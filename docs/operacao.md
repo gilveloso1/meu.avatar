@@ -43,6 +43,16 @@ Portadas do estuda.mais (`src/auth.ts`):
   (`npx wrangler d1 execute meu-avatar --remote --command "DELETE FROM users"`)
   e cadastre de novo: os vídeos continuam.
 
+### Esta instalação
+
+| O quê | Onde |
+|---|---|
+| Conta Cloudflare | a mesma do anb.bot (subdomínio `gilveloso.workers.dev`) |
+| Worker | `meu-avatar`, em <https://meu-avatar.gilveloso.workers.dev> (no ar desde 25/10/2026) |
+| Banco D1 | `meu-avatar` (o id está em `wrangler.jsonc`) |
+| Bucket R2 | `meu-avatar` |
+| Agendamento | a cada 2 minutos (`triggers.crons` em `wrangler.jsonc`) |
+
 ## Onde ficam as chaves
 
 Nenhuma chave fica no repositório.
@@ -67,6 +77,11 @@ npx wrangler secret put OPENROUTER_WEBHOOK_SECRET   # o mesmo do painel do OpenR
 npm run db:migrar < /dev/null
 npm run deploy
 ```
+
+Se o primeiro `npm run deploy` subir o código mas falhar no fim com "This
+Worker does not exist on your account" (aconteceu em 25/10/2026, com o
+Worker novo), rode `npx wrangler triggers deploy`: ele liga o endereço
+workers.dev e o agendamento.
 
 Em seguida, abra o endereço e crie a conta do administrador. Confira se `SITE_URL` bate com o endereço que o deploy mostrar
 (`https://meu-avatar.<subdomínio>.workers.dev`).

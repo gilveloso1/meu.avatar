@@ -12,8 +12,7 @@
     {
       "binding": "DB",
       "database_name": "meu-avatar",
-      // Troque pelo id que `npx wrangler d1 create meu-avatar` mostrar.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "864e9f01-95d4-4478-83f6-4c9c34f7034a",
       "migrations_dir": "migrations"
     }
   ],
