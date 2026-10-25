@@ -76,7 +76,7 @@ Portadas do estuda.mais (`src/auth.ts`):
 |---|---|
 | Conta Cloudflare | a mesma do anb.bot (subdomínio `gilveloso.workers.dev`) |
 | Worker | `meu-avatar`, em <https://meu-avatar.gilveloso.workers.dev> (no ar desde 25/10/2026) |
-| Domínio | <https://meuavatar.ia.br> e www (domínios personalizados do Worker; [detalhes](#o-domínio-meuavatariabr)) |
+| Domínio | <https://meuavatar.ia.br> e www (domínios personalizados do Worker, no ar desde 25/10/2026; [detalhes](#o-domínio-meuavatariabr)) |
 | Banco D1 | `meu-avatar` (o id está em `wrangler.jsonc`) |
 | Bucket R2 | `meu-avatar` |
 | Agendamento | a cada 2 minutos (`triggers.crons` em `wrangler.jsonc`) |
@@ -149,6 +149,11 @@ permite ligar o domínio direto ao Worker (`routes` com `custom_domain` no
    O workers.dev continua respondendo (avisos de vídeos pedidos antes da troca).
 
 A sessão é por endereço: quem entrava pelo workers.dev entra de novo no domínio.
+
+Ativado em 25/10/2026: zona `meuavatar.ia.br` (plano Free) com os servidores
+`meg.ns.cloudflare.com` e `mike.ns.cloudflare.com`; o certificado do domínio
+saiu uns 3 minutos depois do deploy. O token do ambiente não lê os registros
+DNS da zona (falta a permissão "DNS: Read").
 
 ## Desenvolvimento
 
