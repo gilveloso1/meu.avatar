@@ -32,7 +32,7 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add_photo_alternate", "arrow_drop_down", "check_circle", "close", "download", "error", "face", "hourglass_top", "lock", "logout", "person_add", "movie", "progress_activity", "schedule",
+  "add_photo_alternate", "arrow_drop_down", "check_circle", "close", "download", "error", "face", "graphic_eq", "hourglass_top", "lock", "logout", "person_add", "movie", "progress_activity", "schedule",
   "send", "videocam",
 ];
 
@@ -89,11 +89,15 @@ export class Site {
     if (post && path === "/videos") return this.createVideo(request, user);
     if (!post && path === "/") return this.home(url, user);
 
-    const file = /^\/videos\/([0-9a-f-]{36})\.mp4$/.exec(path);
+    // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo.
+    const file = /^\/videos\/([0-9a-f-]{36})(\.original)?\.mp4$/.exec(path);
     if (request.method === "GET" && file) {
       const video = await this.db.videoById(file[1]!);
-      if (!video?.video_key) return new Response("não encontrado", { status: 404 });
-      return this.object(request, video.video_key, "private, max-age=86400", url.searchParams.has("baixar") ? `meu-avatar-${video.id.slice(0, 8)}.mp4` : undefined);
+      const original = Boolean(file[2]);
+      const key = original ? video?.video_key : (video?.processed_key ?? video?.video_key);
+      if (!video || !key) return new Response("não encontrado", { status: 404 });
+      const name = `meu-avatar-${video.id.slice(0, 8)}${original ? "-original" : ""}.mp4`;
+      return this.object(request, key, "private, max-age=86400", url.searchParams.has("baixar") ? name : undefined);
     }
 
     return new Response("não encontrado", { status: 404 });
@@ -110,7 +114,7 @@ export class Site {
       }
     }
     const videos = await this.db.recentVideos();
-    const waiting = videos.some((v) => STATUS[v.status].kind === "busy");
+    const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     const error = url.searchParams.get("erro");
     const banner = modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
 
@@ -245,15 +249,28 @@ ${error ? snackbar(error) : ""}`;
   }
 }
 
-function videoCard(v: Video): string {
+/** O que o cartão mostra: o status do vídeo e, depois de pronto, o do tratamento do áudio. */
+function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; kind: "busy" | "done" | "error" } {
+  const minutes = (iso: string | null) => (iso ? Math.max(0, Math.floor((now - Date.parse(iso)) / 60_000)) : 0);
+  if (v.status === "completed" && (v.audio_status === "pending" || v.audio_status === "processing")) {
+    const since = minutes(v.audio_status === "processing" ? v.audio_started_at : v.updated_at);
+    return { label: `Tratando áudio · ${since} min`, icon: "graphic_eq", kind: "busy" };
+  }
   const status = STATUS[v.status];
+  // Na fila: quanto tempo já passou, para não parecer travado (720p leva uns 10 min).
+  return status.kind === "busy" ? { ...status, label: `${status.label} · ${minutes(v.created_at)} min` } : status;
+}
+
+function videoCard(v: Video): string {
+  const status = cardStatus(v);
   const ratio = /^(\d+):(\d+)$/.exec(v.aspect_ratio);
   const style = [
     ratio ? `--ratio:${ratio[1]} / ${ratio[2]}` : "",
     !v.video_key && v.image_key ? `background-image:url('/midia/${esc(v.image_key)}')` : "",
   ].filter(Boolean).join(";");
+  const progress = status.kind === "busy" ? `<div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>` : "";
   const media = v.video_key
-    ? `<video controls preload="metadata" playsinline src="/videos/${v.id}.mp4"></video>`
+    ? `<video controls preload="metadata" playsinline src="/videos/${v.id}.mp4${v.processed_key ? "?tratado" : ""}"></video>${progress}`
     : `${v.image_key ? "" : `<span class="icon">${status.kind === "error" ? "error" : "movie"}</span>`}${
         status.kind === "busy" ? `<div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>` : ""
       }`;
@@ -275,10 +292,14 @@ function videoCard(v: Video): string {
     <details class="video-card__prompt"><summary class="interactive">${esc(v.prompt)}</summary>${v.extra ? `<p class="video-card__extra">${esc(v.extra)}</p>` : ""}</details>
     <p class="video-card__meta">${meta.map(esc).join(" · ")}</p>
     ${v.error ? `<p class="video-card__error">${esc(v.error)}</p>` : ""}
+    ${v.audio_status === "failed" ? `<p class="video-card__error">Áudio não tratado: ${esc(v.audio_error ?? "erro desconhecido")}</p>` : ""}
   </div>
   ${
     v.video_key
-      ? `<div class="video-card__actions"><a class="button button--text interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>Baixar MP4</a></div>`
+      ? `<div class="video-card__actions">
+    <a class="button button--text interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>Baixar MP4</a>
+    ${v.processed_key ? `<a class="button button--text interactive" href="/videos/${v.id}.original.mp4?baixar" download>Original</a>` : ""}
+  </div>`
       : ""
   }
 </article>`;

@@ -1,3 +1,4 @@
+import type { AudioApi } from "./audio";
 import { Db, OPEN_STATUSES, type Video } from "./db";
 import { buildPrompt, cleanSpeech, languageById, MAX_EXTRA, MAX_SPEECH, styleById } from "./prompt";
 import { estimateCost, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
@@ -27,6 +28,9 @@ export interface NewVideoInput {
 }
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+/** Depois disso, um tratamento de áudio que não terminou conta como falha. */
+export const AUDIO_TIMEOUT_MS = 20 * 60_000;
+
 /** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -45,6 +49,8 @@ export class Studio {
     private readonly media: R2Bucket,
     private readonly api: VideoApi | null,
     private readonly config: StudioConfig,
+    /** Contêiner que trata o áudio; sem ele, o vídeo fica como veio do modelo. */
+    private readonly audio: AudioApi | null = null,
   ) {}
 
   get canGenerate(): boolean {
@@ -137,7 +143,13 @@ export class Studio {
     if (job.status === "completed") {
       const key = `videos/${video.id}.mp4`;
       await this.media.put(key, await api.download(job), { httpMetadata: { contentType: "video/mp4" } });
-      return (await this.db.updateVideo(video.id, { status: "completed", video_key: key, cost: job.usage?.cost ?? null }))!;
+      return (await this.db.updateVideo(video.id, {
+        status: "completed",
+        video_key: key,
+        cost: job.usage?.cost ?? null,
+        // O áudio entra na fila do contêiner; o agendamento trata um por vez.
+        audio_status: this.audio ? "pending" : null,
+      }))!;
     }
     if (job.status === "failed" || job.status === "cancelled" || job.status === "expired") {
       return (await this.db.updateVideo(video.id, { status: job.status, error: job.error ?? null, cost: job.usage?.cost ?? null }))!;
@@ -160,6 +172,31 @@ export class Studio {
     const done: Video[] = [];
     for (const video of await this.db.openVideos(limit)) done.push(await this.sync(video));
     return done;
+  }
+
+  /**
+   * Agendamento: trata o áudio do próximo vídeo da fila no contêiner e guarda
+   * a versão tratada ao lado do original. Um vídeo por rodada (uns 2 min).
+   */
+  async treatNextAudio(now = new Date()): Promise<Video | null> {
+    if (!this.audio) return null;
+    await this.db.failStaleAudio(new Date(now.getTime() - AUDIO_TIMEOUT_MS).toISOString(), now.toISOString());
+    const video = await this.db.claimAudio(now.toISOString());
+    if (!video) return null;
+    try {
+      const original = video.video_key ? await this.media.get(video.video_key) : null;
+      if (!original) throw new Error("O vídeo original não está no R2.");
+      const res = await this.audio.treat(original.body, original.size);
+      // Repassa o MP4 tratado direto para o R2, sem carregar tudo na memória do Worker.
+      const size = Number(res.headers.get("content-length"));
+      const key = `videos/${video.id}.tratado.mp4`;
+      const stream = new FixedLengthStream(size);
+      await Promise.all([res.body!.pipeTo(stream.writable), this.media.put(key, stream.readable, { httpMetadata: { contentType: "video/mp4" } })]);
+      return (await this.db.updateVideo(video.id, { audio_status: "done", processed_key: key, audio_error: null }))!;
+    } catch (err) {
+      console.error("Falha ao tratar o áudio", video.id, err);
+      return (await this.db.updateVideo(video.id, { audio_status: "failed", audio_error: errorMessage(err) }))!;
+    }
   }
 
   estimate(model: VideoModel, input: Pick<NewVideoInput, "duration" | "resolution">): number | undefined {

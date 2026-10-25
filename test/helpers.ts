@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { handle } from "../src/index";
+import type { AudioApi } from "../src/audio";
 import type { VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
 
 export const SITE = "https://meu-avatar.gilveloso.workers.dev";
@@ -67,8 +68,22 @@ export function sessionPair(res: Response): string {
   return res.headers.get("set-cookie")!.split(";")[0]!;
 }
 
-export function call(request: Request, api: VideoApi | null = new FakeVideoApi()): Promise<Response> {
-  return handle(request, { ...env, SITE_URL: SITE }, { api });
+/** Contêiner de áudio de mentira: devolve o MP4 com um sufixo, ou falha. */
+export class FakeAudioApi implements AudioApi {
+  calls = 0;
+  fail: string | null = null;
+  async treat(mp4: ReadableStream, size: number) {
+    this.calls++;
+    const original = new Uint8Array(await new Response(mp4).arrayBuffer());
+    if (original.length !== size) throw new Error(`tamanho errado: ${original.length} != ${size}`);
+    if (this.fail) throw new Error(this.fail);
+    const out = new TextEncoder().encode(new TextDecoder().decode(original) + "+tratado");
+    return new Response(out, { headers: { "content-length": String(out.length), "content-type": "video/mp4" } });
+  }
+}
+
+export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null): Promise<Response> {
+  return handle(request, { ...env, SITE_URL: SITE }, { api, audio });
 }
 
 export function form(fields: Record<string, string | File>): FormData {

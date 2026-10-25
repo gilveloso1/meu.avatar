@@ -43,7 +43,12 @@ selo de produtor e o mesmo codificador, sem tratamento depois) saiu no padrão.
 | 2º, estilo + "moderate volume" | 4,8% | −6,5 LUFS | +1,9 dBFS | 8,8% |
 | Higgsfield, prompt livre | 0,15% | −13,8 LUFS | −0,3 dBFS | 1,7% |
 
-Por isso a voz baixa é pedida duas vezes: no verbo da fala (`says softly, in
+Pedir voz baixa no prompt não resolveu: o 3º e o 4º vídeos, já com isso,
+saíram com 11,8% e 6,5% de clipping e −4,8 e −6,2 LUFS. Por isso todo vídeo
+passa pelo tratamento de áudio no contêiner (ver docs/operacao.md). O prompt
+continua pedindo voz baixa, por não custar nada.
+
+A voz baixa é pedida duas vezes: no verbo da fala (`says softly, in
 a calm, low voice`) e na orientação de áudio (`soft-spoken voice at low
 volume … never raising the voice`). Os estilos também evitam palavras que
 puxam a voz para cima ("enthusiasm" virou "warm, genuine interest"). Se ainda

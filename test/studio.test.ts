@@ -4,7 +4,7 @@ import { Db } from "../src/db";
 import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
 import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, SPEECH_LEAD, STYLES } from "../src/prompt";
-import { call, cookie, FakeVideoApi, postForm, SITE, sign, WAN } from "./helpers";
+import { call, cookie, FakeAudioApi, FakeVideoApi, postForm, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
@@ -179,7 +179,7 @@ describe("acompanhar", () => {
     api.finish("job-1", { status: "in_progress" });
     api.finish("job-2", { status: "failed", error: "Content policy violation" });
 
-    const studio = createStudio({ ...env, SITE_URL: SITE }, { api });
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api, audio: null });
     await studio.syncOpen();
     const byJob = Object.fromEntries((await new Db(env.DB).recentVideos()).map((v) => [v.job_id, v]));
     expect(byJob["job-1"]!.status).toBe("in_progress");
@@ -204,5 +204,79 @@ describe("domínio", () => {
     const res = await handle(new Request("https://www.meuavatar.ia.br/entrar?x=1"), { ...env, SITE_URL: "https://meuavatar.ia.br" }, { api: null });
     expect(res.status).toBe(301);
     expect(res.headers.get("location")).toBe("https://meuavatar.ia.br/entrar?x=1");
+  });
+});
+
+describe("tratamento do áudio", () => {
+  async function prontoParaTratar(audio: FakeAudioApi) {
+    const api = new FakeVideoApi();
+    await call(postForm("/videos", { estilo: "selfie", idioma: "pt-BR", fala: "Oi" }, { cookie: await cookie() }), api, audio);
+    api.finish("job-1", { status: "completed", usage: { cost: 1.06 } });
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api, audio });
+    await studio.syncOpen();
+    return { api, studio };
+  }
+
+  it("o vídeo pronto entra na fila; o agendamento trata e guarda a versão tratada ao lado do original", async () => {
+    const audio = new FakeAudioApi();
+    const { api, studio } = await prontoParaTratar(audio);
+    let [video] = await new Db(env.DB).recentVideos();
+    expect(video).toMatchObject({ status: "completed", audio_status: "pending", processed_key: null });
+
+    // Enquanto trata, o cartão avisa e a página continua se atualizando.
+    let page = await (await call(new Request(`${SITE}/`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(page).toContain("Tratando áudio");
+    expect(page).toContain("data-refresh=");
+
+    video = (await studio.treatNextAudio())!;
+    expect(video).toMatchObject({ audio_status: "done", processed_key: `videos/${video.id}.tratado.mp4` });
+    expect(await (await env.MIDIA.get(video.processed_key!))!.text()).toBe("mp4-falso+tratado");
+    expect(await studio.treatNextAudio()).toBeNull();
+    expect(audio.calls).toBe(1);
+
+    // /videos/<id>.mp4 é o tratado; o original continua em .original.mp4.
+    const session = await cookie();
+    const tratado = await call(new Request(`${SITE}/videos/${video.id}.mp4`, { headers: { cookie: session } }), api, audio);
+    expect(await tratado.text()).toBe("mp4-falso+tratado");
+    const original = await call(new Request(`${SITE}/videos/${video.id}.original.mp4?baixar`, { headers: { cookie: session } }), api, audio);
+    expect(await original.text()).toBe("mp4-falso");
+    expect(original.headers.get("content-disposition")).toContain("-original.mp4");
+
+    page = await (await call(new Request(`${SITE}/`, { headers: { cookie: session } }), api, audio)).text();
+    expect(page).not.toContain("data-refresh=");
+    expect(page).toContain(`/videos/${video.id}.original.mp4?baixar`);
+  });
+
+  it("se o contêiner falhar, o vídeo continua com o original e o motivo aparece", async () => {
+    const audio = new FakeAudioApi();
+    audio.fail = "Tratamento do áudio falhou (HTTP 500): ffmpeg";
+    const { api, studio } = await prontoParaTratar(audio);
+    const video = (await studio.treatNextAudio())!;
+    expect(video).toMatchObject({ audio_status: "failed", processed_key: null, audio_error: "Tratamento do áudio falhou (HTTP 500): ffmpeg" });
+    const page = await (await call(new Request(`${SITE}/`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(page).toContain("Áudio não tratado: Tratamento do áudio falhou");
+    const mp4 = await call(new Request(`${SITE}/videos/${video.id}.mp4`, { headers: { cookie: await cookie() } }), api, audio);
+    expect(await mp4.text()).toBe("mp4-falso");
+  });
+
+  it("tratamento que não termina em 20 minutos vira falha", async () => {
+    const audio = new FakeAudioApi();
+    const { studio } = await prontoParaTratar(audio);
+    const db = new Db(env.DB);
+    const inicio = new Date("2026-10-25T12:00:00Z");
+    const [pendente] = await db.recentVideos();
+    await db.claimAudio(inicio.toISOString());
+    expect(await db.claimAudio(inicio.toISOString())).toBeNull(); // ninguém pega o mesmo vídeo duas vezes
+    await studio.treatNextAudio(new Date(inicio.getTime() + 21 * 60_000));
+    expect(await db.videoById(pendente!.id)).toMatchObject({ audio_status: "failed", audio_error: "O tratamento do áudio não terminou a tempo." });
+  });
+
+  it("sem contêiner, o vídeo fica como veio, sem fila", async () => {
+    const api = new FakeVideoApi();
+    await call(postForm("/videos", { estilo: "selfie", idioma: "pt-BR", fala: "Oi" }, { cookie: await cookie() }), api, null);
+    api.finish("job-1", { status: "completed" });
+    await createStudio({ ...env, SITE_URL: SITE }, { api, audio: null }).syncOpen();
+    const [video] = await new Db(env.DB).recentVideos();
+    expect(video).toMatchObject({ status: "completed", audio_status: null });
   });
 });

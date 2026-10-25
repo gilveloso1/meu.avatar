@@ -1,3 +1,5 @@
+import type { AudioFixer } from "./audio";
+
 export interface Env {
   DB: D1Database;
   /** Fotos dos avatares (avatares/...) e vídeos prontos (videos/...). */
@@ -6,6 +8,8 @@ export interface Env {
   OPENROUTER_API_KEY?: string;
   /** Segredo de assinatura dos webhooks do OpenRouter (opcional: o status sempre é conferido na API). */
   OPENROUTER_WEBHOOK_SECRET?: string;
+  /** Contêiner que trata o áudio (src/audio.ts). Sem ele, o vídeo fica como veio do modelo. */
+  AUDIO?: DurableObjectNamespace<AudioFixer>;
   /** Custo do bcrypt das senhas; padrão 12 (os testes usam 4, para ir rápido). */
   BCRYPT_COST?: string;
   /** Endereço público do Worker, sem barra no fim: vira o callback_url e a URL das fotos. */

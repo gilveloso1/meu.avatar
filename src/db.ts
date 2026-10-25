@@ -21,9 +21,17 @@ export interface Video {
   style: string | null;
   language: string | null;
   extra: string | null;
+  /** Tratamento do áudio no contêiner (src/audio.ts); null quando não se aplica. */
+  audio_status: AudioStatus | null;
+  /** Chave no R2 do MP4 com o áudio tratado. */
+  processed_key: string | null;
+  audio_error: string | null;
+  audio_started_at: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type AudioStatus = "pending" | "processing" | "done" | "failed";
 
 export type Role = "admin" | "member";
 
@@ -63,7 +71,9 @@ function toUserLogin(row: UserRow): UserLogin {
 }
 
 export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "user_id" | "request_prompt" | "style" | "language" | "extra">;
-export type VideoChanges = Partial<Pick<Video, "job_id" | "status" | "video_key" | "cost" | "error">>;
+export type VideoChanges = Partial<
+  Pick<Video, "job_id" | "status" | "video_key" | "cost" | "error" | "audio_status" | "processed_key" | "audio_error" | "audio_started_at">
+>;
 
 /** Status em que o vídeo ainda pode mudar (vale consultar o OpenRouter). */
 export const OPEN_STATUSES: VideoStatus[] = ["pending", "in_progress"];
@@ -112,6 +122,33 @@ export class Db {
         .bind(...OPEN_STATUSES, limit)
         .all<Video>()
     ).results;
+  }
+
+  /**
+   * Pega o próximo vídeo com o áudio na fila e já o marca como em tratamento,
+   * numa instrução só: duas rodadas do agendamento não pegam o mesmo vídeo.
+   */
+  claimAudio(nowIso: string): Promise<Video | null> {
+    return this.d1
+      .prepare(
+        `UPDATE videos SET audio_status = 'processing', audio_started_at = ?, updated_at = ?
+         WHERE id = (SELECT id FROM videos WHERE audio_status = 'pending' ORDER BY created_at LIMIT 1)
+         RETURNING *`,
+      )
+      .bind(nowIso, nowIso)
+      .first<Video>();
+  }
+
+  /** Tratamentos que começaram antes de `beforeIso` e não terminaram: viram falha. */
+  async failStaleAudio(beforeIso: string, nowIso: string): Promise<number> {
+    const result = await this.d1
+      .prepare(
+        `UPDATE videos SET audio_status = 'failed', audio_error = 'O tratamento do áudio não terminou a tempo.', updated_at = ?
+         WHERE audio_status = 'processing' AND audio_started_at < ?`,
+      )
+      .bind(nowIso, beforeIso)
+      .run();
+    return result.meta.changes;
   }
 
   // --- contas e sessões (como no estuda.mais) ---------------------------------------

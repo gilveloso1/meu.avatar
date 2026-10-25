@@ -1,3 +1,4 @@
+import { type AudioApi, ContainerAudio } from "./audio";
 import { Accounts } from "./auth";
 import { Db } from "./db";
 import type { Env } from "./env";
@@ -5,9 +6,17 @@ import { OpenRouterVideo, verifySignature, type VideoApi } from "./openrouter";
 import { Site } from "./site/site";
 import { Studio } from "./studio";
 
-export function createStudio(env: Env, deps: { api?: VideoApi | null } = {}): Studio {
+export { AudioFixer } from "./audio";
+
+export interface Deps {
+  api?: VideoApi | null;
+  audio?: AudioApi | null;
+}
+
+export function createStudio(env: Env, deps: Deps = {}): Studio {
   const api = deps.api !== undefined ? deps.api : env.OPENROUTER_API_KEY ? new OpenRouterVideo(env.OPENROUTER_API_KEY) : null;
-  return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL });
+  const audio = deps.audio !== undefined ? deps.audio : env.AUDIO ? new ContainerAudio(env.AUDIO) : null;
+  return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL }, audio);
 }
 
 export function createAccounts(env: Env): Accounts {
@@ -25,7 +34,7 @@ export function createSite(env: Env, studio: Studio): Site {
   });
 }
 
-export async function handle(request: Request, env: Env, deps: { api?: VideoApi | null } = {}): Promise<Response> {
+export async function handle(request: Request, env: Env, deps: Deps = {}): Promise<Response> {
   const url = new URL(request.url);
 
   // www.<domínio> vai para o domínio sem www: um endereço só, com um cookie de sessão só.
@@ -68,6 +77,9 @@ export default {
 
   // Rede de segurança: confere os vídeos que ainda estão na fila, caso o aviso se perca.
   async scheduled(_controller, env): Promise<void> {
-    await createStudio(env).syncOpen();
+    const studio = createStudio(env);
+    await studio.syncOpen();
+    // Depois de buscar os prontos, trata o áudio de um vídeo da fila.
+    await studio.treatNextAudio();
   },
 } satisfies ExportedHandler<Env>;

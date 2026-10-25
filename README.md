@@ -20,6 +20,7 @@ o padrão é o **Wan 3.0**, 25 s, 480p, 9:16, com áudio (≈ US$ 1,25 por víde
 | `src/index.ts` | Rotas do Worker: webhook do OpenRouter, estúdio, agendamento |
 | `src/auth.ts` | Contas e sessões (portado do estuda.mais): bcrypt, bloqueio, primeiro cadastro vira admin |
 | `src/prompt.ts` | Orientação fixa de qualidade (áudio e imagem) que vai no fim de todo prompt |
+| `src/audio.ts` e `container/` | Contêiner que trata o áudio (ffmpeg + DeepFilterNet 3): volume, picos e chiado |
 | `src/studio.ts` | Pede o vídeo, acompanha o job e guarda o MP4 no R2 |
 | `src/openrouter.ts` | Cliente da API de vídeo (validação, custo, assinatura do webhook) |
 | `src/db.ts` | Tabela `videos` no D1 |

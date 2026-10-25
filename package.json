@@ -8,7 +8,7 @@
     "gerar": "tsx tools/gerar-video.ts",
     "tema": "tsx tools/tema.ts",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "sh container/baixar-binarios.sh && wrangler deploy",
     "db:migrar": "wrangler d1 migrations apply DB --remote",
     "db:migrar:local": "wrangler d1 migrations apply DB --local",
     "test": "vitest run",
@@ -30,6 +30,7 @@
     "fsevents@2.3.3": true
   },
   "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
     "bcryptjs": "^3.0.3"
   }
 }
