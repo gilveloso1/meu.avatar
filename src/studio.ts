@@ -1,7 +1,9 @@
 import type { AudioApi } from "./audio";
-import { Db, OPEN_STATUSES, type Video } from "./db";
-import { buildPrompt, cleanSpeech, languageById, MAX_EXTRA, MAX_SPEECH, styleById } from "./prompt";
-import { estimateCost, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
+import { Db, OPEN_STATUSES, type Role, type Video } from "./db";
+import { validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
+import { canUse, InputError, structureById, type Structure, type Values } from "./structures";
+
+export { InputError } from "./structures";
 
 export interface StudioConfig {
   /** Endereço público, sem barra no fim. */
@@ -9,22 +11,14 @@ export interface StudioConfig {
 }
 
 export interface NewVideoInput {
-  /** Id do estilo (src/prompt.ts). */
-  style: string;
-  /** Id do idioma da fala. */
-  language: string;
-  /** O que a pessoa fala. */
-  speech: string;
-  /** Instruções extras sobre o vídeo (opcional). */
-  extra?: string;
-  model: string;
-  duration: number;
-  resolution: string;
-  aspectRatio: string;
-  /** Foto do avatar, usada como primeiro quadro. */
+  /** A estrutura do modelo escolhido (src/structures/). */
+  structure: Structure;
+  /** Os campos do formulário dessa estrutura. */
+  values: Values;
+  /** Foto do avatar. */
   image?: File | null;
   /** Quem está pedindo. */
-  userId?: number | null;
+  user: { id: number; role: Role };
 }
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -34,7 +28,8 @@ export const AUDIO_TIMEOUT_MS = 20 * 60_000;
 /** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
-export class InputError extends Error {}
+/** A estrutura existe, mas quem pediu não tem acesso a ela. */
+export class ForbiddenError extends Error {}
 
 /**
  * Pede os vídeos ao OpenRouter e acompanha até o MP4 estar no R2. O aviso do
@@ -64,67 +59,53 @@ export class Studio {
     return model;
   }
 
-  /** Valida, guarda a foto, registra o vídeo e envia o pedido. */
+  /** Confere o acesso, valida pela estrutura, guarda a foto, registra o vídeo e envia o pedido. */
   async create(input: NewVideoInput): Promise<Video> {
+    const { structure } = input;
+    if (!canUse(structure, input.user.role)) throw new ForbiddenError(`Sem acesso a ${structure.name}.`);
     const api = this.requireApi();
-    const style = styleById(input.style);
-    if (!style) throw new InputError("Escolha um estilo da lista.");
-    const language = languageById(input.language);
-    if (!language) throw new InputError("Escolha um idioma da lista.");
-    const speech = cleanSpeech(input.speech);
-    if (!speech) throw new InputError("Escreva a fala do vídeo.");
-    if (speech.length > MAX_SPEECH) throw new InputError(`A fala passa de ${MAX_SPEECH} caracteres.`);
-    const extra = (input.extra ?? "").replace(/\s+/g, " ").trim();
-    if (extra.length > MAX_EXTRA) throw new InputError(`As instruções passam de ${MAX_EXTRA} caracteres.`);
 
     const image = input.image && input.image.size > 0 ? input.image : null;
     const ext = image ? IMAGE_TYPES[image.type] : undefined;
     if (image && !ext) throw new InputError("A foto precisa ser JPG, PNG ou WebP.");
     if (image && image.size > MAX_IMAGE_BYTES) throw new InputError("A foto passa de 10 MB.");
 
-    const request: VideoRequest = {
-      model: input.model,
-      prompt: buildPrompt({ style, language, speech, extra }),
-      duration: input.duration,
-      resolution: input.resolution,
-      aspect_ratio: input.aspectRatio,
-      generate_audio: true,
-      ...(image && { frame_images: [{ type: "image_url", image_url: { url: "" }, frame_type: "first_frame" }] }),
-    };
-    const errors = validate(await this.model(input.model), request);
-    if (errors.length) throw new InputError(`Não suportado por ${input.model}: ${errors.join("; ")}.`);
+    const model = await this.model(structure.model);
+    const built = structure.build(input.values, image !== null, model);
+    const request: VideoRequest = { model: structure.model, ...built.request };
+    const placeholder = { type: "image_url" as const, image_url: { url: "" } };
+    if (built.image === "first_frame") request.frame_images = [{ ...placeholder, frame_type: "first_frame" }];
+    if (built.image === "reference") request.input_references = [placeholder];
+    const errors = validate(model, request);
+    if (errors.length) throw new InputError(`Não suportado por ${structure.model}: ${errors.join("; ")}.`);
 
     const id = crypto.randomUUID();
     let imageKey: string | null = null;
-    if (image) {
+    if (image && built.image) {
       // Nome impossível de adivinhar: a foto fica pública só para o provedor baixar.
       imageKey = `avatares/${crypto.randomUUID()}.${ext}`;
       const bytes = await image.arrayBuffer();
       await this.media.put(imageKey, bytes, { httpMetadata: { contentType: image.type } });
-      request.frame_images![0]!.image_url.url = await this.imageUrl(imageKey, image.type, bytes);
+      placeholder.image_url.url = await this.imageUrl(imageKey, image.type, bytes);
     }
     if (this.config.siteUrl.startsWith("https://")) request.callback_url = `${this.config.siteUrl}/openrouter/webhook`;
 
+    const { settings, ...record } = built.record;
     const video = await this.db.insertVideo({
       id,
-      prompt: speech,
-      model: input.model,
-      duration: input.duration,
-      resolution: input.resolution,
-      aspect_ratio: input.aspectRatio,
+      ...record,
+      model: structure.model,
       image_key: imageKey,
-      user_id: input.userId ?? null,
-      request_prompt: request.prompt,
-      style: style.id,
-      language: language.id,
-      extra: extra || null,
+      user_id: input.user.id,
+      structure: structure.id,
+      settings: settings ? JSON.stringify(settings) : null,
     });
 
     try {
       const job = await api.submit(request);
       return (await this.db.updateVideo(id, { job_id: job.id, status: job.status ?? "pending" }))!;
     } catch (err) {
-      return (await this.db.updateVideo(id, { status: "failed", error: errorMessage(err) }))!;
+      return (await this.db.updateVideo(video.id, { status: "failed", error: errorMessage(err) }))!;
     }
   }
 
@@ -147,8 +128,8 @@ export class Studio {
         status: "completed",
         video_key: key,
         cost: job.usage?.cost ?? null,
-        // O áudio entra na fila do contêiner; o agendamento trata um por vez.
-        audio_status: this.audio ? "pending" : null,
+        // O áudio entra na fila do contêiner, se a estrutura pede; o agendamento trata um por vez.
+        audio_status: this.audio && (structureById(video.structure)?.treatAudio ?? true) ? "pending" : null,
       }))!;
     }
     if (job.status === "failed" || job.status === "cancelled" || job.status === "expired") {
@@ -197,10 +178,6 @@ export class Studio {
       console.error("Falha ao tratar o áudio", video.id, err);
       return (await this.db.updateVideo(video.id, { audio_status: "failed", audio_error: errorMessage(err) }))!;
     }
-  }
-
-  estimate(model: VideoModel, input: Pick<NewVideoInput, "duration" | "resolution">): number | undefined {
-    return estimateCost(model, { model: model.id, prompt: "", duration: input.duration, resolution: input.resolution });
   }
 
   /**

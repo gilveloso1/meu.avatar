@@ -21,6 +21,10 @@ export interface Video {
   style: string | null;
   language: string | null;
   extra: string | null;
+  /** Id da estrutura que gerou o vídeo (src/structures/). */
+  structure: string | null;
+  /** Configurações próprias da estrutura, em JSON. */
+  settings: string | null;
   /** Tratamento do áudio no contêiner (src/audio.ts); null quando não se aplica. */
   audio_status: AudioStatus | null;
   /** Chave no R2 do MP4 com o áudio tratado. */
@@ -70,7 +74,7 @@ function toUserLogin(row: UserRow): UserLogin {
   return { ...toUser(row), passwordHash: row.password_hash, failedLogins: row.failed_logins, lockedUntil: row.locked_until };
 }
 
-export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "user_id" | "request_prompt" | "style" | "language" | "extra">;
+export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "user_id" | "request_prompt" | "style" | "language" | "extra" | "structure" | "settings">;
 export type VideoChanges = Partial<
   Pick<Video, "job_id" | "status" | "video_key" | "cost" | "error" | "audio_status" | "processed_key" | "audio_error" | "audio_started_at">
 >;
@@ -85,10 +89,10 @@ export class Db {
     const at = now.toISOString();
     return (await this.d1
       .prepare(
-        `INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, image_key, user_id, request_prompt, style, language, extra, created_at, updated_at)
-         VALUES (?, 'submitting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        `INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, image_key, user_id, request_prompt, style, language, extra, structure, settings, created_at, updated_at)
+         VALUES (?, 'submitting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
-      .bind(v.id, v.prompt, v.model, v.duration, v.resolution, v.aspect_ratio, v.image_key, v.user_id, v.request_prompt, v.style, v.language, v.extra, at, at)
+      .bind(v.id, v.prompt, v.model, v.duration, v.resolution, v.aspect_ratio, v.image_key, v.user_id, v.request_prompt, v.style, v.language, v.extra, v.structure, v.settings, at, at)
       .first<Video>())!;
   }
 

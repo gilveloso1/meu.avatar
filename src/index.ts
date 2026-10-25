@@ -26,7 +26,6 @@ export function createAccounts(env: Env): Accounts {
 export function createSite(env: Env, studio: Studio): Site {
   return new Site(new Db(env.DB), env.MIDIA, studio, createAccounts(env), {
     defaults: {
-      model: env.VIDEO_MODEL,
       duration: Number(env.VIDEO_DURATION),
       resolution: env.VIDEO_RESOLUTION,
       aspectRatio: env.VIDEO_ASPECT_RATIO,

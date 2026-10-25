@@ -141,7 +141,7 @@ describe("bloqueio", () => {
 describe("vídeos", () => {
   it("o vídeo guarda quem pediu", async () => {
     const { FakeVideoApi } = await import("./helpers");
-    await call(postForm("/videos", { estilo: "selfie", idioma: "pt-BR", fala: "Oi" }, { cookie: await cookie() }), new FakeVideoApi());
+    await call(postForm("/novo/wan", { estilo: "selfie", idioma: "pt-BR", fala: "Oi" }, { cookie: await cookie() }), new FakeVideoApi());
     const [video] = await new Db(env.DB).recentVideos();
     const admin = await new Db(env.DB).getUserByEmail(ADMIN.email);
     expect(video!.user_id).toBe(admin!.id);

@@ -27,6 +27,17 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
 - Permissões sempre conferidas no servidor; teste novo para cada caso de
   acesso negado.
 
+## Modelos: uma estrutura para cada
+
+- Cada modelo de vídeo é uma estrutura em `src/structures/` (hoje `wan.ts` e
+  `heygen.ts`): campos do formulário, prompt de sistema, montagem do pedido,
+  regra de custo e se o áudio passa pelo contêiner. O usuário escolhe o modelo
+  num card em `/novo` e preenche o formulário daquela estrutura.
+- Cada vídeo guarda a estrutura que o gerou (`videos.structure`) e as
+  configurações próprias dela (`videos.settings`, JSON).
+- Modelo novo é estrutura nova, sem mexer nas outras. O Wan fica como está.
+  Estrutura em teste usa `access: "admin"` (só o administrador vê).
+
 ## OpenRouter
 
 - Gerar vídeo gasta créditos. Testes usam a API falsa (`test/helpers.ts`);

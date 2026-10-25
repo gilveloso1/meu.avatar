@@ -2,10 +2,12 @@
  * O estúdio: páginas em HTML montado no Worker, com CSS e um script pequeno
  * embutidos (o mesmo jeito do blog do anb.bot), no Material Design 3.
  *
- *   /cadastro   cria a primeira conta, que é a do administrador; depois fecha
- *   /entrar     login (e-mail e senha)
- *   /sair       encerra a sessão (POST)
- *   /           formulário e vídeos (precisa de sessão)
+ *   /cadastro    cria a primeira conta, que é a do administrador; depois fecha
+ *   /entrar      login (e-mail e senha)
+ *   /sair        encerra a sessão (POST)
+ *   /            os vídeos (precisa de sessão), com o botão de novo vídeo
+ *   /novo        escolha do modelo, um cartão por estrutura (src/structures/)
+ *   /novo/<id>   o formulário da estrutura; o POST gera o vídeo
  *
  * Tudo pede sessão, menos /midia/avatares/..., que o provedor de vídeo precisa
  * baixar. Segurança como no painel do estuda.mais: cookie __Host- (HttpOnly,
@@ -16,13 +18,15 @@
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { Db, User, Video, VideoStatus } from "../db";
 import type { VideoModel } from "../openrouter";
-import { LANGUAGES, languageById, MAX_EXTRA, MAX_SPEECH, STYLES, styleById, WORDS_PER_SECOND } from "../prompt";
-import { InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
+import { styleById } from "../prompt";
+import { canUse, type Defaults, estimate, type Field, lowestPrice, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
+import { ForbiddenError, InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
 
 export interface SiteConfig {
-  defaults: { model: string; duration: number; resolution: string; aspectRatio: string };
+  /** Padrões do formulário (wrangler.jsonc). */
+  defaults: Defaults;
 }
 
 const SITE_NAME = "meu.avatar";
@@ -32,8 +36,8 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add_photo_alternate", "arrow_drop_down", "check_circle", "close", "download", "error", "face", "graphic_eq", "hourglass_top", "lock", "logout", "person_add", "movie", "progress_activity", "schedule",
-  "send", "videocam",
+  "add", "add_photo_alternate", "arrow_back", "arrow_drop_down", "check", "check_circle", "close", "download", "error", "face", "graphic_eq", "hourglass_top", "lock", "logout", "person_add",
+  "movie", "schedule", "send", "videocam",
 ];
 
 const SURFACE_LIGHT = /--md-sys-color-surface: (#\w+)/.exec(LIGHT)![1];
@@ -86,8 +90,15 @@ export class Site {
     const user = await this.accounts.session(token);
     if (!user) return redirect("/entrar");
 
-    if (post && path === "/videos") return this.createVideo(request, user);
-    if (!post && path === "/") return this.home(url, user);
+    if (!post && path === "/") return this.home(user);
+    if (!post && path === "/novo") return this.chooser(user);
+    const form = /^\/novo\/([a-z0-9-]+)$/.exec(path);
+    if (form) {
+      // Estrutura que não existe ou que a pessoa não pode usar: a página nem aparece.
+      const structure = structureById(form[1]);
+      if (!structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
+      return post ? this.createVideo(request, user, structure) : this.formPage(structure);
+    }
 
     // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo.
     const file = /^\/videos\/([0-9a-f-]{36})(\.original)?\.mp4$/.exec(path);
@@ -103,102 +114,104 @@ export class Site {
     return new Response("não encontrado", { status: 404 });
   }
 
-  private async home(url: URL, user: User): Promise<Response> {
-    let model: VideoModel | null = null;
-    let modelError: string | null = null;
-    if (this.studio.canGenerate) {
-      try {
-        model = await this.studio.model(this.config.defaults.model);
-      } catch (err) {
-        modelError = `Não deu para ler o modelo ${this.config.defaults.model}: ${err instanceof Error ? err.message : err}`;
-      }
-    }
+  private async home(user: User): Promise<Response> {
     const videos = await this.db.recentVideos();
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
-    const error = url.searchParams.get("erro");
-    const banner = modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
+    const body = `
+<main class="page page--feed" id="conteudo">
+  <h1 class="page__headline">Vídeos</h1>
+  ${
+    videos.length
+      ? `<div class="feed">${videos.map(videoCard).join("")}</div>`
+      : `<div class="empty"><span class="icon">movie</span><p class="empty__title">Nenhum vídeo ainda</p><p>Toque em Novo vídeo, escolha o modelo e gere o primeiro.</p></div>`
+  }
+</main>
+<a class="extended-fab interactive" href="/novo"><span class="icon">add</span>Novo vídeo</a>`;
+    return html(page(SITE_NAME, body, { refresh: waiting, bar: { user } }));
+  }
 
+  /** Escolha do modelo: um cartão por estrutura que a pessoa pode usar. */
+  private async chooser(user: User): Promise<Response> {
+    const structures = STRUCTURES.filter((s) => canUse(s, user.role));
+    const cards = await Promise.all(
+      structures.map(async (s) => {
+        const model = await this.tryModel(s);
+        const price = model.model ? lowestPrice(model.model) : undefined;
+        const subhead = [s.model, price !== undefined ? `a partir de US$ ${price.toFixed(2)}/s` : null].filter(Boolean).join(" · ");
+        return `
+  <a class="card card--outlined card--action model-card interactive" href="/novo/${s.id}">
+    <h2 class="model-card__headline">${esc(s.name)}</h2>
+    <p class="model-card__subhead">${esc(subhead)}</p>
+    <p class="model-card__text">${esc(s.summary)}</p>
+    ${s.access === "admin" ? `<p class="model-card__subhead">Em teste: só o administrador vê</p>` : ""}
+  </a>`;
+      }),
+    );
     const body = `
 <main class="page" id="conteudo">
-  ${this.composer(model, banner)}
-  <section class="gallery" aria-labelledby="videos">
-    <h2 class="gallery__heading" id="videos">Vídeos</h2>
-    ${
-      videos.length
-        ? `<div class="gallery__grid">${videos.map(videoCard).join("")}</div>`
-        : `<div class="empty"><span class="icon">movie</span><p class="empty__title">Nenhum vídeo ainda</p><p>Escolha o estilo, escreva a fala e gere o primeiro.</p></div>`
-    }
-  </section>
+  <p class="page__intro">Escolha o modelo. Cada um tem o seu formulário.</p>
+  <div class="model-grid">${cards.join("")}</div>
+</main>`;
+    return html(page(`Novo vídeo · ${SITE_NAME}`, body, { bar: { back: "/", title: "Novo vídeo" } }));
+  }
+
+  private async formPage(structure: Structure, values?: Values, error?: string): Promise<Response> {
+    const { model, error: modelError } = await this.tryModel(structure);
+    const banner = modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
+    const sections = structure.sections(model, this.config.defaults);
+    const value = values ?? defaultValues(sections);
+    const cost = model ? estimate(structure, model, value) : undefined;
+    const config = {
+      prices: model?.pricing_skus ?? {},
+      sku: structure.cost.sku,
+      seconds: structure.cost.seconds,
+      rate: structure.wordsPerSecond,
+    };
+    const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
+    const body = `
+<main class="page" id="conteudo">
+  <form class="form-layout" method="post" action="/novo/${structure.id}" enctype="multipart/form-data" data-composer='${esc(JSON.stringify(config))}'>
+    <div class="form-layout__focus">
+      ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
+      ${sections.map((section) => formSection(section, value)).join("")}
+    </div>
+    <aside class="card card--outlined summary" aria-labelledby="resumo">
+      <h2 class="summary__title" id="resumo">Resumo</h2>
+      <dl class="summary__list">
+        <div class="summary__item"><dt>Modelo</dt><dd>${esc(structure.model)}</dd></div>
+        <div class="summary__item"><dt>Duração</dt><dd data-seconds>${esc(seconds)}</dd></div>
+        <div class="summary__item"><dt>Custo estimado</dt><dd data-cost>${cost !== undefined ? `US$ ${cost.toFixed(2)}` : "—"}</dd></div>
+      </dl>
+      <div class="summary__actions">
+        <button class="button button--filled interactive" type="submit"${model ? "" : " disabled"}><span class="icon">videocam</span>Gerar vídeo</button>
+      </div>
+    </aside>
+  </form>
 </main>
 ${error ? snackbar(error) : ""}`;
-    return html(page("meu.avatar", body, { refresh: waiting, user }));
+    return html(page(`${structure.name} · ${SITE_NAME}`, body, { bar: { back: "/novo", title: structure.name } }), error ? 400 : 200);
   }
 
-  private composer(model: VideoModel | null, banner: string | null): string {
-    const d = this.config.defaults;
-    const durations = model?.supported_durations ?? range(2, 30);
-    const resolutions = model?.supported_resolutions ?? [d.resolution];
-    const ratios = model?.supported_aspect_ratios ?? [d.aspectRatio];
-    const prices = JSON.stringify(model?.pricing_skus ?? {}).replace(/</g, "\\u003c");
-    return `
-<form class="card card--outlined composer" method="post" action="/videos" enctype="multipart/form-data" data-composer data-prices='${esc(prices)}' data-styles='${esc(JSON.stringify(Object.fromEntries(STYLES.map((s) => [s.id, s.description]))))}' data-rate='${esc(JSON.stringify(WORDS_PER_SECOND))}'>
-  <h1 class="composer__title">Novo vídeo</h1>
-  ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
-  ${select("estilo", "Estilo", STYLES.map((s) => s.id), STYLES[0]!.id, (id) => styleById(id)!.label)}
-  <p class="composer__hint" data-style-description>${esc(STYLES[0]!.description)}</p>
-  <div class="text-field">
-    <textarea class="text-field__input" id="fala" name="fala" required maxlength="${MAX_SPEECH}" placeholder="Só o que a pessoa fala, sem aspas. Ex.: Oi, gente! Hoje eu vou mostrar…" aria-describedby="fala-ajuda"></textarea>
-    <label class="text-field__label" for="fala">Fala</label>
-    <p class="text-field__supporting" id="fala-ajuda"><span data-words>Para ${d.duration} s: umas ${Math.round(d.duration * WORDS_PER_SECOND.min)} a ${Math.round(d.duration * WORDS_PER_SECOND.max)} palavras.</span><span data-count>0/${MAX_SPEECH}</span></p>
-  </div>
-  <div class="text-field">
-    <input class="text-field__input" id="instrucoes" name="instrucoes" type="text" maxlength="${MAX_EXTRA}" placeholder="Ex.: ela sorri no final" aria-describedby="instrucoes-ajuda">
-    <label class="text-field__label" for="instrucoes">Instruções extras</label>
-    <p class="text-field__supporting" id="instrucoes-ajuda"><span>Opcional: algo a mais sobre a cena, além do estilo.</span></p>
-  </div>
-  <label class="file-picker">
-    <input type="file" name="imagem" accept="image/jpeg,image/png,image/webp" data-image>
-    <span class="button button--tonal interactive"><span class="icon">add_photo_alternate</span>Foto do avatar</span>
-    <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
-    <span class="file-picker__text">
-      <span class="file-picker__name" data-image-name>Opcional</span>
-      <span class="file-picker__hint">Vira o primeiro quadro. JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB.</span>
-    </span>
-  </label>
-  <div class="composer__row">
-    ${select("idioma", "Idioma da fala", LANGUAGES.map((l) => l.id), LANGUAGES[0]!.id, (id) => languageById(id)!.label)}
-    ${select("duracao", "Duração", durations.map(String), String(d.duration), (s) => `${s} s`)}
-    ${select("resolucao", "Resolução", resolutions, d.resolution)}
-    ${select("formato", "Formato", ratios, d.aspectRatio)}
-  </div>
-  <input type="hidden" name="modelo" value="${esc(d.model)}">
-  <div class="composer__actions">
-    <span class="composer__cost" data-cost>${esc(d.model)}</span>
-    <button class="button button--filled interactive" type="submit"${model ? "" : " disabled"}><span class="icon">videocam</span>Gerar vídeo</button>
-  </div>
-</form>`;
-  }
-
-  private async createVideo(request: Request, user: User): Promise<Response> {
-    const form = await request.formData();
-    const d = this.config.defaults;
-    const image = form.get("imagem");
+  private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
+    if (!this.studio.canGenerate) return { model: null, error: null };
     try {
-      await this.studio.create({
-        style: String(form.get("estilo") ?? ""),
-        language: String(form.get("idioma") ?? ""),
-        speech: String(form.get("fala") ?? ""),
-        extra: String(form.get("instrucoes") ?? ""),
-        model: String(form.get("modelo") || d.model),
-        duration: Number(form.get("duracao") || d.duration),
-        resolution: String(form.get("resolucao") || d.resolution),
-        aspectRatio: String(form.get("formato") || d.aspectRatio),
-        image: image instanceof File ? image : null,
-        userId: user.id,
-      });
+      return { model: await this.studio.model(structure.model), error: null };
     } catch (err) {
+      return { model: null, error: `Não deu para ler o modelo ${structure.model}: ${err instanceof Error ? err.message : err}` };
+    }
+  }
+
+  private async createVideo(request: Request, user: User, structure: Structure): Promise<Response> {
+    const form = await request.formData();
+    const image = form.get("imagem");
+    const { model } = await this.tryModel(structure);
+    const values = formValues(form, structure.sections(model, this.config.defaults));
+    try {
+      await this.studio.create({ structure, values, image: image instanceof File ? image : null, user });
+    } catch (err) {
+      if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
-      return redirect(`/?erro=${encodeURIComponent(err.message)}`);
+      return this.formPage(structure, values, err.message);
     }
     return redirect("/");
   }
@@ -263,6 +276,7 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
 
 function videoCard(v: Video): string {
   const status = cardStatus(v);
+  const structure = structureById(v.structure);
   const ratio = /^(\d+):(\d+)$/.exec(v.aspect_ratio);
   const style = [
     ratio ? `--ratio:${ratio[1]} / ${ratio[2]}` : "",
@@ -271,38 +285,107 @@ function videoCard(v: Video): string {
   const progress = status.kind === "busy" ? `<div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>` : "";
   const media = v.video_key
     ? `<video controls preload="metadata" playsinline src="/videos/${v.id}.mp4${v.processed_key ? "?tratado" : ""}"></video>${progress}`
-    : `${v.image_key ? "" : `<span class="icon">${status.kind === "error" ? "error" : "movie"}</span>`}${
-        status.kind === "busy" ? `<div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>` : ""
-      }`;
-  const meta = [
-    v.style ? (styleById(v.style)?.label ?? v.style) : null,
-    v.model.replace(/^[^/]+\//, ""),
-    `${v.duration} s`,
-    v.resolution,
-    v.aspect_ratio,
-    v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : null,
-    formatDate(v.created_at),
-  ].filter((m): m is string => Boolean(m));
-  const chipClass = status.kind === "done" ? " chip--selected" : status.kind === "error" ? " chip--error" : "";
+    : `${v.image_key ? "" : `<span class="icon">${status.kind === "error" ? "error" : "movie"}</span>`}${progress}`;
+  const headline = [structure?.name ?? v.model.replace(/^[^/]+\//, ""), v.style ? (styleById(v.style)?.label ?? v.style) : null].filter(Boolean).join(" · ");
+  // A duração do HeyGen segue a fala: até o vídeo ficar pronto, é uma estimativa.
+  const duration = structure && !("field" in structure.cost.seconds) ? `≈ ${v.duration} s` : `${v.duration} s`;
+  const meta = [formatDate(v.created_at), duration, v.resolution, v.aspect_ratio, v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : null].filter(
+    (m): m is string => Boolean(m),
+  );
   return `
 <article class="card card--elevated video-card">
   <div class="video-card__media"${style ? ` style="${style}"` : ""}>${media}</div>
   <div class="video-card__body">
-    <span class="chip${chipClass}"><span class="icon">${status.icon}</span>${esc(status.label)}</span>
+    <p class="video-card__status video-card__status--${status.kind}"><span class="icon">${status.icon}</span>${esc(status.label)}</p>
+    <h2 class="video-card__headline">${esc(headline)}</h2>
+    <p class="video-card__subhead">${meta.map(esc).join(" · ")}</p>
     <details class="video-card__prompt"><summary class="interactive">${esc(v.prompt)}</summary>${v.extra ? `<p class="video-card__extra">${esc(v.extra)}</p>` : ""}</details>
-    <p class="video-card__meta">${meta.map(esc).join(" · ")}</p>
     ${v.error ? `<p class="video-card__error">${esc(v.error)}</p>` : ""}
     ${v.audio_status === "failed" ? `<p class="video-card__error">Áudio não tratado: ${esc(v.audio_error ?? "erro desconhecido")}</p>` : ""}
   </div>
   ${
     v.video_key
       ? `<div class="video-card__actions">
-    <a class="button button--text interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>Baixar MP4</a>
     ${v.processed_key ? `<a class="button button--text interactive" href="/videos/${v.id}.original.mp4?baixar" download>Original</a>` : ""}
+    <a class="button button--text interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>Baixar MP4</a>
   </div>`
       : ""
   }
 </article>`;
+}
+
+/** Uma seção do formulário: título e campos. */
+function formSection(section: Section, value: Values): string {
+  return `<section class="form-section">
+        <h2 class="form-section__title">${esc(section.title)}</h2>
+        ${section.fields.map((f) => formField(f, value)).join("")}
+      </section>`;
+}
+
+function formField(f: Field, value: Values): string {
+  switch (f.kind) {
+    case "textarea":
+      return `<div class="text-field">
+          <textarea class="text-field__input" id="${f.name}" name="${f.name}" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}>${esc(value(f.name))}</textarea>
+          <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
+          <p class="text-field__supporting" id="${f.name}-ajuda"><span${f.speech ? ` data-words data-default="${esc(f.supporting)}"` : ""}>${esc(f.supporting)}</span><span data-count>${value(f.name).length}/${f.maxLength}</span></p>
+        </div>`;
+    case "text":
+      return `<div class="text-field">
+          <input class="text-field__input" id="${f.name}" name="${f.name}" type="text" maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda" value="${esc(value(f.name))}">
+          <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
+          <p class="text-field__supporting" id="${f.name}-ajuda"><span>${esc(f.supporting)}</span></p>
+        </div>`;
+    case "select": {
+      const selected = value(f.name);
+      const description = f.options.find((o) => o.value === selected)?.description;
+      const supporting = description !== undefined ? `<span data-description-for="${f.name}">${esc(description)}</span>` : f.supporting ? `<span>${esc(f.supporting)}</span>` : "";
+      return `<div class="text-field text-field--select">
+          <select class="text-field__input" id="${f.name}" name="${f.name}"${supporting ? ` aria-describedby="${f.name}-ajuda"` : ""}>${f.options
+            .map((o) => `<option value="${esc(o.value)}"${o.value === selected ? " selected" : ""}${o.description ? ` data-description="${esc(o.description)}"` : ""}>${esc(o.label)}</option>`)
+            .join("")}</select>
+          <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
+          <span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
+          ${supporting ? `<p class="text-field__supporting" id="${f.name}-ajuda">${supporting}</p>` : ""}
+        </div>`;
+    }
+    case "segmented": {
+      const selected = value(f.name);
+      return `<fieldset class="segmented-field">
+          <legend class="segmented-field__label">${esc(f.label)}</legend>
+          <div class="segmented-button">${f.options
+            .map(
+              (o) => `<label class="segmented-button__segment interactive"><input type="radio" name="${f.name}" value="${esc(o.value)}"${o.value === selected ? " checked" : ""}><span class="icon segmented-button__check" aria-hidden="true">check</span><span>${esc(o.label)}</span></label>`,
+            )
+            .join("")}</div>
+        </fieldset>`;
+    }
+    case "image":
+      return `<label class="file-picker">
+          <input type="file" name="${f.name}" accept="image/jpeg,image/png,image/webp"${f.required ? " required" : ""} data-image>
+          <span class="button button--tonal interactive"><span class="icon">add_photo_alternate</span>${esc(f.label)}</span>
+          <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
+          <span class="file-picker__text">
+            <span class="file-picker__name" data-image-name data-empty="${f.required ? "Nenhuma foto" : "Opcional"}">${f.required ? "Nenhuma foto" : "Opcional"}</span>
+            <span class="file-picker__hint">${esc(f.supporting)} JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB.</span>
+          </span>
+        </label>`;
+  }
+}
+
+/** Os padrões dos campos com valor (listas e botões segmentados). */
+function defaultValues(sections: Section[]): Values {
+  const defaults = new Map(sections.flatMap((s) => s.fields).flatMap((f) => ("value" in f ? [[f.name, f.value] as const] : [])));
+  return (name) => defaults.get(name) ?? "";
+}
+
+/** O que o formulário mandou; campo ausente fica com o padrão da estrutura. */
+function formValues(form: FormData, sections: Section[]): Values {
+  const defaults = defaultValues(sections);
+  return (name) => {
+    const v = form.get(name);
+    return typeof v === "string" && v !== "" ? v : defaults(name);
+  };
 }
 
 function loginPage(error?: string, email = ""): string {
@@ -373,18 +456,29 @@ function snackbar(text: string): string {
 </div>`;
 }
 
-function page(title: string, body: string, opts: { refresh?: boolean; bar?: boolean; user?: User } = {}): string {
-  const bar =
-    opts.bar === false
-      ? ""
-      : `<header class="top-app-bar" data-app-bar>
+/**
+ * Barra superior pequena do M3: na página inicial, a marca e o botão de sair;
+ * nas outras, o botão de voltar e o título da página.
+ */
+type Bar = false | { user: User } | { back: string; title: string };
+
+function topAppBar(bar: Exclude<Bar, false>): string {
+  if ("back" in bar) {
+    return `<header class="top-app-bar top-app-bar--leading" data-app-bar>
+  <a class="icon-button interactive" href="${esc(bar.back)}" aria-label="Voltar" title="Voltar"><span class="icon">arrow_back</span></a>
+  <h1 class="top-app-bar__title">${esc(bar.title)}</h1>
+</header>`;
+  }
+  return `<header class="top-app-bar" data-app-bar>
   <a class="top-app-bar__brand" href="/">
     <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
     <span class="top-app-bar__title">${SITE_NAME}</span>
   </a>
-  ${opts.user ? `<span class="top-app-bar__user" title="${esc(opts.user.email)}">${esc(opts.user.name)}</span>` : ""}
-  <form method="post" action="/sair"><button class="icon-button interactive" type="submit" aria-label="Sair" title="Sair"><span class="icon">logout</span></button></form>
+  <form method="post" action="/sair"><button class="icon-button interactive" type="submit" aria-label="Sair da conta de ${esc(bar.user.name)}" title="Sair (${esc(bar.user.email)})"><span class="icon">logout</span></button></form>
 </header>`;
+}
+
+function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -402,7 +496,7 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar?: bool
 </head>
 <body${opts.refresh ? ` data-refresh="${REFRESH_SECONDS}"` : ""}>
   <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
-  ${bar}
+  ${opts.bar ? topAppBar(opts.bar) : ""}
   ${body}
   <footer class="footer"><div class="footer__inner"><p class="footer__text">Vídeos gerados com inteligência artificial pelo OpenRouter.</p></div></footer>
   <script nonce="${NONCE}">${SCRIPT}</script>
@@ -410,7 +504,11 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar?: bool
 </html>`;
 }
 
-/** Barra que muda de cor ao rolar, custo estimado, contador do prompt, prévia da foto e atualização da fila. */
+/**
+ * Barra que muda de cor ao rolar, snackbar, e no formulário: custo e duração
+ * estimados, contador da fala, explicação da opção escolhida e prévia da foto.
+ * Na lista de vídeos, atualiza a fila de tempos em tempos.
+ */
 const SCRIPT = `(() => {
   const bar = document.querySelector("[data-app-bar]");
   if (bar) {
@@ -423,36 +521,46 @@ const SCRIPT = `(() => {
     const close = e.target instanceof Element && e.target.closest("[data-snackbar-close]");
     if (close) close.closest("[data-snackbar]").hidden = true;
   });
-  if (location.search.includes("erro=")) history.replaceState(null, "", location.pathname);
 
   const f = document.querySelector("[data-composer]");
   if (f) {
-    const prices = JSON.parse(f.dataset.prices || "{}");
-    const cost = f.querySelector("[data-cost]"), model = f.modelo.value;
+    const cfg = JSON.parse(f.dataset.composer);
+    const val = (name) => (f.elements[name] ? f.elements[name].value || "" : "");
+    const speech = f.querySelector("[data-speech]");
     const words = f.querySelector("[data-words]"), count = f.querySelector("[data-count]");
-    const styles = JSON.parse(f.dataset.styles || "{}"), rate = JSON.parse(f.dataset.rate || "{}");
-    const styleText = f.querySelector("[data-style-description]");
+    const cost = f.querySelector("[data-cost]"), seconds = f.querySelector("[data-seconds]");
+    const rate = cfg.rate, mid = (rate.min + rate.max) / 2;
     const update = () => {
-      const p = Number(prices["duration_seconds_" + f.resolucao.value]);
-      cost.innerHTML = p ? model + " · <strong>US$ " + (p * f.duracao.value).toFixed(2) + "</strong> estimado" : model;
-      styleText.textContent = styles[f.estilo.value] || "";
-      // Fala natural: a faixa de palavras que cabe na duração escolhida.
-      const s = Number(f.duracao.value), min = Math.round(s * rate.min), max = Math.round(s * rate.max);
-      const n = f.fala.value.split(/\\s+/).filter(Boolean).length;
-      words.textContent = n
-        ? n + " palavras" + (n < min ? " · curta para " + s + " s (ideal " + min + " a " + max + ")" : n > max ? " · longa para " + s + " s (ideal " + min + " a " + max + ")" : " · cabe em " + s + " s")
-        : "Para " + s + " s: umas " + min + " a " + max + " palavras.";
-      words.parentElement.classList.toggle("text-field__supporting--warn", n > max);
-      count.textContent = f.fala.value.length + "/" + f.fala.maxLength;
+      const n = speech.value.split(/\\s+/).filter(Boolean).length;
+      const fixed = cfg.seconds.field ? Number(val(cfg.seconds.field)) : 0;
+      const s = fixed || (n ? Math.max(1, Math.round(n / mid)) : 0);
+      const price = Number(cfg.prices[cfg.sku.replace(/\\{(\\w+)\\}/g, (_, k) => val(k))]);
+      seconds.textContent = s ? (fixed ? "" : "≈ ") + s + " s" : "—";
+      cost.textContent = price && s ? "US$ " + (price * s).toFixed(2) : "—";
+      if (fixed) {
+        // Duração escolhida: a faixa de palavras que cabe nela.
+        const min = Math.round(fixed * rate.min), max = Math.round(fixed * rate.max);
+        words.textContent = n
+          ? n + " palavras" + (n < min ? " · curta para " + fixed + " s (ideal " + min + " a " + max + ")" : n > max ? " · longa para " + fixed + " s (ideal " + min + " a " + max + ")" : " · cabe em " + fixed + " s")
+          : "Para " + fixed + " s: umas " + min + " a " + max + " palavras.";
+        words.parentElement.classList.toggle("text-field__supporting--error", n > max);
+      } else {
+        words.textContent = n ? n + " palavras · ≈ " + s + " s de vídeo" : words.dataset.default;
+      }
+      count.textContent = speech.value.length + "/" + speech.maxLength;
+      for (const d of f.querySelectorAll("[data-description-for]")) {
+        const option = f.elements[d.dataset.descriptionFor].selectedOptions[0];
+        d.textContent = (option && option.dataset.description) || "";
+      }
     };
     f.addEventListener("change", update);
-    f.fala.addEventListener("input", update);
+    f.addEventListener("input", update);
     update();
 
     const image = f.querySelector("[data-image]"), preview = f.querySelector("[data-preview]"), name = f.querySelector("[data-image-name]");
     image.addEventListener("change", () => {
       const file = image.files[0];
-      name.textContent = file ? file.name : "Opcional";
+      name.textContent = file ? file.name : name.dataset.empty;
       preview.innerHTML = file ? '<img alt="">' : '<span class="icon">face</span>';
       if (file) preview.firstChild.src = URL.createObjectURL(file);
     });
@@ -460,26 +568,12 @@ const SCRIPT = `(() => {
     f.addEventListener("submit", () => { f.querySelector("[type=submit]").disabled = true; });
   }
 
-  // Vídeo na fila: confere de novo de tempos em tempos, sem perder o que está sendo escrito.
+  // Vídeo na fila: confere de novo de tempos em tempos, sem cortar um vídeo que está tocando.
   const refresh = Number(document.body.dataset.refresh);
   if (refresh) setInterval(() => {
-    if (!f || (!f.fala.value && !f.instrucoes.value && !f.imagem.files.length)) location.reload();
+    if (![...document.querySelectorAll("video")].some((v) => !v.paused)) location.reload();
   }, refresh * 1000);
 })();`;
-
-function select(name: string, label: string, options: string[], selected: string, text: (s: string) => string = (s) => s): string {
-  return `<div class="text-field text-field--select">
-  <select class="text-field__input" id="${name}" name="${name}">${options
-    .map((o) => `<option value="${esc(o)}"${o === selected ? " selected" : ""}>${esc(text(o))}</option>`)
-    .join("")}</select>
-  <label class="text-field__label" for="${name}">${esc(label)}</label>
-  <span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
-</div>`;
-}
-
-function range(from: number, to: number): number[] {
-  return Array.from({ length: to - from + 1 }, (_, i) => from + i);
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });

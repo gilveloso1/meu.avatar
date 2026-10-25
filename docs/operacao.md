@@ -93,8 +93,9 @@ Nenhuma chave fica no repositório.
 | `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` | Só onde você publica | Publicar, criar banco e bucket, cadastrar segredos |
 
 Configurações que não são segredo ficam em `vars`, no `wrangler.jsonc`:
-`SITE_URL` e os padrões do formulário (`VIDEO_MODEL`, `VIDEO_DURATION`,
-`VIDEO_RESOLUTION`, `VIDEO_ASPECT_RATIO`).
+`SITE_URL` e os padrões do formulário do Wan (`VIDEO_DURATION`,
+`VIDEO_RESOLUTION`, `VIDEO_ASPECT_RATIO`). O modelo de cada formulário fica na
+própria estrutura, em `src/structures/`.
 
 ## Publicar com o contêiner
 

@@ -35,9 +35,9 @@
     // Endereço público do Worker (sem barra no fim): o OpenRouter manda o aviso
     // para SITE_URL/openrouter/webhook e baixa a foto do avatar de SITE_URL/midia/...
     "SITE_URL": "https://meuavatar.ia.br",
-    // Padrões do formulário. Os valores aceitos vêm do próprio modelo
+    // Padrões do formulário do Wan. O modelo de cada estrutura fica em
+    // src/structures/; os valores aceitos vêm do próprio modelo
     // (GET https://openrouter.ai/api/v1/videos/models).
-    "VIDEO_MODEL": "alibaba/wan-3.0",
     "VIDEO_DURATION": "25",
     "VIDEO_RESOLUTION": "480p",
     "VIDEO_ASPECT_RATIO": "9:16"
