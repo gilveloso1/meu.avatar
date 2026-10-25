@@ -1,30 +1,24 @@
 # meu.avatar
 
-Geração de vídeos curtos com avatar realista falando um texto, para redes sociais e anúncios, usando a API de vídeo do [OpenRouter](https://openrouter.ai/docs/guides/overview/multimodal/video-generation.md). Projeto em TypeScript (Node 22+).
+Estúdio de **vídeos curtos com avatar realista falando um texto**, para redes
+sociais e anúncios. Você escreve o prompt (quem é o avatar, cenário, a fala
+exata), envia a foto do avatar e recebe o MP4.
 
-## Instalação
+Roda no **Cloudflare Workers**, com banco D1 e arquivos no R2, no mesmo molde
+do [anb.bot](https://github.com/gilveloso1/anb.bot). Os vídeos vêm da
+[API de vídeo do OpenRouter](https://openrouter.ai/docs/guides/overview/multimodal/video-generation.md);
+o padrão é o **Wan 3.0**, 25 s, 480p, 9:16, com áudio (≈ US$ 1,25 por vídeo).
 
-```sh
-npm install
-export OPENROUTER_API_KEY=...   # nunca commitar a chave
-```
-
-## Primeiro vídeo
-
-Padrão do teste: `alibaba/wan-3.0`, 25 s, 480p, 9:16, com áudio (≈ US$ 0,05/s → US$ 1,25).
-
-```sh
-npm run gerar -- --prompt-arquivo prompts/teste.txt --imagem avatar.jpg --simular   # confere o pedido e o custo
-npm run gerar -- --prompt-arquivo prompts/teste.txt --imagem avatar.jpg             # gera de verdade
-```
-
-- `--imagem` é opcional: arquivo local (enviado em base64) ou URL pública; vira o primeiro quadro do vídeo.
-- O MP4 e um `.json` com o pedido/resposta ficam em `saida/`.
-- Outras opções: `--modelo`, `--duracao`, `--resolucao`, `--formato`, `--seed`, `--sem-audio` (veja `npm run gerar -- --ajuda`).
+- Como funciona, chaves e como publicar: [docs/operacao.md](docs/operacao.md)
 
 ## Estrutura
 
-- `src/openrouter.ts` — cliente da API de vídeo (listar modelos, validar, enviar, aguardar, baixar).
-- `src/gerar-video.ts` — CLI.
-
-Atrás de um proxy HTTP (ex.: ambiente cloud), rode com `NODE_USE_ENV_PROXY=1` para o `fetch` do Node usar `HTTPS_PROXY`.
+| Arquivo | O quê |
+|---|---|
+| `src/index.ts` | Rotas do Worker: webhook do OpenRouter, estúdio, agendamento |
+| `src/studio.ts` | Pede o vídeo, acompanha o job e guarda o MP4 no R2 |
+| `src/openrouter.ts` | Cliente da API de vídeo (validação, custo, assinatura do webhook) |
+| `src/db.ts` | Tabela `videos` no D1 |
+| `src/site/` | Páginas (HTML no Worker) e visual Material Design 3 |
+| `tools/gerar-video.ts` | Gerar pelo terminal, sem o Worker (`npm run gerar`) |
+| `test/` | Testes (Vitest no ambiente do Workers, OpenRouter falso) |

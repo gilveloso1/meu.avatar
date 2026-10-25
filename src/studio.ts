@@ -1,0 +1,169 @@
+import { Db, OPEN_STATUSES, type Video } from "./db";
+import { estimateCost, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
+
+export interface StudioConfig {
+  /** Endereço público, sem barra no fim. */
+  siteUrl: string;
+}
+
+export interface NewVideoInput {
+  prompt: string;
+  model: string;
+  duration: number;
+  resolution: string;
+  aspectRatio: string;
+  /** Foto do avatar, usada como primeiro quadro. */
+  image?: File | null;
+}
+
+const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+/** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_PROMPT = 4000;
+
+export class InputError extends Error {}
+
+/**
+ * Pede os vídeos ao OpenRouter e acompanha até o MP4 estar no R2. O aviso do
+ * OpenRouter (webhook) só serve de gatilho: o status é sempre conferido na
+ * API, e o agendamento confere os que ficaram abertos caso o aviso se perca.
+ */
+export class Studio {
+  private models = new Map<string, Promise<VideoModel>>();
+
+  constructor(
+    private readonly db: Db,
+    private readonly media: R2Bucket,
+    private readonly api: VideoApi | null,
+    private readonly config: StudioConfig,
+  ) {}
+
+  get canGenerate(): boolean {
+    return this.api !== null;
+  }
+
+  model(id: string): Promise<VideoModel> {
+    const api = this.requireApi();
+    let model = this.models.get(id);
+    if (!model) this.models.set(id, (model = api.getModel(id)));
+    return model;
+  }
+
+  /** Valida, guarda a foto, registra o vídeo e envia o pedido. */
+  async create(input: NewVideoInput): Promise<Video> {
+    const api = this.requireApi();
+    const prompt = input.prompt.trim();
+    if (!prompt) throw new InputError("Escreva o prompt do vídeo.");
+    if (prompt.length > MAX_PROMPT) throw new InputError(`O prompt passa de ${MAX_PROMPT} caracteres.`);
+
+    const image = input.image && input.image.size > 0 ? input.image : null;
+    const ext = image ? IMAGE_TYPES[image.type] : undefined;
+    if (image && !ext) throw new InputError("A foto precisa ser JPG, PNG ou WebP.");
+    if (image && image.size > MAX_IMAGE_BYTES) throw new InputError("A foto passa de 10 MB.");
+
+    const request: VideoRequest = {
+      model: input.model,
+      prompt,
+      duration: input.duration,
+      resolution: input.resolution,
+      aspect_ratio: input.aspectRatio,
+      generate_audio: true,
+      ...(image && { frame_images: [{ type: "image_url", image_url: { url: "" }, frame_type: "first_frame" }] }),
+    };
+    const errors = validate(await this.model(input.model), request);
+    if (errors.length) throw new InputError(`Não suportado por ${input.model}: ${errors.join("; ")}.`);
+
+    const id = crypto.randomUUID();
+    let imageKey: string | null = null;
+    if (image) {
+      // Nome impossível de adivinhar: a foto fica pública só para o provedor baixar.
+      imageKey = `avatares/${crypto.randomUUID()}.${ext}`;
+      const bytes = await image.arrayBuffer();
+      await this.media.put(imageKey, bytes, { httpMetadata: { contentType: image.type } });
+      request.frame_images![0]!.image_url.url = await this.imageUrl(imageKey, image.type, bytes);
+    }
+    if (this.config.siteUrl.startsWith("https://")) request.callback_url = `${this.config.siteUrl}/openrouter/webhook`;
+
+    const video = await this.db.insertVideo({
+      id,
+      prompt,
+      model: input.model,
+      duration: input.duration,
+      resolution: input.resolution,
+      aspect_ratio: input.aspectRatio,
+      image_key: imageKey,
+    });
+
+    try {
+      const job = await api.submit(request);
+      return (await this.db.updateVideo(id, { job_id: job.id, status: job.status ?? "pending" }))!;
+    } catch (err) {
+      return (await this.db.updateVideo(id, { status: "failed", error: errorMessage(err) }))!;
+    }
+  }
+
+  /** Confere o job no OpenRouter e, se terminou, guarda o MP4 no R2. */
+  async sync(video: Video): Promise<Video> {
+    if (!video.job_id || !OPEN_STATUSES.includes(video.status)) return video;
+    const api = this.requireApi();
+    let job: VideoJob;
+    try {
+      job = await api.get(video.job_id);
+    } catch (err) {
+      console.error("Falha ao consultar o job", video.job_id, err);
+      return video;
+    }
+
+    if (job.status === "completed") {
+      const key = `videos/${video.id}.mp4`;
+      await this.media.put(key, await api.download(job), { httpMetadata: { contentType: "video/mp4" } });
+      return (await this.db.updateVideo(video.id, { status: "completed", video_key: key, cost: job.usage?.cost ?? null }))!;
+    }
+    if (job.status === "failed" || job.status === "cancelled" || job.status === "expired") {
+      return (await this.db.updateVideo(video.id, { status: job.status, error: job.error ?? null, cost: job.usage?.cost ?? null }))!;
+    }
+    if (job.status !== video.status) return (await this.db.updateVideo(video.id, { status: job.status }))!;
+    return video;
+  }
+
+  /** Aviso do OpenRouter: acha o vídeo pelo id do job e confere. */
+  async onWebhook(payload: unknown): Promise<Video | null> {
+    const jobId = (payload as { data?: { id?: unknown } } | null)?.data?.id;
+    if (typeof jobId !== "string") return null;
+    const video = await this.db.videoByJob(jobId);
+    return video ? this.sync(video) : null;
+  }
+
+  /** Agendamento: confere os vídeos ainda abertos. */
+  async syncOpen(limit = 10): Promise<Video[]> {
+    if (!this.api) return [];
+    const done: Video[] = [];
+    for (const video of await this.db.openVideos(limit)) done.push(await this.sync(video));
+    return done;
+  }
+
+  estimate(model: VideoModel, input: Pick<NewVideoInput, "duration" | "resolution">): number | undefined {
+    return estimateCost(model, { model: model.id, prompt: "", duration: input.duration, resolution: input.resolution });
+  }
+
+  /**
+   * O provedor baixa a foto pela URL pública do Worker. Em desenvolvimento
+   * (localhost), essa URL não é alcançável de fora: vai a foto em base64.
+   */
+  private async imageUrl(key: string, type: string, bytes: ArrayBuffer): Promise<string> {
+    if (this.config.siteUrl.startsWith("https://")) return `${this.config.siteUrl}/midia/${key}`;
+    let binary = "";
+    const view = new Uint8Array(bytes);
+    for (let i = 0; i < view.length; i += 0x8000) binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
+    return `data:${type};base64,${btoa(binary)}`;
+  }
+
+  private requireApi(): VideoApi {
+    if (!this.api) throw new InputError("Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY).");
+    return this.api;
+  }
+}
+
+export function errorMessage(err: unknown): string {
+  return (err instanceof Error ? err.message : String(err)).slice(0, 1000);
+}

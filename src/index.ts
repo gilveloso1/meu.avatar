@@ -1,0 +1,62 @@
+import { Db } from "./db";
+import type { Env } from "./env";
+import { OpenRouterVideo, verifySignature, type VideoApi } from "./openrouter";
+import { Site } from "./site/site";
+import { Studio } from "./studio";
+
+export function createStudio(env: Env, deps: { api?: VideoApi | null } = {}): Studio {
+  const api = deps.api !== undefined ? deps.api : env.OPENROUTER_API_KEY ? new OpenRouterVideo(env.OPENROUTER_API_KEY) : null;
+  return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL });
+}
+
+export function createSite(env: Env, studio: Studio): Site {
+  return new Site(new Db(env.DB), env.MIDIA, studio, {
+    accessToken: env.ACCESS_TOKEN || undefined,
+    defaults: {
+      model: env.VIDEO_MODEL,
+      duration: Number(env.VIDEO_DURATION),
+      resolution: env.VIDEO_RESOLUTION,
+      aspectRatio: env.VIDEO_ASPECT_RATIO,
+    },
+  });
+}
+
+export async function handle(request: Request, env: Env, deps: { api?: VideoApi | null } = {}): Promise<Response> {
+  const url = new URL(request.url);
+  const studio = createStudio(env, deps);
+
+  // Aviso do OpenRouter de que um job terminou. Com o segredo de assinatura
+  // configurado, a assinatura é conferida; de qualquer jeito o status vem da
+  // própria API, nunca do corpo do aviso.
+  if (request.method === "POST" && url.pathname === "/openrouter/webhook") {
+    const raw = await request.text();
+    if (env.OPENROUTER_WEBHOOK_SECRET && !(await verifySignature(raw, request.headers.get("X-OpenRouter-Signature"), env.OPENROUTER_WEBHOOK_SECRET))) {
+      return new Response("unauthorized", { status: 401 });
+    }
+    let payload: unknown = null;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      return new Response("bad request", { status: 400 });
+    }
+    try {
+      await studio.onWebhook(payload);
+    } catch (err) {
+      // 500: o OpenRouter tenta de novo; e o agendamento também confere.
+      console.error("Erro ao processar aviso do OpenRouter", err);
+      return new Response("error", { status: 500 });
+    }
+    return new Response("ok");
+  }
+
+  return createSite(env, studio).handle(request);
+}
+
+export default {
+  fetch: (request, env) => handle(request, env),
+
+  // Rede de segurança: confere os vídeos que ainda estão na fila, caso o aviso se perca.
+  async scheduled(_controller, env): Promise<void> {
+    await createStudio(env).syncOpen();
+  },
+} satisfies ExportedHandler<Env>;

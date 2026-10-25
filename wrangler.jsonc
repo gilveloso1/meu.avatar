@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "meu-avatar",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // A cada 2 minutos: confere no OpenRouter os vídeos que ainda estão na fila,
+  // caso o aviso (webhook) não chegue.
+  "triggers": { "crons": ["*/2 * * * *"] },
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "meu-avatar",
+      // Troque pelo id que `npx wrangler d1 create meu-avatar` mostrar.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "MIDIA", "bucket_name": "meu-avatar" }],
+  "vars": {
+    // Endereço público do Worker (sem barra no fim): o OpenRouter manda o aviso
+    // para SITE_URL/openrouter/webhook e baixa a foto do avatar de SITE_URL/midia/...
+    "SITE_URL": "https://meu-avatar.gilveloso.workers.dev",
+    // Padrões do formulário. Os valores aceitos vêm do próprio modelo
+    // (GET https://openrouter.ai/api/v1/videos/models).
+    "VIDEO_MODEL": "alibaba/wan-3.0",
+    "VIDEO_DURATION": "25",
+    "VIDEO_RESOLUTION": "480p",
+    "VIDEO_ASPECT_RATIO": "9:16"
+  },
+  "observability": { "enabled": true }
+}
