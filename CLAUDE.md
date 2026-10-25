@@ -8,8 +8,12 @@ Como publicar e operar: [docs/operacao.md](docs/operacao.md).
 ## Site leve
 
 - As páginas são HTML montado no Worker (`src/site/site.ts`), com CSS
-  (`src/site/style.ts`, tokens do Material Design 3) e poucas linhas de script
-  embutidos, sem framework nem biblioteca de interface. Mantenha assim.
+  (`src/site/style.ts`, tokens e componentes do Material Design 3, como no
+  anb.bot) e poucas linhas de script embutidos, sem framework nem biblioteca
+  de interface. Mantenha assim e siga o M3 (m3.material.io) em todo componente.
+- Cores só por `npm run tema`, que gera `src/site/theme.ts` pelo algoritmo do
+  M3; não edite as cores à mão. Fontes: Roboto e Material Symbols do Google
+  Fonts, só com os ícones listados em `ICONS`.
 - Nada de biblioteca de componentes ou de CSS (nem de CDN) sem combinar antes
   com o usuário.
 

@@ -54,7 +54,7 @@ describe("acesso", () => {
     expect(page).toContain('<option value="480p" selected>');
     expect(page).toContain('<option value="9:16" selected>');
     expect(page).toContain("duration_seconds_480p");
-    expect(page).toContain("Nenhum vídeo ainda.");
+    expect(page).toContain("Nenhum vídeo ainda");
   });
 
   it("sem chave do OpenRouter, avisa e desliga o botão", async () => {
@@ -139,7 +139,7 @@ describe("acompanhar", () => {
     const page = await (await call(new Request(`${SITE}/`, { headers: { cookie: await cookie() } }), api)).text();
     expect(page).toContain(`<video controls preload="metadata" playsinline src="/videos/${video!.id}.mp4">`);
     expect(page).toContain("US$ 1.25");
-    expect(page).not.toContain('http-equiv="refresh"');
+    expect(page).not.toContain('data-refresh=');
 
     const mp4 = await call(new Request(`${SITE}/videos/${video!.id}.mp4`, { headers: { cookie: await cookie(), range: "bytes=0-2" } }), api);
     expect(mp4.status).toBe(206);
@@ -169,7 +169,7 @@ describe("acompanhar", () => {
 
     // Enquanto há vídeo na fila, a página se atualiza sozinha.
     const page = await (await call(new Request(`${SITE}/`, { headers: { cookie: await cookie() } }), api)).text();
-    expect(page).toContain('http-equiv="refresh"');
+    expect(page).toContain('data-refresh=');
     expect(page).toContain("Content policy violation");
 
     // Terminado, não consulta mais.

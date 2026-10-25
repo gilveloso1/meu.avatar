@@ -1,12 +1,14 @@
 /**
- * O estúdio: páginas em HTML montado no Worker, com CSS e poucas linhas de
- * script embutidos (o mesmo jeito do blog do anb.bot). Tudo atrás da senha
- * ACCESS_TOKEN, menos /midia/avatares/..., que o provedor de vídeo precisa baixar.
+ * O estúdio: páginas em HTML montado no Worker, com CSS e um script pequeno
+ * embutidos (o mesmo jeito do blog do anb.bot), no Material Design 3. Tudo
+ * atrás da senha ACCESS_TOKEN, menos /midia/avatares/..., que o provedor de
+ * vídeo precisa baixar.
  */
 import type { Db, Video, VideoStatus } from "../db";
 import type { VideoModel } from "../openrouter";
 import { InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
 import { CSS } from "./style";
+import { DARK, LIGHT } from "./theme";
 
 export interface SiteConfig {
   /** Senha do estúdio; sem ela ninguém entra. */
@@ -14,17 +16,29 @@ export interface SiteConfig {
   defaults: { model: string; duration: number; resolution: string; aspectRatio: string };
 }
 
+const SITE_NAME = "meu.avatar";
 const COOKIE = "sessao";
 const ONE_YEAR = 60 * 60 * 24 * 365;
+/** Enquanto há vídeo na fila, a página confere de novo a cada tantos segundos. */
+const REFRESH_SECONDS = 20;
 
-const STATUS_LABEL: Record<VideoStatus, string> = {
-  submitting: "Enviando",
-  pending: "Na fila",
-  in_progress: "Gerando",
-  completed: "Pronto",
-  failed: "Falhou",
-  cancelled: "Cancelado",
-  expired: "Expirou",
+/** Ícones usados (Material Symbols); a fonte só baixa esses. */
+const ICONS = [
+  "add_photo_alternate", "arrow_drop_down", "check_circle", "close", "download", "error", "face", "hourglass_top", "lock", "logout", "movie", "progress_activity", "schedule",
+  "send", "videocam",
+];
+
+const SURFACE_LIGHT = /--md-sys-color-surface: (#\w+)/.exec(LIGHT)![1];
+const SURFACE_DARK = /--md-sys-color-surface: (#\w+)/.exec(DARK)![1];
+
+const STATUS: Record<VideoStatus, { label: string; icon: string; kind: "busy" | "done" | "error" }> = {
+  submitting: { label: "Enviando", icon: "send", kind: "busy" },
+  pending: { label: "Na fila", icon: "schedule", kind: "busy" },
+  in_progress: { label: "Gerando", icon: "hourglass_top", kind: "busy" },
+  completed: { label: "Pronto", icon: "check_circle", kind: "done" },
+  failed: { label: "Falhou", icon: "error", kind: "error" },
+  cancelled: { label: "Cancelado", icon: "error", kind: "error" },
+  expired: { label: "Expirou", icon: "error", kind: "error" },
 };
 
 export class Site {
@@ -76,64 +90,61 @@ export class Site {
       }
     }
     const videos = await this.db.recentVideos();
-    const waiting = videos.some((v) => v.status === "submitting" || v.status === "pending" || v.status === "in_progress");
-    const notice = url.searchParams.get("erro") ?? modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
+    const waiting = videos.some((v) => STATUS[v.status].kind === "busy");
+    const error = url.searchParams.get("erro");
+    const banner = modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
 
     const body = `
-<header class="top-app-bar"><h1>meu.avatar</h1><a class="button text" href="/sair">Sair</a></header>
-<main>
-  ${notice ? `<p class="snackbar" role="alert">${esc(notice)}</p>` : ""}
-  ${this.form(model)}
-  <h2>Vídeos</h2>
-  ${videos.length ? `<div class="videos">${videos.map((v) => videoCard(v)).join("")}</div>` : `<p class="empty">Nenhum vídeo ainda.</p>`}
-</main>`;
-    // Enquanto algum vídeo está na fila, a página se atualiza sozinha.
-    return html(page("meu.avatar", body, waiting ? 20 : undefined));
+<main class="page" id="conteudo">
+  ${this.composer(model, banner)}
+  <section class="gallery" aria-labelledby="videos">
+    <h2 class="gallery__heading" id="videos">Vídeos</h2>
+    ${
+      videos.length
+        ? `<div class="gallery__grid">${videos.map(videoCard).join("")}</div>`
+        : `<div class="empty"><span class="icon">movie</span><p class="empty__title">Nenhum vídeo ainda</p><p>Escreva o prompt e gere o primeiro.</p></div>`
+    }
+  </section>
+</main>
+${error ? snackbar(error) : ""}`;
+    return html(page("meu.avatar", body, { refresh: waiting }));
   }
 
-  private form(model: VideoModel | null): string {
+  private composer(model: VideoModel | null, banner: string | null): string {
     const d = this.config.defaults;
     const durations = model?.supported_durations ?? range(2, 30);
     const resolutions = model?.supported_resolutions ?? [d.resolution];
     const ratios = model?.supported_aspect_ratios ?? [d.aspectRatio];
-    const prices = JSON.stringify(model?.pricing_skus ?? {});
-    const disabled = model ? "" : " disabled";
+    const prices = JSON.stringify(model?.pricing_skus ?? {}).replace(/</g, "\\u003c");
     return `
-<form class="card" method="post" action="/videos" enctype="multipart/form-data" id="novo">
-  <div class="field">
-    <label for="prompt">Prompt completo</label>
-    <textarea id="prompt" name="prompt" required maxlength="4000" placeholder="Quem é o avatar, cenário e câmera, a fala exata entre aspas, tom de voz e gestos, áudio."></textarea>
-    <small id="palavras">Fala de 25 s: umas 55 a 65 palavras.</small>
+<form class="card card--outlined composer" method="post" action="/videos" enctype="multipart/form-data" data-composer data-prices='${esc(prices)}'>
+  <h1 class="composer__title">Novo vídeo</h1>
+  ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
+  <div class="text-field">
+    <textarea class="text-field__input" id="prompt" name="prompt" required maxlength="4000" placeholder="Quem é o avatar, cenário e câmera, a fala exata entre aspas, tom de voz e gestos, áudio." aria-describedby="prompt-ajuda"></textarea>
+    <label class="text-field__label" for="prompt">Prompt completo</label>
+    <p class="text-field__supporting" id="prompt-ajuda"><span data-words>Fala de 25 s: umas 55 a 65 palavras.</span><span data-count>0/4000</span></p>
   </div>
-  <div class="field">
-    <label for="imagem">Foto do avatar (opcional: vira o primeiro quadro)</label>
-    <input id="imagem" name="imagem" type="file" accept="image/jpeg,image/png,image/webp">
-    <small>JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB. De frente, com boa luz.</small>
-  </div>
-  <div class="row">
-    <div class="field"><label for="duracao">Duração</label>${select("duracao", durations.map(String), String(d.duration), (s) => `${s} s`)}</div>
-    <div class="field"><label for="resolucao">Resolução</label>${select("resolucao", resolutions, d.resolution)}</div>
-    <div class="field"><label for="formato">Formato</label>${select("formato", ratios, d.aspectRatio)}</div>
+  <label class="file-picker">
+    <input type="file" name="imagem" accept="image/jpeg,image/png,image/webp" data-image>
+    <span class="button button--tonal interactive"><span class="icon">add_photo_alternate</span>Foto do avatar</span>
+    <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
+    <span class="file-picker__text">
+      <span class="file-picker__name" data-image-name>Opcional</span>
+      <span class="file-picker__hint">Vira o primeiro quadro. JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB.</span>
+    </span>
+  </label>
+  <div class="composer__row">
+    ${select("duracao", "Duração", durations.map(String), String(d.duration), (s) => `${s} s`)}
+    ${select("resolucao", "Resolução", resolutions, d.resolution)}
+    ${select("formato", "Formato", ratios, d.aspectRatio)}
   </div>
   <input type="hidden" name="modelo" value="${esc(d.model)}">
-  <div class="actions">
-    <button class="button" type="submit"${disabled}>Gerar vídeo</button>
-    <span class="estimate" id="custo"></span>
+  <div class="composer__actions">
+    <span class="composer__cost" data-cost>${esc(d.model)}</span>
+    <button class="button button--filled interactive" type="submit"${model ? "" : " disabled"}><span class="icon">videocam</span>Gerar vídeo</button>
   </div>
-</form>
-<script>
-(() => {
-  const f = document.getElementById("novo"), prices = ${prices.replace(/</g, "\\u003c")};
-  const custo = document.getElementById("custo");
-  const update = () => {
-    const p = prices["duration_seconds_" + f.resolucao.value];
-    custo.textContent = p ? "${esc(d.model)} · custo estimado US$ " + (p * f.duracao.value).toFixed(2) : "${esc(d.model)}";
-  };
-  f.addEventListener("change", update);
-  update();
-  f.addEventListener("submit", () => { f.querySelector("button").disabled = true; });
-})();
-</script>`;
+</form>`;
   }
 
   private async createVideo(request: Request): Promise<Response> {
@@ -193,9 +204,17 @@ export class Site {
 }
 
 function videoCard(v: Video): string {
+  const status = STATUS[v.status];
+  const ratio = /^(\d+):(\d+)$/.exec(v.aspect_ratio);
+  const style = [
+    ratio ? `--ratio:${ratio[1]} / ${ratio[2]}` : "",
+    !v.video_key && v.image_key ? `background-image:url('/midia/${esc(v.image_key)}')` : "",
+  ].filter(Boolean).join(";");
   const media = v.video_key
     ? `<video controls preload="metadata" playsinline src="/videos/${v.id}.mp4"></video>`
-    : `<div class="placeholder"${v.image_key ? ` style="background-image:url('/midia/${esc(v.image_key)}')"` : ""}><span>${esc(STATUS_LABEL[v.status])}</span></div>`;
+    : `${v.image_key ? "" : `<span class="icon">${status.kind === "error" ? "error" : "movie"}</span>`}${
+        status.kind === "busy" ? `<div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>` : ""
+      }`;
   const meta = [
     v.model.replace(/^[^/]+\//, ""),
     `${v.duration} s`,
@@ -204,48 +223,148 @@ function videoCard(v: Video): string {
     v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : null,
     formatDate(v.created_at),
   ].filter((m): m is string => Boolean(m));
+  const chipClass = status.kind === "done" ? " chip--selected" : status.kind === "error" ? " chip--error" : "";
   return `
-<article class="card video">
-  ${media}
-  <span class="chip ${v.status}">${esc(STATUS_LABEL[v.status])}</span>
-  <details><summary>${esc(v.prompt)}</summary><p>${esc(v.prompt)}</p></details>
-  <div class="meta">${meta.map(esc).join(" · ")}</div>
-  ${v.error ? `<div class="error">${esc(v.error)}</div>` : ""}
-  ${v.video_key ? `<a class="button text" href="/videos/${v.id}.mp4?baixar">Baixar MP4</a>` : ""}
+<article class="card card--elevated video-card">
+  <div class="video-card__media"${style ? ` style="${style}"` : ""}>${media}</div>
+  <div class="video-card__body">
+    <span class="chip${chipClass}"><span class="icon">${status.icon}</span>${esc(status.label)}</span>
+    <details class="video-card__prompt"><summary class="interactive">${esc(v.prompt)}</summary></details>
+    <p class="video-card__meta">${meta.map(esc).join(" · ")}</p>
+    ${v.error ? `<p class="video-card__error">${esc(v.error)}</p>` : ""}
+  </div>
+  ${
+    v.video_key
+      ? `<div class="video-card__actions"><a class="button button--text interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>Baixar MP4</a></div>`
+      : ""
+  }
 </article>`;
 }
 
 function loginPage(error?: string): string {
   return page(
     "Entrar · meu.avatar",
-    `<main><form class="card login" method="post" action="/entrar">
-  <h1>meu.avatar</h1>
-  ${error ? `<p class="snackbar" role="alert">${esc(error)}</p>` : ""}
-  <div class="field"><label for="senha">Senha do estúdio</label><input id="senha" name="senha" type="password" required autofocus autocomplete="current-password"></div>
-  <button class="button" type="submit">Entrar</button>
-</form></main>`,
+    `<main id="conteudo">
+  <form class="card card--outlined login" method="post" action="/entrar">
+    <div class="login__head">
+      <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
+      <h1 class="login__title">${SITE_NAME}</h1>
+      <p class="login__text">Estúdio de vídeos com avatar. Entre com a senha.</p>
+    </div>
+    <div class="text-field">
+      <input class="text-field__input" id="senha" name="senha" type="password" required autofocus autocomplete="current-password" placeholder=" ">
+      <label class="text-field__label" for="senha">Senha do estúdio</label>
+    </div>
+    <button class="button button--filled interactive" type="submit"><span class="icon">lock</span>Entrar</button>
+  </form>
+</main>
+${error ? snackbar(error) : ""}`,
+    { bar: false },
   );
 }
 
-function page(title: string, body: string, refreshSeconds?: number): string {
+function snackbar(text: string): string {
+  return `<div class="snackbar" role="alert" data-snackbar>
+  <span class="snackbar__text">${esc(text)}</span>
+  <button type="button" class="icon-button interactive" aria-label="Fechar" data-snackbar-close style="color:inherit"><span class="icon">close</span></button>
+</div>`;
+}
+
+function page(title: string, body: string, opts: { refresh?: boolean; bar?: boolean } = {}): string {
+  const bar =
+    opts.bar === false
+      ? ""
+      : `<header class="top-app-bar" data-app-bar>
+  <a class="top-app-bar__brand" href="/">
+    <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
+    <span class="top-app-bar__title">${SITE_NAME}</span>
+  </a>
+  <a class="icon-button interactive" href="/sair" aria-label="Sair" title="Sair"><span class="icon">logout</span></a>
+</header>`;
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-${refreshSeconds ? `<meta http-equiv="refresh" content="${refreshSeconds}">` : ""}
-<title>${esc(title)}</title>
-<style>${CSS}</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>${esc(title)}</title>
+  <meta name="theme-color" content="${SURFACE_LIGHT}" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="${SURFACE_DARK}" media="(prefers-color-scheme: dark)">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&icon_names=${[...ICONS].sort().join(",")}&display=block">
+  <style>${CSS}</style>
 </head>
-<body>${body}</body>
+<body${opts.refresh ? ` data-refresh="${REFRESH_SECONDS}"` : ""}>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+  ${bar}
+  ${body}
+  <footer class="footer"><div class="footer__inner"><p class="footer__text">Vídeos gerados com inteligência artificial pelo OpenRouter.</p></div></footer>
+  <script>${SCRIPT}</script>
+</body>
 </html>`;
 }
 
-function select(name: string, options: string[], selected: string, label: (s: string) => string = (s) => s): string {
-  return `<select id="${name}" name="${name}">${options
-    .map((o) => `<option value="${esc(o)}"${o === selected ? " selected" : ""}>${esc(label(o))}</option>`)
-    .join("")}</select>`;
+/** Barra que muda de cor ao rolar, custo estimado, contador do prompt, prévia da foto e atualização da fila. */
+const SCRIPT = `(() => {
+  const bar = document.querySelector("[data-app-bar]");
+  if (bar) {
+    const onScroll = () => bar.classList.toggle("is-scrolled", window.scrollY > 0);
+    addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  }
+
+  document.addEventListener("click", (e) => {
+    const close = e.target instanceof Element && e.target.closest("[data-snackbar-close]");
+    if (close) close.closest("[data-snackbar]").hidden = true;
+  });
+  if (location.search.includes("erro=")) history.replaceState(null, "", location.pathname);
+
+  const f = document.querySelector("[data-composer]");
+  if (f) {
+    const prices = JSON.parse(f.dataset.prices || "{}");
+    const cost = f.querySelector("[data-cost]"), model = f.modelo.value;
+    const words = f.querySelector("[data-words]"), count = f.querySelector("[data-count]");
+    const update = () => {
+      const p = Number(prices["duration_seconds_" + f.resolucao.value]);
+      cost.innerHTML = p ? model + " · <strong>US$ " + (p * f.duracao.value).toFixed(2) + "</strong> estimado" : model;
+      // Fala natural: umas 2,2 a 2,6 palavras por segundo.
+      const s = Number(f.duracao.value);
+      const spoken = (f.prompt.value.match(/["“”«»]([^"“”«»]*)["“”«»]/g) || []).join(" ").split(/\\s+/).filter(Boolean).length;
+      words.textContent = "Fala de " + s + " s: umas " + Math.round(s * 2.2) + " a " + Math.round(s * 2.6) + " palavras" + (spoken ? " (entre aspas: " + spoken + ")" : "") + ".";
+      count.textContent = f.prompt.value.length + "/4000";
+    };
+    f.addEventListener("change", update);
+    f.prompt.addEventListener("input", update);
+    update();
+
+    const image = f.querySelector("[data-image]"), preview = f.querySelector("[data-preview]"), name = f.querySelector("[data-image-name]");
+    image.addEventListener("change", () => {
+      const file = image.files[0];
+      name.textContent = file ? file.name : "Opcional";
+      preview.innerHTML = file ? '<img alt="">' : '<span class="icon">face</span>';
+      if (file) preview.firstChild.src = URL.createObjectURL(file);
+    });
+
+    f.addEventListener("submit", () => { f.querySelector("[type=submit]").disabled = true; });
+  }
+
+  // Vídeo na fila: confere de novo de tempos em tempos, sem perder o que está sendo escrito.
+  const refresh = Number(document.body.dataset.refresh);
+  if (refresh) setInterval(() => {
+    if (!f || (!f.prompt.value && !f.imagem.files.length)) location.reload();
+  }, refresh * 1000);
+})();`;
+
+function select(name: string, label: string, options: string[], selected: string, text: (s: string) => string = (s) => s): string {
+  return `<div class="text-field text-field--select">
+  <select class="text-field__input" id="${name}" name="${name}">${options
+    .map((o) => `<option value="${esc(o)}"${o === selected ? " selected" : ""}>${esc(text(o))}</option>`)
+    .join("")}</select>
+  <label class="text-field__label" for="${name}">${esc(label)}</label>
+  <span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
+</div>`;
 }
 
 function range(from: number, to: number): number[] {
