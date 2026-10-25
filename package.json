@@ -1,0 +1,19 @@
+{
+  "name": "meu-avatar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vídeos curtos com avatar realista falando, para redes sociais e anúncios, via OpenRouter.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "gerar": "tsx src/gerar-video.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
