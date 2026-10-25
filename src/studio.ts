@@ -1,4 +1,5 @@
 import { Db, OPEN_STATUSES, type Video } from "./db";
+import { buildPrompt } from "./prompt";
 import { estimateCost, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 
 export interface StudioConfig {
@@ -65,7 +66,7 @@ export class Studio {
 
     const request: VideoRequest = {
       model: input.model,
-      prompt,
+      prompt: buildPrompt(prompt),
       duration: input.duration,
       resolution: input.resolution,
       aspect_ratio: input.aspectRatio,
@@ -95,6 +96,7 @@ export class Studio {
       aspect_ratio: input.aspectRatio,
       image_key: imageKey,
       user_id: input.userId ?? null,
+      request_prompt: request.prompt,
     });
 
     try {

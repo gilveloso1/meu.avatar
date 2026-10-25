@@ -11,6 +11,7 @@ do [anb.bot](https://github.com/gilveloso1/anb.bot). Os vídeos vêm da
 o padrão é o **Wan 3.0**, 25 s, 480p, 9:16, com áudio (≈ US$ 1,25 por vídeo).
 
 - Como funciona, chaves e como publicar: [docs/operacao.md](docs/operacao.md)
+- Como escrever o prompt e o que o estúdio acrescenta: [docs/prompt.md](docs/prompt.md)
 
 ## Estrutura
 
@@ -18,6 +19,7 @@ o padrão é o **Wan 3.0**, 25 s, 480p, 9:16, com áudio (≈ US$ 1,25 por víde
 |---|---|
 | `src/index.ts` | Rotas do Worker: webhook do OpenRouter, estúdio, agendamento |
 | `src/auth.ts` | Contas e sessões (portado do estuda.mais): bcrypt, bloqueio, primeiro cadastro vira admin |
+| `src/prompt.ts` | Orientação fixa de qualidade (áudio e imagem) que vai no fim de todo prompt |
 | `src/studio.ts` | Pede o vídeo, acompanha o job e guarda o MP4 no R2 |
 | `src/openrouter.ts` | Cliente da API de vídeo (validação, custo, assinatura do webhook) |
 | `src/db.ts` | Tabela `videos` no D1 |

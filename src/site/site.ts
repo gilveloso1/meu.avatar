@@ -140,7 +140,7 @@ ${error ? snackbar(error) : ""}`;
   <h1 class="composer__title">Novo vídeo</h1>
   ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
   <div class="text-field">
-    <textarea class="text-field__input" id="prompt" name="prompt" required maxlength="4000" placeholder="Quem é o avatar, cenário e câmera, a fala exata entre aspas, tom de voz e gestos, áudio." aria-describedby="prompt-ajuda"></textarea>
+    <textarea class="text-field__input" id="prompt" name="prompt" required maxlength="4000" placeholder='Quem é o avatar, cenário e câmera, e a fala entre aspas. Ex.: A mulher olha para a câmera e diz: "Oi, gente! Hoje eu vou mostrar…"' aria-describedby="prompt-ajuda"></textarea>
     <label class="text-field__label" for="prompt">Prompt completo</label>
     <p class="text-field__supporting" id="prompt-ajuda"><span data-words>Fala de 25 s: umas 55 a 65 palavras.</span><span data-count>0/4000</span></p>
   </div>

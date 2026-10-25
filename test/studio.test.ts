@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
 import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
+import { QUALITY_GUIDE } from "../src/prompt";
 import { call, cookie, FakeVideoApi, postForm, SITE, sign, WAN } from "./helpers";
 
 const PROMPT = 'Mulher de 30 anos, selfie no celular, diz: "Oi, gente!"';
@@ -62,7 +63,9 @@ describe("gerar vídeo", () => {
     expect(res.headers.get("location")).toBe("/");
 
     const [req] = api.submitted;
-    expect(req).toMatchObject({ model: "alibaba/wan-3.0", prompt: PROMPT, duration: 25, resolution: "480p", aspect_ratio: "9:16", generate_audio: true });
+    // O prompt da pessoa vai primeiro, com a orientação fixa de qualidade no fim.
+    expect(req!.prompt).toBe(`${PROMPT}\n\n${QUALITY_GUIDE}`);
+    expect(req).toMatchObject({ model: "alibaba/wan-3.0", duration: 25, resolution: "480p", aspect_ratio: "9:16", generate_audio: true });
     expect(req!.callback_url).toBe(`${SITE}/openrouter/webhook`);
     const imageUrl = req!.frame_images![0]!.image_url.url;
     expect(imageUrl).toMatch(new RegExp(`^${SITE}/midia/avatares/[0-9a-f-]{36}\\.jpg$`));
@@ -73,7 +76,7 @@ describe("gerar vídeo", () => {
     expect(foto2.headers.get("content-type")).toBe("image/jpeg");
 
     const [video] = await new Db(env.DB).recentVideos();
-    expect(video).toMatchObject({ job_id: "job-1", status: "pending", duration: 25 });
+    expect(video).toMatchObject({ job_id: "job-1", status: "pending", duration: 25, prompt: PROMPT, request_prompt: req!.prompt });
   });
 
   it("sem foto, vai só o texto", async () => {
