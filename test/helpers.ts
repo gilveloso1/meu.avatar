@@ -48,8 +48,22 @@ export class FakeVideoApi implements VideoApi {
   }
 }
 
+export const ADMIN = { nome: "Gil", email: "gil@exemplo.com", senha: "senha-forte-123" };
+
+/** Formulário enviado pelo próprio site (com o Origin do estúdio). */
+export function postForm(path: string, fields: Record<string, string | File>, headers: Record<string, string> = {}): Request {
+  return new Request(`${SITE}${path}`, { method: "POST", body: form(fields), headers: { origin: SITE, ...headers } });
+}
+
+/** Cookie de sessão do administrador: cria a conta na primeira vez, depois entra. */
 export async function cookie(): Promise<string> {
-  const res = await call(new Request(`${SITE}/entrar`, { method: "POST", body: form({ senha: "senha-teste" }) }));
+  let res = await call(postForm("/cadastro", { ...ADMIN, confirmar: ADMIN.senha }));
+  if (res.status !== 303) res = await call(postForm("/entrar", { email: ADMIN.email, senha: ADMIN.senha }));
+  return sessionPair(res);
+}
+
+/** "__Host-sessao=<código>" do Set-Cookie da resposta. */
+export function sessionPair(res: Response): string {
   return res.headers.get("set-cookie")!.split(";")[0]!;
 }
 

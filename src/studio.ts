@@ -14,6 +14,8 @@ export interface NewVideoInput {
   aspectRatio: string;
   /** Foto do avatar, usada como primeiro quadro. */
   image?: File | null;
+  /** Quem está pedindo. */
+  userId?: number | null;
 }
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -92,6 +94,7 @@ export class Studio {
       resolution: input.resolution,
       aspect_ratio: input.aspectRatio,
       image_key: imageKey,
+      user_id: input.userId ?? null,
     });
 
     try {

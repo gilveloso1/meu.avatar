@@ -1,3 +1,4 @@
+import { Accounts } from "./auth";
 import { Db } from "./db";
 import type { Env } from "./env";
 import { OpenRouterVideo, verifySignature, type VideoApi } from "./openrouter";
@@ -9,9 +10,12 @@ export function createStudio(env: Env, deps: { api?: VideoApi | null } = {}): St
   return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL });
 }
 
+export function createAccounts(env: Env): Accounts {
+  return new Accounts(new Db(env.DB), Number(env.BCRYPT_COST) || 12);
+}
+
 export function createSite(env: Env, studio: Studio): Site {
-  return new Site(new Db(env.DB), env.MIDIA, studio, {
-    accessToken: env.ACCESS_TOKEN || undefined,
+  return new Site(new Db(env.DB), env.MIDIA, studio, createAccounts(env), {
     defaults: {
       model: env.VIDEO_MODEL,
       duration: Number(env.VIDEO_DURATION),

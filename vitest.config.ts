@@ -11,7 +11,7 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,
-            ACCESS_TOKEN: "senha-teste",
+            BCRYPT_COST: "4",
             OPENROUTER_WEBHOOK_SECRET: "segredo-webhook",
           },
         },

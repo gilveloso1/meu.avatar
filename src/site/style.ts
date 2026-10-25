@@ -161,6 +161,13 @@ h1, h2, h3, p { margin: 0; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+.top-app-bar form { display: contents; }
+.top-app-bar__user {
+  font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem;
+  color: var(--md-sys-color-on-surface-variant);
+  max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* --- Botões de ícone --------------------------------------------------------------- */
 .icon-button {
   width: 48px; height: 48px; flex: none;
@@ -387,6 +394,7 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .login__title { font: var(--md-sys-typescale-headline-small); }
 .login__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .login .button { align-self: stretch; }
+.login { --field-surface: var(--md-sys-color-surface); }
 
 /* --- Rodapé ---------------------------------------------------------------------------- */
 .footer {

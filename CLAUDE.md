@@ -17,6 +17,14 @@ Como publicar e operar: [docs/operacao.md](docs/operacao.md).
 - Nada de biblioteca de componentes ou de CSS (nem de CDN) sem combinar antes
   com o usuário.
 
+## Contas
+
+- Contas e sessões vêm do estuda.mais (github.com/gilveloso1/estuda.mais,
+  `src/auth.ts`). Antes de mexer em login, convite ou permissão, leia o
+  original e porte de lá.
+- Permissões sempre conferidas no servidor; teste novo para cada caso de
+  acesso negado.
+
 ## OpenRouter
 
 - Gerar vídeo gasta créditos. Testes usam a API falsa (`test/helpers.ts`);

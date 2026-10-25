@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
 import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
-import { call, cookie, FakeVideoApi, form, SITE, sign, WAN } from "./helpers";
+import { call, cookie, FakeVideoApi, postForm, SITE, sign, WAN } from "./helpers";
 
 const PROMPT = 'Mulher de 30 anos, selfie no celular, diz: "Oi, gente!"';
 
 async function post(api: FakeVideoApi, fields: Record<string, string | File>) {
-  return call(new Request(`${SITE}/videos`, { method: "POST", body: form(fields), headers: { cookie: await cookie() } }), api);
+  return call(postForm("/videos", fields, { cookie: await cookie() }), api);
 }
 
 describe("openrouter", () => {
@@ -32,18 +32,6 @@ describe("acesso", () => {
     const res = await call(new Request(`${SITE}/`));
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/entrar");
-  });
-
-  it("senha errada não entra", async () => {
-    const res = await call(new Request(`${SITE}/entrar`, { method: "POST", body: form({ senha: "errada" }) }));
-    expect(res.status).toBe(401);
-    expect(res.headers.get("set-cookie")).toBeNull();
-  });
-
-  it("sem ACCESS_TOKEN, ninguém entra", async () => {
-    const { handle } = await import("../src/index");
-    const res = await handle(new Request(`${SITE}/entrar`, { method: "POST", body: form({ senha: "" }) }), { ...env, ACCESS_TOKEN: "" }, { api: null });
-    expect(res.status).toBe(401);
   });
 
   it("com login, mostra o formulário com os padrões e o custo", async () => {

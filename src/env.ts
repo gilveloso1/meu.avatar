@@ -6,8 +6,8 @@ export interface Env {
   OPENROUTER_API_KEY?: string;
   /** Segredo de assinatura dos webhooks do OpenRouter (opcional: o status sempre é conferido na API). */
   OPENROUTER_WEBHOOK_SECRET?: string;
-  /** Senha do estúdio. Sem ela, ninguém entra (gerar vídeo gasta créditos). */
-  ACCESS_TOKEN?: string;
+  /** Custo do bcrypt das senhas; padrão 12 (os testes usam 4, para ir rápido). */
+  BCRYPT_COST?: string;
   /** Endereço público do Worker, sem barra no fim: vira o callback_url e a URL das fotos. */
   SITE_URL: string;
   /** Padrões do formulário. */

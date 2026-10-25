@@ -1,30 +1,37 @@
 /**
  * O estúdio: páginas em HTML montado no Worker, com CSS e um script pequeno
- * embutidos (o mesmo jeito do blog do anb.bot), no Material Design 3. Tudo
- * atrás da senha ACCESS_TOKEN, menos /midia/avatares/..., que o provedor de
- * vídeo precisa baixar.
+ * embutidos (o mesmo jeito do blog do anb.bot), no Material Design 3.
+ *
+ *   /cadastro   cria a primeira conta, que é a do administrador; depois fecha
+ *   /entrar     login (e-mail e senha)
+ *   /sair       encerra a sessão (POST)
+ *   /           formulário e vídeos (precisa de sessão)
+ *
+ * Tudo pede sessão, menos /midia/avatares/..., que o provedor de vídeo precisa
+ * baixar. Segurança como no painel do estuda.mais: cookie __Host- (HttpOnly,
+ * Secure, SameSite=Strict), todo POST precisa vir do próprio site (cabeçalho
+ * Origin), páginas sem cache e sem abrir dentro de outros sites, e o script
+ * da página só roda com o nonce da CSP.
  */
-import type { Db, Video, VideoStatus } from "../db";
+import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
+import type { Db, User, Video, VideoStatus } from "../db";
 import type { VideoModel } from "../openrouter";
 import { InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
 
 export interface SiteConfig {
-  /** Senha do estúdio; sem ela ninguém entra. */
-  accessToken?: string;
   defaults: { model: string; duration: number; resolution: string; aspectRatio: string };
 }
 
 const SITE_NAME = "meu.avatar";
-const COOKIE = "sessao";
-const ONE_YEAR = 60 * 60 * 24 * 365;
+export const SESSION_COOKIE = "__Host-sessao";
 /** Enquanto há vídeo na fila, a página confere de novo a cada tantos segundos. */
 const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add_photo_alternate", "arrow_drop_down", "check_circle", "close", "download", "error", "face", "hourglass_top", "lock", "logout", "movie", "progress_activity", "schedule",
+  "add_photo_alternate", "arrow_drop_down", "check_circle", "close", "download", "error", "face", "hourglass_top", "lock", "logout", "person_add", "movie", "progress_activity", "schedule",
   "send", "videocam",
 ];
 
@@ -46,28 +53,40 @@ export class Site {
     private readonly db: Db,
     private readonly media: R2Bucket,
     private readonly studio: Studio,
+    private readonly accounts: Accounts,
     private readonly config: SiteConfig,
   ) {}
 
   async handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    const post = request.method === "POST";
+    if (!post && request.method !== "GET" && request.method !== "HEAD") return new Response("método não permitido", { status: 405 });
 
     // A foto do avatar é baixada pelo provedor de vídeo, sem login.
-    if (request.method === "GET" && path.startsWith("/midia/avatares/")) {
+    if (!post && path.startsWith("/midia/avatares/")) {
       return this.object(request, path.slice("/midia/".length), "public, max-age=86400");
     }
 
+    // Formulário de outro site tentando agir em nome de quem está logado.
+    if (post && !sameSite(request, url)) return new Response("forbidden", { status: 403 });
+
+    if (path === "/cadastro") return post ? this.signup(request) : this.signupPage();
     if (path === "/entrar") {
-      if (request.method === "POST") return this.login(request);
-      return html(loginPage());
+      if (post) return this.login(request);
+      return (await this.accounts.signupOpen()) ? redirect("/cadastro") : html(loginPage());
     }
-    if (path === "/sair") return redirect("/", clearCookie());
 
-    if (!(await this.authorized(request))) return redirect("/entrar");
+    const token = sessionToken(request);
+    if (path === "/sair" && post) {
+      await this.accounts.logout(token);
+      return redirect("/entrar", clearCookie());
+    }
+    const user = await this.accounts.session(token);
+    if (!user) return redirect("/entrar");
 
-    if (request.method === "POST" && path === "/videos") return this.createVideo(request);
-    if (request.method === "GET" && path === "/") return this.home(url);
+    if (post && path === "/videos") return this.createVideo(request, user);
+    if (!post && path === "/") return this.home(url, user);
 
     const file = /^\/videos\/([0-9a-f-]{36})\.mp4$/.exec(path);
     if (request.method === "GET" && file) {
@@ -79,7 +98,7 @@ export class Site {
     return new Response("não encontrado", { status: 404 });
   }
 
-  private async home(url: URL): Promise<Response> {
+  private async home(url: URL, user: User): Promise<Response> {
     let model: VideoModel | null = null;
     let modelError: string | null = null;
     if (this.studio.canGenerate) {
@@ -107,7 +126,7 @@ export class Site {
   </section>
 </main>
 ${error ? snackbar(error) : ""}`;
-    return html(page("meu.avatar", body, { refresh: waiting }));
+    return html(page("meu.avatar", body, { refresh: waiting, user }));
   }
 
   private composer(model: VideoModel | null, banner: string | null): string {
@@ -147,7 +166,7 @@ ${error ? snackbar(error) : ""}`;
 </form>`;
   }
 
-  private async createVideo(request: Request): Promise<Response> {
+  private async createVideo(request: Request, user: User): Promise<Response> {
     const form = await request.formData();
     const d = this.config.defaults;
     const image = form.get("imagem");
@@ -159,6 +178,7 @@ ${error ? snackbar(error) : ""}`;
         resolution: String(form.get("resolucao") || d.resolution),
         aspectRatio: String(form.get("formato") || d.aspectRatio),
         image: image instanceof File ? image : null,
+        userId: user.id,
       });
     } catch (err) {
       if (!(err instanceof InputError)) throw err;
@@ -169,19 +189,29 @@ ${error ? snackbar(error) : ""}`;
 
   private async login(request: Request): Promise<Response> {
     const form = await request.formData();
-    const token = this.config.accessToken;
-    if (!token || String(form.get("senha") ?? "") !== token) {
-      return html(loginPage(token ? "Senha errada." : "O estúdio está sem senha (segredo ACCESS_TOKEN)."), 401);
+    const email = String(form.get("email") ?? "");
+    const result = await this.accounts.login(email, String(form.get("senha") ?? ""));
+    if (result.ok) return redirect("/", sessionCookie(result.token));
+    if (result.reason === "locked") {
+      return html(loginPage(`Muitas tentativas erradas. A conta fica bloqueada até ${formatDate(result.until)}.`, email), 400);
     }
-    return redirect("/", `${COOKIE}=${await sessionValue(token)}; Path=/; Max-Age=${ONE_YEAR}; HttpOnly; Secure; SameSite=Strict`);
+    return html(loginPage("E-mail ou senha não conferem.", email), 400);
   }
 
-  private async authorized(request: Request): Promise<boolean> {
-    const token = this.config.accessToken;
-    if (!token) return false;
-    const cookie = request.headers.get("cookie") ?? "";
-    const value = cookie.split(/;\s*/).find((c) => c.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1);
-    return value === (await sessionValue(token));
+  private async signupPage(error?: string, values: { name?: string; email?: string } = {}): Promise<Response> {
+    if (!(await this.accounts.signupOpen())) return html(closedPage(), 403);
+    return html(signupPage(error, values), error ? 400 : 200);
+  }
+
+  private async signup(request: Request): Promise<Response> {
+    const form = await request.formData();
+    const name = String(form.get("nome") ?? "");
+    const email = String(form.get("email") ?? "");
+    const password = String(form.get("senha") ?? "");
+    if (password !== String(form.get("confirmar") ?? "")) return this.signupPage("As senhas não são iguais.", { name, email });
+    const result = await this.accounts.signupFirst(name, email, password);
+    if ("error" in result) return this.signupPage(result.error, { name, email });
+    return redirect("/", sessionCookie(result.token));
   }
 
   /** Arquivo do R2, com suporte a Range (o player de vídeo pede pedaços). */
@@ -241,26 +271,65 @@ function videoCard(v: Video): string {
 </article>`;
 }
 
-function loginPage(error?: string): string {
-  return page(
-    "Entrar · meu.avatar",
-    `<main id="conteudo">
-  <form class="card card--outlined login" method="post" action="/entrar">
-    <div class="login__head">
-      <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
-      <h1 class="login__title">${SITE_NAME}</h1>
-      <p class="login__text">Estúdio de vídeos com avatar. Entre com a senha.</p>
-    </div>
-    <div class="text-field">
-      <input class="text-field__input" id="senha" name="senha" type="password" required autofocus autocomplete="current-password" placeholder=" ">
-      <label class="text-field__label" for="senha">Senha do estúdio</label>
-    </div>
+function loginPage(error?: string, email = ""): string {
+  return authPage(
+    "Entrar",
+    "Estúdio de vídeos com avatar.",
+    `<form class="card card--outlined login" method="post" action="/entrar">
+    ${authHead("Entrar", "Estúdio de vídeos com avatar.")}
+    ${textField("email", "E-mail", `type="email" autocomplete="username" required autofocus value="${esc(email)}"`)}
+    ${textField("senha", "Senha", `type="password" autocomplete="current-password" required`)}
     <button class="button button--filled interactive" type="submit"><span class="icon">lock</span>Entrar</button>
-  </form>
-</main>
-${error ? snackbar(error) : ""}`,
-    { bar: false },
+  </form>`,
+    error,
   );
+}
+
+function signupPage(error?: string, values: { name?: string; email?: string } = {}): string {
+  return authPage(
+    "Criar conta",
+    "",
+    `<form class="card card--outlined login" method="post" action="/cadastro">
+    ${authHead("Criar conta", "A primeira conta é a do administrador. Depois dela, o cadastro fecha.")}
+    ${textField("nome", "Nome", `type="text" autocomplete="name" required autofocus maxlength="80" value="${esc(values.name ?? "")}"`)}
+    ${textField("email", "E-mail", `type="email" autocomplete="username" required value="${esc(values.email ?? "")}"`)}
+    ${textField("senha", "Senha", `type="password" autocomplete="new-password" required minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}"`, `De ${PASSWORD_MIN} a ${PASSWORD_MAX} caracteres.`)}
+    ${textField("confirmar", "Repita a senha", `type="password" autocomplete="new-password" required minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}"`)}
+    <button class="button button--filled interactive" type="submit"><span class="icon">person_add</span>Criar conta</button>
+  </form>`,
+    error,
+  );
+}
+
+function closedPage(): string {
+  return authPage(
+    "Cadastro fechado",
+    "",
+    `<div class="card card--outlined login">
+    ${authHead("Cadastro fechado", "O estúdio já tem administrador. Novas contas só por convite dele.")}
+    <a class="button button--filled interactive" href="/entrar"><span class="icon">lock</span>Entrar</a>
+  </div>`,
+  );
+}
+
+function authHead(title: string, text: string): string {
+  return `<div class="login__head">
+      <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
+      <h1 class="login__title">${esc(title)}</h1>
+      ${text ? `<p class="login__text">${esc(text)}</p>` : ""}
+    </div>`;
+}
+
+function authPage(title: string, _description: string, form: string, error?: string): string {
+  return page(`${title} · ${SITE_NAME}`, `<main id="conteudo">${form}</main>${error ? snackbar(error) : ""}`, { bar: false });
+}
+
+function textField(name: string, label: string, attrs: string, supporting?: string): string {
+  return `<div class="text-field">
+      <input class="text-field__input" id="${name}" name="${name}" ${attrs} placeholder=" ">
+      <label class="text-field__label" for="${name}">${esc(label)}</label>
+      ${supporting ? `<p class="text-field__supporting"><span>${esc(supporting)}</span></p>` : ""}
+    </div>`;
 }
 
 function snackbar(text: string): string {
@@ -270,7 +339,7 @@ function snackbar(text: string): string {
 </div>`;
 }
 
-function page(title: string, body: string, opts: { refresh?: boolean; bar?: boolean } = {}): string {
+function page(title: string, body: string, opts: { refresh?: boolean; bar?: boolean; user?: User } = {}): string {
   const bar =
     opts.bar === false
       ? ""
@@ -279,7 +348,8 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar?: bool
     <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
     <span class="top-app-bar__title">${SITE_NAME}</span>
   </a>
-  <a class="icon-button interactive" href="/sair" aria-label="Sair" title="Sair"><span class="icon">logout</span></a>
+  ${opts.user ? `<span class="top-app-bar__user" title="${esc(opts.user.email)}">${esc(opts.user.name)}</span>` : ""}
+  <form method="post" action="/sair"><button class="icon-button interactive" type="submit" aria-label="Sair" title="Sair"><span class="icon">logout</span></button></form>
 </header>`;
   return `<!doctype html>
 <html lang="pt-BR">
@@ -301,7 +371,7 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar?: bool
   ${bar}
   ${body}
   <footer class="footer"><div class="footer__inner"><p class="footer__text">Vídeos gerados com inteligência artificial pelo OpenRouter.</p></div></footer>
-  <script>${SCRIPT}</script>
+  <script nonce="${NONCE}">${SCRIPT}</script>
 </body>
 </html>`;
 }
@@ -375,25 +445,76 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-async function sessionValue(token: string): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`meu.avatar:${token}`)));
-  return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function clearCookie(): string {
-  return `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
-}
-
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
+/** Marca no lugar do nonce do script; html() troca por um valor novo a cada resposta. */
+const NONCE = "{{nonce}}";
+
 function html(body: string, status = 200): Response {
-  return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+  const nonce = randomNonce();
+  return new Response(body.replaceAll(`nonce="${NONCE}"`, `nonce="${nonce}"`), {
+    status,
+    headers: { "content-type": "text/html; charset=utf-8", ...SECURITY_HEADERS, "content-security-policy": csp(nonce) },
+  });
 }
 
 function redirect(location: string, cookie?: string): Response {
-  const headers = new Headers({ location });
-  if (cookie) headers.set("set-cookie", cookie);
+  const headers = new Headers({ location, ...SECURITY_HEADERS });
+  if (cookie) headers.append("set-cookie", cookie);
   return new Response(null, { status: 303, headers });
+}
+
+const SECURITY_HEADERS = {
+  "cache-control": "no-store",
+  "x-robots-tag": "noindex, nofollow",
+  "x-frame-options": "DENY",
+  "x-content-type-options": "nosniff",
+  // Não "no-referrer": com ele, o navegador manda Origin: null nos formulários do próprio site.
+  "referrer-policy": "same-origin",
+};
+
+/** Só o script da própria página (com o nonce); fotos de prévia vêm de blob:. */
+function csp(nonce: string): string {
+  return [
+    "default-src 'none'",
+    `script-src 'nonce-${nonce}'`,
+    "style-src 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "img-src 'self' blob:",
+    "media-src 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'none'",
+  ].join("; ");
+}
+
+function randomNonce(): string {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
+}
+
+/**
+ * O formulário veio de uma página do próprio estúdio? Vale o Origin igual ao
+ * do site ou, quando o navegador manda Origin "null", o Sec-Fetch-Site
+ * "same-origin", que só o navegador consegue pôr. (Como no estuda.mais.)
+ */
+function sameSite(request: Request, url: URL): boolean {
+  const origin = request.headers.get("origin");
+  if (origin === url.origin) return true;
+  return (origin === null || origin === "null") && request.headers.get("sec-fetch-site") === "same-origin";
+}
+
+function sessionCookie(token: string): string {
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DAYS * 86_400}`;
+}
+
+function clearCookie(): string {
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
+}
+
+export function sessionToken(request: Request): string | null {
+  const cookies = request.headers.get("cookie") ?? "";
+  const match = new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([\\w-]+)`).exec(cookies);
+  return match ? match[1]! : null;
 }
