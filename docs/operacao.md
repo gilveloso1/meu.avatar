@@ -80,7 +80,7 @@ Portadas do estuda.mais (`src/auth.ts`):
 | Banco D1 | `meu-avatar` (o id está em `wrangler.jsonc`) |
 | Bucket R2 | `meu-avatar` |
 | Agendamento | a cada 2 minutos (`triggers.crons` em `wrangler.jsonc`) |
-| Contêiner de áudio | `AudioFixer`, tipo "basic", 1 instância (`containers` em `wrangler.jsonc`) |
+| Contêiner de áudio | `AudioFixer` (aplicação `meu-avatar-audiofixer`), tipo "basic", 1 instância (`containers` em `wrangler.jsonc`); no ar desde 25/10/2026. Primeiro vídeo tratado (25 s, 720p) em ~1 min 20 s, contando a partida do contêiner |
 
 ## Onde ficam as chaves
 
