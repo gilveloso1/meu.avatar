@@ -47,6 +47,7 @@ export const HEYGEN_AVATAR: Structure = {
   name: "HeyGen Avatar IV",
   model: "heygen/avatar-iv",
   summary: "Anima a foto falando o texto com uma voz pronta da HeyGen. A duração segue a fala.",
+  icon: "record_voice_over",
   access: "admin",
   // A voz vem pronta do texto para fala: sem o chiado do Wan, não passa pelo contêiner.
   treatAudio: false,
@@ -133,6 +134,20 @@ export const HEYGEN_AVATAR: Structure = {
         settings: { voice_id: voice.value, voice: voice.label, expressiveness: expressiveness.value, motion_prompt: motion },
       },
     };
+  },
+
+  details(video) {
+    let settings: Record<string, string> = {};
+    try {
+      settings = JSON.parse(video.settings ?? "{}");
+    } catch {
+      // Configurações ilegíveis: mostra só o que der.
+    }
+    return [
+      { term: "Voz", description: settings.voice ?? "—" },
+      { term: "Expressividade", description: EXPRESSIVENESS.find((e) => e.value === settings.expressiveness)?.label ?? "—" },
+      { term: "Movimento", description: video.extra ?? "—" },
+    ];
   },
 };
 

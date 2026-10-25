@@ -117,6 +117,19 @@ export class Db {
     return (await this.d1.prepare("SELECT * FROM videos ORDER BY created_at DESC, rowid DESC LIMIT ?").bind(limit).all<Video>()).results;
   }
 
+  /** Os vídeos de uma estrutura, os mais novos primeiro. */
+  async videosByStructure(structure: string, limit = 50): Promise<Video[]> {
+    return (
+      await this.d1.prepare("SELECT * FROM videos WHERE structure = ? ORDER BY created_at DESC, rowid DESC LIMIT ?").bind(structure, limit).all<Video>()
+    ).results;
+  }
+
+  /** Quantos vídeos cada estrutura tem. */
+  async countByStructure(): Promise<Map<string, number>> {
+    const rows = (await this.d1.prepare("SELECT structure, COUNT(*) AS n FROM videos GROUP BY structure").all<{ structure: string | null; n: number }>()).results;
+    return new Map(rows.map((r) => [r.structure ?? "", r.n]));
+  }
+
   /** Os mais antigos primeiro: são os que mais devem estar prontos. */
   async openVideos(limit = 10): Promise<Video[]> {
     const marks = OPEN_STATUSES.map(() => "?").join(", ");

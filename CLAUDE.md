@@ -31,8 +31,10 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
 
 - Cada modelo de vídeo é uma estrutura em `src/structures/` (hoje `wan.ts` e
   `heygen.ts`): campos do formulário, prompt de sistema, montagem do pedido,
-  regra de custo e se o áudio passa pelo contêiner. O usuário escolhe o modelo
-  num card em `/novo` e preenche o formulário daquela estrutura.
+  regra de custo e se o áudio passa pelo contêiner. A tela inicial tem um card
+  por modelo; a página do modelo (`/modelo/<id>`) tem o formulário daquela
+  estrutura num painel menor e os vídeos dela no painel maior, cada um com
+  "Ver mais" (diálogo com os detalhes). O nome do site é "Meu Avatar".
 - Cada vídeo guarda a estrutura que o gerou (`videos.structure`) e as
   configurações próprias dela (`videos.settings`, JSON).
 - Modelo novo é estrutura nova, sem mexer nas outras. O Wan fica como está.

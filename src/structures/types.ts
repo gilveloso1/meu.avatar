@@ -8,6 +8,7 @@
  * Os valores aceitos pelo modelo (duração, resolução, formato, preço) vêm
  * sempre de GET /videos/models; a estrutura só escolhe o padrão.
  */
+import type { Video } from "../db";
 import type { VideoModel, VideoRequest } from "../openrouter";
 
 export class InputError extends Error {}
@@ -17,6 +18,12 @@ export interface Option {
   label: string;
   /** Explicação da opção, mostrada abaixo do campo quando ela está escolhida. */
   description?: string;
+}
+
+/** Uma linha do cartão de detalhes do vídeo. */
+export interface Detail {
+  term: string;
+  description: string;
 }
 
 export type Field =
@@ -91,6 +98,8 @@ export interface Structure {
   model: string;
   /** Uma ou duas linhas para o cartão de escolha. */
   summary: string;
+  /** Ícone do cartão (Material Symbols; precisa estar em ICONS, src/site/site.ts). */
+  icon: string;
   /** "admin": só o administrador vê e usa (modelo em teste). */
   access: "all" | "admin";
   /** O áudio pronto passa pelo contêiner (src/audio.ts). */
@@ -101,4 +110,6 @@ export interface Structure {
   sections(model: VideoModel | null, defaults: Defaults): Section[];
   /** Valida o formulário e monta o pedido; lança InputError. */
   build(values: Values, hasImage: boolean, model: VideoModel): Built;
+  /** As configurações próprias de um vídeo, para o cartão de detalhes. */
+  details(video: Video): Detail[];
 }

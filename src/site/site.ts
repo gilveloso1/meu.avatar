@@ -5,9 +5,9 @@
  *   /cadastro    cria a primeira conta, que é a do administrador; depois fecha
  *   /entrar      login (e-mail e senha)
  *   /sair        encerra a sessão (POST)
- *   /            os vídeos (precisa de sessão), com o botão de novo vídeo
- *   /novo        escolha do modelo, um cartão por estrutura (src/structures/)
- *   /novo/<id>   o formulário da estrutura; o POST gera o vídeo
+ *   /              os modelos, um cartão por estrutura (src/structures/)
+ *   /modelo/<id>   a página do modelo: o formulário de um lado e os vídeos
+ *                  dele do outro; o POST gera o vídeo
  *
  * Tudo pede sessão, menos /midia/avatares/..., que o provedor de vídeo precisa
  * baixar. Segurança como no painel do estuda.mais: cookie __Host- (HttpOnly,
@@ -29,15 +29,15 @@ export interface SiteConfig {
   defaults: Defaults;
 }
 
-const SITE_NAME = "meu.avatar";
+const SITE_NAME = "Meu Avatar";
 export const SESSION_COOKIE = "__Host-sessao";
 /** Enquanto há vídeo na fila, a página confere de novo a cada tantos segundos. */
 const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "add_photo_alternate", "arrow_back", "arrow_drop_down", "check", "check_circle", "close", "download", "error", "face", "graphic_eq", "hourglass_top", "lock", "logout", "person_add",
-  "movie", "schedule", "send", "videocam",
+  "add_photo_alternate", "arrow_back", "arrow_drop_down", "check", "check_circle", "close", "download", "error", "face", "graphic_eq", "hourglass_top", "lock", "logout", "person_add",
+  "movie", "record_voice_over", "schedule", "send", "videocam",
 ];
 
 const SURFACE_LIGHT = /--md-sys-color-surface: (#\w+)/.exec(LIGHT)![1];
@@ -91,13 +91,17 @@ export class Site {
     if (!user) return redirect("/entrar");
 
     if (!post && path === "/") return this.home(user);
-    if (!post && path === "/novo") return this.chooser(user);
-    const form = /^\/novo\/([a-z0-9-]+)$/.exec(path);
-    if (form) {
+    // Endereços da versão anterior.
+    if (!post && path === "/novo") return redirect("/");
+    const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
+    if (!post && old) return redirect(`/modelo/${old[1]}`);
+
+    const model = /^\/modelo\/([a-z0-9-]+)$/.exec(path);
+    if (model) {
       // Estrutura que não existe ou que a pessoa não pode usar: a página nem aparece.
-      const structure = structureById(form[1]);
+      const structure = structureById(model[1]);
       if (!structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
-      return post ? this.createVideo(request, user, structure) : this.formPage(structure);
+      return post ? this.createVideo(request, user, structure) : this.modelPage(structure);
     }
 
     // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo.
@@ -114,48 +118,43 @@ export class Site {
     return new Response("não encontrado", { status: 404 });
   }
 
+  /** Tela inicial: um cartão por estrutura que a pessoa pode usar. */
   private async home(user: User): Promise<Response> {
-    const videos = await this.db.recentVideos();
-    const waiting = videos.some((v) => cardStatus(v).kind === "busy");
-    const body = `
-<main class="page page--feed" id="conteudo">
-  <h1 class="page__headline">Vídeos</h1>
-  ${
-    videos.length
-      ? `<div class="feed">${videos.map(videoCard).join("")}</div>`
-      : `<div class="empty"><span class="icon">movie</span><p class="empty__title">Nenhum vídeo ainda</p><p>Toque em Novo vídeo, escolha o modelo e gere o primeiro.</p></div>`
-  }
-</main>
-<a class="extended-fab interactive" href="/novo"><span class="icon">add</span>Novo vídeo</a>`;
-    return html(page(SITE_NAME, body, { refresh: waiting, bar: { user } }));
-  }
-
-  /** Escolha do modelo: um cartão por estrutura que a pessoa pode usar. */
-  private async chooser(user: User): Promise<Response> {
+    const counts = await this.db.countByStructure();
     const structures = STRUCTURES.filter((s) => canUse(s, user.role));
     const cards = await Promise.all(
       structures.map(async (s) => {
-        const model = await this.tryModel(s);
-        const price = model.model ? lowestPrice(model.model) : undefined;
-        const subhead = [s.model, price !== undefined ? `a partir de US$ ${price.toFixed(2)}/s` : null].filter(Boolean).join(" · ");
+        const { model } = await this.tryModel(s);
+        const price = model ? lowestPrice(model) : undefined;
+        const n = counts.get(s.id) ?? 0;
+        const subhead = [s.model.replace(/\/.*/, ""), price !== undefined ? `a partir de US$ ${price.toFixed(2)}/s` : null].filter(Boolean).join(" · ");
+        const footer = [n === 1 ? "1 vídeo" : `${n} vídeos`, s.access === "admin" ? "Em teste: só o administrador vê" : null].filter(Boolean).join(" · ");
         return `
-  <a class="card card--outlined card--action model-card interactive" href="/novo/${s.id}">
-    <h2 class="model-card__headline">${esc(s.name)}</h2>
-    <p class="model-card__subhead">${esc(subhead)}</p>
-    <p class="model-card__text">${esc(s.summary)}</p>
-    ${s.access === "admin" ? `<p class="model-card__subhead">Em teste: só o administrador vê</p>` : ""}
-  </a>`;
+    <a class="card card--outlined card--action model-card interactive" href="/modelo/${s.id}">
+      <span class="model-card__icon"><span class="icon">${esc(s.icon)}</span></span>
+      <span class="model-card__content">
+        <span class="model-card__headline">${esc(s.name)}</span>
+        <span class="model-card__subhead">${esc(subhead)}</span>
+        <span class="model-card__text">${esc(s.summary)}</span>
+        <span class="model-card__footer">${esc(footer)}</span>
+      </span>
+    </a>`;
       }),
     );
     const body = `
 <main class="page" id="conteudo">
-  <p class="page__intro">Escolha o modelo. Cada um tem o seu formulário.</p>
+  <h1 class="page__headline">Modelos</h1>
+  <p class="page__intro">Escolha um modelo para criar vídeos e ver os que ele já fez.</p>
   <div class="model-grid">${cards.join("")}</div>
 </main>`;
-    return html(page(`Novo vídeo · ${SITE_NAME}`, body, { bar: { back: "/", title: "Novo vídeo" } }));
+    return html(page(SITE_NAME, body, { bar: { user } }));
   }
 
-  private async formPage(structure: Structure, values?: Values, error?: string): Promise<Response> {
+  /**
+   * A página do modelo: o formulário da estrutura num painel menor e os vídeos
+   * dela no painel maior (layout de painel fixo e flexível do M3).
+   */
+  private async modelPage(structure: Structure, values?: Values, error?: string): Promise<Response> {
     const { model, error: modelError } = await this.tryModel(structure);
     const banner = modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
     const sections = structure.sections(model, this.config.defaults);
@@ -168,28 +167,36 @@ export class Site {
       rate: structure.wordsPerSecond,
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
+    const videos = await this.db.videosByStructure(structure.id);
+    const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     const body = `
-<main class="page" id="conteudo">
-  <form class="form-layout" method="post" action="/novo/${structure.id}" enctype="multipart/form-data" data-composer='${esc(JSON.stringify(config))}'>
-    <div class="form-layout__focus">
+<main class="page page--panes" id="conteudo">
+  <section class="pane pane--fixed" aria-labelledby="novo">
+    <form class="composer" method="post" action="/modelo/${structure.id}" enctype="multipart/form-data" data-composer='${esc(JSON.stringify(config))}'>
+      <h2 class="pane__headline" id="novo">Novo vídeo</h2>
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
       ${sections.map((section) => formSection(section, value)).join("")}
-    </div>
-    <aside class="card card--outlined summary" aria-labelledby="resumo">
-      <h2 class="summary__title" id="resumo">Resumo</h2>
-      <dl class="summary__list">
-        <div class="summary__item"><dt>Modelo</dt><dd>${esc(structure.model)}</dd></div>
-        <div class="summary__item"><dt>Duração</dt><dd data-seconds>${esc(seconds)}</dd></div>
-        <div class="summary__item"><dt>Custo estimado</dt><dd data-cost>${cost !== undefined ? `US$ ${cost.toFixed(2)}` : "—"}</dd></div>
-      </dl>
-      <div class="summary__actions">
+      <div class="card card--filled summary">
+        <dl class="summary__list">
+          <div class="summary__item"><dt>Duração</dt><dd data-seconds>${esc(seconds)}</dd></div>
+          <div class="summary__item"><dt>Custo estimado</dt><dd data-cost>${cost !== undefined ? `US$ ${cost.toFixed(2)}` : "—"}</dd></div>
+        </dl>
         <button class="button button--filled interactive" type="submit"${model ? "" : " disabled"}><span class="icon">videocam</span>Gerar vídeo</button>
       </div>
-    </aside>
-  </form>
+    </form>
+  </section>
+  <section class="pane pane--flexible" aria-labelledby="videos">
+    <h2 class="pane__headline" id="videos">Vídeos <span class="pane__count">${videos.length}</span></h2>
+    ${
+      videos.length
+        ? `<div class="video-grid">${videos.map((v) => videoCard(v, structure)).join("")}</div>`
+        : `<div class="empty"><span class="icon">movie</span><p class="empty__title">Nenhum vídeo ainda</p><p>Preencha o formulário e gere o primeiro com ${esc(structure.name)}.</p></div>`
+    }
+  </section>
 </main>
+${videos.map((v) => videoDialog(v, structure)).join("")}
 ${error ? snackbar(error) : ""}`;
-    return html(page(`${structure.name} · ${SITE_NAME}`, body, { bar: { back: "/novo", title: structure.name } }), error ? 400 : 200);
+    return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, bar: { back: "/", title: structure.name } }), error ? 400 : 200);
   }
 
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
@@ -211,9 +218,9 @@ ${error ? snackbar(error) : ""}`;
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
-      return this.formPage(structure, values, err.message);
+      return this.modelPage(structure, values, err.message);
     }
-    return redirect("/");
+    return redirect(`/modelo/${structure.id}`);
   }
 
   private async login(request: Request): Promise<Response> {
@@ -274,9 +281,9 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
   return status.kind === "busy" ? { ...status, label: `${status.label} · ${minutes(v.created_at)} min` } : status;
 }
 
-function videoCard(v: Video): string {
+/** O cartão do vídeo na grade: a mídia, o status, quando foi feito, a fala e as ações. */
+function videoCard(v: Video, structure: Structure): string {
   const status = cardStatus(v);
-  const structure = structureById(v.structure);
   const ratio = /^(\d+):(\d+)$/.exec(v.aspect_ratio);
   const style = [
     ratio ? `--ratio:${ratio[1]} / ${ratio[2]}` : "",
@@ -284,34 +291,87 @@ function videoCard(v: Video): string {
   ].filter(Boolean).join(";");
   const progress = status.kind === "busy" ? `<div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>` : "";
   const media = v.video_key
-    ? `<video controls preload="metadata" playsinline src="/videos/${v.id}.mp4${v.processed_key ? "?tratado" : ""}"></video>${progress}`
+    ? `<video controls preload="metadata" playsinline src="${videoSrc(v)}"></video>${progress}`
     : `${v.image_key ? "" : `<span class="icon">${status.kind === "error" ? "error" : "movie"}</span>`}${progress}`;
-  const headline = [structure?.name ?? v.model.replace(/^[^/]+\//, ""), v.style ? (styleById(v.style)?.label ?? v.style) : null].filter(Boolean).join(" · ");
-  // A duração do HeyGen segue a fala: até o vídeo ficar pronto, é uma estimativa.
-  const duration = structure && !("field" in structure.cost.seconds) ? `≈ ${v.duration} s` : `${v.duration} s`;
-  const meta = [formatDate(v.created_at), duration, v.resolution, v.aspect_ratio, v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : null].filter(
-    (m): m is string => Boolean(m),
-  );
   return `
 <article class="card card--elevated video-card">
   <div class="video-card__media"${style ? ` style="${style}"` : ""}>${media}</div>
   <div class="video-card__body">
     <p class="video-card__status video-card__status--${status.kind}"><span class="icon">${status.icon}</span>${esc(status.label)}</p>
-    <h2 class="video-card__headline">${esc(headline)}</h2>
-    <p class="video-card__subhead">${meta.map(esc).join(" · ")}</p>
-    <details class="video-card__prompt"><summary class="interactive">${esc(v.prompt)}</summary>${v.extra ? `<p class="video-card__extra">${esc(v.extra)}</p>` : ""}</details>
-    ${v.error ? `<p class="video-card__error">${esc(v.error)}</p>` : ""}
-    ${v.audio_status === "failed" ? `<p class="video-card__error">Áudio não tratado: ${esc(v.audio_error ?? "erro desconhecido")}</p>` : ""}
+    <p class="video-card__subhead">${esc([formatDate(v.created_at), durationLabel(v, structure)].join(" · "))}</p>
+    <p class="video-card__text">${esc(v.prompt)}</p>
   </div>
-  ${
-    v.video_key
-      ? `<div class="video-card__actions">
-    ${v.processed_key ? `<a class="button button--text interactive" href="/videos/${v.id}.original.mp4?baixar" download>Original</a>` : ""}
-    <a class="button button--text interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>Baixar MP4</a>
-  </div>`
-      : ""
-  }
+  <div class="video-card__actions">
+    ${v.video_key ? `<a class="icon-button interactive" href="/videos/${v.id}.mp4?baixar" download aria-label="Baixar MP4" title="Baixar MP4"><span class="icon">download</span></a>` : ""}
+    <button class="button button--text interactive" type="button" data-dialog-open="detalhes-${v.id}">Ver mais</button>
+  </div>
 </article>`;
+}
+
+/**
+ * "Ver mais": o vídeo maior e tudo sobre ele, organizado em seções. Diálogo
+ * básico do M3 nas telas médias e maiores; diálogo de tela cheia no celular.
+ */
+function videoDialog(v: Video, structure: Structure): string {
+  const status = cardStatus(v);
+  const details = [
+    ...structure.details(v),
+    { term: "Duração", description: durationLabel(v, structure) },
+    { term: "Resolução", description: v.resolution },
+    { term: "Formato", description: v.aspect_ratio },
+    { term: "Custo", description: v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—" },
+    { term: "Criado em", description: formatDate(v.created_at) },
+    { term: "Modelo", description: v.model },
+  ];
+  const errors = [v.error, v.audio_status === "failed" ? `Áudio não tratado: ${v.audio_error ?? "erro desconhecido"}` : null].filter((e): e is string => Boolean(e));
+  return `
+<dialog class="dialog" id="detalhes-${v.id}" aria-labelledby="detalhes-${v.id}-titulo">
+  <div class="dialog__header">
+    <button class="icon-button interactive dialog__close" type="button" aria-label="Fechar" data-dialog-close><span class="icon">close</span></button>
+    <h2 class="dialog__headline" id="detalhes-${v.id}-titulo">${esc(structure.name)} · ${esc(formatDate(v.created_at))}</h2>
+  </div>
+  <div class="dialog__content">
+    ${v.video_key ? `<video class="dialog__video" controls preload="none" playsinline src="${videoSrc(v)}" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"></video>` : ""}
+    <p class="video-card__status video-card__status--${status.kind}"><span class="icon">${status.icon}</span>${esc(status.label)}</p>
+    ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
+    <section class="dialog__section">
+      <h3 class="dialog__title">Fala</h3>
+      <p class="dialog__text">${esc(v.prompt)}</p>
+    </section>
+    <section class="dialog__section">
+      <h3 class="dialog__title">Configurações</h3>
+      <dl class="details">${details.map((d) => `<div class="details__item"><dt>${esc(d.term)}</dt><dd>${esc(d.description)}</dd></div>`).join("")}</dl>
+    </section>
+    ${
+      v.request_prompt && v.request_prompt !== v.prompt
+        ? `<details class="dialog__section dialog__prompt"><summary class="dialog__title interactive">Prompt enviado ao modelo</summary><p class="dialog__text">${esc(v.request_prompt)}</p></details>`
+        : ""
+    }
+    ${
+      v.video_key
+        ? `<section class="dialog__section">
+      <h3 class="dialog__title">Arquivos</h3>
+      <div class="dialog__files">
+        <a class="button button--tonal interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>${v.processed_key ? "Baixar com áudio tratado" : "Baixar MP4"}</a>
+        ${v.processed_key ? `<a class="button button--outlined interactive" href="/videos/${v.id}.original.mp4?baixar" download><span class="icon">download</span>Original</a>` : ""}
+      </div>
+    </section>`
+        : ""
+    }
+  </div>
+  <div class="dialog__actions">
+    <button class="button button--text interactive" type="button" data-dialog-close>Fechar</button>
+  </div>
+</dialog>`;
+}
+
+function videoSrc(v: Video): string {
+  return `/videos/${v.id}.mp4${v.processed_key ? "?tratado" : ""}`;
+}
+
+/** A duração do HeyGen segue a fala: até o vídeo ficar pronto, é uma estimativa. */
+function durationLabel(v: Video, structure: Structure): string {
+  return "field" in structure.cost.seconds ? `${v.duration} s` : `≈ ${v.duration} s`;
 }
 
 /** Uma seção do formulário: título e campos. */
@@ -505,9 +565,10 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }
 }
 
 /**
- * Barra que muda de cor ao rolar, snackbar, e no formulário: custo e duração
- * estimados, contador da fala, explicação da opção escolhida e prévia da foto.
- * Na lista de vídeos, atualiza a fila de tempos em tempos.
+ * Barra que muda de cor ao rolar, snackbar, diálogo de detalhes do vídeo e, no
+ * formulário: custo e duração estimados, contador da fala, explicação da opção
+ * escolhida e prévia da foto. Com vídeo na fila, atualiza a página de tempos
+ * em tempos.
  */
 const SCRIPT = `(() => {
   const bar = document.querySelector("[data-app-bar]");
@@ -518,12 +579,21 @@ const SCRIPT = `(() => {
   }
 
   document.addEventListener("click", (e) => {
-    const close = e.target instanceof Element && e.target.closest("[data-snackbar-close]");
+    const el = e.target instanceof Element ? e.target : null;
+    const close = el && el.closest("[data-snackbar-close]");
     if (close) close.closest("[data-snackbar]").hidden = true;
+    // Ver mais: abre o diálogo do vídeo; fechar, ou tocar fora dele, fecha.
+    const open = el && el.closest("[data-dialog-open]");
+    if (open) document.getElementById(open.dataset.dialogOpen).showModal();
+    if (el && (el.closest("[data-dialog-close]") || el.matches("dialog"))) el.closest("dialog").close();
   });
+  // Diálogo fechado: o vídeo dele para de tocar.
+  for (const d of document.querySelectorAll("dialog")) d.addEventListener("close", () => d.querySelectorAll("video").forEach((v) => v.pause()));
 
   const f = document.querySelector("[data-composer]");
+  let dirty = false;
   if (f) {
+    f.addEventListener("input", () => { dirty = true; });
     const cfg = JSON.parse(f.dataset.composer);
     const val = (name) => (f.elements[name] ? f.elements[name].value || "" : "");
     const speech = f.querySelector("[data-speech]");
@@ -568,10 +638,12 @@ const SCRIPT = `(() => {
     f.addEventListener("submit", () => { f.querySelector("[type=submit]").disabled = true; });
   }
 
-  // Vídeo na fila: confere de novo de tempos em tempos, sem cortar um vídeo que está tocando.
+  // Vídeo na fila: confere de novo de tempos em tempos, sem perder o que está sendo
+  // escrito, sem fechar um diálogo aberto e sem cortar um vídeo que está tocando.
   const refresh = Number(document.body.dataset.refresh);
   if (refresh) setInterval(() => {
-    if (![...document.querySelectorAll("video")].some((v) => !v.paused)) location.reload();
+    const playing = [...document.querySelectorAll("video")].some((v) => !v.paused);
+    if (!dirty && !playing && !document.querySelector("dialog[open]")) location.reload();
   }, refresh * 1000);
 })();`;
 

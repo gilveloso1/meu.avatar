@@ -11,7 +11,7 @@ const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
 
 async function post(api: FakeVideoApi, fields: Record<string, string | File>, structure = "wan", audio: FakeAudioApi | null = null) {
-  return call(postForm(`/novo/${structure}`, fields, { cookie: await cookie() }), api, audio);
+  return call(postForm(`/modelo/${structure}`, fields, { cookie: await cookie() }), api, audio);
 }
 
 const get = async (path: string, session?: string, api: FakeVideoApi | null = new FakeVideoApi()) =>
@@ -40,16 +40,22 @@ describe("acesso", () => {
     expect(res.headers.get("location")).toBe("/entrar");
   });
 
-  it("com login, mostra os vídeos e o botão de novo vídeo", async () => {
+  it("com login, a tela inicial mostra os cards dos modelos, com a contagem de vídeos", async () => {
     const res = await get("/");
     const page = await res.text();
     expect(res.status).toBe(200);
-    expect(page).toContain("Nenhum vídeo ainda");
-    expect(page).toContain('<a class="extended-fab interactive" href="/novo">');
+    expect(page).toContain('href="/modelo/wan"');
+    expect(page).toContain("0 vídeos");
+    expect(page).toContain("<title>Meu Avatar</title>");
+  });
+
+  it("os endereços antigos levam às páginas novas", async () => {
+    expect((await get("/novo")).headers.get("location")).toBe("/");
+    expect((await get("/novo/wan")).headers.get("location")).toBe("/modelo/wan");
   });
 
   it("o formulário do Wan vem com os padrões e o custo", async () => {
-    const res = await get("/novo/wan");
+    const res = await get("/modelo/wan");
     const page = await res.text();
     expect(res.status).toBe(200);
     expect(page).toContain('<option value="25" selected>25 s</option>');
@@ -60,38 +66,38 @@ describe("acesso", () => {
   });
 
   it("sem chave do OpenRouter, avisa e desliga o botão", async () => {
-    const page = await (await get("/novo/wan", undefined, null)).text();
+    const page = await (await get("/modelo/wan", undefined, null)).text();
     expect(page).toContain("OPENROUTER_API_KEY");
     expect(page).toContain('type="submit" disabled');
   });
 
   it("o administrador escolhe entre o Wan e o HeyGen", async () => {
-    const page = await (await get("/novo")).text();
-    expect(page).toContain('href="/novo/wan"');
-    expect(page).toContain('href="/novo/heygen"');
+    const page = await (await get("/")).text();
+    expect(page).toContain('href="/modelo/wan"');
+    expect(page).toContain('href="/modelo/heygen"');
     expect(page).toContain("Em teste: só o administrador vê");
   });
 
   it("estrutura que não existe dá 404", async () => {
-    expect((await get("/novo/inventada")).status).toBe(404);
+    expect((await get("/modelo/inventada")).status).toBe(404);
   });
 });
 
 describe("acesso negado à estrutura em teste", () => {
   it("conta comum não vê o HeyGen na escolha", async () => {
-    const page = await (await get("/novo", await memberCookie())).text();
-    expect(page).toContain('href="/novo/wan"');
-    expect(page).not.toContain("/novo/heygen");
+    const page = await (await get("/", await memberCookie())).text();
+    expect(page).toContain('href="/modelo/wan"');
+    expect(page).not.toContain("/modelo/heygen");
   });
 
   it("conta comum não abre o formulário do HeyGen", async () => {
-    expect((await get("/novo/heygen", await memberCookie())).status).toBe(404);
+    expect((await get("/modelo/heygen", await memberCookie())).status).toBe(404);
   });
 
   it("conta comum não gera vídeo pelo HeyGen, mesmo mandando o formulário direto", async () => {
     const api = new FakeVideoApi();
     const foto = new File([new Uint8Array([1, 2, 3])], "eu.jpg", { type: "image/jpeg" });
-    const res = await call(postForm("/novo/heygen", { fala: FALA, voz: VOICES[0]!.value, imagem: foto }, { cookie: await memberCookie() }), api);
+    const res = await call(postForm("/modelo/heygen", { fala: FALA, voz: VOICES[0]!.value, imagem: foto }, { cookie: await memberCookie() }), api);
     expect(res.status).toBe(404);
     expect(api.submitted).toHaveLength(0);
     expect(await new Db(env.DB).recentVideos()).toHaveLength(0);
@@ -135,7 +141,7 @@ describe("gerar vídeo", () => {
     const foto = new File([new Uint8Array([1, 2, 3])], "eu.jpg", { type: "image/jpeg" });
     const res = await post(api, { ...PEDIDO, instrucoes: "ela sorri no final", imagem: foto, duracao: "25", resolucao: "480p", formato: "9:16" });
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/");
+    expect(res.headers.get("location")).toBe("/modelo/wan");
 
     const [req] = api.submitted;
     expect(req!.input_references).toBeUndefined();
@@ -215,7 +221,7 @@ describe("acompanhar", () => {
     expect(video).toMatchObject({ status: "completed", cost: 1.25, video_key: `videos/${video!.id}.mp4` });
     expect(await (await env.MIDIA.get(video!.video_key!))!.text()).toBe("mp4-falso");
 
-    const page = await (await call(new Request(`${SITE}/`, { headers: { cookie: await cookie() } }), api)).text();
+    const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api)).text();
     expect(page).toContain(`<video controls preload="metadata" playsinline src="/videos/${video!.id}.mp4">`);
     expect(page).toContain("US$ 1.25");
     expect(page).not.toContain('data-refresh=');
@@ -247,7 +253,7 @@ describe("acompanhar", () => {
     expect(byJob["job-2"]).toMatchObject({ status: "failed", error: "Content policy violation" });
 
     // Enquanto há vídeo na fila, a página se atualiza sozinha.
-    const page = await (await call(new Request(`${SITE}/`, { headers: { cookie: await cookie() } }), api)).text();
+    const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api)).text();
     expect(page).toContain('data-refresh=');
     expect(page).toContain("Content policy violation");
 
@@ -285,7 +291,7 @@ describe("tratamento do áudio", () => {
     expect(video).toMatchObject({ status: "completed", audio_status: "pending", processed_key: null });
 
     // Enquanto trata, o cartão avisa e a página continua se atualizando.
-    let page = await (await call(new Request(`${SITE}/`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    let page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api, audio)).text();
     expect(page).toContain("Tratando áudio");
     expect(page).toContain("data-refresh=");
 
@@ -303,7 +309,7 @@ describe("tratamento do áudio", () => {
     expect(await original.text()).toBe("mp4-falso");
     expect(original.headers.get("content-disposition")).toContain("-original.mp4");
 
-    page = await (await call(new Request(`${SITE}/`, { headers: { cookie: session } }), api, audio)).text();
+    page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: session } }), api, audio)).text();
     expect(page).not.toContain("data-refresh=");
     expect(page).toContain(`/videos/${video.id}.original.mp4?baixar`);
   });
@@ -314,7 +320,7 @@ describe("tratamento do áudio", () => {
     const { api, studio } = await prontoParaTratar(audio);
     const video = (await studio.treatNextAudio())!;
     expect(video).toMatchObject({ audio_status: "failed", processed_key: null, audio_error: "Tratamento do áudio falhou (HTTP 500): ffmpeg" });
-    const page = await (await call(new Request(`${SITE}/`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api, audio)).text();
     expect(page).toContain("Áudio não tratado: Tratamento do áudio falhou");
     const mp4 = await call(new Request(`${SITE}/videos/${video.id}.mp4`, { headers: { cookie: await cookie() } }), api, audio);
     expect(await mp4.text()).toBe("mp4-falso");
@@ -346,7 +352,7 @@ describe("HeyGen Avatar IV", () => {
   const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
 
   it("o formulário tem voz, expressividade e movimento, sem duração", async () => {
-    const page = await (await get("/novo/heygen")).text();
+    const page = await (await get("/modelo/heygen")).text();
     expect(page).toContain('name="voz"');
     expect(page).toContain('name="expressividade" value="low" checked');
     expect(page).toContain('name="movimento"');
@@ -377,9 +383,14 @@ describe("HeyGen Avatar IV", () => {
     // Duração estimada pela fala (11 palavras a 2,4 por segundo).
     expect(video!.duration).toBe(5);
 
-    const home = await (await get("/", undefined, api)).text();
-    expect(home).toContain("HeyGen Avatar IV");
-    expect(home).toContain("≈ 5 s");
+    // Fica na página do HeyGen, não na do Wan, com os detalhes no "Ver mais".
+    const page = await (await get("/modelo/heygen", undefined, api)).text();
+    expect(page).toContain("≈ 5 s");
+    expect(page).toContain(`data-dialog-open="detalhes-${video!.id}"`);
+    expect(page).toContain("<dt>Voz</dt><dd>Orus · masculina · multilíngue</dd>");
+    expect(page).toContain("<dt>Expressividade</dt><dd>Média</dd>");
+    expect(await (await get("/modelo/wan", undefined, api)).text()).not.toContain(video!.id);
+    expect(await (await get("/", undefined, api)).text()).toContain("1 vídeo");
   });
 
   it("sem foto, sem voz da lista ou com expressividade inventada, não manda nada", async () => {

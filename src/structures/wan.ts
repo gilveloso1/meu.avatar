@@ -13,6 +13,7 @@ export const WAN: Structure = {
   name: "Wan 3.0",
   model: "alibaba/wan-3.0",
   summary: "A cena, a voz e a boca saem juntas do modelo, a partir da foto e da fala. O áudio passa pelo tratamento depois.",
+  icon: "movie",
   access: "all",
   treatAudio: true,
   wordsPerSecond: WORDS_PER_SECOND,
@@ -108,6 +109,14 @@ export const WAN: Structure = {
         settings: null,
       },
     };
+  },
+
+  details(video) {
+    return [
+      { term: "Estilo", description: video.style ? (styleById(video.style)?.label ?? video.style) : "—" },
+      { term: "Idioma da fala", description: video.language ? (languageById(video.language)?.label ?? video.language) : "—" },
+      { term: "Instruções extras", description: video.extra ?? "—" },
+    ];
   },
 };
 

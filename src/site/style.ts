@@ -2,15 +2,16 @@
  * Visual do estúdio, todo no Material Design 3 (m3.material.io), no mesmo
  * molde do blog do anb.bot: os tokens do sistema (cor, tipografia, forma,
  * elevação, estados e movimento) e os componentes feitos com eles: barra
- * superior pequena, FAB estendido, botões, botões de ícone, botões
+ * superior pequena, botões, botões de ícone, botões
  * segmentados, campos de texto contornados, cards, indicador de progresso
- * linear, snackbar e banner. As cores vêm de theme.ts (npm run tema).
+ * linear, diálogo, snackbar e banner. As cores vêm de theme.ts (npm run tema).
  *
  * Layout pelos breakpoints do M3: compacto (< 600 px) com margens de 16 px e
  * um painel; médio (600 a 839 px) e maiores com margens e espaço entre
- * painéis de 24 px. Vídeos: layout "feed" (grade de cards que ganha colunas
- * com a largura). Formulário: layout "supporting pane" (o resumo fica abaixo
- * do formulário até 839 px e num painel fixo de 360 px ao lado a partir daí).
+ * painéis de 24 px. Tela inicial: grade de cards dos modelos, que ganha
+ * colunas com a largura. Página do modelo: até 839 px, o formulário em cima e
+ * os vídeos embaixo; a partir daí, painel fixo de 360 px com o formulário e
+ * painel flexível com a grade de vídeos.
  */
 import { DARK, LIGHT } from "./theme";
 
@@ -199,20 +200,6 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 .button--outlined { background: none; color: var(--md-sys-color-primary); border: 1px solid var(--md-sys-color-outline); }
 .button--text { background: none; color: var(--md-sys-color-primary); padding: 0 12px; }
 
-/* --- FAB estendido pequeno: a ação principal da tela, no canto inferior direito ---- */
-.extended-fab {
-  position: fixed; z-index: 4; right: 16px; bottom: 16px;
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 56px; min-width: 80px; padding: 0 16px;
-  border-radius: var(--md-sys-shape-corner-large);
-  background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
-  box-shadow: var(--md-sys-elevation-level3);
-  font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem;
-  text-decoration: none; white-space: nowrap;
-  transition: box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
-}
-.extended-fab:hover { box-shadow: var(--md-sys-elevation-level4); }
-
 /* --- Campos de texto contornados (outlined text field) ------------------------------ */
 .text-field { position: relative; display: flex; flex-direction: column; gap: 4px; }
 .text-field__input {
@@ -305,57 +292,104 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .card--action { transition: box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
 .card--action:hover { box-shadow: var(--md-sys-elevation-level1); }
 
-/* Escolha do modelo: um card por estrutura. */
+/* Modelos na tela inicial: cards compactos, com ícone, nome, preço, resumo e contagem. */
 .model-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.model-card { display: flex; flex-direction: column; gap: 8px; }
-.model-card__headline { font: var(--md-sys-typescale-title-large); }
-.model-card__subhead { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
-.model-card__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
+.model-card { display: flex; align-items: flex-start; gap: 16px; }
+.model-card__icon {
+  width: 48px; height: 48px; flex: none; display: grid; place-items: center;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
+}
+.model-card__content { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.model-card__headline { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
+.model-card__subhead { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.model-card__text {
+  margin-top: 6px; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.model-card__footer { margin-top: 8px; font: var(--md-sys-typescale-label-medium); letter-spacing: 0.031rem; color: var(--md-sys-color-primary); }
 
-/* Vídeo: mídia em cima, texto no meio e ações embaixo, à direita. */
+/* Vídeo na grade: mídia em cima, status, data e fala, e as ações embaixo. */
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
 .video-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .video-card__media {
-  position: relative; aspect-ratio: var(--ratio, 9 / 16); max-height: 520px; width: 100%;
+  position: relative; aspect-ratio: var(--ratio, 9 / 16); max-height: 360px; width: 100%;
   background: var(--md-sys-color-surface-container-highest) center / cover no-repeat;
   display: grid; place-items: center; color: var(--md-sys-color-on-surface-variant);
 }
 .video-card__media video { width: 100%; height: 100%; object-fit: contain; background: #000; }
 .video-card__media > .icon { font-size: 48px; }
 .video-card__media .linear-progress { position: absolute; left: 0; right: 0; bottom: 0; }
-.video-card__body { display: flex; flex-direction: column; gap: 4px; padding: 16px; }
+.video-card__body { display: flex; flex-direction: column; gap: 4px; padding: 16px 16px 8px; }
 .video-card__status {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 8px;
   font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant);
 }
 .video-card__status .icon { font-size: 18px; }
 .video-card__status--done { color: var(--md-sys-color-primary); }
 .video-card__status--error { color: var(--md-sys-color-error); }
-.video-card__headline { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
-.video-card__subhead { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
-.video-card__prompt { margin-top: 4px; }
-.video-card__prompt summary {
-  list-style: none; cursor: pointer; border-radius: var(--md-sys-shape-corner-extra-small);
+.video-card__subhead { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.video-card__text {
   font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.video-card__prompt summary::-webkit-details-marker { display: none; }
-.video-card__prompt[open] summary { display: block; -webkit-line-clamp: unset; white-space: pre-wrap; }
-.video-card__extra { margin-top: 4px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
-.video-card__error { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-error); overflow-wrap: anywhere; }
-.video-card__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; }
+.video-card__actions { display: flex; justify-content: flex-end; align-items: center; gap: 4px; padding: 0 8px 8px; margin-top: auto; }
 
-/* --- Formulário: seções no painel principal, resumo no painel de apoio --------------- */
-.form-layout { --field-surface: var(--md-sys-color-surface); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--layout-gap); align-items: start; }
-.form-layout__focus { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+/* --- Diálogo: básico (até 560 px, cantos de 28 px) nas telas médias e maiores ----------- */
+.dialog {
+  border: 0; padding: 0; margin: auto;
+  width: calc(100vw - 48px); max-width: 560px; max-height: calc(100vh - 112px);
+  border-radius: var(--md-sys-shape-corner-extra-large);
+  background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface);
+  box-shadow: var(--md-sys-elevation-level3);
+}
+.dialog[open] { display: flex; flex-direction: column; }
+.dialog::backdrop { background: rgb(0 0 0 / 0.32); }
+.dialog__header { display: flex; align-items: center; gap: 4px; padding: 24px 24px 16px; }
+.dialog__close { display: none; }
+.dialog__headline { font: var(--md-sys-typescale-headline-small); min-width: 0; }
+/* O título e as ações ficam parados; só o conteúdo rola. */
+.dialog__content { flex: 1; min-height: 0; overflow-y: auto; padding: 0 24px; display: flex; flex-direction: column; gap: 24px; }
+.dialog__video { width: 100%; aspect-ratio: var(--ratio, 9 / 16); max-height: 45vh; background: #000; border-radius: var(--md-sys-shape-corner-medium); flex: none; }
+.dialog__error { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-error); overflow-wrap: anywhere; margin-top: -16px; }
+.dialog__section { display: flex; flex-direction: column; gap: 8px; }
+.dialog__title { font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }
+.dialog__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dialog__prompt summary { cursor: pointer; border-radius: var(--md-sys-shape-corner-extra-small); }
+.dialog__prompt[open] summary { margin-bottom: 8px; }
+.dialog__files { display: flex; flex-wrap: wrap; gap: 8px; }
+.dialog__actions { display: flex; justify-content: flex-end; gap: 8px; padding: 24px; }
+/* Configurações: nome à esquerda, valor à direita. */
+.details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
+.details__item { display: contents; }
+.details dt { color: var(--md-sys-color-on-surface-variant); }
+.details dd { overflow-wrap: anywhere; }
+/* No celular, diálogo de tela cheia: o X no topo fecha. */
+@media (max-width: 599px) {
+  .dialog { width: 100%; max-width: none; height: 100%; max-height: none; border-radius: 0; background: var(--md-sys-color-surface); box-shadow: none; }
+  .dialog__header { padding: 4px 16px 4px 4px; min-height: 56px; }
+  .dialog__close { display: inline-grid; }
+  .dialog__headline { font: var(--md-sys-typescale-title-large); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dialog__content { padding: 8px 16px 24px; }
+  .dialog__actions { display: none; }
+}
+
+/* --- Página do modelo: formulário no painel fixo, vídeos no painel flexível ----------- */
+.page.page--panes { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--layout-gap); align-items: start; }
+.pane { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+/* O formulário fica num contêiner próprio, para se separar dos vídeos. */
+.pane--fixed { background: var(--md-sys-color-surface-container-low); border-radius: var(--md-sys-shape-corner-large); padding: 16px; }
+.pane__headline { font: var(--md-sys-typescale-title-large); display: flex; align-items: baseline; gap: 8px; }
+.pane__count { font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }
+.composer { --field-surface: var(--md-sys-color-surface-container-low); display: flex; flex-direction: column; gap: 24px; }
 .form-section { display: flex; flex-direction: column; gap: 24px; }
 .form-section__title { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
 .summary { display: flex; flex-direction: column; gap: 16px; }
-.summary__title { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
+.summary .button { align-self: flex-end; }
 .summary__list { display: flex; flex-direction: column; gap: 8px; }
 .summary__item { display: flex; justify-content: space-between; gap: 16px; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
 .summary__item dt { color: var(--md-sys-color-on-surface-variant); }
 .summary__item dd { text-align: right; overflow-wrap: anywhere; }
-.summary__actions { display: flex; justify-content: flex-end; }
 
 /* --- Indicador de progresso linear (indeterminado) ----------------------------------- */
 .linear-progress { height: 4px; overflow: hidden; background: var(--md-sys-color-secondary-container); }
@@ -397,12 +431,10 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
   padding: 8px var(--layout-margin) 32px;
   display: flex; flex-direction: column; gap: 16px;
 }
-/* Espaço no fim para o FAB estendido (56 px + 16 px de margem) não cobrir o último card. */
-.page--feed { padding-bottom: 104px; }
+/* A página do modelo é mais larga: o painel de 360 px mais a grade de vídeos. */
+.page--panes { --layout-max: 1600px; }
 .page__headline { font: var(--md-sys-typescale-headline-small); }
 .page__intro { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
-/* Feed: no compacto, os cards um embaixo do outro, na largura toda; mais colunas nas janelas maiores. */
-.feed { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; }
 
 .empty {
   display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px;
@@ -435,19 +467,19 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
   .top-app-bar { padding: 0 12px 0 24px; }
   .top-app-bar--leading { padding-left: 12px; }
   .page { padding-top: 16px; padding-bottom: 48px; }
-  .page--feed { padding-bottom: 104px; }
-  .feed, .model-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .model-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .video-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
   .footer { padding: 32px 24px 40px; }
 }
 @media (min-width: 840px) {
   .page__headline { font: var(--md-sys-typescale-headline-medium); }
-  .feed { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  /* Supporting pane: o resumo num painel fixo de 360 px à direita, parado ao rolar. */
-  .form-layout { grid-template-columns: minmax(0, 1fr) var(--layout-pane); }
-  .summary { position: sticky; top: 80px; }
+  .model-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Painel fixo de 360 px com o formulário, parado ao rolar e com rolagem própria; vídeos no resto. */
+  .page.page--panes { grid-template-columns: var(--layout-pane) minmax(0, 1fr); }
+  .pane--fixed { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; }
 }
 @media (min-width: 1200px) {
-  .feed { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .model-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

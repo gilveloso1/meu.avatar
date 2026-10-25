@@ -27,9 +27,9 @@ No ar em <https://meuavatar.ia.br> (e no workers.dev). O que já funciona e
   (`/videos/<id>.original.mp4`). Explicado em `docs/operacao.md`.
 - Contas (primeiro cadastro vira admin), webhook assinado do OpenRouter,
   domínio próprio.
-- **Uma estrutura por modelo** (`src/structures/`): o usuário escolhe o modelo
-  num card em `/novo` e preenche o formulário daquela estrutura. Cada vídeo
-  guarda a estrutura que o gerou. Hoje: Wan 3.0 (para todos) e HeyGen Avatar
+- **Uma estrutura por modelo** (`src/structures/`): a tela inicial tem um card
+  por modelo; na página do modelo, o formulário fica de um lado e os vídeos
+  daquele modelo do outro. Cada vídeo guarda a estrutura que o gerou. Hoje: Wan 3.0 (para todos) e HeyGen Avatar
   IV (em teste, só o administrador).
 
 O problema que motiva o item 1: pelo OpenRouter, o Wan 3.0 devolve a voz alta
