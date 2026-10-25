@@ -12,6 +12,7 @@ o padrão é o **Wan 3.0**, 25 s, 480p, 9:16, com áudio (≈ US$ 1,25 por víde
 
 - Como funciona, chaves e como publicar: [docs/operacao.md](docs/operacao.md)
 - Como escrever o prompt e o que o estúdio acrescenta: [docs/prompt.md](docs/prompt.md)
+- O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md)
 
 ## Estrutura
 
@@ -26,4 +27,5 @@ o padrão é o **Wan 3.0**, 25 s, 480p, 9:16, com áudio (≈ US$ 1,25 por víde
 | `src/db.ts` | Tabela `videos` no D1 |
 | `src/site/` | Páginas (HTML no Worker) e visual Material Design 3; cores em `theme.ts`, geradas por `npm run tema` |
 | `tools/gerar-video.ts` | Gerar pelo terminal, sem o Worker (`npm run gerar`) |
+| `tools/medir-audio.py` | Mede o áudio dos vídeos (LUFS, pico, clipping, tom, agudos) para comparar modelos |
 | `test/` | Testes (Vitest no ambiente do Workers, OpenRouter falso) |

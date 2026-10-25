@@ -4,6 +4,8 @@ Estúdio de vídeos curtos com avatar realista falando, para redes sociais e
 anúncios. Worker do Cloudflare com D1 e R2; os vídeos vêm da API de vídeo do
 OpenRouter. Segue o mesmo molde do anb.bot (github.com/gilveloso1/anb.bot).
 Como publicar e operar: [docs/operacao.md](docs/operacao.md).
+O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
+é montado e as medições de áudio: [docs/prompt.md](docs/prompt.md).
 
 ## Site leve
 
