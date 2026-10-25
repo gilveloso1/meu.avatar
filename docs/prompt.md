@@ -11,15 +11,15 @@ O formulário separa o que vai no prompt:
 | Campo | O que vira no prompt |
 |---|---|
 | **Estilo** (lista) | Uma direção pronta, em inglês: câmera, enquadramento, postura (`STYLES`) |
-| **Fala** | `The person on camera says: "<fala>"`, numa linha só; as aspas são postas pelo estúdio |
+| **Fala** | `The person on camera says softly, in a calm, low voice: "<fala>"`, numa linha só; as aspas são postas pelo estúdio |
 | **Instruções extras** (opcional) | Uma linha a mais logo depois da direção do estilo |
 | **Idioma da fala** | O idioma citado na orientação de qualidade (`LANGUAGES`) |
 
 O prompt final fica nesta ordem: estilo, instruções extras, fala e, no fim, a
-orientação fixa de qualidade (`qualityGuide`, ~75 palavras): uma voz só,
-gravada de perto num microfone de lapela em sala silenciosa; timbre natural no
-tom real da pessoa, ritmo de conversa, volume moderado e constante, sibilantes
-suaves; sem música, efeitos, eco, distorção ou clipping; "Lip sync"; a fala no
+orientação fixa de qualidade (`qualityGuide`, ~90 palavras): uma voz só, baixa
+e suave, gravada de perto num microfone de lapela em sala silenciosa e
+mixada baixo; fala gentil, sem levantar a voz, no tom real da pessoa, ritmo
+calmo, sibilantes suaves; sem música, efeitos, eco, distorção ou clipping; "Lip sync"; a fala no
 idioma escolhido, com exatamente as palavras entre aspas; vídeo fotorrealista,
 enquadramento firme e sem texto, legenda ou marca d'água na tela.
 
@@ -30,6 +30,25 @@ conferem que cada direção fica em até 60 palavras.
 O banco guarda a fala (`prompt`), o estilo, o idioma, as instruções e o prompt
 exatamente como foi para o modelo (`request_prompt`), para comparar resultados
 quando um estilo ou a orientação mudar.
+
+## Volume da voz: as medições
+
+Pelo OpenRouter, o Wan 3.0 devolve a voz alta demais e cortada; o mesmo tipo
+de pedido no Higgsfield (que também usa o Wan 3.0: os arquivos têm o mesmo
+selo de produtor e o mesmo codificador, sem tratamento depois) saiu no padrão.
+
+| Vídeo | Clipping | Loudness | Pico | Acima de 3 kHz |
+|---|---|---|---|---|
+| 1º, prompt livre | 8,8% | −5,2 LUFS | +2,5 dBFS | 8,4% |
+| 2º, estilo + "moderate volume" | 4,8% | −6,5 LUFS | +1,9 dBFS | 8,8% |
+| Higgsfield, prompt livre | 0,15% | −13,8 LUFS | −0,3 dBFS | 1,7% |
+
+Por isso a voz baixa é pedida duas vezes: no verbo da fala (`says softly, in
+a calm, low voice`) e na orientação de áudio (`soft-spoken voice at low
+volume … never raising the voice`). Os estilos também evitam palavras que
+puxam a voz para cima ("enthusiasm" virou "warm, genuine interest"). Se ainda
+assim sair alto, o próximo passo é normalizar o áudio depois de gerar
+(−14 LUFS, pico abaixo de −1 dBFS).
 
 ## Como escrever a fala
 

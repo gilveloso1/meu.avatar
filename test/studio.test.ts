@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
 import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
-import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, STYLES } from "../src/prompt";
+import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, SPEECH_LEAD, STYLES } from "../src/prompt";
 import { call, cookie, FakeVideoApi, postForm, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
@@ -62,7 +62,7 @@ describe("prompt", () => {
 
   it("o idioma escolhido vai na orientação de qualidade; sem instruções, nada de linha vazia", () => {
     const prompt = buildPrompt({ style: STYLES[1]!, language: LANGUAGES[2]!, speech: "Hola" });
-    expect(prompt).toBe(`${STYLES[1]!.direction}\nThe person on camera says: "Hola"\n\n${qualityGuide(LANGUAGES[2]!)}`);
+    expect(prompt).toBe(`${STYLES[1]!.direction}\n${SPEECH_LEAD} "Hola"\n\n${qualityGuide(LANGUAGES[2]!)}`);
     expect(prompt).toContain("Latin American Spanish");
     expect(prompt).not.toContain("Brazilian Portuguese");
   });
@@ -70,7 +70,10 @@ describe("prompt", () => {
   it("cada estilo e a orientação ficam curtos (prompt de até ~200 tokens)", () => {
     const words = (t: string) => t.split(/\s+/).length;
     for (const style of STYLES) expect(words(style.direction)).toBeLessThanOrEqual(60);
-    expect(words(qualityGuide(LANGUAGES[0]!))).toBeLessThanOrEqual(80);
+    expect(words(qualityGuide(LANGUAGES[0]!))).toBeLessThanOrEqual(90);
+    // Falar baixo é pedido no verbo da fala e na orientação de áudio.
+    expect(SPEECH_LEAD).toMatch(/softly.*low voice/);
+    expect(qualityGuide(LANGUAGES[0]!)).toMatch(/low volume[\s\S]*never raising the voice/);
   });
 });
 
@@ -85,7 +88,7 @@ describe("gerar vídeo", () => {
     const [req] = api.submitted;
     // Estilo, instruções, fala entre aspas e a orientação fixa de qualidade no fim.
     expect(req!.prompt).toBe(
-      `${STYLES[0]!.direction}\nela sorri no final\nThe person on camera says: "${FALA}"\n\n${qualityGuide(LANGUAGES[0]!)}`,
+      `${STYLES[0]!.direction}\nela sorri no final\n${SPEECH_LEAD} "${FALA}"\n\n${qualityGuide(LANGUAGES[0]!)}`,
     );
     expect(req).toMatchObject({ model: "alibaba/wan-3.0", duration: 25, resolution: "480p", aspect_ratio: "9:16", generate_audio: true });
     expect(req!.callback_url).toBe(`${SITE}/openrouter/webhook`);
