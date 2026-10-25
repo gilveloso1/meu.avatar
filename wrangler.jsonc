@@ -1,0 +1,46 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "meu-avatar",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // A cada 2 minutos: confere no OpenRouter os vídeos que ainda estão na fila,
+  // caso o aviso (webhook) não chegue.
+  "triggers": { "crons": ["*/2 * * * *"] },
+  // O estúdio no domínio próprio (zona meuavatar.ia.br na mesma conta). O www
+  // redireciona para o endereço sem www (src/index.ts). O workers.dev continua
+  // ligado: vídeos pedidos antes da troca mandam o aviso para lá.
+  "routes": [
+    { "pattern": "meuavatar.ia.br", "custom_domain": true },
+    { "pattern": "www.meuavatar.ia.br", "custom_domain": true }
+  ],
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "meu-avatar",
+      "database_id": "864e9f01-95d4-4478-83f6-4c9c34f7034a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "MIDIA", "bucket_name": "meu-avatar" }],
+  // Contêiner que trata o áudio (src/audio.ts, container/). "basic": 1/4 de vCPU
+  // e 1 GiB; um vídeo de 25 s leva uns 2 min. Uma instância basta (um vídeo por vez).
+  "containers": [
+    { "class_name": "AudioFixer", "image": "./container/Dockerfile", "instance_type": "basic", "max_instances": 1 }
+  ],
+  "durable_objects": { "bindings": [{ "class_name": "AudioFixer", "name": "AUDIO" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AudioFixer"] }],
+  "vars": {
+    // Endereço público do Worker (sem barra no fim): o OpenRouter manda o aviso
+    // para SITE_URL/openrouter/webhook e baixa a foto do avatar de SITE_URL/midia/...
+    "SITE_URL": "https://meuavatar.ia.br",
+    // Padrões do formulário. Os valores aceitos vêm do próprio modelo
+    // (GET https://openrouter.ai/api/v1/videos/models).
+    "VIDEO_MODEL": "alibaba/wan-3.0",
+    "VIDEO_DURATION": "25",
+    "VIDEO_RESOLUTION": "480p",
+    "VIDEO_ASPECT_RATIO": "9:16"
+  },
+  "observability": { "enabled": true }
+}

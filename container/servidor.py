@@ -1,0 +1,51 @@
+"""Servidor do contêiner de áudio: POST /tratar com o MP4 no corpo devolve o
+MP4 com o áudio tratado (tratar.sh). GET /saude responde ok. Um vídeo por vez."""
+import os, subprocess, tempfile, threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+LIMITE = 300 * 1024 * 1024  # 300 MB
+uma_vez = threading.Lock()
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/saude":
+            return self.responder(200, b"ok", "text/plain")
+        self.responder(404, b"nao encontrado", "text/plain")
+
+    def do_POST(self):
+        if self.path != "/tratar":
+            return self.responder(404, b"nao encontrado", "text/plain")
+        tamanho = int(self.headers.get("content-length") or 0)
+        if not 0 < tamanho <= LIMITE:
+            return self.responder(413, b"tamanho invalido", "text/plain")
+        with uma_vez, tempfile.TemporaryDirectory() as d:
+            entrada, saida = os.path.join(d, "in.mp4"), os.path.join(d, "out.mp4")
+            with open(entrada, "wb") as f:
+                restante = tamanho
+                while restante:
+                    bloco = self.rfile.read(min(restante, 1 << 20))
+                    if not bloco:
+                        return self.responder(400, b"corpo incompleto", "text/plain")
+                    f.write(bloco)
+                    restante -= len(bloco)
+            r = subprocess.run(["/app/tratar.sh", entrada, saida], capture_output=True, timeout=600)
+            if r.returncode != 0:
+                return self.responder(500, (r.stderr or b"falhou")[-2000:], "text/plain")
+            self.send_response(200)
+            self.send_header("content-type", "video/mp4")
+            self.send_header("content-length", str(os.path.getsize(saida)))
+            self.end_headers()
+            with open(saida, "rb") as f:
+                while bloco := f.read(1 << 20):
+                    self.wfile.write(bloco)
+
+    def responder(self, status, corpo, tipo):
+        self.send_response(status)
+        self.send_header("content-type", tipo)
+        self.send_header("content-length", str(len(corpo)))
+        self.end_headers()
+        self.wfile.write(corpo)
+
+
+ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
