@@ -294,7 +294,9 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 /* Formulário de novo vídeo */
 .composer { --field-surface: var(--md-sys-color-surface); display: flex; flex-direction: column; gap: 24px; padding: 24px 16px; }
 .composer__title { font: var(--md-sys-typescale-title-large); }
-.composer__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.composer__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 12px; }
+.composer__hint { margin-top: -16px; padding: 0 16px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.text-field__supporting--warn { color: var(--md-sys-color-error); }
 .composer__actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .composer__cost { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .composer__cost strong { font: var(--md-sys-typescale-label-large); color: var(--md-sys-color-on-surface); }
@@ -318,6 +320,7 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 }
 .video-card__prompt summary::-webkit-details-marker { display: none; }
 .video-card__prompt[open] summary { display: block; -webkit-line-clamp: unset; white-space: pre-wrap; }
+.video-card__extra { margin-top: 4px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
 .video-card__error { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-error); overflow-wrap: anywhere; }
 .video-card__actions { display: flex; gap: 8px; padding: 0 8px 8px; }
 

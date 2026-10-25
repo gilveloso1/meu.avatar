@@ -17,6 +17,10 @@ export interface Video {
   user_id: number | null;
   /** O prompt como foi para o modelo, com a orientação fixa (null nos pedidos antigos). */
   request_prompt: string | null;
+  /** Estilo, idioma e instruções extras do formulário (null nos pedidos antigos). */
+  style: string | null;
+  language: string | null;
+  extra: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -58,7 +62,7 @@ function toUserLogin(row: UserRow): UserLogin {
   return { ...toUser(row), passwordHash: row.password_hash, failedLogins: row.failed_logins, lockedUntil: row.locked_until };
 }
 
-export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "user_id" | "request_prompt">;
+export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "user_id" | "request_prompt" | "style" | "language" | "extra">;
 export type VideoChanges = Partial<Pick<Video, "job_id" | "status" | "video_key" | "cost" | "error">>;
 
 /** Status em que o vídeo ainda pode mudar (vale consultar o OpenRouter). */
@@ -71,10 +75,10 @@ export class Db {
     const at = now.toISOString();
     return (await this.d1
       .prepare(
-        `INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, image_key, user_id, request_prompt, created_at, updated_at)
-         VALUES (?, 'submitting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        `INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, image_key, user_id, request_prompt, style, language, extra, created_at, updated_at)
+         VALUES (?, 'submitting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
-      .bind(v.id, v.prompt, v.model, v.duration, v.resolution, v.aspect_ratio, v.image_key, v.user_id, v.request_prompt, at, at)
+      .bind(v.id, v.prompt, v.model, v.duration, v.resolution, v.aspect_ratio, v.image_key, v.user_id, v.request_prompt, v.style, v.language, v.extra, at, at)
       .first<Video>())!;
   }
 

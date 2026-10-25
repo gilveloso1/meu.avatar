@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
 import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
-import { QUALITY_GUIDE } from "../src/prompt";
+import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, STYLES } from "../src/prompt";
 import { call, cookie, FakeVideoApi, postForm, SITE, sign, WAN } from "./helpers";
 
-const PROMPT = 'Mulher de 30 anos, selfie no celular, diz: "Oi, gente!"';
+const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
+const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
 
 async function post(api: FakeVideoApi, fields: Record<string, string | File>) {
   return call(postForm("/videos", fields, { cookie: await cookie() }), api);
@@ -54,17 +55,38 @@ describe("acesso", () => {
   });
 });
 
+describe("prompt", () => {
+  it("a fala vira uma linha só, sem as aspas de fora e com as de dentro trocadas", () => {
+    expect(cleanSpeech(' "Oi,\n  gente!  Ele disse "olá" pra mim." ')).toBe("Oi, gente! Ele disse 'olá' pra mim.");
+  });
+
+  it("o idioma escolhido vai na orientação de qualidade; sem instruções, nada de linha vazia", () => {
+    const prompt = buildPrompt({ style: STYLES[1]!, language: LANGUAGES[2]!, speech: "Hola" });
+    expect(prompt).toBe(`${STYLES[1]!.direction}\nThe person on camera says: "Hola"\n\n${qualityGuide(LANGUAGES[2]!)}`);
+    expect(prompt).toContain("Latin American Spanish");
+    expect(prompt).not.toContain("Brazilian Portuguese");
+  });
+
+  it("cada estilo e a orientação ficam curtos (prompt de até ~200 tokens)", () => {
+    const words = (t: string) => t.split(/\s+/).length;
+    for (const style of STYLES) expect(words(style.direction)).toBeLessThanOrEqual(60);
+    expect(words(qualityGuide(LANGUAGES[0]!))).toBeLessThanOrEqual(80);
+  });
+});
+
 describe("gerar vídeo", () => {
   it("guarda a foto, envia o pedido com primeiro quadro e callback", async () => {
     const api = new FakeVideoApi();
     const foto = new File([new Uint8Array([1, 2, 3])], "eu.jpg", { type: "image/jpeg" });
-    const res = await post(api, { prompt: PROMPT, imagem: foto, duracao: "25", resolucao: "480p", formato: "9:16" });
+    const res = await post(api, { ...PEDIDO, instrucoes: "ela sorri no final", imagem: foto, duracao: "25", resolucao: "480p", formato: "9:16" });
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/");
 
     const [req] = api.submitted;
-    // O prompt da pessoa vai primeiro, com a orientação fixa de qualidade no fim.
-    expect(req!.prompt).toBe(`${PROMPT}\n\n${QUALITY_GUIDE}`);
+    // Estilo, instruções, fala entre aspas e a orientação fixa de qualidade no fim.
+    expect(req!.prompt).toBe(
+      `${STYLES[0]!.direction}\nela sorri no final\nThe person on camera says: "${FALA}"\n\n${qualityGuide(LANGUAGES[0]!)}`,
+    );
     expect(req).toMatchObject({ model: "alibaba/wan-3.0", duration: 25, resolution: "480p", aspect_ratio: "9:16", generate_audio: true });
     expect(req!.callback_url).toBe(`${SITE}/openrouter/webhook`);
     const imageUrl = req!.frame_images![0]!.image_url.url;
@@ -76,21 +98,23 @@ describe("gerar vídeo", () => {
     expect(foto2.headers.get("content-type")).toBe("image/jpeg");
 
     const [video] = await new Db(env.DB).recentVideos();
-    expect(video).toMatchObject({ job_id: "job-1", status: "pending", duration: 25, prompt: PROMPT, request_prompt: req!.prompt });
+    expect(video).toMatchObject({ job_id: "job-1", status: "pending", duration: 25, prompt: FALA, request_prompt: req!.prompt, style: "selfie", language: "pt-BR", extra: "ela sorri no final" });
   });
 
   it("sem foto, vai só o texto", async () => {
     const api = new FakeVideoApi();
-    await post(api, { prompt: PROMPT });
+    await post(api, PEDIDO);
     expect(api.submitted[0]!.frame_images).toBeUndefined();
   });
 
-  it("recusa prompt vazio, duração fora do modelo e arquivo que não é imagem", async () => {
+  it("recusa fala vazia, estilo ou idioma fora da lista, duração fora do modelo e arquivo que não é imagem", async () => {
     const api = new FakeVideoApi();
     const casos: Record<string, string | File>[] = [
-      { prompt: "  " },
-      { prompt: PROMPT, duracao: "45" },
-      { prompt: PROMPT, imagem: new File(["x"], "a.gif", { type: "image/gif" }) },
+      { ...PEDIDO, fala: ' "" ' },
+      { ...PEDIDO, estilo: "inventado" },
+      { ...PEDIDO, idioma: "klingon" },
+      { ...PEDIDO, duracao: "45" },
+      { ...PEDIDO, imagem: new File(["x"], "a.gif", { type: "image/gif" }) },
     ];
     for (const fields of casos) {
       const res = await post(api, fields);
@@ -103,7 +127,7 @@ describe("gerar vídeo", () => {
   it("se o OpenRouter recusar, o vídeo fica como falhou, com o motivo", async () => {
     const api = new FakeVideoApi();
     api.failSubmit = "OpenRouter respondeu HTTP 402: sem créditos";
-    await post(api, { prompt: PROMPT });
+    await post(api, PEDIDO);
     const [video] = await new Db(env.DB).recentVideos();
     expect(video).toMatchObject({ status: "failed", error: "OpenRouter respondeu HTTP 402: sem créditos" });
   });
@@ -112,7 +136,7 @@ describe("gerar vídeo", () => {
 describe("acompanhar", () => {
   it("webhook assinado: confere na API, guarda o MP4 no R2 e mostra o player", async () => {
     const api = new FakeVideoApi();
-    await post(api, { prompt: PROMPT });
+    await post(api, PEDIDO);
     api.finish("job-1", { status: "completed", usage: { cost: 1.25 } });
 
     // O corpo do aviso diz "failed", mas quem manda é a API.
@@ -147,8 +171,8 @@ describe("acompanhar", () => {
 
   it("agendamento confere os abertos e registra a falha", async () => {
     const api = new FakeVideoApi();
-    await post(api, { prompt: PROMPT });
-    await post(api, { prompt: PROMPT });
+    await post(api, PEDIDO);
+    await post(api, PEDIDO);
     api.finish("job-1", { status: "in_progress" });
     api.finish("job-2", { status: "failed", error: "Content policy violation" });
 

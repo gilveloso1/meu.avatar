@@ -1,5 +1,5 @@
 import { Db, OPEN_STATUSES, type Video } from "./db";
-import { buildPrompt } from "./prompt";
+import { buildPrompt, cleanSpeech, languageById, MAX_EXTRA, MAX_SPEECH, styleById } from "./prompt";
 import { estimateCost, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 
 export interface StudioConfig {
@@ -8,7 +8,14 @@ export interface StudioConfig {
 }
 
 export interface NewVideoInput {
-  prompt: string;
+  /** Id do estilo (src/prompt.ts). */
+  style: string;
+  /** Id do idioma da fala. */
+  language: string;
+  /** O que a pessoa fala. */
+  speech: string;
+  /** Instruções extras sobre o vídeo (opcional). */
+  extra?: string;
   model: string;
   duration: number;
   resolution: string;
@@ -22,7 +29,6 @@ export interface NewVideoInput {
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 /** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_PROMPT = 4000;
 
 export class InputError extends Error {}
 
@@ -55,9 +61,15 @@ export class Studio {
   /** Valida, guarda a foto, registra o vídeo e envia o pedido. */
   async create(input: NewVideoInput): Promise<Video> {
     const api = this.requireApi();
-    const prompt = input.prompt.trim();
-    if (!prompt) throw new InputError("Escreva o prompt do vídeo.");
-    if (prompt.length > MAX_PROMPT) throw new InputError(`O prompt passa de ${MAX_PROMPT} caracteres.`);
+    const style = styleById(input.style);
+    if (!style) throw new InputError("Escolha um estilo da lista.");
+    const language = languageById(input.language);
+    if (!language) throw new InputError("Escolha um idioma da lista.");
+    const speech = cleanSpeech(input.speech);
+    if (!speech) throw new InputError("Escreva a fala do vídeo.");
+    if (speech.length > MAX_SPEECH) throw new InputError(`A fala passa de ${MAX_SPEECH} caracteres.`);
+    const extra = (input.extra ?? "").replace(/\s+/g, " ").trim();
+    if (extra.length > MAX_EXTRA) throw new InputError(`As instruções passam de ${MAX_EXTRA} caracteres.`);
 
     const image = input.image && input.image.size > 0 ? input.image : null;
     const ext = image ? IMAGE_TYPES[image.type] : undefined;
@@ -66,7 +78,7 @@ export class Studio {
 
     const request: VideoRequest = {
       model: input.model,
-      prompt: buildPrompt(prompt),
+      prompt: buildPrompt({ style, language, speech, extra }),
       duration: input.duration,
       resolution: input.resolution,
       aspect_ratio: input.aspectRatio,
@@ -89,7 +101,7 @@ export class Studio {
 
     const video = await this.db.insertVideo({
       id,
-      prompt,
+      prompt: speech,
       model: input.model,
       duration: input.duration,
       resolution: input.resolution,
@@ -97,6 +109,9 @@ export class Studio {
       image_key: imageKey,
       user_id: input.userId ?? null,
       request_prompt: request.prompt,
+      style: style.id,
+      language: language.id,
+      extra: extra || null,
     });
 
     try {

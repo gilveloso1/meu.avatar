@@ -16,6 +16,7 @@
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { Db, User, Video, VideoStatus } from "../db";
 import type { VideoModel } from "../openrouter";
+import { LANGUAGES, languageById, MAX_EXTRA, MAX_SPEECH, STYLES, styleById, WORDS_PER_SECOND } from "../prompt";
 import { InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
@@ -121,7 +122,7 @@ export class Site {
     ${
       videos.length
         ? `<div class="gallery__grid">${videos.map(videoCard).join("")}</div>`
-        : `<div class="empty"><span class="icon">movie</span><p class="empty__title">Nenhum vídeo ainda</p><p>Escreva o prompt e gere o primeiro.</p></div>`
+        : `<div class="empty"><span class="icon">movie</span><p class="empty__title">Nenhum vídeo ainda</p><p>Escolha o estilo, escreva a fala e gere o primeiro.</p></div>`
     }
   </section>
 </main>
@@ -136,13 +137,20 @@ ${error ? snackbar(error) : ""}`;
     const ratios = model?.supported_aspect_ratios ?? [d.aspectRatio];
     const prices = JSON.stringify(model?.pricing_skus ?? {}).replace(/</g, "\\u003c");
     return `
-<form class="card card--outlined composer" method="post" action="/videos" enctype="multipart/form-data" data-composer data-prices='${esc(prices)}'>
+<form class="card card--outlined composer" method="post" action="/videos" enctype="multipart/form-data" data-composer data-prices='${esc(prices)}' data-styles='${esc(JSON.stringify(Object.fromEntries(STYLES.map((s) => [s.id, s.description]))))}' data-rate='${esc(JSON.stringify(WORDS_PER_SECOND))}'>
   <h1 class="composer__title">Novo vídeo</h1>
   ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
+  ${select("estilo", "Estilo", STYLES.map((s) => s.id), STYLES[0]!.id, (id) => styleById(id)!.label)}
+  <p class="composer__hint" data-style-description>${esc(STYLES[0]!.description)}</p>
   <div class="text-field">
-    <textarea class="text-field__input" id="prompt" name="prompt" required maxlength="4000" placeholder='Quem é o avatar, cenário e câmera, e a fala entre aspas. Ex.: A mulher olha para a câmera e diz: "Oi, gente! Hoje eu vou mostrar…"' aria-describedby="prompt-ajuda"></textarea>
-    <label class="text-field__label" for="prompt">Prompt completo</label>
-    <p class="text-field__supporting" id="prompt-ajuda"><span data-words>Fala de 25 s: umas 55 a 65 palavras.</span><span data-count>0/4000</span></p>
+    <textarea class="text-field__input" id="fala" name="fala" required maxlength="${MAX_SPEECH}" placeholder="Só o que a pessoa fala, sem aspas. Ex.: Oi, gente! Hoje eu vou mostrar…" aria-describedby="fala-ajuda"></textarea>
+    <label class="text-field__label" for="fala">Fala</label>
+    <p class="text-field__supporting" id="fala-ajuda"><span data-words>Para ${d.duration} s: umas ${Math.round(d.duration * WORDS_PER_SECOND.min)} a ${Math.round(d.duration * WORDS_PER_SECOND.max)} palavras.</span><span data-count>0/${MAX_SPEECH}</span></p>
+  </div>
+  <div class="text-field">
+    <input class="text-field__input" id="instrucoes" name="instrucoes" type="text" maxlength="${MAX_EXTRA}" placeholder="Ex.: ela sorri no final" aria-describedby="instrucoes-ajuda">
+    <label class="text-field__label" for="instrucoes">Instruções extras</label>
+    <p class="text-field__supporting" id="instrucoes-ajuda"><span>Opcional: algo a mais sobre a cena, além do estilo.</span></p>
   </div>
   <label class="file-picker">
     <input type="file" name="imagem" accept="image/jpeg,image/png,image/webp" data-image>
@@ -154,6 +162,7 @@ ${error ? snackbar(error) : ""}`;
     </span>
   </label>
   <div class="composer__row">
+    ${select("idioma", "Idioma da fala", LANGUAGES.map((l) => l.id), LANGUAGES[0]!.id, (id) => languageById(id)!.label)}
     ${select("duracao", "Duração", durations.map(String), String(d.duration), (s) => `${s} s`)}
     ${select("resolucao", "Resolução", resolutions, d.resolution)}
     ${select("formato", "Formato", ratios, d.aspectRatio)}
@@ -172,7 +181,10 @@ ${error ? snackbar(error) : ""}`;
     const image = form.get("imagem");
     try {
       await this.studio.create({
-        prompt: String(form.get("prompt") ?? ""),
+        style: String(form.get("estilo") ?? ""),
+        language: String(form.get("idioma") ?? ""),
+        speech: String(form.get("fala") ?? ""),
+        extra: String(form.get("instrucoes") ?? ""),
         model: String(form.get("modelo") || d.model),
         duration: Number(form.get("duracao") || d.duration),
         resolution: String(form.get("resolucao") || d.resolution),
@@ -246,6 +258,7 @@ function videoCard(v: Video): string {
         status.kind === "busy" ? `<div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>` : ""
       }`;
   const meta = [
+    v.style ? (styleById(v.style)?.label ?? v.style) : null,
     v.model.replace(/^[^/]+\//, ""),
     `${v.duration} s`,
     v.resolution,
@@ -259,7 +272,7 @@ function videoCard(v: Video): string {
   <div class="video-card__media"${style ? ` style="${style}"` : ""}>${media}</div>
   <div class="video-card__body">
     <span class="chip${chipClass}"><span class="icon">${status.icon}</span>${esc(status.label)}</span>
-    <details class="video-card__prompt"><summary class="interactive">${esc(v.prompt)}</summary></details>
+    <details class="video-card__prompt"><summary class="interactive">${esc(v.prompt)}</summary>${v.extra ? `<p class="video-card__extra">${esc(v.extra)}</p>` : ""}</details>
     <p class="video-card__meta">${meta.map(esc).join(" · ")}</p>
     ${v.error ? `<p class="video-card__error">${esc(v.error)}</p>` : ""}
   </div>
@@ -396,17 +409,23 @@ const SCRIPT = `(() => {
     const prices = JSON.parse(f.dataset.prices || "{}");
     const cost = f.querySelector("[data-cost]"), model = f.modelo.value;
     const words = f.querySelector("[data-words]"), count = f.querySelector("[data-count]");
+    const styles = JSON.parse(f.dataset.styles || "{}"), rate = JSON.parse(f.dataset.rate || "{}");
+    const styleText = f.querySelector("[data-style-description]");
     const update = () => {
       const p = Number(prices["duration_seconds_" + f.resolucao.value]);
       cost.innerHTML = p ? model + " · <strong>US$ " + (p * f.duracao.value).toFixed(2) + "</strong> estimado" : model;
-      // Fala natural: umas 2,2 a 2,6 palavras por segundo.
-      const s = Number(f.duracao.value);
-      const spoken = (f.prompt.value.match(/["“”«»]([^"“”«»]*)["“”«»]/g) || []).join(" ").split(/\\s+/).filter(Boolean).length;
-      words.textContent = "Fala de " + s + " s: umas " + Math.round(s * 2.2) + " a " + Math.round(s * 2.6) + " palavras" + (spoken ? " (entre aspas: " + spoken + ")" : "") + ".";
-      count.textContent = f.prompt.value.length + "/4000";
+      styleText.textContent = styles[f.estilo.value] || "";
+      // Fala natural: a faixa de palavras que cabe na duração escolhida.
+      const s = Number(f.duracao.value), min = Math.round(s * rate.min), max = Math.round(s * rate.max);
+      const n = f.fala.value.split(/\\s+/).filter(Boolean).length;
+      words.textContent = n
+        ? n + " palavras" + (n < min ? " · curta para " + s + " s (ideal " + min + " a " + max + ")" : n > max ? " · longa para " + s + " s (ideal " + min + " a " + max + ")" : " · cabe em " + s + " s")
+        : "Para " + s + " s: umas " + min + " a " + max + " palavras.";
+      words.parentElement.classList.toggle("text-field__supporting--warn", n > max);
+      count.textContent = f.fala.value.length + "/" + f.fala.maxLength;
     };
     f.addEventListener("change", update);
-    f.prompt.addEventListener("input", update);
+    f.fala.addEventListener("input", update);
     update();
 
     const image = f.querySelector("[data-image]"), preview = f.querySelector("[data-preview]"), name = f.querySelector("[data-image-name]");
@@ -423,7 +442,7 @@ const SCRIPT = `(() => {
   // Vídeo na fila: confere de novo de tempos em tempos, sem perder o que está sendo escrito.
   const refresh = Number(document.body.dataset.refresh);
   if (refresh) setInterval(() => {
-    if (!f || (!f.prompt.value && !f.imagem.files.length)) location.reload();
+    if (!f || (!f.fala.value && !f.instrucoes.value && !f.imagem.files.length)) location.reload();
   }, refresh * 1000);
 })();`;
 

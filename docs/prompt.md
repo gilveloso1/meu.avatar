@@ -4,32 +4,44 @@ Como escrever o prompt para o Wan 3.0 e o que o estúdio acrescenta sozinho.
 Pesquisa de 25/10/2026, depois do primeiro vídeo sair com o áudio agudo e
 estourado.
 
-## O que o estúdio acrescenta (src/prompt.ts)
+## O formulário e o prompt montado (src/prompt.ts)
 
-Todo pedido leva, no fim do prompt da pessoa, uma orientação fixa em inglês
-(`QUALITY_GUIDE`, 76 palavras): uma voz só, gravada de perto num microfone de
-lapela em sala silenciosa; timbre natural no tom real da pessoa, ritmo de
-conversa, volume moderado e constante, sibilantes suaves; sem música, efeitos,
-eco, distorção ou clipping; "Lip sync"; fala em português do Brasil com
-exatamente as palavras entre aspas; vídeo fotorrealista, enquadramento firme e
-sem texto, legenda ou marca d'água na tela.
+O formulário separa o que vai no prompt:
 
-O banco guarda os dois: `prompt` (o que a pessoa escreveu) e `request_prompt`
-(o que foi para o modelo), para comparar quando a orientação mudar.
+| Campo | O que vira no prompt |
+|---|---|
+| **Estilo** (lista) | Uma direção pronta, em inglês: câmera, enquadramento, postura (`STYLES`) |
+| **Fala** | `The person on camera says: "<fala>"`, numa linha só; as aspas são postas pelo estúdio |
+| **Instruções extras** (opcional) | Uma linha a mais logo depois da direção do estilo |
+| **Idioma da fala** | O idioma citado na orientação de qualidade (`LANGUAGES`) |
 
-## Como escrever o prompt
+O prompt final fica nesta ordem: estilo, instruções extras, fala e, no fim, a
+orientação fixa de qualidade (`qualityGuide`, ~75 palavras): uma voz só,
+gravada de perto num microfone de lapela em sala silenciosa; timbre natural no
+tom real da pessoa, ritmo de conversa, volume moderado e constante, sibilantes
+suaves; sem música, efeitos, eco, distorção ou clipping; "Lip sync"; a fala no
+idioma escolhido, com exatamente as palavras entre aspas; vídeo fotorrealista,
+enquadramento firme e sem texto, legenda ou marca d'água na tela.
 
-- **A fala entre aspas, com quem fala e o verbo antes:** `A mulher olha para a
-  câmera e diz: "Oi, gente! …"`. É o formato do guia oficial do Wan 3.0. Sem
-  aspas, o modelo pode trocar ou inventar palavras.
-- **Tamanho da fala:** uns 2,2 a 2,6 palavras por segundo (55 a 65 palavras
-  em 25 s). Fala longa demais sai corrida e mais aguda.
-- **Com foto (primeiro quadro), descreva o movimento, não a pessoa:** a foto
-  já mostra quem é. Diga o que ela faz e como a câmera se comporta.
-- **Prompt curto:** o Higgsfield recomenda até ~200 tokens no total; a
-  orientação fixa já usa uns 100.
-- **Diga o que quer, não só o que não quer:** "nítido" funciona melhor que
-  "sem borrão".
+Estilos de agora: **Selfie para a câmera** (o padrão), **Apresentador** e
+**Review de produto (UGC)**. Para mudar ou criar um, edite `STYLES`; os testes
+conferem que cada direção fica em até 60 palavras.
+
+O banco guarda a fala (`prompt`), o estilo, o idioma, as instruções e o prompt
+exatamente como foi para o modelo (`request_prompt`), para comparar resultados
+quando um estilo ou a orientação mudar.
+
+## Como escrever a fala
+
+- **Só o que a pessoa fala**, sem aspas e sem instruções no meio: tudo o que
+  estiver no campo é falado.
+- **Tamanho:** uns 2,2 a 2,6 palavras por segundo (55 a 65 palavras em 25 s).
+  O contador do formulário avisa quando passa. Fala longa demais sai corrida
+  e mais aguda.
+- **Escreva como se fala** e confira a gramática: o modelo fala exatamente o
+  texto ("começa às cinco", não "começa cinco").
+- **Instruções extras curtas e afirmativas:** "câmera parada" funciona melhor
+  que "sem movimento", e caixa alta não ajuda.
 
 ## O que não dá para configurar
 
