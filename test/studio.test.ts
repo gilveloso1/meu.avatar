@@ -167,3 +167,12 @@ describe("acompanhar", () => {
     expect(api.downloads).toBe(1);
   });
 });
+
+describe("domínio", () => {
+  it("www vai para o domínio sem www, com o mesmo caminho", async () => {
+    const { handle } = await import("../src/index");
+    const res = await handle(new Request("https://www.meuavatar.ia.br/entrar?x=1"), { ...env, SITE_URL: "https://meuavatar.ia.br" }, { api: null });
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://meuavatar.ia.br/entrar?x=1");
+  });
+});

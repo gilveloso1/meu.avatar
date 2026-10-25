@@ -27,6 +27,13 @@ export function createSite(env: Env, studio: Studio): Site {
 
 export async function handle(request: Request, env: Env, deps: { api?: VideoApi | null } = {}): Promise<Response> {
   const url = new URL(request.url);
+
+  // www.<domínio> vai para o domínio sem www: um endereço só, com um cookie de sessão só.
+  const site = new URL(env.SITE_URL);
+  if (url.hostname === `www.${site.hostname}`) {
+    return Response.redirect(`${site.origin}${url.pathname}${url.search}`, 301);
+  }
+
   const studio = createStudio(env, deps);
 
   // Aviso do OpenRouter de que um job terminou. Com o segredo de assinatura

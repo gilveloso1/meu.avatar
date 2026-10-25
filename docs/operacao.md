@@ -49,6 +49,7 @@ Portadas do estuda.mais (`src/auth.ts`):
 |---|---|
 | Conta Cloudflare | a mesma do anb.bot (subdomínio `gilveloso.workers.dev`) |
 | Worker | `meu-avatar`, em <https://meu-avatar.gilveloso.workers.dev> (no ar desde 25/10/2026) |
+| Domínio | <https://meuavatar.ia.br> e www (domínios personalizados do Worker; [detalhes](#o-domínio-meuavatariabr)) |
 | Banco D1 | `meu-avatar` (o id está em `wrangler.jsonc`) |
 | Bucket R2 | `meu-avatar` |
 | Agendamento | a cada 2 minutos (`triggers.crons` em `wrangler.jsonc`) |
@@ -85,6 +86,24 @@ workers.dev e o agendamento.
 
 Em seguida, abra o endereço e crie a conta do administrador. Confira se `SITE_URL` bate com o endereço que o deploy mostrar
 (`https://meu-avatar.<subdomínio>.workers.dev`).
+
+## O domínio meuavatar.ia.br
+
+O domínio fica registrado no Registro.br, mas o DNS é da Cloudflare: é o que
+permite ligar o domínio direto ao Worker (`routes` com `custom_domain` no
+`wrangler.jsonc`; a Cloudflare cria os registros e o certificado sozinha).
+
+1. No painel da Cloudflare: **Add a domain** → `meuavatar.ia.br`, plano Free.
+   (O token do ambiente não tem a permissão de criar zonas.)
+2. A Cloudflare mostra dois servidores DNS (`*.ns.cloudflare.com`). No
+   Registro.br, em **DNS → Alterar servidores DNS**, troque pelos dois.
+3. Quando a zona ficar **Active** na Cloudflare (minutos a algumas horas),
+   `npm run deploy` liga `meuavatar.ia.br` e `www.meuavatar.ia.br` ao Worker.
+4. `SITE_URL` é `https://meuavatar.ia.br`: é para lá que o OpenRouter manda os
+   avisos e de onde baixa as fotos. O www redireciona para o endereço sem www.
+   O workers.dev continua respondendo (avisos de vídeos pedidos antes da troca).
+
+A sessão é por endereço: quem entrava pelo workers.dev entra de novo no domínio.
 
 ## Desenvolvimento
 
