@@ -105,6 +105,14 @@ Docker rodando (no ambiente cloud: `dockerd &`). A imagem não usa `apt`:
 a rede do ambiente cloud bloqueia o `deb.debian.org`; a base vem do espelho
 do Google (`mirror.gcr.io`), porque o Docker Hub limita downloads.
 
+No ambiente cloud, a rede precisa liberar `registry.cloudflare.com` (para onde
+o `wrangler deploy` manda a imagem), além de `api.cloudflare.com`.
+
+Teste local da imagem (25/10/2026), com os limites do tipo "basic"
+(`docker run --cpus 0.25 --memory 1g`): vídeo de 25 s em 720p tratado em
+87 s; resultado igual ao E2 aprovado (correlação 1,000), −13,9 LUFS, sem
+picos cortados e o vídeo idêntico byte a byte ao original.
+
 ## Primeira publicação
 
 ```bash
