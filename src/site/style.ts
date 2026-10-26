@@ -331,12 +331,13 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .segmented-button__segment:has(input:focus-visible)::before { opacity: var(--md-sys-state-focus-state-layer-opacity); }
 .segmented-button:has(input:focus-visible) { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
 
-/* Foto do avatar: o input fica escondido; o botão tonal e a prévia fazem o papel dele. */
-.file-picker { display: flex; align-items: center; gap: 16px; }
+/* Foto do avatar: o input fica escondido; o botão tonal (largura toda) e, embaixo, a prévia com o nome e uma linha de ajuda. */
+.file-picker { display: flex; flex-direction: column; gap: 12px; }
+.file-picker__row { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .file-picker input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .file-picker input:focus-visible + .button { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
 .file-picker__preview {
-  width: 56px; height: 56px; flex: none; display: grid; place-items: center; overflow: hidden;
+  width: 48px; height: 48px; flex: none; display: grid; place-items: center; overflow: hidden;
   border-radius: var(--md-sys-shape-corner-medium);
   background: var(--md-sys-color-surface-container-highest); color: var(--md-sys-color-on-surface-variant);
 }

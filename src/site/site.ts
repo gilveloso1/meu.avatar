@@ -542,11 +542,13 @@ function formField(f: Field, value: Values): string {
     case "image":
       return `<label class="file-picker">
           <input type="file" name="${f.name}" accept="image/jpeg,image/png,image/webp"${f.required ? " required" : ""} data-image>
-          <span class="button button--tonal interactive"><span class="icon">add_photo_alternate</span>${esc(f.label)}</span>
-          <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
-          <span class="file-picker__text">
-            <span class="file-picker__name" data-image-name data-empty="${f.required ? "Nenhuma foto" : "Opcional"}">${f.required ? "Nenhuma foto" : "Opcional"}</span>
-            <span class="file-picker__hint">${esc(f.supporting)} JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB.</span>
+          <span class="button button--tonal interactive" title="JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB"><span class="icon">add_photo_alternate</span>${esc(f.label)}</span>
+          <span class="file-picker__row">
+            <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
+            <span class="file-picker__text">
+              <span class="file-picker__name" data-image-name data-empty="${f.required ? "Nenhuma foto" : "Opcional"}">${f.required ? "Nenhuma foto" : "Opcional"}</span>
+              <span class="file-picker__hint">${esc(f.supporting)}</span>
+            </span>
           </span>
         </label>`;
   }
