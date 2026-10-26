@@ -83,11 +83,86 @@ describe("acesso", () => {
   });
 });
 
+describe("telas", () => {
+  it("a busca da tela inicial filtra os modelos pelo nome", async () => {
+    const page = await (await get("/?q=wan")).text();
+    expect(page).toContain('href="/modelo/wan"');
+    expect(page).not.toContain('href="/modelo/heygen"');
+    expect(await (await get("/?q=nada")).text()).toContain("Nenhum modelo encontrado");
+  });
+
+  it("a página de vídeos junta os modelos, filtra por status e pela fala, e abre na página do modelo", async () => {
+    const api = new FakeVideoApi();
+    await post(api, PEDIDO);
+    await post(api, { ...PEDIDO, fala: "Promoção de verão" });
+    api.finish("job-1", { status: "failed", error: "Content policy violation" });
+    await createStudio({ ...env, SITE_URL: SITE }, { api, audio: null }).syncOpen();
+    const [verao, oi] = await new Db(env.DB).recentVideos();
+
+    const page = await (await get("/videos", undefined, api)).text();
+    expect(page).toContain(`href="/modelo/wan?video=${verao!.id}"`);
+    expect(page).toContain(`href="/modelo/wan?video=${oi!.id}"`);
+    expect(page).toContain("data-refresh=");
+
+    const erro = await (await get("/videos?status=erro", undefined, api)).text();
+    expect(erro).toContain(oi!.id);
+    expect(erro).not.toContain(verao!.id);
+    expect(erro).not.toContain("data-refresh=");
+
+    const busca = await (await get("/videos?q=ver%C3%A3o&ver=lista", undefined, api)).text();
+    expect(busca).toContain(verao!.id);
+    expect(busca).not.toContain(oi!.id);
+    expect(busca).toContain('class="list-item list-item--two-line interactive"');
+    // Trocar o filtro guarda a busca e a vista.
+    expect(busca).toContain('href="/videos?q=ver%C3%A3o&amp;ver=lista&amp;status=prontos"');
+  });
+
+  it("a página do modelo mostra o vídeo escolhido; sem vídeos, a apresentação e as falas prontas", async () => {
+    const vazia = await (await get("/modelo/wan")).text();
+    expect(vazia).toContain("Comece por uma fala pronta");
+    expect(vazia).toContain("data-fill=");
+
+    const api = new FakeVideoApi();
+    await post(api, PEDIDO);
+    await post(api, { ...PEDIDO, fala: "Segundo vídeo" });
+    const [segundo, primeiro] = await new Db(env.DB).recentVideos();
+    // Sem ?video=, o mais novo; com ele, o escolhido, marcado na lista.
+    expect(await (await get("/modelo/wan", undefined, api)).text()).toContain(`id="detalhes-${segundo!.id}"`);
+    const page = await (await get(`/modelo/wan?video=${primeiro!.id}`, undefined, api)).text();
+    expect(page).toContain(`id="detalhes-${primeiro!.id}"`);
+    expect(page).not.toContain(`id="detalhes-${segundo!.id}"`);
+    expect(page).toContain(`href="/modelo/wan?video=${primeiro!.id}" aria-current="true"`);
+    expect(page).toContain(`data-fill="${FALA}"`);
+    expect(page).not.toContain("Comece por uma fala pronta");
+  });
+});
+
 describe("acesso negado à estrutura em teste", () => {
   it("conta comum não vê o HeyGen na escolha", async () => {
     const page = await (await get("/", await memberCookie())).text();
     expect(page).toContain('href="/modelo/wan"');
     expect(page).not.toContain("/modelo/heygen");
+  });
+
+  it("conta comum não vê os vídeos do HeyGen na página de vídeos", async () => {
+    const api = new FakeVideoApi();
+    await post(api, PEDIDO);
+    await post(api, { fala: FALA, voz: VOICES[0]!.value, imagem: new File([new Uint8Array([1])], "eu.png", { type: "image/png" }) }, "heygen");
+    const [heygen, wan] = await new Db(env.DB).recentVideos();
+    expect(heygen!.structure).toBe("heygen");
+    const page = await (await get("/videos", await memberCookie(), api)).text();
+    expect(page).toContain(wan!.id);
+    expect(page).not.toContain(heygen!.id);
+    expect(await (await get("/videos", undefined, api)).text()).toContain(heygen!.id);
+  });
+
+  it("o id de um vídeo do HeyGen não abre na página do Wan", async () => {
+    const api = new FakeVideoApi();
+    await post(api, { fala: FALA, voz: VOICES[0]!.value, imagem: new File([new Uint8Array([1])], "eu.png", { type: "image/png" }) }, "heygen");
+    const [heygen] = await new Db(env.DB).recentVideos();
+    const page = await (await get(`/modelo/wan?video=${heygen!.id}`, await memberCookie(), api)).text();
+    expect(page).not.toContain(heygen!.id);
+    expect(page).not.toContain(FALA);
   });
 
   it("conta comum não abre o formulário do HeyGen", async () => {
@@ -141,7 +216,8 @@ describe("gerar vídeo", () => {
     const foto = new File([new Uint8Array([1, 2, 3])], "eu.jpg", { type: "image/jpeg" });
     const res = await post(api, { ...PEDIDO, instrucoes: "ela sorri no final", imagem: foto, duracao: "25", resolucao: "480p", formato: "9:16" });
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/modelo/wan");
+    const [criado] = await new Db(env.DB).recentVideos();
+    expect(res.headers.get("location")).toBe(`/modelo/wan?video=${criado!.id}`);
 
     const [req] = api.submitted;
     expect(req!.input_references).toBeUndefined();

@@ -124,6 +124,19 @@ export class Db {
     ).results;
   }
 
+  /** Os vídeos de várias estruturas, os mais novos primeiro; com `q`, só os que têm o trecho na fala. */
+  async videosByStructures(structures: string[], q = "", limit = 100): Promise<Video[]> {
+    if (!structures.length) return [];
+    const marks = structures.map(() => "?").join(", ");
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    return (
+      await this.d1
+        .prepare(`SELECT * FROM videos WHERE structure IN (${marks}) AND prompt LIKE ? ESCAPE '\\' ORDER BY created_at DESC, rowid DESC LIMIT ?`)
+        .bind(...structures, like, limit)
+        .all<Video>()
+    ).results;
+  }
+
   /** Quantos vídeos cada estrutura tem. */
   async countByStructure(): Promise<Map<string, number>> {
     const rows = (await this.d1.prepare("SELECT structure, COUNT(*) AS n FROM videos GROUP BY structure").all<{ structure: string | null; n: number }>()).results;

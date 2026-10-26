@@ -1,26 +1,27 @@
 /**
  * Cores do Material Design 3 geradas por `npm run tema` a partir de #6750a4
- * (esquema tonal spot). Não edite à mão: rode o comando de novo.
+ * (esquema tonal spot, com fundos e textos em cinza neutro). Não edite à mão:
+ * rode o comando de novo.
  */
 export const SOURCE_COLOR = "#6750a4";
 
 export const LIGHT = `
-  --md-sys-color-background: #fdf7ff;
-  --md-sys-color-on-background: #1d1b20;
-  --md-sys-color-surface: #fdf7ff;
-  --md-sys-color-surface-dim: #ded8e0;
-  --md-sys-color-surface-bright: #fdf7ff;
+  --md-sys-color-background: #f9f9f9;
+  --md-sys-color-on-background: #1b1b1b;
+  --md-sys-color-surface: #f9f9f9;
+  --md-sys-color-surface-dim: #dadada;
+  --md-sys-color-surface-bright: #f9f9f9;
   --md-sys-color-surface-container-lowest: #ffffff;
-  --md-sys-color-surface-container-low: #f8f2fa;
-  --md-sys-color-surface-container: #f2ecf4;
-  --md-sys-color-surface-container-high: #ece6ee;
-  --md-sys-color-surface-container-highest: #e6e0e9;
-  --md-sys-color-on-surface: #1d1b20;
-  --md-sys-color-on-surface-variant: #49454e;
-  --md-sys-color-outline: #7a757f;
-  --md-sys-color-outline-variant: #cac4cf;
-  --md-sys-color-inverse-surface: #322f35;
-  --md-sys-color-inverse-on-surface: #f5eff7;
+  --md-sys-color-surface-container-low: #f3f3f3;
+  --md-sys-color-surface-container: #eeeeee;
+  --md-sys-color-surface-container-high: #e8e8e8;
+  --md-sys-color-surface-container-highest: #e2e2e2;
+  --md-sys-color-on-surface: #1b1b1b;
+  --md-sys-color-on-surface-variant: #474747;
+  --md-sys-color-outline: #777777;
+  --md-sys-color-outline-variant: #c6c6c6;
+  --md-sys-color-inverse-surface: #303030;
+  --md-sys-color-inverse-on-surface: #f1f1f1;
   --md-sys-color-primary: #65558f;
   --md-sys-color-primary-dim: #594982;
   --md-sys-color-on-primary: #ffffff;
@@ -57,22 +58,22 @@ export const LIGHT = `
 `;
 
 export const DARK = `
-  --md-sys-color-background: #141218;
-  --md-sys-color-on-background: #e6e0e9;
-  --md-sys-color-surface: #141218;
-  --md-sys-color-surface-dim: #141218;
-  --md-sys-color-surface-bright: #3b383e;
-  --md-sys-color-surface-container-lowest: #0f0d13;
-  --md-sys-color-surface-container-low: #1d1b20;
-  --md-sys-color-surface-container: #211f24;
-  --md-sys-color-surface-container-high: #2b292f;
-  --md-sys-color-surface-container-highest: #36343a;
-  --md-sys-color-on-surface: #e6e0e9;
-  --md-sys-color-on-surface-variant: #cac4cf;
-  --md-sys-color-outline: #948f99;
-  --md-sys-color-outline-variant: #49454e;
-  --md-sys-color-inverse-surface: #e6e0e9;
-  --md-sys-color-inverse-on-surface: #322f35;
+  --md-sys-color-background: #131313;
+  --md-sys-color-on-background: #e2e2e2;
+  --md-sys-color-surface: #131313;
+  --md-sys-color-surface-dim: #131313;
+  --md-sys-color-surface-bright: #393939;
+  --md-sys-color-surface-container-lowest: #0e0e0e;
+  --md-sys-color-surface-container-low: #1b1b1b;
+  --md-sys-color-surface-container: #1f1f1f;
+  --md-sys-color-surface-container-high: #2a2a2a;
+  --md-sys-color-surface-container-highest: #353535;
+  --md-sys-color-on-surface: #e2e2e2;
+  --md-sys-color-on-surface-variant: #c6c6c6;
+  --md-sys-color-outline: #919191;
+  --md-sys-color-outline-variant: #474747;
+  --md-sys-color-inverse-surface: #e2e2e2;
+  --md-sys-color-inverse-on-surface: #303030;
   --md-sys-color-primary: #cfbdfe;
   --md-sys-color-primary-dim: #c7b4f5;
   --md-sys-color-on-primary: #36275d;
