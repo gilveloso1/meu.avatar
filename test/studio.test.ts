@@ -112,9 +112,13 @@ describe("telas", () => {
     const busca = await (await get("/videos?q=ver%C3%A3o&ver=lista", undefined, api)).text();
     expect(busca).toContain(verao!.id);
     expect(busca).not.toContain(oi!.id);
-    expect(busca).toContain('class="list-item list-item--two-line interactive"');
+    expect(busca).toContain('class="list-row interactive"');
     // Trocar o filtro guarda a busca e a vista.
-    expect(busca).toContain('href="/videos?q=ver%C3%A3o&amp;ver=lista&amp;status=prontos"');
+    expect(busca).toContain('href="/videos?q=ver%C3%A3o&amp;status=prontos&amp;ver=lista"');
+
+    // O menu do card do modelo leva aos vídeos só dele.
+    expect(await (await get("/", undefined, api)).text()).toContain('href="/videos?modelo=wan"');
+    expect(await (await get("/videos?modelo=heygen", undefined, api)).text()).not.toContain(oi!.id);
   });
 
   it("a página do modelo mostra o vídeo escolhido; sem vídeos, a apresentação e as falas prontas", async () => {
@@ -150,10 +154,13 @@ describe("acesso negado à estrutura em teste", () => {
     await post(api, { fala: FALA, voz: VOICES[0]!.value, imagem: new File([new Uint8Array([1])], "eu.png", { type: "image/png" }) }, "heygen");
     const [heygen, wan] = await new Db(env.DB).recentVideos();
     expect(heygen!.structure).toBe("heygen");
-    const page = await (await get("/videos", await memberCookie(), api)).text();
+    const member = await memberCookie();
+    const page = await (await get("/videos", member, api)).text();
     expect(page).toContain(wan!.id);
     expect(page).not.toContain(heygen!.id);
     expect(await (await get("/videos", undefined, api)).text()).toContain(heygen!.id);
+    // Nem pedindo só os do HeyGen.
+    expect(await (await get("/videos?modelo=heygen", member, api)).text()).not.toContain(heygen!.id);
   });
 
   it("o id de um vídeo do HeyGen não abre na página do Wan", async () => {
