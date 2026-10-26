@@ -2,13 +2,16 @@
  * Visual do estúdio, todo no Material Design 3 (m3.material.io), no mesmo
  * molde do blog do anb.bot: os tokens do sistema (cor, tipografia, forma,
  * elevação, estados e movimento) e os componentes feitos com eles: barra
- * superior, botões, botões de ícone, campos de texto contornados, chips,
- * cards, indicador de progresso linear, listas, snackbar e divisor. As cores
- * vêm de theme.ts (npm run tema).
+ * superior pequena, botões, botões de ícone, botões
+ * segmentados, campos de texto contornados, cards, indicador de progresso
+ * linear, diálogo, snackbar e banner. As cores vêm de theme.ts (npm run tema).
  *
- * Layout pelas classes de tamanho de janela do MD3: compacta (< 600 px), uma
- * coluna; média (600 a 839 px), uma coluna mais larga; expandida (≥ 840 px),
- * o formulário num painel fixo ao lado da galeria de vídeos.
+ * Layout pelos breakpoints do M3: compacto (< 600 px) com margens de 16 px e
+ * um painel; médio (600 a 839 px) e maiores com margens e espaço entre
+ * painéis de 24 px. Tela inicial: grade de cards dos modelos, que ganha
+ * colunas com a largura. Página do modelo: até 839 px, o formulário em cima e
+ * os vídeos embaixo; a partir daí, painel fixo de 360 px com o formulário e
+ * painel flexível com a grade de vídeos.
  */
 import { DARK, LIGHT } from "./theme";
 
@@ -45,6 +48,7 @@ ${LIGHT}
   --md-sys-elevation-level1: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
   --md-sys-elevation-level2: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
   --md-sys-elevation-level3: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
+  --md-sys-elevation-level4: 0 2px 3px 0 rgb(0 0 0 / 0.3), 0 6px 10px 4px rgb(0 0 0 / 0.15);
 
   /* Estados (camada sobre o componente) */
   --md-sys-state-hover-state-layer-opacity: 0.08;
@@ -57,8 +61,8 @@ ${LIGHT}
   --md-sys-motion-duration-short4: 200ms;
   --md-sys-motion-duration-medium2: 300ms;
 
-  /* Larguras do layout: o painel do formulário e a margem da janela. */
-  --layout-pane: 400px;
+  /* Layout: painel fixo (supporting pane), largura máxima, espaço entre painéis e margem da janela. */
+  --layout-pane: 360px;
   --layout-max: 1240px;
   --layout-gap: 24px;
   --layout-margin: 16px;
@@ -89,7 +93,8 @@ body {
 
 a { color: inherit; }
 img, video { display: block; max-width: 100%; }
-h1, h2, h3, p { margin: 0; }
+h1, h2, h3, p, dl, dd { margin: 0; }
+fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 
 .icon {
   font-family: "Material Symbols Rounded";
@@ -147,6 +152,8 @@ h1, h2, h3, p { margin: 0; }
   transition: background-color var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
 }
 .top-app-bar.is-scrolled { background: var(--md-sys-color-surface-container); }
+/* Com o botão de voltar à esquerda: 4 px até o botão, como no M3. */
+.top-app-bar--leading { padding-left: 4px; }
 .top-app-bar__brand {
   display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1;
   text-decoration: none; color: inherit; border-radius: var(--md-sys-shape-corner-small);
@@ -157,16 +164,12 @@ h1, h2, h3, p { margin: 0; }
   background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
 }
 .top-app-bar__title {
-  font: 400 22px/28px var(--md-ref-typeface-brand);
+  flex: 1; min-width: 0;
+  font: var(--md-sys-typescale-title-large);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 .top-app-bar form { display: contents; }
-.top-app-bar__user {
-  font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem;
-  color: var(--md-sys-color-on-surface-variant);
-  max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 
 /* --- Botões de ícone --------------------------------------------------------------- */
 .icon-button {
@@ -238,14 +241,30 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .text-field--select .text-field__input { padding-right: 48px; cursor: pointer; }
 .text-field--select .text-field__input:focus { padding-right: 47px; }
 .text-field__trailing { position: absolute; right: 12px; top: 16px; color: var(--md-sys-color-on-surface-variant); pointer-events: none; }
-/* Na janela compacta, três seletores lado a lado: menos recuo para o valor caber. */
-@media (max-width: 599px) {
-  .text-field--select .text-field__input { padding: 16px 32px 16px 12px; }
-  .text-field--select .text-field__input:focus { padding: 15px 31px 15px 11px; }
-  .text-field--select .text-field__label { left: 8px; }
-  .text-field__trailing { right: 6px; }
-}
 .text-field--select option { background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface); }
+.text-field__supporting--error { color: var(--md-sys-color-error); }
+
+/* --- Botão segmentado (escolha única) ----------------------------------------------- */
+.segmented-field { display: flex; flex-direction: column; gap: 8px; }
+.segmented-field__label { padding: 0; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+/* Segmentos da mesma largura; o conjunto cresce com os rótulos, sem ocupar a largura toda. */
+.segmented-button {
+  display: inline-grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); justify-self: start; align-self: flex-start; max-width: 100%;
+  border: 1px solid var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-full); overflow: hidden;
+}
+.segmented-button__segment {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 38px; min-width: 48px; padding: 0 12px;
+  color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; white-space: nowrap;
+}
+.segmented-button__segment + .segmented-button__segment { border-left: 1px solid var(--md-sys-color-outline); }
+.segmented-button__segment input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.segmented-button__check { display: none; font-size: 18px; }
+.segmented-button__segment:has(input:checked) { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.segmented-button__segment:has(input:checked) .segmented-button__check { display: inline-block; }
+.segmented-button__segment:has(input:focus-visible)::before { opacity: var(--md-sys-state-focus-state-layer-opacity); }
+.segmented-button:has(input:focus-visible) { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
 
 /* Foto do avatar: o input fica escondido; o botão tonal e a prévia fazem o papel dele. */
 .file-picker { display: flex; align-items: center; gap: 16px; }
@@ -261,27 +280,6 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .file-picker__name { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-picker__hint { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
 
-/* --- Chips --------------------------------------------------------------------------- */
-.chip {
-  display: inline-flex; align-items: center; gap: 8px; flex: none; align-self: flex-start;
-  height: 32px; padding: 0 16px;
-  border-radius: var(--md-sys-shape-corner-small);
-  border: 1px solid var(--md-sys-color-outline-variant);
-  color: var(--md-sys-color-on-surface-variant);
-  font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem;
-  text-decoration: none; white-space: nowrap;
-}
-.chip .icon { font-size: 18px; color: var(--md-sys-color-primary); }
-.chip:has(.icon:first-child) { padding-left: 8px; }
-.chip--selected {
-  background: var(--md-sys-color-secondary-container);
-  color: var(--md-sys-color-on-secondary-container);
-  border-color: transparent;
-}
-.chip--selected .icon { color: inherit; }
-.chip--error { border-color: transparent; background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
-.chip--error .icon { color: inherit; }
-
 /* --- Cards --------------------------------------------------------------------------- */
 .card {
   display: block; border-radius: var(--md-sys-shape-corner-medium);
@@ -290,39 +288,108 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .card--outlined { background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); }
 .card--filled { background: var(--md-sys-color-surface-container-highest); }
 .card--elevated { background: var(--md-sys-color-surface-container-low); box-shadow: var(--md-sys-elevation-level1); }
+/* Card inteiro como área de ação: camada de estado e elevação 1 ao passar o mouse. */
+.card--action { transition: box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
+.card--action:hover { box-shadow: var(--md-sys-elevation-level1); }
 
-/* Formulário de novo vídeo */
-.composer { --field-surface: var(--md-sys-color-surface); display: flex; flex-direction: column; gap: 24px; padding: 24px 16px; }
-.composer__title { font: var(--md-sys-typescale-title-large); }
-.composer__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 12px; }
-.composer__hint { margin-top: -16px; padding: 0 16px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
-.text-field__supporting--warn { color: var(--md-sys-color-error); }
-.composer__actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.composer__cost { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
-.composer__cost strong { font: var(--md-sys-typescale-label-large); color: var(--md-sys-color-on-surface); }
+/* Modelos na tela inicial: cards compactos, com ícone, nome, preço, resumo e contagem. */
+.model-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.model-card { display: flex; align-items: flex-start; gap: 16px; }
+.model-card__icon {
+  width: 48px; height: 48px; flex: none; display: grid; place-items: center;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
+}
+.model-card__content { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.model-card__headline { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
+.model-card__subhead { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.model-card__text {
+  margin-top: 6px; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.model-card__footer { margin-top: 8px; font: var(--md-sys-typescale-label-medium); letter-spacing: 0.031rem; color: var(--md-sys-color-primary); }
 
-/* Vídeo na galeria: mídia em cima, texto e ações embaixo. */
+/* Vídeo na grade: mídia em cima, status, data e fala, e as ações embaixo. */
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
 .video-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .video-card__media {
-  position: relative; aspect-ratio: var(--ratio, 9 / 16); max-height: 520px; width: 100%;
+  position: relative; aspect-ratio: var(--ratio, 9 / 16); max-height: 360px; width: 100%;
   background: var(--md-sys-color-surface-container-highest) center / cover no-repeat;
   display: grid; place-items: center; color: var(--md-sys-color-on-surface-variant);
 }
 .video-card__media video { width: 100%; height: 100%; object-fit: contain; background: #000; }
 .video-card__media > .icon { font-size: 48px; }
 .video-card__media .linear-progress { position: absolute; left: 0; right: 0; bottom: 0; }
-.video-card__body { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
-.video-card__meta { font: var(--md-sys-typescale-label-medium); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
-.video-card__prompt summary {
-  list-style: none; cursor: pointer; border-radius: var(--md-sys-shape-corner-extra-small);
+.video-card__body { display: flex; flex-direction: column; gap: 4px; padding: 16px 16px 8px; }
+.video-card__status {
+  display: flex; align-items: center; gap: 8px;
+  font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant);
+}
+.video-card__status .icon { font-size: 18px; }
+.video-card__status--done { color: var(--md-sys-color-primary); }
+.video-card__status--error { color: var(--md-sys-color-error); }
+.video-card__subhead { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.video-card__text {
   font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.video-card__prompt summary::-webkit-details-marker { display: none; }
-.video-card__prompt[open] summary { display: block; -webkit-line-clamp: unset; white-space: pre-wrap; }
-.video-card__extra { margin-top: 4px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
-.video-card__error { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-error); overflow-wrap: anywhere; }
-.video-card__actions { display: flex; gap: 8px; padding: 0 8px 8px; }
+.video-card__actions { display: flex; justify-content: flex-end; align-items: center; gap: 4px; padding: 0 8px 8px; margin-top: auto; }
+
+/* --- Diálogo: básico (até 560 px, cantos de 28 px) nas telas médias e maiores ----------- */
+.dialog {
+  border: 0; padding: 0; margin: auto;
+  width: calc(100vw - 48px); max-width: 560px; max-height: calc(100vh - 112px);
+  border-radius: var(--md-sys-shape-corner-extra-large);
+  background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface);
+  box-shadow: var(--md-sys-elevation-level3);
+}
+.dialog[open] { display: flex; flex-direction: column; }
+.dialog::backdrop { background: rgb(0 0 0 / 0.32); }
+.dialog__header { display: flex; align-items: center; gap: 4px; padding: 24px 24px 16px; }
+.dialog__close { display: none; }
+.dialog__headline { font: var(--md-sys-typescale-headline-small); min-width: 0; }
+/* O título e as ações ficam parados; só o conteúdo rola. */
+.dialog__content { flex: 1; min-height: 0; overflow-y: auto; padding: 0 24px; display: flex; flex-direction: column; gap: 24px; }
+.dialog__video { width: 100%; aspect-ratio: var(--ratio, 9 / 16); max-height: 45vh; background: #000; border-radius: var(--md-sys-shape-corner-medium); flex: none; }
+.dialog__error { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-error); overflow-wrap: anywhere; margin-top: -16px; }
+.dialog__section { display: flex; flex-direction: column; gap: 8px; }
+.dialog__title { font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }
+.dialog__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dialog__prompt summary { cursor: pointer; border-radius: var(--md-sys-shape-corner-extra-small); }
+.dialog__prompt[open] summary { margin-bottom: 8px; }
+.dialog__files { display: flex; flex-wrap: wrap; gap: 8px; }
+.dialog__actions { display: flex; justify-content: flex-end; gap: 8px; padding: 24px; }
+/* Configurações: nome à esquerda, valor à direita. */
+.details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
+.details__item { display: contents; }
+.details dt { color: var(--md-sys-color-on-surface-variant); }
+.details dd { overflow-wrap: anywhere; }
+/* No celular, diálogo de tela cheia: o X no topo fecha. */
+@media (max-width: 599px) {
+  .dialog { width: 100%; max-width: none; height: 100%; max-height: none; border-radius: 0; background: var(--md-sys-color-surface); box-shadow: none; }
+  .dialog__header { padding: 4px 16px 4px 4px; min-height: 56px; }
+  .dialog__close { display: inline-grid; }
+  .dialog__headline { font: var(--md-sys-typescale-title-large); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dialog__content { padding: 8px 16px 24px; }
+  .dialog__actions { display: none; }
+}
+
+/* --- Página do modelo: formulário no painel fixo, vídeos no painel flexível ----------- */
+.page.page--panes { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--layout-gap); align-items: start; }
+.pane { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+/* O formulário fica num contêiner próprio, para se separar dos vídeos. */
+.pane--fixed { background: var(--md-sys-color-surface-container-low); border-radius: var(--md-sys-shape-corner-large); padding: 16px; }
+.pane__headline { font: var(--md-sys-typescale-title-large); display: flex; align-items: baseline; gap: 8px; }
+.pane__count { font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }
+.composer { --field-surface: var(--md-sys-color-surface-container-low); display: flex; flex-direction: column; gap: 24px; }
+.form-section { display: flex; flex-direction: column; gap: 24px; }
+.form-section__title { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
+.summary { display: flex; flex-direction: column; gap: 16px; }
+.summary .button { align-self: flex-end; }
+.summary__list { display: flex; flex-direction: column; gap: 8px; }
+.summary__item { display: flex; justify-content: space-between; gap: 16px; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
+.summary__item dt { color: var(--md-sys-color-on-surface-variant); }
+.summary__item dd { text-align: right; overflow-wrap: anywhere; }
 
 /* --- Indicador de progresso linear (indeterminado) ----------------------------------- */
 .linear-progress { height: 4px; overflow: hidden; background: var(--md-sys-color-secondary-container); }
@@ -332,20 +399,6 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
   animation: linear-progress 1.8s var(--md-sys-motion-easing-standard) infinite;
 }
 @keyframes linear-progress { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
-
-/* --- Listas -------------------------------------------------------------------------- */
-.list { list-style: none; margin: 0; padding: 8px 0; }
-.list-item {
-  display: flex; align-items: center; gap: 16px;
-  min-height: 56px; padding: 8px 24px 8px 16px;
-  text-decoration: none; color: var(--md-sys-color-on-surface);
-}
-.list-item__leading { color: var(--md-sys-color-on-surface-variant); }
-.list-item__content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.list-item__headline { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; }
-.list-item__supporting { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
-
-.divider { height: 1px; border: 0; margin: 0; background: var(--md-sys-color-outline-variant); }
 
 /* --- Snackbar ------------------------------------------------------------------------ */
 .snackbar {
@@ -375,13 +428,13 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 /* --- Página ---------------------------------------------------------------------------- */
 .page {
   flex: 1; width: 100%; max-width: calc(var(--layout-max) + 2 * var(--layout-margin)); margin: 0 auto;
-  padding: 8px 16px 32px;
-  display: grid; gap: var(--layout-gap); grid-template-columns: minmax(0, 1fr);
-  align-content: start;
+  padding: 8px var(--layout-margin) 32px;
+  display: flex; flex-direction: column; gap: 16px;
 }
-.gallery { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.gallery__heading { font: var(--md-sys-typescale-headline-small); padding: 8px 0 0; }
-.gallery__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; align-items: start; }
+/* A página do modelo é mais larga: o painel de 360 px mais a grade de vídeos. */
+.page--panes { --layout-max: 1600px; }
+.page__headline { font: var(--md-sys-typescale-headline-small); }
+.page__intro { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
 
 .empty {
   display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px;
@@ -408,22 +461,25 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .footer__inner { max-width: var(--layout-max); margin: 0 auto; }
 .footer__text { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; }
 
-/* --- Janela média e expandida --------------------------------------------------------- */
+/* --- Breakpoints médio, expandido e grande ------------------------------------------ */
 @media (min-width: 600px) {
-  .top-app-bar { padding: 0 12px 0 24px; }
   :root { --layout-margin: 24px; }
-  .page { padding: 16px 24px 48px; }
-  .composer { padding: 24px; }
+  .top-app-bar { padding: 0 12px 0 24px; }
+  .top-app-bar--leading { padding-left: 12px; }
+  .page { padding-top: 16px; padding-bottom: 48px; }
+  .model-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .video-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
   .footer { padding: 32px 24px 40px; }
 }
 @media (min-width: 840px) {
-  /* Painel do formulário à esquerda, fixo ao rolar; galeria ao lado. */
-  .page { grid-template-columns: var(--layout-pane) minmax(0, 1fr); }
-  .composer { position: sticky; top: 80px; align-self: start; max-height: calc(100vh - 96px); overflow-y: auto; }
-  .gallery__heading { font: var(--md-sys-typescale-headline-medium); }
+  .page__headline { font: var(--md-sys-typescale-headline-medium); }
+  .model-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Painel fixo de 360 px com o formulário, parado ao rolar e com rolagem própria; vídeos no resto. */
+  .page.page--panes { grid-template-columns: var(--layout-pane) minmax(0, 1fr); }
+  .pane--fixed { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; }
 }
 @media (min-width: 1200px) {
-  :root { --layout-pane: 440px; }
+  .model-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

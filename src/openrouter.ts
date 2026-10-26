@@ -27,6 +27,10 @@ export interface VideoRequest {
   seed?: number;
   callback_url?: string;
   frame_images?: { type: "image_url"; image_url: { url: string }; frame_type: FrameType }[];
+  /** Imagens de referência (o HeyGen Avatar IV recebe a foto assim). */
+  input_references?: { type: "image_url"; image_url: { url: string } }[];
+  /** Opções do provedor, por slug (só as de allowed_passthrough_parameters). */
+  provider?: { options: Record<string, Record<string, string>> };
 }
 
 export type JobStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled" | "expired";
@@ -50,6 +54,8 @@ export interface VideoApi {
 }
 
 export class OpenRouterVideo implements VideoApi {
+  private models?: Promise<VideoModel[]>;
+
   constructor(
     private readonly apiKey: string,
     private readonly base = OPENROUTER_API,
@@ -63,7 +69,9 @@ export class OpenRouterVideo implements VideoApi {
   }
 
   async getModel(id: string): Promise<VideoModel> {
-    const model = (await OpenRouterVideo.listModels(this.base)).find((m) => m.id === id);
+    // Uma consulta à lista por instância (uma por pedido no Worker), mesmo com vários modelos na página.
+    this.models ??= OpenRouterVideo.listModels(this.base);
+    const model = (await this.models).find((m) => m.id === id);
     if (!model) throw new Error(`Modelo ${id} não encontrado em ${this.base}/videos/models`);
     return model;
   }

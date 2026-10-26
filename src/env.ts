@@ -14,8 +14,7 @@ export interface Env {
   BCRYPT_COST?: string;
   /** Endereço público do Worker, sem barra no fim: vira o callback_url e a URL das fotos. */
   SITE_URL: string;
-  /** Padrões do formulário. */
-  VIDEO_MODEL: string;
+  /** Padrões do formulário do Wan (o modelo de cada estrutura fica em src/structures/). */
   VIDEO_DURATION: string;
   VIDEO_RESOLUTION: string;
   VIDEO_ASPECT_RATIO: string;

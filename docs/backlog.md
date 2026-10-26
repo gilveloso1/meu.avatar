@@ -6,8 +6,10 @@ que ficou para depois) no mesmo PR.
 
 ## Ordem
 
-1. **Testar outro modelo de vídeo com áudio próprio** (próximo passo)
-2. Voz gerada à parte e avatar falante (só se o item 1 não resolver)
+1. **Testar outro modelo de vídeo com áudio próprio** (em andamento: HeyGen
+   Avatar IV no ar para o administrador testar)
+2. Voz gerada à parte e avatar falante (o HeyGen Avatar IV já faz isso numa
+   chamada só; ver o item 1)
 3. Convites do administrador
 4. Esqueci a senha
 
@@ -25,6 +27,10 @@ No ar em <https://meuavatar.ia.br> (e no workers.dev). O que já funciona e
   (`/videos/<id>.original.mp4`). Explicado em `docs/operacao.md`.
 - Contas (primeiro cadastro vira admin), webhook assinado do OpenRouter,
   domínio próprio.
+- **Uma estrutura por modelo** (`src/structures/`): a tela inicial tem um card
+  por modelo; na página do modelo, o formulário fica de um lado e os vídeos
+  daquele modelo do outro. Cada vídeo guarda a estrutura que o gerou. Hoje: Wan 3.0 (para todos) e HeyGen Avatar
+  IV (em teste, só o administrador).
 
 O problema que motiva o item 1: pelo OpenRouter, o Wan 3.0 devolve a voz alta
 demais, cortada e com chiado. O mesmo modelo no Higgsfield sai limpo (os
@@ -44,8 +50,25 @@ gerada e não sai por completo.
 ## 1. Testar outro modelo de vídeo com áudio próprio
 
 Descobrir se algum outro modelo do OpenRouter entrega a voz limpa já na
-origem. **Sem desfazer nada**: o Wan continua o padrão, e o contêiner
-continua tratando todo vídeo até haver um vencedor.
+origem. **Sem desfazer nada**: o Wan continua como está, com o contêiner
+tratando o áudio dele.
+
+### Agora: HeyGen Avatar IV, pelo estúdio
+
+Escolhido pelo dono por custar o mesmo que o Wan em 480p (US$ 0,05/s) e trazer
+a voz de um texto para fala, sem o chiado que nasce na voz do Wan. Está no ar
+como estrutura própria (`src/structures/heygen.ts`, explicada em
+`docs/prompt.md`), visível só para o administrador.
+
+Próximos passos:
+
+1. O dono gera um vídeo com a mesma fala e a mesma foto do vídeo de referência
+   do Wan e ouve.
+2. Medir o áudio como veio (`python3 tools/medir-audio.py`) e comparar com a
+   tabela acima.
+3. Conferir a imagem: lip sync, rosto igual ao da foto, olhar fixo.
+4. Se ganhar: liberar para todos (`access: "all"`). Se a voz pedir ajuste,
+   ligar o contêiner só para ele (`treatAudio`).
 
 ### Candidatos
 
@@ -84,21 +107,15 @@ caminho para mandar uma voz pronta e o modelo sincronizar a boca.
 6. **Conferir também a imagem**: lip sync, rosto igual ao da foto, olhar fixo e
    câmera parada (estilo Selfie). Não adianta voz limpa com rosto diferente.
 
-### Se um modelo ganhar
+### Para cada modelo novo
 
-- **Seletor de modelo no formulário**, sem tirar o Wan. Hoje o modelo vem de
-  `VIDEO_MODEL` num campo escondido, e as listas de duração, resolução e
-  formato saem desse modelo (`src/site/site.ts`, `composer`). Com vários
-  modelos, as listas e o custo precisam mudar com a escolha (cada modelo tem
-  as suas, em `/videos/models`; não fixe listas no código).
-- **Custo do Seedance**: ele cobra por tokens de vídeo, não por segundo;
-  `estimateCost` (`src/openrouter.ts`) hoje só conhece preço por segundo.
-- **Tratamento de áudio por modelo**: se o vencedor já vier limpo, o contêiner
-  pode ficar só para o Wan (ou só normalizar o volume). Decidir medindo, não
-  por suposição.
-- **Prompt por modelo**: a orientação de qualidade e o `SPEECH_LEAD` de
-  `src/prompt.ts` foram escritos para o Wan. Ver o guia de prompt do modelo
-  escolhido antes de reaproveitar.
+- **Uma estrutura nova** em `src/structures/`, com os seus campos, o seu
+  prompt de sistema (ver o guia de prompt do modelo antes de reaproveitar o
+  do Wan), a montagem do pedido e se o áudio passa pelo contêiner (decidir
+  medindo). Começa com `access: "admin"`.
+- **Custo do Seedance**: ele cobra por tokens de vídeo, não por segundo; a
+  regra de custo das estruturas (`CostRule`) hoje só conhece preço por
+  segundo.
 - Testes para cada comportamento novo (`test/`, com a API falsa).
 
 ## 2. Voz gerada à parte e avatar falante

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { handle } from "../src/index";
 import type { AudioApi } from "../src/audio";
+import { randomToken, sha256 } from "../src/auth";
 import type { VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
 
 export const SITE = "https://meu-avatar.gilveloso.workers.dev";
@@ -16,6 +17,19 @@ export const WAN: VideoModel = {
   pricing_skus: { duration_seconds_480p: "0.05", duration_seconds_720p: "0.1", duration_seconds_1080p: "0.2" },
 };
 
+export const HEYGEN: VideoModel = {
+  id: "heygen/avatar-iv",
+  name: "HeyGen: Avatar IV",
+  supported_durations: null,
+  supported_resolutions: ["720p", "1080p"],
+  supported_aspect_ratios: ["16:9", "9:16", "1:1"],
+  supported_frame_images: null,
+  generate_audio: false,
+  pricing_skus: { duration_seconds: "0.05" },
+};
+
+const MODELS = [WAN, HEYGEN];
+
 /** OpenRouter de mentira: guarda os pedidos e responde o status que o teste mandar. */
 export class FakeVideoApi implements VideoApi {
   submitted: VideoRequest[] = [];
@@ -25,8 +39,9 @@ export class FakeVideoApi implements VideoApi {
   private next = 1;
 
   async getModel(id: string) {
-    if (id !== WAN.id) throw new Error(`modelo ${id} não existe`);
-    return WAN;
+    const model = MODELS.find((m) => m.id === id);
+    if (!model) throw new Error(`modelo ${id} não existe`);
+    return model;
   }
   async submit(body: VideoRequest) {
     if (this.failSubmit) throw new Error(this.failSubmit);
@@ -61,6 +76,19 @@ export async function cookie(): Promise<string> {
   let res = await call(postForm("/cadastro", { ...ADMIN, confirmar: ADMIN.senha }));
   if (res.status !== 303) res = await call(postForm("/entrar", { email: ADMIN.email, senha: ADMIN.senha }));
   return sessionPair(res);
+}
+
+/** Cookie de sessão de uma conta comum (member), criada direto no banco. */
+export async function memberCookie(): Promise<string> {
+  const now = new Date().toISOString();
+  const user = await env.DB.prepare("INSERT INTO users (email, name, role, password_hash, created_at) VALUES (?, ?, 'member', NULL, ?) RETURNING id")
+    .bind("membro@exemplo.com", "Membro", now)
+    .first<{ id: number }>();
+  const token = randomToken();
+  await env.DB.prepare("INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
+    .bind(await sha256(token), user!.id, now, new Date(Date.now() + 86_400_000).toISOString())
+    .run();
+  return `__Host-sessao=${token}`;
 }
 
 /** "__Host-sessao=<código>" do Set-Cookie da resposta. */

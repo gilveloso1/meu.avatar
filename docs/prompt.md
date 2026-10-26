@@ -80,6 +80,32 @@ para o Seedance 2 em diante. Se o prompt não bastar, os caminhos são: voz
 gerada à parte e um modelo de avatar falante (HeyGen Avatar IV, no OpenRouter)
 ou o Seedance com áudio de referência.
 
+## HeyGen Avatar IV (src/structures/heygen.ts)
+
+Estrutura em teste (só o administrador vê). A voz não sai do modelo de vídeo:
+a HeyGen lê o texto com uma voz pronta e anima a foto sincronizando a boca.
+O pedido pelo OpenRouter (conferido em 25/10/2026):
+
+| Campo do formulário | No pedido |
+|---|---|
+| **Fala** | `prompt` (o texto que a voz lê; a duração do vídeo segue a fala) |
+| **Foto** (obrigatória) | `input_references` |
+| **Voz** | `provider.options.heygen.voice_id` |
+| **Expressividade** (baixa, média, alta) | `provider.options.heygen.expressiveness` (`low`, `medium`, `high`; a HeyGen usa `low` se nada vier) |
+| **Movimento** (opcional) | entra no fim de `provider.options.heygen.motion_prompt` |
+
+O prompt de sistema desta estrutura é a orientação de movimento
+(`MOTION_GUIDE`): olhar fixo na câmera, cabeça e piscadas naturais, ombros
+relaxados e gestos contidos, o mesmo jeito do estilo "Selfie" do Wan.
+
+**Vozes:** o OpenRouter não publica a lista. Sem `voice_id`, ele recusa o
+pedido (sem custo) e mostra 12 vozes; o formulário usa as de inglês, espanhol e
+as duas multilíngues (Kore, feminina, e Orus, masculina), que são as que falam
+português. A lista completa da HeyGen pede uma chave da própria HeyGen.
+
+**Áudio:** o vídeo pronto não passa pelo contêiner (`treatAudio: false`), porque
+a voz vem pronta do texto para fala. Se a medição mostrar problema, é só ligar.
+
 ## O que o Higgsfield faz
 
 Nos repositórios públicos (`higgsfield-ai/skills`):
