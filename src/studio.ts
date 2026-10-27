@@ -234,7 +234,8 @@ export class Studio {
       // O rosto achado na prévia; sem ele, o contêiner acha sozinho.
       const face = storedFace(video.face);
       await this.runInContainer(video.processed_key ?? video.video_key, key, (body, size) => this.audio!.edit(body, size, containerPlan(plan, face)));
-      return (await this.db.updateVideo(video.id, { edit_status: "done", edited_key: key, edit_error: null }))!;
+      // A edição que vale passa a ser esta: guarda quando e com que escolhas (a página mostra e o endereço muda).
+      return (await this.db.updateVideo(video.id, { edit_status: "done", edited_key: key, edited_at: now.toISOString(), edited_plan: video.edit_plan, edit_error: null }))!;
     } catch (err) {
       console.error("Falha na edição rápida", video.id, err);
       return (await this.db.updateVideo(video.id, { edit_status: "failed", edit_error: errorMessage(err) }))!;

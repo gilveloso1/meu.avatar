@@ -35,6 +35,9 @@ export interface Video {
   edit_status: AudioStatus | null;
   /** Chave no R2 do MP4 editado. */
   edited_key: string | null;
+  /** Quando a edição que vale (a do edited_key) ficou pronta, e com que plano (JSON). */
+  edited_at: string | null;
+  edited_plan: string | null;
   edit_error: string | null;
   edit_started_at: string | null;
   /** O plano da edição (src/quickedit.ts), em JSON. */
@@ -88,7 +91,7 @@ export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "res
 export type VideoChanges = Partial<
   Pick<
     Video,
-    "job_id" | "status" | "video_key" | "cost" | "error" | "audio_status" | "processed_key" | "audio_error" | "audio_started_at" | "edit_status" | "edited_key" | "edit_error" | "face"
+    "job_id" | "status" | "video_key" | "cost" | "error" | "audio_status" | "processed_key" | "audio_error" | "audio_started_at" | "edit_status" | "edited_key" | "edited_at" | "edited_plan" | "edit_error" | "face"
   >
 >;
 

@@ -630,17 +630,43 @@ describe("edição rápida", () => {
     const mp4 = await call(new Request(`${SITE}/videos/${video.id}.editado.mp4?baixar`, { headers: { cookie: session } }), api, audio);
     expect(await mp4.text()).toBe("mp4-falso+editado");
     expect(mp4.headers.get("content-disposition")).toContain("-editado.mp4");
+    // A edição que vale fica guardada: quando e com que escolhas.
+    expect(editado.edited_at).toBeTruthy();
+    expect(JSON.parse(editado.edited_plan!)).toMatchObject({ pause: "longa", camera: "zoom" });
     page = await ver();
-    expect(page).toContain(`src="/videos/${video.id}.editado.mp4"`);
-    expect(page).toContain("Ver o original");
+    // O player abre no editado, com o endereço da edição (muda a cada uma, por causa do cache).
+    const editadoSrc = `/videos/${video.id}.editado.mp4?v=${encodeURIComponent(editado.edited_at!)}`;
+    expect(page).toContain(`src="${editadoSrc}"`);
+    expect(page).toContain("Este vídeo já foi editado");
+    expect(page).toContain('<span class="qe-result__label">Pausas</span><span class="qe-result__value">Longas</span>');
+    expect(page).toContain('<span class="qe-result__label">Câmera</span><span class="qe-result__value">Zoom</span>');
+    expect(page).toContain("data-qe-again");
+    expect(page).toContain("Substituir editado");
+    // As escolhas da edição que vale vêm marcadas.
+    expect(page).toMatch(/name="pausa" value="longa" form="edicao-rapida"[^>]* checked/);
+    // Original | Editado só na aba Edição rápida (a Informações não repete).
+    expect(page).not.toContain("Ver o original");
     page = await ver("?original");
     expect(page).toContain(`src="/videos/${video.id}.mp4"`);
-    expect(page).toContain("Ver o editado");
     // Editado, dá para refazer com outras escolhas; sem os trechos da prévia, o contêiner acha os silêncios.
     expect(page).toContain(BOTAO);
     expect((await pedir(video.id, api, audio, session, { pausa: "curta", camera: "parada" })).status).toBe(303);
-    await studio.editNext();
+    const refeito = (await studio.editNext(new Date(Date.parse(editado.edited_at!) + 60_000)))!;
     expect(audio!.plans[1]).toEqual({ pausa: 0.1, zooms: [1] });
+    expect(refeito.edited_at).not.toBe(editado.edited_at);
+    expect(await ver()).toContain(`.editado.mp4?v=${encodeURIComponent(refeito.edited_at!)}`);
+  });
+
+  it("se a nova edição falhar, a página continua mostrando a edição que vale, com as escolhas dela", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    await pedir(video.id, api, audio, undefined, { pausa: "longa", camera: "zoom" });
+    await studio.editNext();
+    await pedir(video.id, api, audio, undefined, { pausa: "curta", camera: "parada" });
+    audio!.fail = "Edição rápida falhou (HTTP 500): ffmpeg";
+    await studio.editNext();
+    const page = await (await call(new Request(`${SITE}/video/${video.id}`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(page).toContain('<span class="qe-result__label">Pausas</span><span class="qe-result__value">Longas</span>');
+    expect(page).toContain(`src="/videos/${video.id}.editado.mp4?v=`);
   });
 
   it("o rosto é achado pelo contêiner na primeira vez, fica guardado e vai no plano da edição", async () => {

@@ -655,6 +655,18 @@ a.frame { display: block; }
 .viewer .quick-edit__actions .button { width: 100%; justify-content: center; }
 .viewer__sheet:has(.quick-edit:not([hidden])) .viewer__actions { display: none; }
 .viewer .quick-edit[hidden] { display: none; }
+/* Já editado: Original | Editado (troca o vídeo do player), o card de quando e como (linhas com ícone)
+   e o "Editar de novo"; até ele, a aba mostra só isso; depois, os ajustes com o aviso. */
+.qe-existing { display: flex; flex-direction: column; gap: 12px; }
+.qe-versions { display: grid; align-self: stretch; }
+.qe-versions .segmented-button__segment { border: 0; margin: 0; cursor: pointer; }
+.qe-versions .icon { font-size: 18px; }
+.qe-existing__card { gap: 0; }
+.qe-existing__again { width: 100%; justify-content: center; }
+.qe-existing__warn { display: flex; align-items: center; gap: 8px; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.qe-existing__warn .icon { font-size: 18px; }
+.quick-edit[data-edited]:not(.is-again) > :not(.qe-existing), .quick-edit[data-edited]:not(.is-again) .qe-existing__warn { display: none; }
+.quick-edit[data-edited].is-again .qe-existing__again { display: none; }
 /* O botão que abre a edição rápida fica escondido: quem abre é a aba (a edição o mostra de novo ao fechar). */
 .viewer [data-qe-open] { display: none; }
 /* Abas principais do M3: 48 px, indicador de 3 px na cor primary embaixo do escolhido. */

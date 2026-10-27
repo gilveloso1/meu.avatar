@@ -108,6 +108,13 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   "Gerar prévia" e, pronta, começa a tocar (e recomeça a cada troca de escolha);
   o botão vira "Prévia gerada", desligado, e nunca é um segundo tocar (quem toca e
   pausa é a barra do player).
+  Vídeo já editado: a aba mostra só Original | Editado (troca o vídeo do player;
+  a Informações não repete isso), o card "Este vídeo já foi editado" (linhas com
+  ícone: Editado em, Pausas, Câmera, de `edited_at`/`edited_plan`, gravados só
+  quando a edição termina bem) e "Editar de novo"; só então aparecem os ajustes
+  (com as escolhas da edição que vale), o aviso "A nova edição substitui a atual."
+  e "Substituir editado". O editado é um arquivo só (a nova edição substitui) e o
+  endereço dele leva `?v=<edited_at>`, para o navegador não mostrar a anterior.
 - Página do vídeo na tela larga: tem a altura da janela, nunca rola; o vídeo
   encolhe para caber (pelo formato) e a folha rola por dentro.
 - Textos: frases de ajuda curtas, numa linha; na língua de quem usa, nunca de

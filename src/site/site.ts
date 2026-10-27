@@ -325,7 +325,7 @@ ${error ? snackbar(error) : ""}`;
     const status = cardStatus(v);
     const quick = canQuickEdit(v, structure);
     const edited = Boolean(v.edited_key) && !showOriginal;
-    const src = edited ? `/videos/${v.id}.editado.mp4` : videoSrc(v);
+    const src = edited ? editedSrc(v) : videoSrc(v);
     const ratio = esc(v.aspect_ratio.replace(":", " / "));
     const media = v.video_key
       ? `<div class="player viewer__player" style="--ratio:${ratio}"${quick ? " data-player" : ""}><div class="player__frame"><video autoplay preload="metadata" playsinline src="${src}"></video>${
@@ -354,13 +354,11 @@ ${error ? snackbar(error) : ""}`;
     const downloads: MenuItem[] = v.video_key
       ? [
           { label: v.processed_key ? "Com áudio tratado" : "MP4", icon: "download", href: `/videos/${v.id}.mp4?baixar`, download: true },
-          ...(v.edited_key ? [{ label: "Editado", icon: "content_cut", href: `/videos/${v.id}.editado.mp4?baixar`, download: true }] : []),
+          ...(v.edited_key ? [{ label: "Editado", icon: "content_cut", href: `${editedSrc(v)}&baixar`, download: true }] : []),
           ...(v.processed_key ? [{ label: "Original", icon: "movie", href: `/videos/${v.id}.original.mp4?baixar`, download: true }] : []),
         ]
       : [];
     const avatar = v.image_key?.startsWith("avatares/") ? `<img class="viewer__avatar" src="/midia/${esc(v.image_key)}" alt="Foto do avatar">` : "";
-    const toggle = new URLSearchParams(from ? { de: from } : {});
-    if (edited) toggle.set("original", "");
     const info = `
         <div class="viewer__panel" data-tab-panel="info">
           ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
@@ -375,7 +373,6 @@ ${error ? snackbar(error) : ""}`;
             <h2 class="qe-result__title" id="detalhes-titulo">Detalhes</h2>
             <dl>${details.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${DETAIL_ICONS[d.term] ?? "info"}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.description)}</dd></div>`).join("")}</dl>
           </section>
-          ${v.edited_key ? `<a class="button button--text interactive" href="/video/${v.id}?${esc(toggle.toString())}"><span class="icon">movie</span>${edited ? "Ver o original" : "Ver o editado"}</a>` : ""}
         </div>`;
     const body = `
 <main class="viewer" id="conteudo">
@@ -411,7 +408,7 @@ ${error ? snackbar(error) : ""}`;
     }
     <div class="viewer__body">
       ${info}
-      ${quick ? quickEditPreview(v) : ""}
+      ${quick ? quickEditPreview(v, showOriginal) : ""}
     </div>
     <div class="viewer__actions">
       <a class="button button--filled interactive" href="/modelo/${structure.id}?refazer=${v.id}"><span class="icon">refresh</span>Refazer</a>
@@ -568,7 +565,7 @@ function tileCard(c: { href: string; tile: string; headline: string; supporting:
  * "Gerar vídeo editado" manda os trechos para o contêiner (formulário
  * #edicao-rapida, fora do formulário da fala).
  */
-function quickEditPreview(v: Video): string {
+function quickEditPreview(v: Video, showOriginal = false): string {
   const config = {
     src: videoSrc(v),
     face: `/videos/${v.id}/rosto`,
@@ -576,20 +573,47 @@ function quickEditPreview(v: Video): string {
     pauses: Object.fromEntries(PAUSES.map((p) => [p.value, p.pause])),
     cameras: Object.fromEntries(CAMERAS.map((c) => [c.value, c.zooms])),
   };
-  return `<section class="quick-edit" data-quick-edit='${esc(JSON.stringify(config))}' hidden aria-labelledby="edicao-rapida-titulo">
+  // Já editado: as escolhas da edição que vale vêm marcadas, e a aba diz quando e como foi feita.
+  let plan: { pause?: string; camera?: string } = {};
+  // Vídeos editados antes das colunas edited_*: o último plano e o início da edição.
+  try { plan = v.edited_key ? JSON.parse(v.edited_plan ?? v.edit_plan ?? "{}") : {}; } catch {}
+  const pause = PAUSES.find((p) => p.value === plan.pause), camera = CAMERAS.find((c) => c.value === plan.camera);
+  const editedAt = v.edited_at ?? v.edit_started_at;
+  const when = v.edited_key && editedAt ? formatDate(editedAt) : null;
+  const rows = [
+    when ? { icon: "calendar_today", label: "Editado em", value: when } : null,
+    pause ? { icon: "content_cut", label: "Pausas", value: pause.label } : null,
+    camera ? { icon: "videocam", label: "Câmera", value: camera.label } : null,
+  ].filter((r): r is { icon: string; label: string; value: string } => r !== null);
+  const existing = v.edited_key
+    ? `<div class="qe-existing" data-qe-existing>
+            <div class="segmented-button qe-versions" role="group" aria-label="Versão no player">
+              <button class="segmented-button__segment interactive" type="button" data-version="${videoSrc(v)}"${showOriginal ? ' aria-current="true"' : ""}>Original</button>
+              <button class="segmented-button__segment interactive" type="button" data-version="${esc(editedSrc(v))}"${showOriginal ? "" : ' aria-current="true"'}><span class="icon">content_cut</span>Editado</button>
+            </div>
+            <section class="viewer__card qe-existing__card" aria-labelledby="ja-editado">
+              <h3 class="qe-result__title" id="ja-editado">Este vídeo já foi editado</h3>
+              ${rows.map((r) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${r.icon}</span><span class="qe-result__label">${esc(r.label)}</span><span class="qe-result__value">${esc(r.value)}</span></div>`).join("")}
+            </section>
+            <button class="button button--outlined interactive qe-existing__again" type="button" data-qe-again><span class="icon">edit</span>Editar de novo</button>
+            <p class="qe-existing__warn"><span class="icon">info</span>A nova edição substitui a atual.</p>
+          </div>`
+    : "";
+  return `<section class="quick-edit" data-quick-edit='${esc(JSON.stringify(config))}'${v.edited_key ? " data-edited" : ""} hidden aria-labelledby="edicao-rapida-titulo">
+          ${existing}
           <div class="quick-edit__head">
             <h2 class="quick-edit__title" id="edicao-rapida-titulo">Edição rápida</h2>
             <p class="quick-edit__summary" data-qe-summary role="status"></p>
           </div>
           <div class="quick-edit__fields">
-            ${segmented("pausa", "Pausas", PAUSES, DEFAULT_PAUSE, "edicao-rapida")}
-            ${segmented("camera", "Câmera", CAMERAS, DEFAULT_CAMERA, "edicao-rapida")}
+            ${segmented("pausa", "Pausas", PAUSES, pause?.value ?? DEFAULT_PAUSE, "edicao-rapida")}
+            ${segmented("camera", "Câmera", CAMERAS, camera?.value ?? DEFAULT_CAMERA, "edicao-rapida")}
           </div>
           <button class="button button--tonal interactive quick-edit__preview" type="button" data-qe-preview><span class="icon">auto_awesome</span><span>Gerar prévia</span></button>
           <input type="hidden" name="trechos" form="edicao-rapida" data-qe-parts>
           <div class="quick-edit__actions">
             <button class="button button--outlined interactive" type="button" data-qe-close>Cancelar</button>
-            <button class="button button--filled interactive" type="submit" form="edicao-rapida"><span class="icon">content_cut</span>Gerar editado</button>
+            <button class="button button--filled interactive" type="submit" form="edicao-rapida"><span class="icon">content_cut</span>${v.edited_key ? "Substituir editado" : "Gerar editado"}</button>
           </div>
         </section>`;
 }
@@ -765,6 +789,14 @@ function generateBar(seconds: string, cost: number | undefined, enabled: boolean
 
 function emptyState(icon: string, title: string, text: string): string {
   return `<div class="empty"><span class="icon">${icon}</span><p class="empty__title">${esc(title)}</p><p>${esc(text)}</p></div>`;
+}
+
+/**
+ * O endereço do editado muda a cada edição (?v=<quando ficou pronta>): o navegador guarda o
+ * MP4 por um dia, e sem isso continuaria mostrando (e baixando) a edição anterior.
+ */
+function editedSrc(v: Video): string {
+  return `/videos/${v.id}.editado.mp4?v=${encodeURIComponent(v.edited_at ?? v.updated_at)}`;
 }
 
 function videoSrc(v: Video): string {
@@ -1243,6 +1275,19 @@ const SCRIPT = `(() => {
       if (qePlay) new MutationObserver(sync).observe(qePlay, { subtree: true, childList: true, characterData: true });
       if (qeTime) new MutationObserver(sync).observe(qeTime, { subtree: true, childList: true, characterData: true });
       sync();
+    }
+
+    // Edição rápida de um vídeo já editado: Original | Editado troca o vídeo do player; os ajustes
+    // só aparecem no "Editar de novo" (que já é a confirmação de que a edição atual será trocada).
+    const qeEl = viewer.querySelector("[data-quick-edit][data-edited]");
+    if (qeEl) {
+      const mainVideo = document.querySelector(".viewer__player video");
+      for (const b of qeEl.querySelectorAll("[data-version]")) b.addEventListener("click", () => {
+        for (const o of qeEl.querySelectorAll("[data-version]")) o.toggleAttribute("aria-current", o === b);
+        if (mainVideo && mainVideo.getAttribute("src") !== b.dataset.version) { mainVideo.src = b.dataset.version; mainVideo.play().catch(() => {}); }
+      });
+      qeEl.querySelector("[data-qe-again]").addEventListener("click", () => qeEl.classList.add("is-again"));
+      qeEl.querySelector("[data-qe-close]").addEventListener("click", () => qeEl.classList.remove("is-again"));
     }
 
     for (const c of viewer.querySelectorAll("[data-copy]")) c.addEventListener("click", async () => {
