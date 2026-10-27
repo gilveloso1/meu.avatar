@@ -88,7 +88,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   com colunas); chips de filtro por status, chip de ordem e chip "Agrupar por
   data" (desligado por padrão). Tudo no navegador, sem recarregar, e guardado
   no `localStorage` por lista (`lista-<modelo>`, `lista-videos`). Miniatura só
-  baixa quando aparece na tela. A busca pela fala de `/videos` fica no servidor.
+  baixa quando aparece na tela e enquadra o rosto (`videos.face`, achado pelo
+  agendamento, um vídeo por minuto; sem rosto, o terço de cima). A busca pela fala de `/videos` fica no servidor.
 - Página do vídeo (`/video/<id>`, aberta por qualquer lista; `?de=` diz para
   onde a seta e o X voltam, só caminho do site): ocupa a tela abaixo da barra
   superior. À esquerda, o vídeo no formato dele (sem faixas) sobre fundo
@@ -102,7 +103,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   em Informações, Texto (com Copiar), os textos livres (Movimento, Instruções
   extras) em bloco próprio e Detalhes no card de linhas (ícone, rótulo, valor);
   embaixo, Refazer (volta ao modelo com tudo preenchido, `?refazer=<id>`) e
-  Baixar (menu quando há mais de uma versão). Na Edição rápida, o card
+  Baixar (menu quando há mais de uma versão: Original, Editado e, se o áudio foi
+  tratado, "Sem tratamento de áudio"). Na Edição rápida, o card
   "Resultado da edição", Pausas, Câmera, "Gerar prévia" e, presos embaixo,
   Cancelar e Gerar editado. Abrir a aba não analisa nada: a prévia só é feita no
   "Gerar prévia" e, pronta, começa a tocar (e recomeça a cada troca de escolha);

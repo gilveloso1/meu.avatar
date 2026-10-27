@@ -154,6 +154,17 @@ export class Db {
   }
 
   /** Quantos vídeos cada estrutura tem. */
+  /** Um vídeo pronto (e com o áudio já tratado, se for o caso) que ainda não teve o rosto procurado. */
+  async nextWithoutFace(): Promise<Video | null> {
+    return this.d1
+      .prepare(
+        `SELECT * FROM videos WHERE status = 'completed' AND video_key IS NOT NULL AND face IS NULL
+           AND (audio_status IS NULL OR audio_status IN ('done', 'failed'))
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .first<Video>();
+  }
+
   async countByStructure(): Promise<Map<string, number>> {
     const rows = (await this.d1.prepare("SELECT structure, COUNT(*) AS n FROM videos GROUP BY structure").all<{ structure: string | null; n: number }>()).results;
     return new Map(rows.map((r) => [r.structure ?? "", r.n]));

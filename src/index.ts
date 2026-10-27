@@ -82,5 +82,7 @@ export default {
     // Depois de buscar os prontos, trata o áudio de um vídeo da fila e faz uma edição rápida pedida.
     await studio.treatNextAudio();
     await studio.editNext();
+    // E acha o rosto de um vídeo pronto, para a miniatura das listas enquadrar.
+    await studio.findNextFace();
   },
 } satisfies ExportedHandler<Env>;

@@ -222,6 +222,25 @@ export class Studio {
     }
   }
 
+  /**
+   * Agendamento: procura o rosto de um vídeo pronto que ainda não tem (para enquadrar a miniatura
+   * nas listas e já deixar pronto para a edição rápida). Sem rosto ou se o contêiner falhar, grava
+   * {} para não tentar de novo a cada minuto (a prévia da edição rápida usa o padrão).
+   */
+  async findNextFace(): Promise<Video | null> {
+    if (!this.audio) return null;
+    const video = await this.db.nextWithoutFace();
+    if (!video) return null;
+    let face: Face | Record<string, never> = {};
+    try {
+      const original = await this.media.get((video.processed_key ?? video.video_key)!);
+      if (original) face = await this.audio.face(await original.arrayBuffer());
+    } catch (err) {
+      console.error("Falha ao achar o rosto (agendamento)", video.id, err);
+    }
+    return this.db.updateVideo(video.id, { face: JSON.stringify(face) });
+  }
+
   /** Agendamento: faz a edição rápida do próximo vídeo da fila, a partir da versão com o áudio tratado, se houver. */
   async editNext(now = new Date()): Promise<Video | null> {
     if (!this.audio) return null;

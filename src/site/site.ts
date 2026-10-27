@@ -353,9 +353,11 @@ ${error ? snackbar(error) : ""}`;
     ].filter((e): e is string => Boolean(e));
     const downloads: MenuItem[] = v.video_key
       ? [
-          { label: v.processed_key ? "Com áudio tratado" : "MP4", icon: "download", href: `/videos/${v.id}.mp4?baixar`, download: true },
+          // "Original" é o vídeo como aparece no player sem edição (com o áudio tratado, se houver);
+          // o que veio do modelo, antes do tratamento, só aparece quando existe o tratado.
+          { label: "Original", icon: "movie", href: `/videos/${v.id}.mp4?baixar`, download: true },
           ...(v.edited_key ? [{ label: "Editado", icon: "content_cut", href: `${editedSrc(v)}&baixar`, download: true }] : []),
-          ...(v.processed_key ? [{ label: "Original", icon: "movie", href: `/videos/${v.id}.original.mp4?baixar`, download: true }] : []),
+          ...(v.processed_key ? [{ label: "Sem tratamento de áudio", icon: "graphic_eq", href: `/videos/${v.id}.original.mp4?baixar`, download: true }] : []),
         ]
       : [];
     const avatar = v.image_key?.startsWith("avatares/") ? `<img class="viewer__avatar" src="/midia/${esc(v.image_key)}" alt="Foto do avatar">` : "";
@@ -670,6 +672,22 @@ function downloadMenu(items: MenuItem[]): string {
       </details>`;
 }
 
+/**
+ * Onde a miniatura quadrada corta o vídeo (object-position): com o rosto achado (rosto.py: o ponto
+ * entre os olhos, em frações do quadro), os olhos ficam a 40% da altura e no meio da largura;
+ * sem ele, o terço de cima (onde o rosto costuma estar).
+ */
+function thumbPosition(v: Video): string {
+  let face: { x?: number; y?: number } = {};
+  try { face = JSON.parse(v.face ?? "{}"); } catch {}
+  const fx = typeof face.x === "number" ? face.x : 0.5, fy = typeof face.y === "number" ? face.y : 0.35;
+  const [w, h] = v.aspect_ratio.split(":").map(Number);
+  const ratio = w && h ? h / w : 16 / 9;
+  // Corte no eixo que sobra: a parte do vídeo fora do quadrado, de 0 a 100%.
+  const pct = (r: number, f: number, target: number) => (r > 1 ? Math.min(100, Math.max(0, ((r * f - target) / (r - 1)) * 100)) : 50);
+  return `${pct(1 / ratio, fx, 0.5).toFixed(1)}% ${pct(ratio, fy, 0.4).toFixed(1)}%`;
+}
+
 /** Dia no fuso de São Paulo (AAAA-MM-DD), para agrupar por data. */
 function dayKey(iso: string | number): string {
   return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -727,7 +745,7 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
     groups.set(g, [...(groups.get(g) ?? []), v]);
   }
   const thumb = (v: Video, status: ReturnType<typeof cardStatus>) =>
-    v.video_key ? `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1"></video>` : `<span class="frame__placeholder">${statusTile(status, true)}</span>`;
+    v.video_key ? `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>` : `<span class="frame__placeholder">${statusTile(status, true)}</span>`;
   const section = ([title, list]: [string, Video[]]) => {
     const frames = list
       .map((v) => {
