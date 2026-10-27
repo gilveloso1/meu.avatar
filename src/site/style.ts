@@ -439,13 +439,16 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .icon-tile--tertiary { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
 .icon-tile--error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 
-/* Vídeos em lista: uma caixa de cantos grandes, uma linha por vídeo. */
-.list-box { display: flex; flex-direction: column; overflow: hidden; border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container); }
+/* Vídeos em lista: lista expressiva do M3 no estilo segmentado; itens separados por 2 px,
+   cantos de 4 px por dentro e 16 px nas pontas do grupo. */
+.list-box { display: flex; flex-direction: column; gap: 2px; }
 .list-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 64px; padding: 12px 24px;
-  border-bottom: 1px solid var(--md-sys-color-surface-container-highest); text-decoration: none; color: var(--md-sys-color-on-surface);
+  border-radius: var(--md-sys-shape-corner-extra-small); background: var(--md-sys-color-surface-container);
+  text-decoration: none; color: var(--md-sys-color-on-surface);
 }
-.list-row:last-child { border-bottom: 0; }
+.list-row:first-child { border-top-left-radius: var(--md-sys-shape-corner-large); border-top-right-radius: var(--md-sys-shape-corner-large); }
+.list-row:last-child { border-bottom-left-radius: var(--md-sys-shape-corner-large); border-bottom-right-radius: var(--md-sys-shape-corner-large); }
 .list-row__headline { flex: 1 1 240px; min-width: 0; font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .list-row__supporting { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 
@@ -519,7 +522,8 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
   border-radius: var(--md-sys-shape-corner-large); text-decoration: none; color: var(--md-sys-color-on-surface);
 }
 .pane-list__item .icon-tile { width: 36px; height: 36px; border-radius: 10px; }
-.pane-list__item[aria-current] { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+/* Lista expressiva do M3: o item escolhido em primary-container, com cantos de 16 px. */
+.pane-list__item[aria-current] { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
 .pane-list__text { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .pane-list__headline, .pane-list__supporting { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pane-list__headline { font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; }
@@ -554,7 +558,7 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
   border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface-variant);
 }
 .stage > .icon { font-size: 40px; }
-.stage .linear-progress { width: 240px; max-width: 100%; border-radius: var(--md-sys-shape-corner-full); }
+.stage .linear-progress { --progress-gap: var(--md-sys-color-surface-container); width: 240px; max-width: 100%; }
 .stage__title { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; color: var(--md-sys-color-on-surface); }
 .stage__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; overflow-wrap: anywhere; }
 .stage--error { gap: 12px; background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
@@ -591,11 +595,14 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .composer-bar .text-field__supporting { padding: 0 24px; }
 .composer-bar__note { text-align: center; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
 
-/* --- Indicador de progresso linear (indeterminado) ----------------------------------- */
-.linear-progress { height: 4px; overflow: hidden; background: var(--md-sys-color-secondary-container); }
+/* --- Indicador de progresso linear (indeterminado), M3 Expressive: 4 px, pontas arredondadas e
+   4 px de folga entre o indicador e a trilha. ------------------------------------------------------ */
+.linear-progress { --progress-gap: var(--md-sys-color-surface); position: relative; height: 4px; overflow: hidden; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-secondary-container); }
+/* A folga é uma borda na cor do fundo em volta do indicador. */
 .linear-progress::before {
-  content: ""; display: block; height: 100%; width: 40%;
-  background: var(--md-sys-color-primary); border-radius: var(--md-sys-shape-corner-full);
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%;
+  border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 4px var(--progress-gap);
   animation: linear-progress 1.8s var(--md-sys-motion-easing-standard) infinite;
 }
 @keyframes linear-progress { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
