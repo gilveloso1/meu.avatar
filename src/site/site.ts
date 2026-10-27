@@ -6,8 +6,10 @@
  *   /entrar      login (e-mail e senha)
  *   /sair        encerra a sessão (POST)
  *   /              os modelos, um cartão por estrutura (src/structures/)
- *   /modelo/<id>   a página do modelo: o formulário de um lado e os vídeos
- *                  dele do outro; o POST gera o vídeo
+ *   /videos        os vídeos de todos os modelos, com filtro por status
+ *   /modelo/<id>   a página do modelo em três painéis: a configuração, o vídeo
+ *                  escolhido (?video=<id>) com a caixa da fala, e os vídeos
+ *                  dele; o POST gera o vídeo
  *
  * Tudo pede sessão, menos /midia/avatares/..., que o provedor de vídeo precisa
  * baixar. Segurança como no painel do estuda.mais: cookie __Host- (HttpOnly,
@@ -36,9 +38,25 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add_photo_alternate", "arrow_back", "arrow_drop_down", "check", "check_circle", "close", "download", "error", "face", "graphic_eq", "hourglass_top", "lock", "logout", "person_add",
-  "movie", "record_voice_over", "schedule", "send", "videocam",
+  "add", "add_photo_alternate", "arrow_drop_down", "arrow_upward", "check", "check_circle", "close", "download", "error", "face", "graphic_eq", "grid_view", "left_panel_close", "left_panel_open", "more_vert", "right_panel_close", "right_panel_open",
+  "edit", "hourglass_top", "info", "lock", "logout", "movie", "person_add", "play_arrow", "record_voice_over", "schedule", "search", "send", "subdirectory_arrow_right",
+  "videocam", "view_list",
 ];
+
+/** Falas prontas da página do modelo sem vídeos: um clique põe o texto na caixa da fala. */
+const IDEAS = [
+  { label: "Apresentação", text: "Oi! Eu sou [SEU NOME] e aqui você vai encontrar [O QUE VOCÊ FAZ]." },
+  { label: "Oferta", text: "Só hoje: [PRODUTO] com [DESCONTO]. Corre que é por tempo limitado!" },
+  { label: "Convite", text: "Hoje tem live às [HORÁRIO]. Ative o lembrete e venha conversar comigo." },
+];
+
+/** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
+const FILTERS = [
+  { id: "", label: "Todos", kind: null },
+  { id: "prontos", label: "Prontos", kind: "done" },
+  { id: "andamento", label: "Em andamento", kind: "busy" },
+  { id: "erro", label: "Com erro", kind: "error" },
+] as const;
 
 const SURFACE_LIGHT = /--md-sys-color-surface: (#\w+)/.exec(LIGHT)![1];
 const SURFACE_DARK = /--md-sys-color-surface: (#\w+)/.exec(DARK)![1];
@@ -90,7 +108,8 @@ export class Site {
     const user = await this.accounts.session(token);
     if (!user) return redirect("/entrar");
 
-    if (!post && path === "/") return this.home(user);
+    if (!post && path === "/") return this.home(user, url);
+    if (!post && path === "/videos") return this.videosPage(user, url);
     // Endereços da versão anterior.
     if (!post && path === "/novo") return redirect("/");
     const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
@@ -101,7 +120,7 @@ export class Site {
       // Estrutura que não existe ou que a pessoa não pode usar: a página nem aparece.
       const structure = structureById(model[1]);
       if (!structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
-      return post ? this.createVideo(request, user, structure) : this.modelPage(structure);
+      return post ? this.createVideo(request, user, structure) : this.modelPage(user, structure, url.searchParams.get("video"));
     }
 
     // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo.
@@ -118,43 +137,110 @@ export class Site {
     return new Response("não encontrado", { status: 404 });
   }
 
-  /** Tela inicial: um cartão por estrutura que a pessoa pode usar. */
-  private async home(user: User): Promise<Response> {
+  /** Tela inicial: um card por estrutura que a pessoa pode usar; a busca filtra pelo nome. */
+  private async home(user: User, url: URL): Promise<Response> {
+    const q = (url.searchParams.get("q") ?? "").trim();
     const counts = await this.db.countByStructure();
-    const structures = STRUCTURES.filter((s) => canUse(s, user.role));
-    const cards = await Promise.all(
-      structures.map(async (s) => {
-        const { model } = await this.tryModel(s);
-        const price = model ? lowestPrice(model) : undefined;
-        const n = counts.get(s.id) ?? 0;
-        const subhead = [s.model.replace(/\/.*/, ""), price !== undefined ? `a partir de US$ ${price.toFixed(2)}/s` : null].filter(Boolean).join(" · ");
-        const footer = [n === 1 ? "1 vídeo" : `${n} vídeos`, s.access === "admin" ? "Em teste: só o administrador vê" : null].filter(Boolean).join(" · ");
-        return `
-    <a class="card card--outlined card--action model-card interactive" href="/modelo/${s.id}">
-      <span class="model-card__icon"><span class="icon">${esc(s.icon)}</span></span>
-      <span class="model-card__content">
-        <span class="model-card__headline">${esc(s.name)}</span>
-        <span class="model-card__subhead">${esc(subhead)}</span>
-        <span class="model-card__text">${esc(s.summary)}</span>
-        <span class="model-card__footer">${esc(footer)}</span>
-      </span>
-    </a>`;
-      }),
-    );
+    const structures = STRUCTURES.filter((s) => canUse(s, user.role) && s.name.toLowerCase().includes(q.toLowerCase()));
+    const cards = structures.map((s, i) => {
+      const n = counts.get(s.id) ?? 0;
+      return tileCard({
+        href: `/modelo/${s.id}`,
+        tile: `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">${esc(s.icon)}</span></span>`,
+        badge: s.access === "admin" ? { label: "Em teste", title: "Em teste: só o administrador vê" } : undefined,
+        headline: s.name,
+        supporting: n === 1 ? "1 vídeo" : `${n} vídeos`,
+        menu: [
+          { label: "Criar vídeo", icon: "add", href: `/modelo/${s.id}` },
+          { label: "Ver os vídeos", icon: "movie", href: `/videos?modelo=${s.id}` },
+        ],
+      });
+    });
     const body = `
 <main class="page" id="conteudo">
-  <h1 class="page__headline">Modelos</h1>
-  <p class="page__intro">Escolha um modelo para criar vídeos e ver os que ele já fez.</p>
-  <div class="model-grid">${cards.join("")}</div>
+  <div class="page__head">
+    <div>
+      <h1 class="page__headline">Modelos</h1>
+      <p class="page__intro">Escolha um modelo para criar vídeos e ver os que ele já fez.</p>
+    </div>
+  </div>
+  ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : emptyState("search", "Nenhum modelo encontrado", `Nada com “${q}” no nome.`)}
 </main>`;
-    return html(page(SITE_NAME, body, { bar: { user } }));
+    return html(page(SITE_NAME, body, { bar: { user, tab: "modelos", search: { action: "/", label: "Pesquisar modelos", q } } }));
+  }
+
+  /** Os vídeos de todos os modelos que a pessoa pode usar, com filtro por status, busca pela fala e grade ou lista. */
+  private async videosPage(user: User, url: URL): Promise<Response> {
+    const q = (url.searchParams.get("q") ?? "").trim();
+    const filter = FILTERS.find((f) => f.id === url.searchParams.get("status")) ?? FILTERS[0];
+    const list = url.searchParams.get("ver") === "lista";
+    // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
+    const only = url.searchParams.get("modelo") ?? "";
+    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && (!only || s.id === only));
+    const all = await this.db.videosByStructures(usable.map((s) => s.id), q);
+    const videos = all.filter((v) => !filter.kind || cardStatus(v).kind === filter.kind);
+    const waiting = videos.some((v) => cardStatus(v).kind === "busy");
+    const keep = { q, status: filter.id, ver: list ? "lista" : "", modelo: only };
+    // Os links da página guardam os outros parâmetros: trocar o filtro não perde a busca nem a vista.
+    const link = (changes: Record<string, string>) => {
+      const params = new URLSearchParams({ ...keep, ...changes });
+      for (const [k, v] of [...params]) if (!v) params.delete(k);
+      const s = params.toString();
+      return `/videos${s ? `?${s}` : ""}`;
+    };
+    const chips = FILTERS.map(
+      (f) =>
+        `<a class="chip interactive" href="${esc(link({ status: f.id }))}"${f === filter ? ' aria-current="true"' : ""}>${f === filter ? '<span class="icon">check</span>' : ""}${esc(f.label)}</a>`,
+    ).join("");
+    const items = videos.map((v) => {
+      const structure = structureById(v.structure)!;
+      const status = cardStatus(v);
+      const meta = [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ");
+      const href = `/modelo/${structure.id}?video=${v.id}`;
+      if (list) {
+        return `<a class="list-row interactive" href="${href}">${statusTile(status)}<span class="list-row__headline">${esc(v.prompt)}</span><span class="list-row__supporting">${esc(`${status.label} · ${meta}`)}</span></a>`;
+      }
+      return tileCard({
+        href,
+        tile: statusTile(status, true),
+        headline: v.prompt,
+        supporting: meta,
+        hidden: `${status.label} · `,
+        menu: [
+          { label: "Abrir", icon: "play_arrow", href },
+          ...(v.video_key ? [{ label: "Baixar MP4", icon: "download", href: `/videos/${v.id}.mp4?baixar`, download: true }] : []),
+        ],
+      });
+    });
+    const empty = q || filter.id || only ? emptyState("search", "Nenhum vídeo encontrado", "Tente outro filtro ou outra busca.") : emptyState("movie", "Nenhum vídeo ainda", "Escolha um modelo para gerar o primeiro.");
+    const body = `
+<main class="page" id="conteudo">
+  <div class="page__head">
+    <h1 class="page__headline">${only && usable[0] ? `Vídeos · ${esc(usable[0].name)}` : "Vídeos"}</h1>
+    <a class="fab fab--extended interactive" href="/"><span class="icon">add</span>Novo vídeo</a>
+  </div>
+  <nav class="chip-set" aria-label="Filtrar por status">${chips}</nav>
+  ${!items.length ? empty : list ? `<div class="list-box">${items.join("")}</div>` : `<div class="tile-grid">${items.join("")}</div>`}
+</main>`;
+    const view = `<nav class="view-toggle" aria-label="Visualização">
+      <a class="view-toggle__option interactive" href="${esc(link({ ver: "" }))}"${list ? "" : ' aria-current="true"'} aria-label="Grade" title="Grade"><span class="icon">grid_view</span></a>
+      <a class="view-toggle__option interactive" href="${esc(link({ ver: "lista" }))}"${list ? ' aria-current="true"' : ""} aria-label="Lista" title="Lista"><span class="icon">view_list</span></a>
+    </nav>`;
+    return html(
+      page(`Vídeos · ${SITE_NAME}`, body, {
+        refresh: waiting,
+        bar: { user, tab: "videos", search: { action: "/videos", label: "Pesquisar pela fala", q, keep: { status: filter.id, ver: keep.ver, modelo: only } }, extra: view },
+      }),
+    );
   }
 
   /**
-   * A página do modelo: o formulário da estrutura num painel menor e os vídeos
-   * dela no painel maior (layout de painel fixo e flexível do M3).
+   * A página do modelo em três painéis: a configuração do vídeo à esquerda, o
+   * vídeo escolhido e a caixa da fala no centro, e os vídeos do modelo à
+   * direita; os painéis dos lados se recolhem. Sem `?video=`, fica o mais novo;
+   * sem vídeos, a apresentação do modelo e as falas prontas.
    */
-  private async modelPage(structure: Structure, values?: Values, error?: string): Promise<Response> {
+  private async modelPage(user: User, structure: Structure, selectedId: string | null, values?: Values, error?: string): Promise<Response> {
     const { model, error: modelError } = await this.tryModel(structure);
     const banner = modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
     const sections = structure.sections(model, this.config.defaults);
@@ -168,35 +254,69 @@ export class Site {
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const videos = await this.db.videosByStructure(structure.id);
+    // Só vale um vídeo deste modelo: o id de outro não abre nada aqui.
+    const selected = videos.find((v) => v.id === selectedId) ?? videos[0];
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
-    const body = `
-<main class="page page--panes" id="conteudo">
-  <section class="pane pane--fixed" aria-labelledby="novo">
-    <form class="composer" method="post" action="/modelo/${structure.id}" enctype="multipart/form-data" data-composer='${esc(JSON.stringify(config))}'>
-      <h2 class="pane__headline" id="novo">Novo vídeo</h2>
-      ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
-      ${sections.map((section) => formSection(section, value)).join("")}
-      <div class="card card--filled summary">
-        <dl class="summary__list">
-          <div class="summary__item"><dt>Duração</dt><dd data-seconds>${esc(seconds)}</dd></div>
-          <div class="summary__item"><dt>Custo estimado</dt><dd data-cost>${cost !== undefined ? `US$ ${cost.toFixed(2)}` : "—"}</dd></div>
-        </dl>
-        <button class="button button--filled interactive" type="submit"${model ? "" : " disabled"}><span class="icon">videocam</span>Gerar vídeo</button>
+
+    // A fala vai na caixa do centro; a foto abre o painel; o resto segue as seções da estrutura.
+    const fields = sections.flatMap((s) => s.fields);
+    const speech = fields.find((f): f is Extract<Field, { kind: "textarea" }> => f.kind === "textarea");
+    const images = fields.filter((f) => f.kind === "image");
+    const rest = sections.map((s) => ({ ...s, fields: s.fields.filter((f) => f.kind !== "textarea" && f.kind !== "image") })).filter((s) => s.fields.length);
+    const price = model ? lowestPrice(model) : undefined;
+    const tone = MODEL_TONES[STRUCTURES.indexOf(structure) % MODEL_TONES.length];
+
+    const intro = `
+      <div class="model-intro">
+        <span class="icon-tile icon-tile--hero icon-tile--${tone}" aria-hidden="true"><span class="icon">${esc(structure.icon)}</span></span>
+        <h2 class="model-intro__headline">${esc(structure.name)}</h2>
+        <p class="model-intro__supporting">${esc([structure.model.replace(/\/.*/, ""), price !== undefined ? `a partir de US$ ${price.toFixed(2)}/s` : null, "nenhum vídeo ainda"].filter(Boolean).join(" · "))}</p>
+        <p class="model-intro__text">${esc(structure.summary)}</p>
       </div>
-    </form>
-  </section>
-  <section class="pane pane--flexible" aria-labelledby="videos">
-    <h2 class="pane__headline" id="videos">Vídeos <span class="pane__count">${videos.length}</span></h2>
+      <section class="ideas" aria-labelledby="ideias">
+        <h3 class="ideas__title" id="ideias">Comece por uma fala pronta</h3>
+        <div class="ideas__grid">${IDEAS.map(
+          (i) =>
+            `<button class="idea interactive" type="button" data-fill="${esc(i.text)}"><span class="idea__label">${esc(i.label)}</span><span class="idea__text">${esc(i.text)}</span><span class="icon" aria-hidden="true">subdirectory_arrow_right</span></button>`,
+        ).join("")}</div>
+      </section>`;
+
+    const body = `
+<main class="workspace" id="conteudo">
+  <form class="workspace__form" method="post" action="/modelo/${structure.id}" enctype="multipart/form-data" data-composer='${esc(JSON.stringify(config))}'>
+    <section class="pane pane--config" aria-labelledby="configuracao" data-pane="config">
+      ${paneHead("configuracao", "Configuração", "left")}
+      <div class="pane__body" id="configuracao-corpo">
+        ${images.map((f) => formField(f, value)).join("")}
+        ${rest.map((section) => formSection(section, value)).join("")}
+      </div>
+    </section>
+    <div class="workspace__main">
+      ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
+      ${selected ? selectedVideo(selected, structure) : intro}
+      ${speech ? composerBar(speech, value, seconds, cost, Boolean(model)) : ""}
+    </div>
+  </form>
+  <section class="pane pane--videos" aria-labelledby="videos" data-pane="videos">
+    ${paneHead("videos", `Vídeos <span class="pane__count">${videos.length}</span>`, "right")}
+    <div class="pane__body" id="videos-corpo">
     ${
       videos.length
-        ? `<div class="video-grid">${videos.map((v) => videoCard(v, structure)).join("")}</div>`
-        : `<div class="empty"><span class="icon">movie</span><p class="empty__title">Nenhum vídeo ainda</p><p>Preencha o formulário e gere o primeiro com ${esc(structure.name)}.</p></div>`
+        ? `<nav class="pane-list" aria-label="Vídeos de ${esc(structure.name)}">${videos
+            .map((v) => {
+              const status = cardStatus(v);
+              const current = v === selected ? ' aria-current="true"' : "";
+              return `<a class="pane-list__item interactive" href="/modelo/${structure.id}?video=${v.id}"${current}>${statusTile(status)}<span class="pane-list__text"><span class="pane-list__headline">${esc(v.prompt)}</span><span class="pane-list__supporting">${esc([status.label, formatDate(v.created_at), durationLabel(v, structure)].join(" · "))}</span></span></a>`;
+            })
+            .join("")}</nav>`
+        : `<div class="pane-empty"><span class="icon">videocam</span><p class="pane-empty__title">Os vídeos gerados aparecem aqui.</p><p>Escolha a foto e os ajustes, escreva a fala embaixo e toque na seta para gerar.</p></div>`
     }
+    </div>
   </section>
 </main>
-${videos.map((v) => videoDialog(v, structure)).join("")}
+${selected ? videoDialog(selected, structure) : ""}
 ${error ? snackbar(error) : ""}`;
-    return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, bar: { back: "/", title: structure.name } }), error ? 400 : 200);
+    return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, footer: false, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
   }
 
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
@@ -213,14 +333,15 @@ ${error ? snackbar(error) : ""}`;
     const image = form.get("imagem");
     const { model } = await this.tryModel(structure);
     const values = formValues(form, structure.sections(model, this.config.defaults));
+    let video: Video;
     try {
-      await this.studio.create({ structure, values, image: image instanceof File ? image : null, user });
+      video = await this.studio.create({ structure, values, image: image instanceof File ? image : null, user });
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
-      return this.modelPage(structure, values, err.message);
+      return this.modelPage(user, structure, null, values, err.message);
     }
-    return redirect(`/modelo/${structure.id}`);
+    return redirect(`/modelo/${structure.id}?video=${video.id}`);
   }
 
   private async login(request: Request): Promise<Response> {
@@ -281,35 +402,102 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
   return status.kind === "busy" ? { ...status, label: `${status.label} · ${minutes(v.created_at)} min` } : status;
 }
 
-/** O cartão do vídeo na grade: a mídia, o status, quando foi feito, a fala e as ações. */
-function videoCard(v: Video, structure: Structure): string {
-  const status = cardStatus(v);
-  const ratio = /^(\d+):(\d+)$/.exec(v.aspect_ratio);
-  const style = [
-    ratio ? `--ratio:${ratio[1]} / ${ratio[2]}` : "",
-    !v.video_key && v.image_key ? `background-image:url('/midia/${esc(v.image_key)}')` : "",
-  ].filter(Boolean).join(";");
-  const progress = status.kind === "busy" ? `<div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>` : "";
-  const media = v.video_key
-    ? `<video controls preload="metadata" playsinline src="${videoSrc(v)}"></video>${progress}`
-    : `${v.image_key ? "" : `<span class="icon">${status.kind === "error" ? "error" : "movie"}</span>`}${progress}`;
-  return `
-<article class="card card--elevated video-card">
-  <div class="video-card__media"${style ? ` style="${style}"` : ""}>${media}</div>
-  <div class="video-card__body">
-    <p class="video-card__status video-card__status--${status.kind}"><span class="icon">${status.icon}</span>${esc(status.label)}</p>
-    <p class="video-card__subhead">${esc([formatDate(v.created_at), durationLabel(v, structure)].join(" · "))}</p>
-    <p class="video-card__text">${esc(v.prompt)}</p>
-  </div>
-  <div class="video-card__actions">
-    ${v.video_key ? `<a class="icon-button interactive" href="/videos/${v.id}.mp4?baixar" download aria-label="Baixar MP4" title="Baixar MP4"><span class="icon">download</span></a>` : ""}
-    <button class="button button--text interactive" type="button" data-dialog-open="detalhes-${v.id}">Ver mais</button>
-  </div>
-</article>`;
+/** Cor do ícone de cada modelo, na ordem dos cards. */
+const MODEL_TONES = ["primary", "tertiary", "secondary"] as const;
+
+/** Ícone num contêiner tonal, na cor do grupo de status: pronto, na fila, áudio ou erro. */
+function statusTile(status: ReturnType<typeof cardStatus>, large = false): string {
+  const tone = status.kind === "done" ? "primary" : status.kind === "error" ? "error" : status.icon === "graphic_eq" ? "tertiary" : "secondary";
+  return `<span class="icon-tile${large ? " icon-tile--large" : ""} icon-tile--${tone}" aria-hidden="true"><span class="icon">${status.kind === "done" ? "play_arrow" : status.icon}</span></span>`;
+}
+
+interface MenuItem {
+  label: string;
+  icon: string;
+  href: string;
+  download?: boolean;
+}
+
+/** Menu do M3 aberto por um botão de ícone (três pontos); fecha ao escolher ou ao tocar fora (SCRIPT). */
+function overflowMenu(label: string, items: MenuItem[]): string {
+  return `<details class="menu" data-menu>
+      <summary class="icon-button interactive" aria-label="${esc(label)}" title="Mais opções"><span class="icon">more_vert</span></summary>
+      <div class="menu__list">${items
+        .map((i) => `<a class="menu__item interactive" href="${esc(i.href)}"${i.download ? " download" : ""}><span class="icon">${i.icon}</span>${esc(i.label)}</a>`)
+        .join("")}</div>
+    </details>`;
 }
 
 /**
- * "Ver mais": o vídeo maior e tudo sobre ele, organizado em seções. Diálogo
+ * Card da grade (modelos e vídeos): o ícone em cima, à esquerda, com o menu à
+ * direita, e o título e a linha de apoio embaixo. O card inteiro é o link; o
+ * menu fica por cima dele.
+ */
+function tileCard(c: { href: string; tile: string; headline: string; supporting: string; hidden?: string; badge?: { label: string; title: string }; menu: MenuItem[] }): string {
+  return `
+    <article class="tile-card">
+      <div class="tile-card__top">
+        ${c.tile}
+        ${c.badge ? `<span class="badge-chip" title="${esc(c.badge.title)}">${esc(c.badge.label)}</span>` : ""}
+        ${overflowMenu(`Mais opções: ${c.headline}`, c.menu)}
+      </div>
+      <a class="tile-card__link" href="${c.href}"><span class="tile-card__headline">${esc(c.headline)}</span></a>
+      <p class="tile-card__supporting">${c.hidden ? `<span class="visually-hidden">${esc(c.hidden)}</span>` : ""}${esc(c.supporting)}</p>
+    </article>`;
+}
+
+/** Título do painel lateral com o botão de recolher (o painel da esquerda recolhe para a esquerda, o da direita para a direita). */
+function paneHead(id: string, title: string, side: "left" | "right"): string {
+  return `<div class="pane__head">
+        <h2 class="pane__headline" id="${id}">${title}</h2>
+        <button class="icon-button interactive pane__toggle" type="button" data-pane-toggle="${side}" aria-controls="${id}-corpo" aria-expanded="true" aria-label="Recolher o painel" title="Recolher o painel"><span class="icon">${side}_panel_close</span></button>
+      </div>`;
+}
+
+/** O vídeo escolhido, no centro da página do modelo: o player (ou o andamento, ou o erro), a fala e as ações. */
+function selectedVideo(v: Video, structure: Structure): string {
+  const status = cardStatus(v);
+  const media = v.video_key
+    ? `<div class="player" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"><video controls preload="metadata" playsinline src="${videoSrc(v)}"></video></div>`
+    : status.kind === "error"
+      ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p>${v.error ? `<p class="stage__text">${esc(v.error)}</p>` : ""}</div>`
+      : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">Leva alguns minutos. A página se atualiza sozinha.</p></div>`;
+  const meta = [status.label, formatDate(v.created_at), durationLabel(v, structure), v.resolution, v.aspect_ratio].join(" · ");
+  return `
+      <section class="selected" aria-label="Vídeo escolhido">
+        ${media}
+        <div class="selected__body">
+          <p class="selected__meta">${esc(meta)}</p>
+          <p class="selected__text">${esc(v.prompt)}</p>
+        </div>
+        <div class="selected__actions">
+          ${v.video_key ? `<a class="button button--text interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>Baixar MP4</a>` : ""}
+          <button class="button button--text interactive" type="button" data-fill="${esc(v.prompt)}"><span class="icon">edit</span>Usar esta fala</button>
+          <button class="button button--text interactive" type="button" data-dialog-open="detalhes-${v.id}"><span class="icon">info</span>Detalhes</button>
+        </div>
+      </section>`;
+}
+
+/** A caixa da fala, embaixo do centro: o campo, a duração e o custo estimados e o botão de gerar. */
+function composerBar(f: Extract<Field, { kind: "textarea" }>, value: Values, seconds: string, cost: number | undefined, enabled: boolean): string {
+  return `
+      <div class="composer-bar">
+        <div class="composer-bar__box">
+          <textarea class="composer-bar__input" id="${f.name}" name="${f.name}" rows="2" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-label="${esc(f.label)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}>${esc(value(f.name))}</textarea>
+          <span class="composer-bar__meta"><span data-seconds>${esc(seconds)}</span> · <span data-cost>${cost !== undefined ? `US$ ${cost.toFixed(2)}` : "—"}</span></span>
+          <button class="composer-bar__send interactive" type="submit"${enabled ? "" : " disabled"} aria-label="Gerar vídeo" title="Gerar vídeo"><span class="icon">arrow_upward</span></button>
+        </div>
+        <p class="text-field__supporting" id="${f.name}-ajuda"><span${f.speech ? ` data-words data-default="${esc(f.supporting)}"` : ""}>${esc(f.supporting)}</span><span data-count>${value(f.name).length}/${f.maxLength}</span></p>
+        <p class="composer-bar__note">Vídeos gerados com inteligência artificial pelo OpenRouter. Confira antes de publicar.</p>
+      </div>`;
+}
+
+function emptyState(icon: string, title: string, text: string): string {
+  return `<div class="empty"><span class="icon">${icon}</span><p class="empty__title">${esc(title)}</p><p>${esc(text)}</p></div>`;
+}
+
+/**
+ * "Detalhes": o vídeo maior e tudo sobre ele, organizado em seções. Diálogo
  * básico do M3 nas telas médias e maiores; diálogo de tela cheia no celular.
  */
 function videoDialog(v: Video, structure: Structure): string {
@@ -332,7 +520,7 @@ function videoDialog(v: Video, structure: Structure): string {
   </div>
   <div class="dialog__content">
     ${v.video_key ? `<video class="dialog__video" controls preload="none" playsinline src="${videoSrc(v)}" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"></video>` : ""}
-    <p class="video-card__status video-card__status--${status.kind}"><span class="icon">${status.icon}</span>${esc(status.label)}</p>
+    <p class="status-line status-line--${status.kind}"><span class="icon">${status.icon}</span>${esc(status.label)}</p>
     ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
     <section class="dialog__section">
       <h3 class="dialog__title">Fala</h3>
@@ -423,11 +611,14 @@ function formField(f: Field, value: Values): string {
     case "image":
       return `<label class="file-picker">
           <input type="file" name="${f.name}" accept="image/jpeg,image/png,image/webp"${f.required ? " required" : ""} data-image>
-          <span class="button button--tonal interactive"><span class="icon">add_photo_alternate</span>${esc(f.label)}</span>
-          <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
-          <span class="file-picker__text">
-            <span class="file-picker__name" data-image-name data-empty="${f.required ? "Nenhuma foto" : "Opcional"}">${f.required ? "Nenhuma foto" : "Opcional"}</span>
-            <span class="file-picker__hint">${esc(f.supporting)} JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB.</span>
+          <span class="file-picker__button interactive" title="JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB"><span class="icon">add_photo_alternate</span><span data-image-action>Adicionar foto</span></span>
+          <span class="file-picker__row">
+            <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
+            <span class="file-picker__text">
+              <span class="file-picker__label">${esc(f.label)}</span>
+              <span class="file-picker__name" data-image-name data-empty="${f.required ? "Nenhuma foto" : "Opcional"}">${f.required ? "Nenhuma foto" : "Opcional"}</span>
+              <span class="file-picker__hint">${esc(f.supporting)}</span>
+            </span>
           </span>
         </label>`;
   }
@@ -517,28 +708,63 @@ function snackbar(text: string): string {
 }
 
 /**
- * Barra superior pequena do M3: na página inicial, a marca e o botão de sair;
- * nas outras, o botão de voltar e o título da página.
+ * Barra superior, numa linha só. Na tela inicial e na de vídeos: a marca, as
+ * abas Modelos e Vídeos em pílulas, a busca, o que a página acrescenta (a
+ * escolha entre grade e lista), o botão de sair e a conta. Na página do modelo:
+ * a marca (que volta para Modelos), o nome do modelo, o botão de sair e a conta.
  */
-type Bar = false | { user: User } | { back: string; title: string };
+type Search = { action: string; label: string; q: string; keep?: Record<string, string> };
+type Bar = false | { user: User; tab: "modelos" | "videos"; search: Search; extra?: string } | { user: User; back: string; title: string };
+
+function accountActions(user: User): string {
+  const initial = esc((user.name.trim()[0] ?? "?").toUpperCase());
+  return `<form class="top-app-bar__action" method="post" action="/sair"><button class="icon-button interactive" type="submit" aria-label="Sair da conta de ${esc(user.name)}" title="Sair"><span class="icon">logout</span></button></form>
+    <details class="menu menu--account" data-menu>
+      <summary class="avatar interactive" aria-label="Sua conta: ${esc(user.name)}" title="${esc(user.name)}">${initial}</summary>
+      <div class="menu__list">
+        <p class="menu__header"><span class="menu__name">${esc(user.name)}</span><span class="menu__email">${esc(user.email)}</span></p>
+        <hr class="menu__divider">
+        <form method="post" action="/sair"><button class="menu__item interactive" type="submit"><span class="icon">logout</span>Sair</button></form>
+      </div>
+    </details>`;
+}
+
+function brand(href: string, label?: string): string {
+  return `<a class="top-app-bar__brand interactive" href="${href}"${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ""}>
+    <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
+    ${label ? "" : `<span class="top-app-bar__title">${SITE_NAME}</span>`}
+  </a>`;
+}
 
 function topAppBar(bar: Exclude<Bar, false>): string {
   if ("back" in bar) {
-    return `<header class="top-app-bar top-app-bar--leading" data-app-bar>
-  <a class="icon-button interactive" href="${esc(bar.back)}" aria-label="Voltar" title="Voltar"><span class="icon">arrow_back</span></a>
-  <h1 class="top-app-bar__title">${esc(bar.title)}</h1>
+    return `<header class="top-app-bar" data-app-bar>
+  ${brand(bar.back, "Voltar para Modelos")}
+  <h1 class="top-app-bar__title top-app-bar__title--page">${esc(bar.title)}</h1>
+  <div class="top-app-bar__actions">${accountActions(bar.user)}</div>
 </header>`;
   }
-  return `<header class="top-app-bar" data-app-bar>
-  <a class="top-app-bar__brand" href="/">
-    <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
-    <span class="top-app-bar__title">${SITE_NAME}</span>
-  </a>
-  <form method="post" action="/sair"><button class="icon-button interactive" type="submit" aria-label="Sair da conta de ${esc(bar.user.name)}" title="Sair (${esc(bar.user.email)})"><span class="icon">logout</span></button></form>
+  const { search } = bar;
+  const keep = Object.entries(search.keep ?? {})
+    .filter(([, v]) => v)
+    .map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`)
+    .join("");
+  const tab = (id: string, href: string, label: string) => `<a class="nav-pill interactive" href="${href}"${bar.tab === id ? ' aria-current="page"' : ""}>${label}</a>`;
+  return `<header class="top-app-bar top-app-bar--home" data-app-bar>
+  ${brand("/")}
+  <nav class="nav-pills" aria-label="Seções">${tab("modelos", "/", "Modelos")}${tab("videos", "/videos", "Vídeos")}</nav>
+  <div class="top-app-bar__tools">
+    <form class="search-field" role="search" method="get" action="${search.action}">
+      <span class="icon" aria-hidden="true">search</span>
+      <input class="search-field__input" type="search" name="q" value="${esc(search.q)}" placeholder="${esc(search.label)}" aria-label="${esc(search.label)}">${keep}
+    </form>
+    ${bar.extra ?? ""}
+  </div>
+  <div class="top-app-bar__actions">${accountActions(bar.user)}</div>
 </header>`;
 }
 
-function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }): string {
+function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar; footer?: boolean }): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -558,7 +784,7 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }
   <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
   ${opts.bar ? topAppBar(opts.bar) : ""}
   ${body}
-  <footer class="footer"><div class="footer__inner"><p class="footer__text">Vídeos gerados com inteligência artificial pelo OpenRouter.</p></div></footer>
+  ${opts.footer === false ? "" : `<footer class="footer"><div class="footer__inner"><p class="footer__text">Vídeos gerados com inteligência artificial pelo OpenRouter.</p></div></footer>`}
   <script nonce="${NONCE}">${SCRIPT}</script>
 </body>
 </html>`;
@@ -567,7 +793,9 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }
 /**
  * Barra que muda de cor ao rolar, snackbar, diálogo de detalhes do vídeo e, no
  * formulário: custo e duração estimados, contador da fala, explicação da opção
- * escolhida e prévia da foto. Com vídeo na fila, atualiza a página de tempos
+ * escolhida, prévia da foto e os botões que põem um texto na caixa da fala
+ * (falas prontas e "Usar esta fala"). Menus dos cards e da conta, e os painéis
+ * da página do modelo que se recolhem (lembrados no navegador). Com vídeo na fila, atualiza a página de tempos
  * em tempos.
  */
 const SCRIPT = `(() => {
@@ -580,13 +808,43 @@ const SCRIPT = `(() => {
 
   document.addEventListener("click", (e) => {
     const el = e.target instanceof Element ? e.target : null;
+    // Menu aberto: tocar fora dele, ou escolher um item, fecha.
+    for (const m of document.querySelectorAll("details[data-menu][open]")) if (!m.contains(el) || (el && el.closest(".menu__item"))) m.open = false;
     const close = el && el.closest("[data-snackbar-close]");
     if (close) close.closest("[data-snackbar]").hidden = true;
-    // Ver mais: abre o diálogo do vídeo; fechar, ou tocar fora dele, fecha.
+    // Fala pronta ou "Usar esta fala": o texto vai para a caixa da fala.
+    const fill = el && el.closest("[data-fill]");
+    const speechBox = document.querySelector("[data-speech]");
+    if (fill && speechBox) {
+      speechBox.value = fill.dataset.fill;
+      speechBox.dispatchEvent(new Event("input", { bubbles: true }));
+      speechBox.focus();
+    }
+    // Detalhes: abre o diálogo do vídeo; fechar, ou tocar fora dele, fecha.
     const open = el && el.closest("[data-dialog-open]");
     if (open) document.getElementById(open.dataset.dialogOpen).showModal();
     if (el && (el.closest("[data-dialog-close]") || el.matches("dialog"))) el.closest("dialog").close();
   });
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape") for (const m of document.querySelectorAll("details[data-menu][open]")) { m.open = false; m.querySelector("summary").focus(); }
+  });
+
+  // Painéis da página do modelo: o botão recolhe e abre; a escolha fica guardada.
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+  const setPane = (pane, open) => {
+    const b = pane.querySelector("[data-pane-toggle]"), side = b.dataset.paneToggle;
+    pane.classList.toggle("is-collapsed", !open);
+    b.setAttribute("aria-expanded", String(open));
+    b.setAttribute("aria-label", open ? "Recolher o painel" : "Abrir o painel");
+    b.title = b.getAttribute("aria-label");
+    b.querySelector(".icon").textContent = side + (open ? "_panel_close" : "_panel_open");
+    store.set("painel-" + pane.dataset.pane, open ? "aberto" : "fechado");
+  };
+  for (const pane of document.querySelectorAll("[data-pane]")) {
+    if (store.get("painel-" + pane.dataset.pane) === "fechado") setPane(pane, false);
+    pane.querySelector("[data-pane-toggle]").addEventListener("click", () => setPane(pane, pane.classList.contains("is-collapsed")));
+  }
+
   // Diálogo fechado: o vídeo dele para de tocar.
   for (const d of document.querySelectorAll("dialog")) d.addEventListener("close", () => d.querySelectorAll("video").forEach((v) => v.pause()));
 
@@ -594,6 +852,8 @@ const SCRIPT = `(() => {
   let dirty = false;
   if (f) {
     f.addEventListener("input", () => { dirty = true; });
+    // Campo obrigatório no painel recolhido (a foto do HeyGen): abre o painel para o aviso aparecer.
+    f.addEventListener("invalid", (e) => { const pane = e.target.closest("[data-pane].is-collapsed"); if (pane) setPane(pane, true); }, true);
     const cfg = JSON.parse(f.dataset.composer);
     const val = (name) => (f.elements[name] ? f.elements[name].value || "" : "");
     const speech = f.querySelector("[data-speech]");
@@ -628,9 +888,10 @@ const SCRIPT = `(() => {
     update();
 
     const image = f.querySelector("[data-image]"), preview = f.querySelector("[data-preview]"), name = f.querySelector("[data-image-name]");
-    image.addEventListener("change", () => {
+    if (image) image.addEventListener("change", () => {
       const file = image.files[0];
       name.textContent = file ? file.name : name.dataset.empty;
+      f.querySelector("[data-image-action]").textContent = file ? "Trocar foto" : "Adicionar foto";
       preview.innerHTML = file ? '<img alt="">' : '<span class="icon">face</span>';
       if (file) preview.firstChild.src = URL.createObjectURL(file);
     });
