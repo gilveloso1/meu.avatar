@@ -4,9 +4,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
-  // A cada 2 minutos: confere no OpenRouter os vídeos que ainda estão na fila,
-  // caso o aviso (webhook) não chegue.
-  "triggers": { "crons": ["*/2 * * * *"] },
+  // A cada minuto: confere no OpenRouter os vídeos que ainda estão na fila,
+  // caso o aviso (webhook) não chegue, e manda ao contêiner o próximo áudio a
+  // tratar e a próxima edição rápida. Rodadas podem se sobrepor (uma edição
+  // leva ~1 min): cada vídeo sai da fila numa instrução só do banco, e o
+  // contêiner faz um vídeo por vez.
+  "triggers": { "crons": ["* * * * *"] },
   // O estúdio no domínio próprio (zona meuavatar.ia.br na mesma conta). O www
   // redireciona para o endereço sem www (src/index.ts). O workers.dev continua
   // ligado: vídeos pedidos antes da troca mandam o aviso para lá.

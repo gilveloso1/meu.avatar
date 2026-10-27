@@ -14,7 +14,7 @@ Você no navegador ──▶ Worker "meu-avatar" (Cloudflare), com conta (e-mail
 OpenRouter ──aviso──▶ POST /openrouter/webhook
                         └─ confere o status na API; pronto: baixa o MP4 para o R2
 
-A cada 2 minutos ──▶ o mesmo Worker confere os vídeos ainda na fila
+A cada minuto ────▶ o mesmo Worker confere os vídeos ainda na fila
                      (rede de segurança se o aviso se perder)
                      e manda um vídeo pronto para o contêiner de áudio:
                      Contêiner "AudioFixer" (ffmpeg + DeepFilterNet 3)
@@ -194,7 +194,7 @@ Portadas do estuda.mais (`src/auth.ts`):
 | Domínio | <https://meuavatar.ia.br> e www (domínios personalizados do Worker, no ar desde 25/10/2026; [detalhes](#o-domínio-meuavatariabr)) |
 | Banco D1 | `meu-avatar` (o id está em `wrangler.jsonc`) |
 | Bucket R2 | `meu-avatar` |
-| Agendamento | a cada 2 minutos (`triggers.crons` em `wrangler.jsonc`) |
+| Agendamento | a cada minuto (`triggers.crons` em `wrangler.jsonc`; era a cada 2 até 27/10/2026, e a edição rápida esperava até 2 min na fila) |
 | Contêiner de áudio | `AudioFixer` (aplicação `meu-avatar-audiofixer`), tipo "basic", 1 instância (`containers` em `wrangler.jsonc`); no ar desde 25/10/2026. Primeiro vídeo tratado (25 s, 720p) em ~1 min 20 s, contando a partida do contêiner |
 
 ## Onde ficam as chaves
