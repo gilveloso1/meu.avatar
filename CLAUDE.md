@@ -111,8 +111,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   só no menu do perfil. Não há rodapé.
 - Celular (até 599 px): só duas vistas (cards dois por linha e Detalhes, este só
   com Texto e Status); os chips numa linha só que rola para o lado; a
-  configuração sem o card branco, os campos na largura toda; setas por cima do
-  vídeo, barra do player na largura toda e o FAB "Novo vídeo" preso no canto.
+  configuração sem o card branco e sem a sobra embaixo do botão, os campos na
+  largura toda; na página do vídeo, o vídeo na largura toda, o fundo escuro só do
+  tamanho dele mais a barra do player, sem as setas de anterior e próximo; o FAB
+  "Novo vídeo" preso no canto.
 
 ## Contas
 

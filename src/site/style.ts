@@ -793,10 +793,13 @@ a.frame { display: block; }
 /* Celular: as setas vão por cima do vídeo (sem a margem dos lados), a barra ocupa a largura toda
    e os cards médios ficam dois por linha. */
 @media (max-width: 599px) {
-  .viewer__stage { padding: 12px 12px 8px; }
-  .viewer__nav--prev { left: 16px; }
-  .viewer__nav--next { right: 16px; }
-  .vbar { width: 100%; }
+  /* Página do vídeo: o vídeo na largura toda e o fundo só do tamanho dele (mais a barra);
+     sem as setas de anterior e próximo, que ficariam por cima do vídeo. */
+  .viewer__stage { display: block; min-height: 0; padding: 0 0 8px; }
+  .viewer__nav { display: none; }
+  .viewer__player { height: auto; container-type: normal; }
+  .viewer__player .player__frame { width: 100%; height: auto; border-radius: 0; box-shadow: none; }
+  .vbar { width: auto; margin: 8px 8px 0; }
   .vbar__time { min-width: 0; }
   .vbar__seek { min-width: 0; margin: 0 4px; }
   .frames, .library[data-grouped="false"]:not([data-view="d"]) .library__groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -812,6 +815,8 @@ a.frame { display: block; }
   /* Página do modelo: a configuração sem o card branco, os campos na largura toda. */
   .pane--config { --field-surface: var(--md-sys-color-surface); padding: 0; border-radius: 0; background: none; }
   .pane--config .form-section, .pane--config .pane__footer { padding-left: 0; padding-right: 0; }
+  /* A sobra embaixo do botão só serve no painel que rola por dentro (tela larga). */
+  .pane__footer { padding-bottom: 8px; }
   .frame { padding: 8px; border-radius: var(--md-sys-shape-corner-extra-large); }
   .vrows__head, .vrow { grid-template-columns: 48px minmax(0, 1fr) 88px; }
   .vrows__head > :nth-child(n + 4), .vrow > :nth-child(n + 4) { display: none; }
