@@ -48,24 +48,40 @@ O contêiner não tem acesso à internet (`enableInternet = false`).
 ## Edição rápida
 
 Botão "Edição rápida" no vídeo pronto das estruturas com `quickEdit` (hoje só
-o HeyGen). O clique põe o vídeo na fila (`edit_status`: pending → processing →
-done/failed); o agendamento manda um por rodada para o mesmo contêiner
-(`POST /editar`), que roda `container/editar.py`:
+o HeyGen). O botão abre a **prévia**, no próprio navegador e sem gerar
+arquivo: o script baixa o vídeo, acha os silêncios no áudio (Web Audio, pico
+a cada 10 ms) e toca o original pulando as pausas, com o zoom de cada trecho
+(um `scale` no vídeo). Pausas (curtas, médias, longas) e câmera (parada, zoom,
+close) mudam a prévia na hora; as regras estão em `src/quickedit.ts` e no
+`editar.py` (mudou uma, mude a outra).
+
+"Gerar vídeo editado" manda os trechos da prévia e põe o vídeo na fila
+(`edit_status`: pending → processing → done/failed; o plano fica em
+`edit_plan`). O agendamento manda um por rodada para o mesmo contêiner
+(`POST /editar`, plano no cabeçalho `x-plano`), que roda
+`container/editar.py` com exatamente aqueles cortes. Se o navegador não
+conseguir ler o áudio, vai só a escolha de pausas e câmera, e o contêiner
+acha os silêncios sozinho. O que o `editar.py` faz:
 
 1. corta os silêncios: pausas de mais de 0,25 s (abaixo de −35 dB) viram
-   0,16 s, e some o silêncio do começo e do fim;
-2. a cada corte muda o enquadramento (aberto, médio 1,25×, aberto, close
-   1,5×), como se fossem duas câmeras; o zoom mira no rosto, no terço de cima;
+   0,08 a 0,3 s, conforme as pausas escolhidas, e some o silêncio do começo
+   e do fim;
+2. a cada corte muda o enquadramento (no "Close": aberto, médio 1,25×,
+   aberto, close 1,5×), como se fossem duas câmeras; o zoom mira no rosto,
+   no terço de cima;
 3. volume em −14 LUFS e pico até −1,5 dBFS (loudnorm linear).
 
 Parte da versão com o áudio tratado, se houver. O editado fica em
 `videos/<id>.editado.mp4`; o player passa a mostrar o editado, com "Ver
-original" ao lado. Se falhar, o motivo aparece em "Detalhes" e o botão volta.
+original" ao lado, e o botão continua lá para refazer com outras escolhas. Se
+falhar, o motivo aparece em "Detalhes".
 Uma edição que passa de 20 minutos vira falha.
 
 Medido em 27/10/2026 no último vídeo do HeyGen (40 s, 720p, 9:16): 40,2 s →
 35,0 s em 13 trechos; 2 min 34 s no contêiner com os limites do tipo "basic"
-(`docker run --cpus 0.25 --memory 1g`). Para testar sem o site:
+(`docker run --cpus 0.25 --memory 1g`). A prévia no Chromium achou 12 cortes
+(35,2 s) e o contêiner, com esses trechos, entregou 35,3 s. Para testar sem o
+site:
 `python3 container/editar.py entrada.mp4 saida.mp4` (precisa de ffmpeg).
 
 A foto do avatar fica pública em `/midia/avatares/<uuid>.jpg` (nome impossível

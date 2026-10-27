@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { handle } from "../src/index";
-import type { AudioApi } from "../src/audio";
+import type { AudioApi, ContainerPlan } from "../src/audio";
 import { randomToken, sha256 } from "../src/auth";
 import type { VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
 
@@ -100,13 +100,15 @@ export function sessionPair(res: Response): string {
 export class FakeAudioApi implements AudioApi {
   calls = 0;
   edits = 0;
+  plans: ContainerPlan[] = [];
   fail: string | null = null;
   async treat(mp4: ReadableStream, size: number) {
     this.calls++;
     return this.answer(mp4, size, "+tratado");
   }
-  async edit(mp4: ReadableStream, size: number) {
+  async edit(mp4: ReadableStream, size: number, plan: ContainerPlan) {
     this.edits++;
+    this.plans.push(plan);
     return this.answer(mp4, size, "+editado");
   }
   private async answer(mp4: ReadableStream, size: number, suffix: string) {

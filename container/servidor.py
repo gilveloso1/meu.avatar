@@ -1,6 +1,7 @@
 """Servidor do contêiner de áudio: POST /tratar com o MP4 no corpo devolve o
 MP4 com o áudio tratado (tratar.sh); POST /editar devolve a edição rápida
-(editar.py). GET /saude responde ok. Um vídeo por vez."""
+(editar.py), com o plano da prévia, se houver, no cabeçalho x-plano (JSON).
+GET /saude responde ok. Um vídeo por vez."""
 import os, subprocess, tempfile, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -32,7 +33,9 @@ class Handler(BaseHTTPRequestHandler):
                         return self.responder(400, b"corpo incompleto", "text/plain")
                     f.write(bloco)
                     restante -= len(bloco)
-            r = subprocess.run([*comando, entrada, saida], capture_output=True, timeout=600)
+            plano = self.headers.get("x-plano")
+            extra = [plano] if plano and self.path == "/editar" else []
+            r = subprocess.run([*comando, entrada, saida, *extra], capture_output=True, timeout=600)
             if r.returncode != 0:
                 return self.responder(500, (r.stderr or b"falhou")[-2000:], "text/plain")
             self.send_response(200)

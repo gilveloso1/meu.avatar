@@ -11,6 +11,9 @@
  * Fica ligado alguns minutos depois de cada vídeo e depois dorme sozinho.
  */
 import { Container, getContainer } from "@cloudflare/containers";
+import type { containerPlan } from "./quickedit";
+
+export type ContainerPlan = ReturnType<typeof containerPlan>;
 
 export class AudioFixer extends Container {
   defaultPort = 8080;
@@ -23,7 +26,7 @@ export interface AudioApi {
   /** Devolve o MP4 com o áudio tratado (corpo com content-length) ou lança erro. */
   treat(mp4: ReadableStream, size: number): Promise<Response>;
   /** Devolve o MP4 com a edição rápida (corpo com content-length) ou lança erro. */
-  edit(mp4: ReadableStream, size: number): Promise<Response>;
+  edit(mp4: ReadableStream, size: number, plan: ContainerPlan): Promise<Response>;
 }
 
 export class ContainerAudio implements AudioApi {
@@ -33,14 +36,14 @@ export class ContainerAudio implements AudioApi {
     return this.post("/tratar", "Tratamento do áudio", mp4, size);
   }
 
-  edit(mp4: ReadableStream, size: number): Promise<Response> {
-    return this.post("/editar", "Edição rápida", mp4, size);
+  edit(mp4: ReadableStream, size: number, plan: ContainerPlan): Promise<Response> {
+    return this.post("/editar", "Edição rápida", mp4, size, { "x-plano": JSON.stringify(plan) });
   }
 
-  private async post(path: string, what: string, mp4: ReadableStream, size: number): Promise<Response> {
+  private async post(path: string, what: string, mp4: ReadableStream, size: number, headers: Record<string, string> = {}): Promise<Response> {
     // Uma instância só: um vídeo por vez, na ordem em que ficaram prontos.
     const res = await getContainer(this.ns, "audio").fetch(
-      new Request(`http://audio${path}`, { method: "POST", body: mp4, headers: { "content-length": String(size) } }),
+      new Request(`http://audio${path}`, { method: "POST", body: mp4, headers: { "content-length": String(size), ...headers } }),
     );
     if (!res.ok) throw new Error(`${what} falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
     if (!res.body || !res.headers.get("content-length")) throw new Error(`${what} voltou sem o vídeo.`);

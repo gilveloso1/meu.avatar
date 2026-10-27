@@ -37,6 +37,8 @@ export interface Video {
   edited_key: string | null;
   edit_error: string | null;
   edit_started_at: string | null;
+  /** O plano da edição (src/quickedit.ts), em JSON. */
+  edit_plan: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -190,14 +192,14 @@ export class Db {
     return result.meta.changes;
   }
 
-  /** Põe o vídeo na fila da edição rápida, se ele não está nela. */
-  queueEdit(id: string, nowIso: string): Promise<Video | null> {
+  /** Põe o vídeo na fila da edição rápida, com o plano, se ele não está nela. */
+  queueEdit(id: string, plan: string, nowIso: string): Promise<Video | null> {
     return this.d1
       .prepare(
-        `UPDATE videos SET edit_status = 'pending', edit_error = NULL, updated_at = ?
+        `UPDATE videos SET edit_status = 'pending', edit_plan = ?, edit_error = NULL, updated_at = ?
          WHERE id = ? AND (edit_status IS NULL OR edit_status NOT IN ('pending', 'processing')) RETURNING *`,
       )
-      .bind(nowIso, id)
+      .bind(plan, nowIso, id)
       .first<Video>();
   }
 

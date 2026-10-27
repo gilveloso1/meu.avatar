@@ -12,7 +12,12 @@ no HeyGen Avatar IV):
 O rosto do avatar fica no terço de cima do quadro (foto de frente, meio
 corpo): o zoom mira no centro, um pouco acima do meio.
 
-  editar.py entrada.mp4 saida.mp4
+O plano (opcional, JSON) vem da prévia do site (src/quickedit.ts): "folga"
+(s), "zooms" (em ordem, um a cada corte) e "trechos" ([início, fim, zoom] no
+original). Com os trechos, os cortes são exatamente os da prévia; sem eles,
+os silêncios são achados aqui, com as mesmas regras.
+
+  editar.py entrada.mp4 saida.mp4 ['{"folga": 0.08, "zooms": [1, 1.25]}']
 """
 import json
 import re
@@ -55,7 +60,7 @@ def analisar(entrada):
     return duracao, silencios, (int(w), int(h)), medida
 
 
-def trechos(duracao, silencios):
+def trechos(duracao, silencios, folga=FOLGA):
     """Os trechos com fala, com um pouco de pausa de cada lado."""
     falas, fim = [], 0.0
     for s, e in silencios:
@@ -67,7 +72,8 @@ def trechos(duracao, silencios):
         falas.append((fim, duracao))
     partes = []
     for a, b in falas:
-        a, b = max(0.0, a - FOLGA), min(duracao, b + FOLGA)
+        # Com folga grande, a pausa toda some: o trecho começa onde o anterior acabou.
+        a, b = max(0.0, a - folga, partes[-1][1] if partes else 0.0), min(duracao, b + folga)
         # Fala curta demais para um corte: junta com a anterior, pausa e tudo.
         if partes and b - a < TRECHO_MIN:
             partes[-1][1] = b
@@ -84,15 +90,36 @@ def enquadramento(zoom, w, h):
     return f"crop={cw}:{ch}:{x}:{y},scale={w}:{h}:flags=lanczos,setsar=1"
 
 
-def main(entrada, saida):
+def do_plano(plano, duracao, silencios):
+    """Os trechos com o zoom de cada um: os do plano, conferidos, ou achados aqui."""
+    folga = plano.get("folga", FOLGA)
+    zooms = plano.get("zooms", ZOOMS)
+    if not (isinstance(folga, (int, float)) and 0 <= folga <= 0.5):
+        raise SystemExit("Folga inválida no plano.")
+    if not (isinstance(zooms, list) and zooms and all(isinstance(z, (int, float)) and 1 <= z <= 2 for z in zooms)):
+        raise SystemExit("Zooms inválidos no plano.")
+    if "trechos" not in plano:
+        return [(a, b, zooms[i % len(zooms)]) for i, (a, b) in enumerate(trechos(duracao, silencios, folga))]
+    partes, fim = [], 0.0
+    for t in plano["trechos"]:
+        if not (isinstance(t, list) and len(t) == 3 and all(isinstance(n, (int, float)) for n in t) and 1 <= t[2] <= 2):
+            raise SystemExit("Trecho inválido no plano.")
+        a, b = max(float(t[0]), fim), min(float(t[1]), duracao)
+        if b - a > 0.05:
+            partes.append((a, b, float(t[2])))
+            fim = b
+    return partes
+
+
+def main(entrada, saida, plano=None):
     duracao, silencios, (w, h), m = analisar(entrada)
-    partes = trechos(duracao, silencios)
+    partes = do_plano(json.loads(plano) if plano else {}, duracao, silencios)
     if not partes:
         raise SystemExit("O vídeo não tem fala.")
     filtros, rotulos = [], []
-    for i, (a, b) in enumerate(partes):
+    for i, (a, b, zoom) in enumerate(partes):
         d = b - a
-        quadro = enquadramento(ZOOMS[i % len(ZOOMS)], w, h)
+        quadro = enquadramento(zoom, w, h)
         filtros.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS,{quadro}[v{i}]")
         # Fades de 10 ms nas pontas: o corte não estala.
         filtros.append(f"[0:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS,afade=t=in:d=0.01,afade=t=out:st={d - 0.01:.3f}:d=0.01[a{i}]")
@@ -108,9 +135,9 @@ def main(entrada, saida):
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-movflags", "+faststart", saida,
     )
-    total = sum(b - a for a, b in partes)
+    total = sum(b - a for a, b, _ in partes)
     print(f"{len(partes)} trechos, {duracao:.1f} s → {total:.1f} s", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(*sys.argv[1:4])

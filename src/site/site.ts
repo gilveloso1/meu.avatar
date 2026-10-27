@@ -21,6 +21,7 @@ import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth
 import type { Db, User, Video, VideoStatus } from "../db";
 import type { VideoModel } from "../openrouter";
 import { styleById } from "../prompt";
+import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, RULES } from "../quickedit";
 import { canUse, type Defaults, estimate, type Field, lowestPrice, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
 import { ForbiddenError, InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
 import { CSS } from "./style";
@@ -39,7 +40,7 @@ const REFRESH_SECONDS = 20;
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
   "add", "add_photo_alternate", "arrow_drop_down", "arrow_upward", "check", "check_circle", "close", "content_cut", "download", "error", "face", "graphic_eq", "grid_view", "left_panel_close", "left_panel_open", "more_vert", "right_panel_close", "right_panel_open",
-  "edit", "hourglass_top", "info", "lock", "logout", "movie", "person_add", "play_arrow", "record_voice_over", "schedule", "search", "send", "subdirectory_arrow_right",
+  "edit", "hourglass_top", "info", "lock", "logout", "movie", "pause", "person_add", "play_arrow", "record_voice_over", "schedule", "search", "send", "subdirectory_arrow_right",
   "videocam", "view_list",
 ];
 
@@ -126,7 +127,7 @@ export class Site {
     }
 
     const quickEdit = /^\/videos\/([0-9a-f-]{36})\/edicao-rapida$/.exec(path);
-    if (post && quickEdit) return this.quickEdit(user, quickEdit[1]!);
+    if (post && quickEdit) return this.quickEdit(request, user, quickEdit[1]!);
 
     // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo;
     // /videos/<id>.editado.mp4: a edição rápida.
@@ -326,13 +327,16 @@ ${error ? snackbar(error) : ""}`;
     return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, footer: false, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
   }
 
-  /** Botão "Edição rápida": põe o vídeo na fila do contêiner e volta para ele. */
-  private async quickEdit(user: User, id: string): Promise<Response> {
+  /** "Gerar vídeo editado", na prévia da edição rápida: põe o vídeo na fila do contêiner e volta para ele. */
+  private async quickEdit(request: Request, user: User, id: string): Promise<Response> {
     const video = await this.db.videoById(id);
     const structure = video ? structureById(video.structure) : undefined;
     if (!video || !structure) return new Response("não encontrado", { status: 404 });
+    const form = await request.formData();
+    const field = (name: string) => String(form.get(name) ?? "");
     try {
-      await this.studio.requestQuickEdit(video, user);
+      const plan = parsePlan(field("pausa") || DEFAULT_PAUSE, field("camera") || DEFAULT_CAMERA, field("trechos"));
+      await this.studio.requestQuickEdit(video, user, plan);
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
@@ -486,8 +490,13 @@ function selectedVideo(v: Video, structure: Structure, showOriginal: boolean): s
   // Com a edição rápida pronta, o player mostra a editada; "Ver original" troca.
   const edited = Boolean(v.edited_key) && !showOriginal;
   const src = edited ? `/videos/${v.id}.editado.mp4` : videoSrc(v);
+  const quick = canQuickEdit(v, structure);
   const media = v.video_key
-    ? `<div class="player" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"><video controls preload="metadata" playsinline src="${src}"></video></div>`
+    ? `<div class="player" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"${quick ? " data-player" : ""}><div class="player__frame"><video controls preload="metadata" playsinline src="${src}"></video>${
+        quick
+          ? `<div class="player__controls" data-qe-controls hidden><button class="icon-button interactive" type="button" data-qe-play aria-label="Tocar a prévia" title="Tocar a prévia"><span class="icon">play_arrow</span></button><span class="player__time" data-qe-time></span></div>`
+          : ""
+      }</div></div>`
     : status.kind === "error"
       ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p>${v.error ? `<p class="stage__text">${esc(v.error)}</p>` : ""}</div>`
       : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">Leva alguns minutos. A página se atualiza sozinha.</p></div>`;
@@ -501,27 +510,72 @@ function selectedVideo(v: Video, structure: Structure, showOriginal: boolean): s
         </div>
         <div class="selected__actions">
           ${v.video_key ? `<a class="button button--text interactive" href="${edited ? `/videos/${v.id}.editado.mp4` : `/videos/${v.id}.mp4`}?baixar" download><span class="icon">download</span>Baixar MP4</a>` : ""}
-          ${canQuickEdit(v, structure) ? `<button class="button button--text interactive" type="submit" form="edicao-rapida"><span class="icon">content_cut</span>Edição rápida</button>` : ""}
+          ${quick ? `<button class="button button--text interactive" type="button" data-qe-open><span class="icon">content_cut</span>Edição rápida</button>` : ""}
           ${v.edited_key ? `<a class="button button--text interactive" href="/modelo/${structure.id}?video=${v.id}${edited ? "&amp;original" : ""}"><span class="icon">movie</span>${edited ? "Ver original" : "Ver editado"}</a>` : ""}
           <button class="button button--text interactive" type="button" data-fill="${esc(v.prompt)}"><span class="icon">edit</span>Usar esta fala</button>
           <button class="button button--text interactive" type="button" data-dialog-open="detalhes-${v.id}"><span class="icon">info</span>Detalhes</button>
         </div>
+        ${quick ? quickEditPreview(v) : ""}
       </section>`;
 }
 
 /**
+ * Prévia da edição rápida, aberta pelo botão: o player toca o vídeo pulando as
+ * pausas e com o zoom de cada trecho; pausas e câmera mudam a prévia na hora.
+ * "Gerar vídeo editado" manda os trechos para o contêiner (formulário
+ * #edicao-rapida, fora do formulário da fala).
+ */
+function quickEditPreview(v: Video): string {
+  const config = {
+    src: videoSrc(v),
+    rules: RULES,
+    pauses: Object.fromEntries(PAUSES.map((p) => [p.value, p.pad])),
+    cameras: Object.fromEntries(CAMERAS.map((c) => [c.value, c.zooms])),
+  };
+  return `<section class="quick-edit" data-quick-edit='${esc(JSON.stringify(config))}' hidden aria-labelledby="edicao-rapida-titulo">
+          <div class="quick-edit__head">
+            <h2 class="quick-edit__title" id="edicao-rapida-titulo">Edição rápida</h2>
+            <p class="quick-edit__summary" data-qe-summary role="status"></p>
+          </div>
+          <div class="quick-edit__fields">
+            ${segmented("pausa", "Pausas", PAUSES, DEFAULT_PAUSE, "edicao-rapida")}
+            ${segmented("camera", "Câmera", CAMERAS, DEFAULT_CAMERA, "edicao-rapida")}
+          </div>
+          <input type="hidden" name="trechos" form="edicao-rapida" data-qe-parts>
+          <div class="quick-edit__actions">
+            <button class="button button--text interactive" type="button" data-qe-close>Cancelar</button>
+            <button class="button button--filled interactive" type="submit" form="edicao-rapida"><span class="icon">content_cut</span>Gerar vídeo editado</button>
+          </div>
+        </section>`;
+}
+
+/**
  * O botão "Edição rápida" aparece no vídeo pronto da estrutura que tem edição,
- * enquanto ela não foi feita (ou falhou) e o áudio não está na fila.
+ * quando nem ela nem o tratamento do áudio estão na fila (editado, dá para refazer).
  */
 function canQuickEdit(v: Video, structure: Structure): boolean {
   return (
     structure.quickEdit &&
     v.status === "completed" &&
     Boolean(v.video_key) &&
-    (v.edit_status === null || v.edit_status === "failed") &&
+    v.edit_status !== "pending" &&
+    v.edit_status !== "processing" &&
     v.audio_status !== "pending" &&
     v.audio_status !== "processing"
   );
+}
+
+/** Escolha única em botão segmentado; `form` liga os botões a um formulário de fora. */
+function segmented(name: string, label: string, options: { value: string; label: string }[], selected: string, form?: string): string {
+  const owner = form ? ` form="${form}"` : "";
+  return `<fieldset class="segmented-field">
+          <legend class="segmented-field__label">${esc(label)}</legend>
+          <div class="segmented-button">${options
+            .map(
+              (o) => `<label class="segmented-button__segment interactive"><input type="radio" name="${name}" value="${esc(o.value)}"${owner}${o.value === selected ? " checked" : ""}><span class="icon segmented-button__check" aria-hidden="true">check</span><span>${esc(o.label)}</span></label>`,
+            )
+            .join("")}</div>
+        </fieldset>`;
 }
 
 /** A caixa da fala, embaixo do centro: o campo, a duração e o custo estimados e o botão de gerar. */
@@ -648,17 +702,8 @@ function formField(f: Field, value: Values): string {
           ${supporting ? `<p class="text-field__supporting" id="${f.name}-ajuda">${supporting}</p>` : ""}
         </div>`;
     }
-    case "segmented": {
-      const selected = value(f.name);
-      return `<fieldset class="segmented-field">
-          <legend class="segmented-field__label">${esc(f.label)}</legend>
-          <div class="segmented-button">${f.options
-            .map(
-              (o) => `<label class="segmented-button__segment interactive"><input type="radio" name="${f.name}" value="${esc(o.value)}"${o.value === selected ? " checked" : ""}><span class="icon segmented-button__check" aria-hidden="true">check</span><span>${esc(o.label)}</span></label>`,
-            )
-            .join("")}</div>
-        </fieldset>`;
-    }
+    case "segmented":
+      return segmented(f.name, f.label, f.options, value(f.name));
     case "image":
       return `<label class="file-picker">
           <input type="file" name="${f.name}" accept="image/jpeg,image/png,image/webp"${f.required ? " required" : ""} data-image>
@@ -846,8 +891,8 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar; 
  * formulário: custo e duração estimados, contador da fala, explicação da opção
  * escolhida, prévia da foto e os botões que põem um texto na caixa da fala
  * (falas prontas e "Usar esta fala"). Menus dos cards e da conta, e os painéis
- * da página do modelo que se recolhem (lembrados no navegador). Com vídeo na fila, atualiza a página de tempos
- * em tempos.
+ * da página do modelo que se recolhem (lembrados no navegador). A prévia da edição
+ * rápida. Com vídeo na fila, atualiza a página de tempos em tempos.
  */
 const SCRIPT = `(() => {
   const bar = document.querySelector("[data-app-bar]");
@@ -950,6 +995,107 @@ const SCRIPT = `(() => {
     f.addEventListener("submit", () => { f.querySelector("[type=submit]").disabled = true; });
   }
 
+  // Edição rápida: a prévia acha os silêncios no áudio (pico de cada 10 ms) e monta os
+  // trechos com as regras do contêiner; o player pula as pausas e dá o zoom de cada trecho.
+  const qe = document.querySelector("[data-quick-edit]");
+  if (qe) {
+    const cfg = JSON.parse(qe.dataset.quickEdit), R = cfg.rules;
+    const player = document.querySelector("[data-player]"), v = player.querySelector("video");
+    const controls = player.querySelector("[data-qe-controls]"), play = controls.querySelector("[data-qe-play]"), clock = controls.querySelector("[data-qe-time]");
+    const opener = document.querySelector("[data-qe-open]"), summary = qe.querySelector("[data-qe-summary]"), input = qe.querySelector("[data-qe-parts]");
+    const form = document.getElementById("edicao-rapida"), savedSrc = v.getAttribute("src");
+    let silences = null, duration = 0, parts = [], total = 0, raf = 0;
+    const fmt = (s) => s.toFixed(1).replace(".", ",") + " s";
+    const findSilences = (buf) => {
+      const win = Math.round(buf.sampleRate / 100), n = Math.ceil(buf.length / win), limit = Math.pow(10, R.noiseDb / 20);
+      const chans = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i));
+      const out = [];
+      let start = -1;
+      for (let w = 0; w <= n; w++) {
+        let peak = 1;
+        if (w < n) { peak = 0; for (const c of chans) for (let i = w * win, e = Math.min(c.length, i + win); i < e; i++) peak = Math.max(peak, Math.abs(c[i])); }
+        const t = Math.min((w * win) / buf.sampleRate, buf.duration);
+        if (peak < limit) { if (start < 0) start = t; }
+        else if (start >= 0) { if (t - start >= R.minSilence) out.push([start, t]); start = -1; }
+      }
+      return out;
+    };
+    const build = () => {
+      const pad = cfg.pauses[form.elements.pausa.value], zooms = cfg.cameras[form.elements.camera.value];
+      const speech = [];
+      let end = 0;
+      for (const [a, b] of silences) { if (a - end > R.minSpeech) speech.push([end, a]); end = b; }
+      if (duration - end > R.minSpeech) speech.push([end, duration]);
+      const out = [];
+      for (const [a, b] of speech) {
+        const last = out[out.length - 1], from = Math.max(0, a - pad, last ? last[1] : 0), to = Math.min(duration, b + pad);
+        if (last && to - from < R.minPart) last[1] = to; else out.push([from, to]);
+      }
+      parts = out.map(([a, b], i) => [+a.toFixed(3), +b.toFixed(3), zooms[i % zooms.length]]);
+      total = parts.reduce((s, p) => s + p[1] - p[0], 0);
+      input.value = parts.length ? JSON.stringify(parts) : "";
+      summary.textContent = parts.length ? fmt(duration) + " → " + fmt(total) + " · " + (parts.length - 1) + " cortes" : "Não achei fala no áudio.";
+      play.disabled = !parts.length;
+    };
+    // Zoom z mirando no rosto: o mesmo recorte do contêiner, como origem do scale.
+    const frame = (z) => {
+      const y = Math.min(Math.max(0, R.faceY - R.faceInFrame / z), 1 - 1 / z);
+      v.style.transform = z > 1 ? "scale(" + z + ")" : "";
+      v.style.transformOrigin = z > 1 ? "50% " + ((y * z) / (z - 1)) * 100 + "%" : "";
+    };
+    const tick = () => {
+      if (!parts.length) return;
+      const t = v.currentTime;
+      let i = parts.findIndex((p) => t < p[1] - 0.02);
+      if (i < 0) { v.pause(); i = 0; v.currentTime = parts[0][0]; }
+      else if (t < parts[i][0] - 0.02) v.currentTime = parts[i][0];
+      frame(parts[i][2]);
+      const done = parts.slice(0, i).reduce((s, p) => s + p[1] - p[0], 0) + Math.max(0, t - parts[i][0]);
+      clock.textContent = fmt(Math.min(done, total)) + " / " + fmt(total);
+      if (!v.paused) raf = requestAnimationFrame(tick);
+    };
+    const setPlaying = (on) => {
+      play.querySelector(".icon").textContent = on ? "pause" : "play_arrow";
+      play.setAttribute("aria-label", on ? "Pausar a prévia" : "Tocar a prévia");
+      play.title = play.getAttribute("aria-label");
+    };
+    const toggle = () => {
+      if (!qe.hidden && parts.length) v.paused ? v.play() : v.pause();
+    };
+    v.addEventListener("play", () => { setPlaying(true); if (!qe.hidden) { cancelAnimationFrame(raf); tick(); } });
+    v.addEventListener("pause", () => setPlaying(false));
+    v.addEventListener("click", () => { if (!qe.hidden) toggle(); });
+    play.addEventListener("click", toggle);
+    opener.addEventListener("click", async () => {
+      dirty = true;
+      qe.hidden = false; opener.hidden = true; controls.hidden = false;
+      player.classList.add("is-previewing");
+      v.pause(); v.controls = false;
+      if (v.getAttribute("src") !== cfg.src) v.src = cfg.src;
+      qe.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (silences) return tick();
+      summary.textContent = "Analisando o áudio…";
+      play.disabled = true;
+      try {
+        const ctx = new AudioContext();
+        const buf = await ctx.decodeAudioData(await (await fetch(cfg.src)).arrayBuffer());
+        ctx.close();
+        duration = buf.duration; silences = findSilences(buf);
+        build(); tick();
+      } catch {
+        summary.textContent = "Não deu para analisar o áudio neste navegador. O vídeo editado sai com as escolhas abaixo, sem prévia.";
+      }
+    });
+    qe.querySelector("[data-qe-close]").addEventListener("click", () => {
+      qe.hidden = true; opener.hidden = false; controls.hidden = true;
+      player.classList.remove("is-previewing");
+      v.pause(); frame(1); v.controls = true;
+      if (v.getAttribute("src") !== savedSrc) v.src = savedSrc;
+    });
+    qe.addEventListener("change", () => { if (silences) { build(); tick(); } });
+    form.addEventListener("submit", () => { qe.querySelector("[type=submit]").disabled = true; });
+  }
+
   // Vídeo na fila: confere de novo de tempos em tempos, sem perder o que está sendo
   // escrito, sem fechar um diálogo aberto e sem cortar um vídeo que está tocando.
   const refresh = Number(document.body.dataset.refresh);
@@ -1002,6 +1148,8 @@ function csp(nonce: string): string {
     "font-src https://fonts.gstatic.com",
     "img-src 'self' blob:",
     "media-src 'self'",
+    // A prévia da edição rápida baixa o vídeo para achar os silêncios.
+    "connect-src 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",

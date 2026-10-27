@@ -1,6 +1,7 @@
 import type { AudioApi } from "./audio";
 import { Db, OPEN_STATUSES, type Role, type Video } from "./db";
 import { validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
+import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan } from "./quickedit";
 import { canUse, InputError, structureById, type Structure, type Values } from "./structures";
 
 export { InputError } from "./structures";
@@ -175,17 +176,18 @@ export class Studio {
   }
 
   /**
-   * Botão "Edição rápida": confere o acesso e se o vídeo pode ser editado, e
-   * põe na fila do contêiner. Pedir de novo refaz a edição.
+   * "Gerar vídeo editado", na prévia da edição rápida: confere o acesso e se o
+   * vídeo pode ser editado, e põe na fila do contêiner com o plano. Pedir de
+   * novo refaz a edição.
    */
-  async requestQuickEdit(video: Video, user: { role: Role }, now = new Date()): Promise<Video> {
+  async requestQuickEdit(video: Video, user: { role: Role }, plan: EditPlan, now = new Date()): Promise<Video> {
     const structure = structureById(video.structure);
     if (!structure || !canUse(structure, user.role)) throw new ForbiddenError("Sem acesso a este vídeo.");
     if (!structure.quickEdit) throw new InputError(`${structure.name} não tem edição rápida.`);
     if (!this.audio) throw new InputError("A edição rápida precisa do contêiner, que não está ligado aqui.");
     if (video.status !== "completed" || !video.video_key) throw new InputError("O vídeo ainda não está pronto.");
     if (video.audio_status === "pending" || video.audio_status === "processing") throw new InputError("Espere o tratamento do áudio terminar.");
-    const queued = await this.db.queueEdit(video.id, now.toISOString());
+    const queued = await this.db.queueEdit(video.id, JSON.stringify(plan), now.toISOString());
     if (!queued) throw new InputError("A edição rápida deste vídeo já está em andamento.");
     return queued;
   }
@@ -198,7 +200,8 @@ export class Studio {
     if (!video) return null;
     try {
       const key = `videos/${video.id}.editado.mp4`;
-      await this.runInContainer(video.processed_key ?? video.video_key, key, (body, size) => this.audio!.edit(body, size));
+      const plan = parseStoredPlan(video.edit_plan);
+      await this.runInContainer(video.processed_key ?? video.video_key, key, (body, size) => this.audio!.edit(body, size, containerPlan(plan)));
       return (await this.db.updateVideo(video.id, { edit_status: "done", edited_key: key, edit_error: null }))!;
     } catch (err) {
       console.error("Falha na edição rápida", video.id, err);
@@ -231,6 +234,16 @@ export class Studio {
     if (!this.api) throw new InputError("Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY).");
     return this.api;
   }
+}
+
+/** O plano guardado no banco; sem ele, os padrões. */
+function parseStoredPlan(json: string | null): EditPlan {
+  try {
+    if (json) return JSON.parse(json) as EditPlan;
+  } catch {
+    // Plano ilegível: segue com os padrões.
+  }
+  return { pause: DEFAULT_PAUSE, camera: DEFAULT_CAMERA, parts: null };
 }
 
 export function errorMessage(err: unknown): string {
