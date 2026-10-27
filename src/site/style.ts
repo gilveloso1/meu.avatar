@@ -161,6 +161,7 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
   display: flex; align-items: center; gap: 12px; min-height: 48px; flex: none;
   text-decoration: none; color: inherit; border-radius: var(--md-sys-shape-corner-medium);
 }
+.top-app-bar__brand:focus-visible { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 4px; }
 .top-app-bar__logo {
   width: 40px; height: 40px; flex: none; display: grid; place-items: center;
   border-radius: var(--md-sys-shape-corner-medium);
@@ -177,7 +178,6 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 .top-app-bar--home .top-app-bar__actions { order: 2; }
 .top-app-bar--home .nav-pills { order: 3; flex-basis: 100%; }
 .top-app-bar__tools .search-field { flex: 1; width: auto; }
-.top-app-bar__action { display: contents; }
 
 /* Abas em pílula: o destino atual no contêiner secundário. */
 .nav-pills { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 1 200px; }
@@ -766,11 +766,6 @@ a.frame { display: block; }
 .login .button { align-self: stretch; }
 .login { --field-surface: var(--md-sys-color-surface); }
 
-/* --- Rodapé: uma linha pequena, centralizada ---------------------------------------------- */
-.footer { padding: 16px 24px 24px; color: var(--md-sys-color-on-surface-variant); text-align: center; }
-.footer__inner { max-width: var(--layout-max); margin: 0 auto; }
-.footer__text { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; }
-
 /* --- Breakpoints médio, expandido e grande ------------------------------------------ */
 @media (min-width: 600px) {
   :root { --layout-margin: 24px; }
@@ -805,8 +800,18 @@ a.frame { display: block; }
   .vbar__time { min-width: 0; }
   .vbar__seek { min-width: 0; margin: 0 4px; }
   .frames, .library[data-grouped="false"]:not([data-view="d"]) .library__groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .library[data-view="p"] .frames, .library[data-grouped="false"][data-view="p"] .library__groups { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .library[data-view="g"] .frames, .library[data-grouped="false"][data-view="g"] .library__groups { grid-template-columns: minmax(0, 1fr); }
+  /* Só duas vistas no celular: cards dois por linha e Detalhes (uma escolha P ou G guardada vira a de dois por linha). */
+  .library__sizes [data-view="p"], .library__sizes [data-view="g"] { display: none; }
+  .library[data-view="p"] .frames, .library[data-grouped="false"][data-view="p"] .library__groups,
+  .library[data-view="g"] .frames, .library[data-grouped="false"][data-view="g"] .library__groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .library[data-view="p"] .library__sizes [data-view="m"], .library[data-view="g"] .library__sizes [data-view="m"] { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+  /* Chips numa linha só, que rola para o lado (o grupo de chips do M3 no celular), até a borda da tela. */
+  .library__tools { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px; scrollbar-width: none; }
+  .library__tools::-webkit-scrollbar { display: none; }
+  .library__tools > * { flex: none; }
+  /* Página do modelo: a configuração sem o card branco, os campos na largura toda. */
+  .pane--config { --field-surface: var(--md-sys-color-surface); padding: 0; border-radius: 0; background: none; }
+  .pane--config .form-section, .pane--config .pane__footer { padding-left: 0; padding-right: 0; }
   .frame { padding: 8px; border-radius: var(--md-sys-shape-corner-extra-large); }
   .vrows__head, .vrow { grid-template-columns: 48px minmax(0, 1fr) 88px; }
   .vrows__head > :nth-child(n + 4), .vrow > :nth-child(n + 4) { display: none; }

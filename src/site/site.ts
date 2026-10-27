@@ -259,7 +259,7 @@ export class Site {
   </form>
 </main>
 ${error ? snackbar(error) : ""}`;
-    return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, footer: false, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
+    return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
   }
 
   /** "Gerar vídeo editado", na prévia da edição rápida: põe o vídeo na fila do contêiner e volta para ele. */
@@ -420,7 +420,7 @@ ${error ? snackbar(error) : ""}`;
 </main>
 ${quick ? `<form id="edicao-rapida" method="post" action="/videos/${v.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
 ${error ? snackbar(error) : ""}`;
-    return html(page(`Vídeo · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", footer: false, bar: { user, back, title: structure.name } }), error ? 400 : 200);
+    return html(page(`Vídeo · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
   }
 
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
@@ -883,7 +883,7 @@ function closedPage(): string {
 
 function authHead(title: string, text: string): string {
   return `<div class="login__head">
-      <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
+      <span class="top-app-bar__logo"><span class="icon">face</span></span>
       <h1 class="login__title">${esc(title)}</h1>
       ${text ? `<p class="login__text">${esc(text)}</p>` : ""}
     </div>`;
@@ -919,8 +919,8 @@ type Bar = false | { user: User; tab: "modelos" | "videos"; search: Search } | {
 
 function accountActions(user: User): string {
   const initial = esc((user.name.trim()[0] ?? "?").toUpperCase());
-  return `<form class="top-app-bar__action" method="post" action="/sair"><button class="icon-button interactive" type="submit" aria-label="Sair da conta de ${esc(user.name)}" title="Sair"><span class="icon">logout</span></button></form>
-    <details class="menu menu--account" data-menu>
+  // Sair fica só no menu do perfil.
+  return `<details class="menu menu--account" data-menu>
       <summary class="avatar interactive" aria-label="Sua conta: ${esc(user.name)}" title="${esc(user.name)}">${initial}</summary>
       <div class="menu__list">
         <p class="menu__header"><span class="menu__name">${esc(user.name)}</span><span class="menu__email">${esc(user.email)}</span></p>
@@ -931,8 +931,9 @@ function accountActions(user: User): string {
 }
 
 function brand(href: string, label?: string): string {
-  return `<a class="top-app-bar__brand interactive" href="${href}"${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ""}>
-    <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
+  // No M3 a marca da barra superior não é botão: sem camada de estado, só o foco do teclado.
+  return `<a class="top-app-bar__brand" href="${href}"${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ""}>
+    <span class="top-app-bar__logo"><span class="icon">face</span></span>
     ${label ? "" : `<span class="top-app-bar__title">${SITE_NAME}</span>`}
   </a>`;
 }
@@ -964,7 +965,7 @@ function topAppBar(bar: Exclude<Bar, false>): string {
 </header>`;
 }
 
-function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar; footer?: boolean }): string {
+function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -984,7 +985,6 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar; 
   <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
   ${opts.bar ? topAppBar(opts.bar) : ""}
   ${body}
-  ${opts.footer === false ? "" : `<footer class="footer"><div class="footer__inner"><p class="footer__text">Vídeos gerados com inteligência artificial pelo OpenRouter.</p></div></footer>`}
   <script nonce="${NONCE}">${SCRIPT}</script>
 </body>
 </html>`;
