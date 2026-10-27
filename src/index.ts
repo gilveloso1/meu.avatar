@@ -30,6 +30,7 @@ export function createSite(env: Env, studio: Studio): Site {
       resolution: env.VIDEO_RESOLUTION,
       aspectRatio: env.VIDEO_ASPECT_RATIO,
     },
+    local: env.AMBIENTE === "local",
   });
 }
 

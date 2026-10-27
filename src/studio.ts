@@ -263,7 +263,7 @@ export class Studio {
   }
 
   private requireApi(): VideoApi {
-    if (!this.api) throw new InputError("Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY).");
+    if (!this.api) throw new InputError("A criação de vídeos está pausada no momento. Tente de novo mais tarde.");
     return this.api;
   }
 }

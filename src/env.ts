@@ -14,6 +14,8 @@ export interface Env {
   BCRYPT_COST?: string;
   /** Endereço público do Worker, sem barra no fim: vira o callback_url e a URL das fotos. */
   SITE_URL: string;
+  /** "local" no computador (vem do .dev.vars, que só o wrangler dev lê); no ar fica vazio. */
+  AMBIENTE?: string;
   /** Padrões do formulário do Wan (o modelo de cada estrutura fica em src/structures/). */
   VIDEO_DURATION: string;
   VIDEO_RESOLUTION: string;

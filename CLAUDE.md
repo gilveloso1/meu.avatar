@@ -38,12 +38,21 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
     surface-container-low, cantos de 16 px, elevação 2, 4 px por dentro;
     itens de 44 px, ícone de 20 px, 16 px nas laterais, 12 px entre ícone e
     texto, body-large; divisor sem ocupar a largura toda.
+  - Campo de seleção (lista de opções, como a voz): sempre o menu feito com
+    script em `SCRIPT` (`src/site/site.ts`), aplicado a todo
+    `.text-field--select`. O `<select>` fica escondido e é ele que vai no
+    formulário; o botão abre um menu vertical (`.select-menu`, popover) com o
+    escolhido em secondary-container, a seta vira arrow_drop_up e há teclado
+    (setas, Home, End, Enter, Espaço, Esc, Tab). Não use a lista nativa do
+    navegador nem o `md-outlined-select` do Material Web (parado e sem o
+    Expressive).
   - Lista: lista expressiva. Item escolhido em primary-container com cantos
     de 16 px; no estilo segmentado, 2 px entre itens, cantos de 4 px por
     dentro e 16 px nas pontas.
   - Botões segmentados: o M3 Expressive troca por grupo de botões conectados
     (2 px entre botões, ponta toda arredondada, cantos internos de 8 px no
-    tamanho S; o escolhido fica todo arredondado).
+    tamanho S). Exceção pedida pelo usuário: o escolhido mantém a forma
+    (não fica todo arredondado como no M3); só muda a cor para primary.
   - Chip de filtro: 32 px, cantos de 8 px, ícone de 18 px, 16 px nas
     laterais (8 px do lado do ícone).
   - FAB estendido (pequeno): 56 px, cantos de 16 px, ícone de 24 px, 16 px
@@ -61,6 +70,46 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
     indicador e a trilha.
   - Snackbar: inverse-surface, inverse-on-surface e ação em inverse-primary.
 
+## Telas aprovadas (out/2026)
+
+Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue o mesmo molde.
+
+- Página do modelo (`/modelo/<id>`): seta de voltar no lugar do logo; à esquerda
+  o painel de Configuração (400 px, não recolhe, ocupa a altura da janela, rola
+  por dentro). Nele, a foto do avatar é uma área só (item de lista, ícone de
+  rosto, sem dica); o bloco Fala tem a voz ou o idioma primeiro e o campo
+  "Texto" (cresce com o texto, como o Movimento); no fim, a estimativa (Duração
+  e Custo estimado, linhas com ícone) e o "Gerar vídeo" na largura toda, sem
+  fixar, com espaço sobrando embaixo. No centro, a lista de vídeos.
+- Lista de vídeos (`videoLibrary`, a mesma na página do modelo e em `/videos`):
+  cards quadrados sem texto numa moldura de 12 px (cantos de 28 px por fora e
+  16 px no vídeo), o vídeo preenchendo o quadrado; vistas em grupo de botões
+  conectados (cards pequenos, médios, grandes e Detalhes, uma linha por vídeo
+  com colunas); chips de filtro por status, chip de ordem e chip "Agrupar por
+  data" (desligado por padrão). Tudo no navegador, sem recarregar, e guardado
+  no `localStorage` por lista (`lista-<modelo>`, `lista-videos`). Miniatura só
+  baixa quando aparece na tela. A busca pela fala de `/videos` fica no servidor.
+- Página do vídeo (`/video/<id>`, aberta por qualquer lista; `?de=` diz para
+  onde a seta e o X voltam, só caminho do site): ocupa a tela abaixo da barra
+  superior. À esquerda, o vídeo no formato dele (sem faixas) sobre fundo
+  escuro liso `#2a2a2a`, setas de anterior e próximo (na ordem da lista de onde
+  veio) a 16 px do vídeo, e a barra própria do player (tocar, tempo, slider,
+  som, tela cheia), que também comanda a prévia da edição rápida. À direita, a
+  folha de 400 px: status e X; abas Informações e Edição rápida (só onde há);
+  em Informações, Texto (com Copiar), os textos livres (Movimento, Instruções
+  extras) em bloco próprio e Detalhes no card de linhas (ícone, rótulo, valor);
+  embaixo, Refazer (volta ao modelo com tudo preenchido, `?refazer=<id>`) e
+  Baixar (menu quando há mais de uma versão). Na Edição rápida, o card
+  "Resultado da edição", Pausas, Câmera, "Tocar prévia" e, presos embaixo,
+  Cancelar e Gerar editado.
+- Textos: frases de ajuda curtas, numa linha; na língua de quem usa, nunca de
+  quem desenvolve (nada de nome de segredo ou de modelo técnico na tela; o
+  detalhe vai para o log). Avisos de configuração não aparecem no computador
+  (`AMBIENTE=local`).
+- Celular (até 599 px): cards médios dois por linha, Detalhes só com Texto e
+  Status, setas por cima do vídeo, barra do player na largura toda e o FAB
+  "Novo vídeo" preso no canto.
+
 ## Contas
 
 - Contas e sessões vêm do estuda.mais (github.com/gilveloso1/estuda.mais,
@@ -75,10 +124,8 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
   `heygen.ts`): campos do formulário, prompt de sistema, montagem do pedido,
   regra de custo, se o áudio passa pelo contêiner e se o vídeo pronto tem o
   botão "Edição rápida" (`quickEdit`, `container/editar.py`). A tela inicial tem um card
-  por modelo e uma aba com os vídeos de todos (`/videos`); a página do modelo
-  (`/modelo/<id>`) tem três painéis: a configuração, o vídeo escolhido
-  (`?video=<id>`) com a caixa da fala embaixo, e a lista de vídeos dele, com
-  "Detalhes" (diálogo). O nome do site é "Meu Avatar".
+  por modelo e uma aba com os vídeos de todos (`/videos`). As telas estão em
+  "Telas aprovadas", acima. O nome do site é "Meu Avatar".
 - Cada vídeo guarda a estrutura que o gerou (`videos.structure`) e as
   configurações próprias dela (`videos.settings`, JSON).
 - Modelo novo é estrutura nova, sem mexer nas outras. O Wan fica como está.
@@ -100,5 +147,11 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
   `git checkout -b <nome> origin/main`). Antes de publicar de um branch,
   confira que `git log HEAD..origin/main` sai vazio.
 - Use `< /dev/null` no fim dos comandos do wrangler que pedem confirmação.
+- No computador: `.dev.vars` com `AMBIENTE=local` (esconde avisos de configuração e,
+  sem chave, lê a lista pública de modelos para o formulário mostrar todas as
+  opções) e, se o usuário quiser, a chave do OpenRouter. O contêiner não roda sem
+  Docker (`wrangler dev --enable-containers=false`). `npm run exemplos` põe vídeos
+  de exemplo no banco local. Os testes zeram `AMBIENTE` e a chave
+  (`vitest.config.ts`).
 - Neste ambiente cloud, o `fetch` do Node só passa pelo proxy com
   `NODE_USE_ENV_PROXY=1` (para `npm run gerar`).
