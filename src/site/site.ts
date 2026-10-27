@@ -403,8 +403,8 @@ ${error ? snackbar(error) : ""}`;
     ${
       quick
         ? `<div class="tabs" role="tablist">
-      <button class="tabs__tab interactive" type="button" role="tab" data-tab="info" aria-selected="true"><span class="icon">info</span>Informações</button>
-      <button class="tabs__tab interactive" type="button" role="tab" data-tab="qe" aria-selected="false"><span class="icon">content_cut</span>Edição rápida</button>
+      <button class="tabs__tab interactive" type="button" role="tab" data-tab="info" aria-selected="true"><span class="tabs__content"><span class="icon">info</span>Informações</span></button>
+      <button class="tabs__tab interactive" type="button" role="tab" data-tab="qe" aria-selected="false"><span class="tabs__content"><span class="icon">content_cut</span>Edição rápida</span></button>
     </div>
     <button type="button" data-qe-open hidden></button>`
         : ""

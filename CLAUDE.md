@@ -95,7 +95,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   escuro liso `#2a2a2a`, setas de anterior e próximo (na ordem da lista de onde
   veio) a 16 px do vídeo, e a barra própria do player (tocar, tempo, slider,
   som, tela cheia), que também comanda a prévia da edição rápida. À direita, a
-  folha de 400 px: status e X; abas Informações e Edição rápida (só onde há);
+  folha de 400 px: status e X; abas Informações e Edição rápida (só onde há;
+  abas principais do M3, indicador de 3 px só sob o ícone e o texto; no celular,
+  de borda a borda e 16 px abaixo da barra do player);
   em Informações, Texto (com Copiar), os textos livres (Movimento, Instruções
   extras) em bloco próprio e Detalhes no card de linhas (ícone, rótulo, valor);
   embaixo, Refazer (volta ao modelo com tudo preenchido, `?refazer=<id>`) e

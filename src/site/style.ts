@@ -661,7 +661,13 @@ a.frame { display: block; }
   border: 0; background: none; color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem;
 }
 .tabs__tab .icon { font-size: 20px; }
-.tabs__tab[aria-selected="true"] { color: var(--md-sys-color-primary); box-shadow: inset 0 -3px 0 var(--md-sys-color-primary); }
+/* Indicador das abas principais do M3: 3 px só sob o conteúdo (ícone e texto), cantos de cima arredondados. */
+.tabs__content { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 100%; }
+.tabs__tab[aria-selected="true"] { color: var(--md-sys-color-primary); }
+.tabs__tab[aria-selected="true"] .tabs__content::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  border-radius: 3px 3px 0 0; background: var(--md-sys-color-primary);
+}
 /* Menu que abre para cima (o "Baixar" fica no fim da folha). */
 .menu--up > summary { list-style: none; }
 .menu--up .menu__list { top: auto; bottom: calc(100% + 4px); left: 0; right: auto; min-width: 100%; }
@@ -798,7 +804,9 @@ a.frame { display: block; }
      aparece embaixo); a barra logo abaixo, na mesma superfície; sem faixa escura e sem as setas.
      Sem o vídeo pronto, o mesmo espaço mostra o status e o progresso. A folha continua na página,
      sem o cabeçalho (status e X repetiriam o que já está acima e a seta da barra superior). */
-  .viewer__stage { display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: 0; padding: 12px 16px 4px; background: none; }
+  .viewer__stage { display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: 0; padding: 12px 16px 16px; background: none; }
+  /* Abas fixas do M3 no celular: de borda a borda, cada uma com metade da largura; 16 px acima delas. */
+  .tabs { padding: 0; }
   .viewer__nav { display: none; }
   .viewer__player { width: 100%; height: auto; container-type: normal; }
   .viewer__player .player__frame { width: min(100%, calc(56svh * var(--ratio, 9 / 16))); height: auto; aspect-ratio: var(--ratio, 9 / 16); border-radius: var(--md-sys-shape-corner-large); box-shadow: none; }
