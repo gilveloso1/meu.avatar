@@ -30,12 +30,27 @@ export interface AudioApi {
   treat(mp4: ReadableStream, size: number): Promise<Response>;
   /** Devolve o MP4 com a edição rápida (corpo com content-length) ou lança erro. */
   edit(mp4: ReadableStream, size: number, plan: ContainerPlan): Promise<Response>;
-  /** Onde está o rosto no vídeo (container/rosto.py). */
-  face(mp4: ReadableStream, size: number): Promise<Face>;
+  /** Onde está o rosto no vídeo (container/rosto.py). O MP4 vai inteiro: dá para tentar de novo. */
+  face(mp4: ArrayBuffer): Promise<Face>;
 }
+
+/**
+ * Quanto esperar o contêiner subir. A biblioteca espera 8 s pela instância e
+ * 20 s pela porta; na primeira partida depois de um deploy, a máquina ainda
+ * baixa a imagem (~820 MB, com o OpenCV) e isso não basta: a chamada voltava
+ * com erro antes de mandar o vídeo.
+ */
+const START_TIMEOUT_MS = 120_000;
 
 export class ContainerAudio implements AudioApi {
   constructor(private readonly ns: DurableObjectNamespace<AudioFixer>) {}
+
+  /** O contêiner (uma instância só), já de pé e com a porta respondendo. */
+  private async ready() {
+    const container = getContainer(this.ns, "audio");
+    await container.startAndWaitForPorts({ ports: 8080, cancellationOptions: { instanceGetTimeoutMS: START_TIMEOUT_MS, portReadyTimeoutMS: START_TIMEOUT_MS } });
+    return container;
+  }
 
   treat(mp4: ReadableStream, size: number): Promise<Response> {
     return this.post("/tratar", "Tratamento do áudio", mp4, size);
@@ -45,17 +60,23 @@ export class ContainerAudio implements AudioApi {
     return this.post("/editar", "Edição rápida", mp4, size, { "x-plano": JSON.stringify(plan) });
   }
 
-  async face(mp4: ReadableStream, size: number): Promise<Face> {
-    const res = await getContainer(this.ns, "audio").fetch(
-      new Request("http://audio/rosto", { method: "POST", body: mp4, headers: { "content-length": String(size) } }),
-    );
-    if (!res.ok) throw new Error(`Detecção do rosto falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
-    return (await res.json()) as Face;
+  async face(mp4: ArrayBuffer): Promise<Face> {
+    // Uma segunda tentativa: a primeira pode pegar o contêiner ainda subindo.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const res = await (await this.ready()).fetch(new Request("http://audio/rosto", { method: "POST", body: mp4 }));
+        if (!res.ok) throw new Error(`Detecção do rosto falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
+        return (await res.json()) as Face;
+      } catch (err) {
+        if (attempt >= 2) throw err;
+        console.error("Detecção do rosto: tentando de novo", err);
+      }
+    }
   }
 
   private async post(path: string, what: string, mp4: ReadableStream, size: number, headers: Record<string, string> = {}): Promise<Response> {
     // Uma instância só: um vídeo por vez, na ordem em que ficaram prontos.
-    const res = await getContainer(this.ns, "audio").fetch(
+    const res = await (await this.ready()).fetch(
       new Request(`http://audio${path}`, { method: "POST", body: mp4, headers: { "content-length": String(size), ...headers } }),
     );
     if (!res.ok) throw new Error(`${what} falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);

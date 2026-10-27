@@ -11,7 +11,8 @@ no HeyGen Avatar IV):
      ganho, como no tratar.sh).
 
 O zoom mira no rosto (rosto.py, YuNet): o centro dele fica no meio, na
-largura, e a um terço do alto do quadro com zoom, sem sair do vídeo. Sem
+largura, e a 28% do alto do quadro com zoom (um pouco acima de um terço),
+sem sair do vídeo. Sem
 rosto achado, mira no centro, um pouco acima do meio.
 
 O plano (opcional, JSON) vem da prévia do site (src/quickedit.ts): "pausa"
@@ -52,7 +53,7 @@ ZOOMS = [1.0, 1.25, 1.0, 1.5]
 # Sem rosto achado: onde ele costuma ficar (fração do quadro). E onde o centro
 # dele fica, na altura, no quadro com zoom.
 ROSTO_X, ROSTO_Y = 0.5, 0.25
-ROSTO_NO_QUADRO = 1 / 3
+ROSTO_NO_QUADRO = 0.28
 
 
 def ffmpeg(*args):

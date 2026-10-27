@@ -54,8 +54,8 @@ export const RULES = {
   /** Sem rosto achado: onde ele costuma ficar (fração do quadro). */
   faceX: 0.5,
   faceY: 0.25,
-  /** Onde o centro do rosto fica, na altura, no quadro com zoom. */
-  faceInFrame: 1 / 3,
+  /** Onde o centro do rosto fica, na altura, no quadro com zoom (um pouco acima de 1/3). */
+  faceInFrame: 0.28,
 };
 
 /** Um trecho do vídeo final: começo e fim no original (s) e o zoom. */

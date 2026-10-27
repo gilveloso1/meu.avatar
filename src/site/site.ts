@@ -1289,8 +1289,11 @@ const PREVIEW_SCRIPT = `(() => {
       // O rosto vem junto (o contêiner acha na primeira vez); sem ele, o padrão.
       const found = fetch(cfg.face).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
       const bytes = new Uint8Array(await (await fetch(cfg.src)).arrayBuffer());
-      const f = await found;
-      if (typeof f.x === "number" && typeof f.y === "number") face = { x: f.x, y: f.y };
+      // Na primeira vez o contêiner pode estar subindo: espera o rosto até 6 s e segue
+      // com o padrão; se ele chegar depois, o zoom passa a mirar nele.
+      const useFace = (f) => { if (f && typeof f.x === "number" && typeof f.y === "number") face = { x: f.x, y: f.y }; };
+      found.then(useFace);
+      await Promise.race([found, new Promise((ok) => setTimeout(ok, 6000))]);
       // decodeAudioData fica com o buffer: vai uma cópia.
       buf = await actx.decodeAudioData(bytes.slice().buffer);
       silences = findSilences();

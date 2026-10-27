@@ -213,7 +213,7 @@ export class Studio {
     const original = await this.media.get(key);
     if (!original) return null;
     try {
-      const face = await this.audio.face(original.body, original.size);
+      const face = await this.audio.face(await original.arrayBuffer());
       await this.db.updateVideo(video.id, { face: JSON.stringify(face) });
       return face;
     } catch (err) {

@@ -113,10 +113,9 @@ export class FakeAudioApi implements AudioApi {
     this.plans.push(plan);
     return this.answer(mp4, size, "+editado");
   }
-  async face(mp4: ReadableStream, size: number) {
+  async face(mp4: ArrayBuffer) {
     this.faces++;
-    const original = new Uint8Array(await new Response(mp4).arrayBuffer());
-    if (original.length !== size) throw new Error(`tamanho errado: ${original.length} != ${size}`);
+    if (new TextDecoder().decode(mp4) !== "mp4-falso") throw new Error("o MP4 não chegou inteiro");
     if (this.fail) throw new Error(this.fail);
     return this.faceFound;
   }
