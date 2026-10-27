@@ -70,7 +70,10 @@ vez e:
   são fechados na hora, e ficam no máximo 6 prontos na frente (o
   decodificador do celular tem poucos para emprestar);
 - cada quadro vai para um `<canvas>` quando o relógio do som chega nele, com
-  o mesmo recorte de zoom do contêiner, e é fechado.
+  o mesmo recorte de zoom do contêiner, e é fechado. O zoom é uma
+  transformação do canvas (`setTransform`) sobre o quadro inteiro: o recorte
+  pelo `drawImage` com `VideoFrame` funciona no Chromium, mas o iPhone
+  ignorou (a prévia tocava sem zoom).
 
 Medido no Chromium (25 fps): 753 quadros em 30 s, sem quadro fora dos trechos
 e a imagem a menos de 30 ms do som em 90% do tempo. Sem WebCodecs, a prévia

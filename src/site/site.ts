@@ -1124,11 +1124,15 @@ const PREVIEW_SCRIPT = `(() => {
     }
     if (decoder && next >= track.samples.length && !flushed) { flushed = true; quiet(decoder.flush()); }
   };
+  // O zoom é uma transformação do canvas sobre o quadro inteiro, não um recorte no
+  // drawImage: o Safari (e todo navegador do iPhone) ignora o recorte com VideoFrame.
   const draw = (f) => {
     drawn = true;
     const z = f.z, w = canvas.width, h = canvas.height, cw = w / z, ch = h / z;
     const y = Math.min(Math.max(0, R.faceY * h - R.faceInFrame * ch), h - ch);
-    g2d.drawImage(f.frame, (w - cw) / 2, y, cw, ch, 0, 0, w, h);
+    g2d.setTransform(z, 0, 0, z, -((w - cw) / 2) * z, -y * z);
+    g2d.drawImage(f.frame, 0, 0, w, h);
+    g2d.setTransform(1, 0, 0, 1, 0, 0);
   };
   const restart = () => {
     if (decoder && decoder.state !== "closed") decoder.close();
