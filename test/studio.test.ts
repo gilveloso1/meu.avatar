@@ -528,9 +528,12 @@ describe("edição rápida", () => {
     expect(page).toContain(`action="/videos/${video.id}/edicao-rapida"`);
     expect(page).toContain(BOTAO);
     expect(page).toContain("data-quick-edit=");
-    expect(page).toMatch(/name="pausa" value="media" form="edicao-rapida" checked/);
-    expect(page).toMatch(/name="camera" value="close" form="edicao-rapida" checked/);
+    expect(page).toMatch(/name="pausa" value="media" form="edicao-rapida"[^>]* checked/);
+    expect(page).toMatch(/name="camera" value="close" form="edicao-rapida"[^>]* checked/);
     expect(page).toContain("Gerar vídeo editado");
+    // A explicação da opção escolhida aparece embaixo de cada ajuste.
+    expect(page).toContain('data-help-for="pausa">Deixa um respiro curto entre as frases.');
+    expect(page).toContain('data-help-for="camera">Como o Zoom, mas de vez em quando chega bem perto do rosto.');
 
     const trechos = [[0.42, 7.417, 1], [7.928, 10.91, 1.25]];
     const res = await pedir(video.id, api, audio, session, { pausa: "longa", camera: "zoom", trechos: JSON.stringify(trechos) });

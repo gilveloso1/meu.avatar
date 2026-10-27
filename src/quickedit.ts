@@ -12,16 +12,16 @@ import { InputError, type Option } from "./structures/types";
 
 /** Pausas: quanto sobra de cada lado de um corte, em segundos. */
 export const PAUSES: (Option & { pad: number })[] = [
-  { value: "curta", label: "Curtas", pad: 0.04 },
-  { value: "media", label: "Médias", pad: 0.08 },
-  { value: "longa", label: "Longas", pad: 0.15 },
+  { value: "curta", label: "Curtas", pad: 0.04, description: "Tira quase toda a pausa entre as frases. Ritmo bem rápido, de Reels e TikTok." },
+  { value: "media", label: "Médias", pad: 0.08, description: "Deixa um respiro curto entre as frases. Rápido, mas ainda natural." },
+  { value: "longa", label: "Longas", pad: 0.15, description: "Só encurta as pausas grandes. A fala fica mais calma." },
 ];
 
 /** Câmera: os enquadramentos, em ordem, um a cada corte (1 é o quadro todo; "Close" alterna zoom e close). */
 export const CAMERAS: (Option & { zooms: number[] })[] = [
-  { value: "parada", label: "Parada", zooms: [1] },
-  { value: "zoom", label: "Zoom", zooms: [1, 1.25] },
-  { value: "close", label: "Close", zooms: [1, 1.25, 1, 1.5] },
+  { value: "parada", label: "Parada", zooms: [1], description: "Sem zoom: só tira as pausas. Em cada corte, a pessoa dá um pulinho na tela." },
+  { value: "zoom", label: "Zoom", zooms: [1, 1.25], description: "A cada corte, alterna entre o quadro inteiro e um pouco mais perto. Parece troca de câmera e esconde o pulinho." },
+  { value: "close", label: "Close", zooms: [1, 1.25, 1, 1.5], description: "Como o Zoom, mas de vez em quando chega bem perto do rosto. O mais dinâmico." },
 ];
 
 export const DEFAULT_PAUSE = "media";

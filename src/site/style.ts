@@ -555,9 +555,9 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .player__frame { position: relative; aspect-ratio: var(--ratio, 9 / 16); height: min(420px, 60vh); max-width: calc(100% - 32px); overflow: hidden; border-radius: var(--md-sys-shape-corner-large); background: #000; }
 .player video { display: block; width: 100%; height: 100%; object-fit: contain; }
 /* Prévia da edição rápida: o zoom de cada trecho é um scale no vídeo; os controles próprios ficam por cima. */
-.player.is-previewing video { cursor: pointer; }
+.player.is-previewing video { position: absolute; inset: 0; cursor: pointer; }
 .player__controls {
-  position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 4px; padding-right: 16px;
+  position: absolute; z-index: 2; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 4px; padding-right: 16px;
   border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface);
 }
 .player__controls .icon-button { color: inherit; }
@@ -583,6 +583,8 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .quick-edit__title { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; color: var(--md-sys-color-on-surface); }
 .quick-edit__summary { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .quick-edit__fields { display: flex; flex-wrap: wrap; gap: 16px 24px; }
+.quick-edit .segmented-field { flex: 1 1 260px; }
+.segmented-field__help { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
 .quick-edit__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
 /* Caixa da fala: campo de cantos inteiros com a estimativa e o botão de gerar; nas telas largas, presa embaixo ao rolar. */

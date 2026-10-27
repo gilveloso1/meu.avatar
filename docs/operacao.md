@@ -50,10 +50,20 @@ O contêiner não tem acesso à internet (`enableInternet = false`).
 Botão "Edição rápida" no vídeo pronto das estruturas com `quickEdit` (hoje só
 o HeyGen). O botão abre a **prévia**, no próprio navegador e sem gerar
 arquivo: o script baixa o vídeo, acha os silêncios no áudio (Web Audio, pico
-a cada 10 ms) e toca o original pulando as pausas, com o zoom de cada trecho
-(um `scale` no vídeo). Pausas (curtas, médias, longas) e câmera (parada, zoom,
-close) mudam a prévia na hora; as regras estão em `src/quickedit.ts` e no
-`editar.py` (mudou uma, mude a outra).
+a cada 10 ms) e toca o vídeo sem as pausas, com o zoom de cada trecho (um
+`scale` no vídeo). Pausas (curtas, médias, longas) e câmera (parada, zoom,
+close) mudam a prévia na hora, com uma linha explicando a opção escolhida; as
+regras estão em `src/quickedit.ts` e no `editar.py` (mudou uma, mude a outra).
+
+A prévia nunca pula o vídeo de um ponto a outro durante a reprodução: o
+HeyGen põe um quadro-chave só a cada 10 s, e cada pulo travava a imagem até
+0,7 s (medido no Chromium com a CPU 4× mais lenta). O som sai do áudio já
+lido, com os trechos emendados (Web Audio, 5 ms de fade nas pontas); dois
+players mudos se revezam: enquanto um mostra o trecho, o outro corre (até 4×)
+até o começo do próximo e espera parado ali. No corte, só trocam de lugar.
+Medido do mesmo jeito: nenhuma trava acima de 100 ms e a imagem a 30 ms do
+som (mediana). No iPhone, o som da prévia toca mesmo no modo silencioso
+(`navigator.audioSession`).
 
 "Gerar vídeo editado" manda os trechos da prévia e põe o vídeo na fila
 (`edit_status`: pending → processing → done/failed; o plano fica em
