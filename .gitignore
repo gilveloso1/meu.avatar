@@ -3,3 +3,4 @@ saida/
 .env
 .wrangler/
 .dev.vars
+__pycache__/
