@@ -219,26 +219,30 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 }
 .avatar::-webkit-details-marker { display: none; }
 
-/* --- Menu (aberto por um botão; lista de itens de 48 px) --------------------------------- */
+/* --- Menu vertical do M3 Expressive (tokens SegmentedMenu/StandardMenu do Compose): contêiner
+   surface-container-low de cantos grandes (16 px) e elevação 2, 4 px de margem interna; itens de
+   44 px com ícone de 20 px, 16 px nas laterais e 12 px entre ícone e rótulo (body-large); o item
+   ganha cantos médios no hover e no foco; o divisor não ocupa a largura toda. ---------------------- */
 .menu { position: relative; }
 .menu > summary { list-style: none; }
 .menu > summary::-webkit-details-marker { display: none; }
 .menu__list {
-  position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; min-width: 200px; padding: 8px 0;
-  border-radius: var(--md-sys-shape-corner-extra-small);
-  background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface);
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; min-width: 224px; padding: 4px;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-low); color: var(--md-sys-color-on-surface);
   box-shadow: var(--md-sys-elevation-level2);
 }
 .menu__item {
-  display: flex; align-items: center; gap: 12px; width: 100%; height: 48px; padding: 0 12px;
-  border: 0; background: none; text-decoration: none; color: inherit; text-align: left;
-  font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; white-space: nowrap;
+  display: flex; align-items: center; gap: 12px; width: 100%; height: 44px; padding: 0 16px;
+  border: 0; border-radius: var(--md-sys-shape-corner-medium); background: none;
+  text-decoration: none; color: var(--md-sys-color-on-surface); text-align: left;
+  font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; white-space: nowrap;
 }
-.menu__item .icon { color: var(--md-sys-color-on-surface-variant); }
-.menu__header { display: flex; flex-direction: column; padding: 8px 12px 12px; border-bottom: 1px solid var(--md-sys-color-outline-variant); margin-bottom: 8px; }
-.menu__name { font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; }
-.menu__email { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
-.menu--account .menu__list { min-width: 240px; }
+.menu__item .icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); }
+.menu__divider { height: 1px; margin: 4px 16px; border: 0; background: var(--md-sys-color-outline-variant); }
+.menu__header { display: flex; flex-direction: column; gap: 2px; padding: 8px 16px; }
+.menu__name { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; }
+.menu__email { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 
 /* --- Botões de ícone --------------------------------------------------------------- */
 .icon-button {

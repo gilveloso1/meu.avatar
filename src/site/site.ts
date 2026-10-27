@@ -723,6 +723,7 @@ function accountActions(user: User): string {
       <summary class="avatar interactive" aria-label="Sua conta: ${esc(user.name)}" title="${esc(user.name)}">${initial}</summary>
       <div class="menu__list">
         <p class="menu__header"><span class="menu__name">${esc(user.name)}</span><span class="menu__email">${esc(user.email)}</span></p>
+        <hr class="menu__divider">
         <form method="post" action="/sair"><button class="menu__item interactive" type="submit"><span class="icon">logout</span>Sair</button></form>
       </div>
     </details>`;
