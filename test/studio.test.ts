@@ -541,7 +541,9 @@ describe("edição rápida", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(`/modelo/heygen?video=${video.id}`);
     page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), api, audio)).text();
-    expect(page).toContain("Editando");
+    expect(page).toContain("Editando o vídeo");
+    expect(page).toContain('class="work-notice"');
+    expect(page).toContain("Enquanto isso, o player mostra o original.");
     expect(page).toContain("data-refresh=");
     expect(page).not.toContain(BOTAO);
     // Pedir de novo enquanto está na fila não duplica.

@@ -425,7 +425,7 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
   }
   if (v.status === "completed" && (v.edit_status === "pending" || v.edit_status === "processing")) {
     const since = minutes(v.edit_status === "processing" ? v.edit_started_at : v.updated_at);
-    return { label: `Editando · ${since} min`, icon: "content_cut", kind: "busy" };
+    return { label: `Editando o vídeo · ${since} min`, icon: "content_cut", kind: "busy" };
   }
   const status = STATUS[v.status];
   // Na fila: quanto tempo já passou, para não parecer travado (720p leva uns 10 min).
@@ -503,6 +503,7 @@ function selectedVideo(v: Video, structure: Structure, showOriginal: boolean): s
   const meta = [status.label, formatDate(v.created_at), durationLabel(v, structure), v.resolution, v.aspect_ratio].join(" · ");
   return `
       <section class="selected" aria-label="Vídeo escolhido">
+        ${v.video_key && status.kind === "busy" ? workNotice(v, status) : ""}
         ${media}
         <div class="selected__body">
           <p class="selected__meta">${esc(meta)}</p>
@@ -517,6 +518,26 @@ function selectedVideo(v: Video, structure: Structure, showOriginal: boolean): s
         </div>
         ${quick ? quickEditPreview(v) : ""}
       </section>`;
+}
+
+/**
+ * Aviso em cima do player enquanto o contêiner trabalha num vídeo pronto (edição
+ * rápida ou tratamento do áudio): o player segue com a versão de antes, e sem o
+ * aviso parecia que nada tinha acontecido.
+ */
+function workNotice(v: Video, status: ReturnType<typeof cardStatus>): string {
+  const editing = v.edit_status === "pending" || v.edit_status === "processing";
+  const text = editing
+    ? `Fica pronto em uns 4 minutos e aparece aqui sozinho. Enquanto isso, o player mostra ${v.edited_key ? "a edição anterior" : "o original"}.`
+    : "Fica pronto em uns 2 minutos e aparece aqui sozinho. Enquanto isso, o player mostra o som como veio do modelo.";
+  return `<div class="work-notice" role="status">
+          <span class="icon" aria-hidden="true">${status.icon}</span>
+          <div class="work-notice__body">
+            <p class="work-notice__title">${esc(status.label)}</p>
+            <p class="work-notice__text">${esc(text)}</p>
+            <div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>
+          </div>
+        </div>`;
 }
 
 /**

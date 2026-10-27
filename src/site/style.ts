@@ -578,6 +578,17 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .selected__actions { display: flex; flex-wrap: wrap; gap: 4px; margin-left: -12px; }
 /* O script esconde o botão "Edição rápida" e os controles da prévia; display dos componentes não ganha do hidden. */
 .selected [hidden] { display: none; }
+/* Aviso de trabalho em andamento (edição rápida, tratamento do áudio), em cima do player. */
+.work-notice {
+  display: flex; gap: 16px; align-items: flex-start; padding: 16px 24px;
+  border-radius: var(--md-sys-shape-corner-extra-large);
+  background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container);
+}
+.work-notice > .icon { margin-top: 2px; }
+.work-notice__body { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.work-notice__title { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
+.work-notice__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
+.work-notice .linear-progress { --progress-gap: var(--md-sys-color-tertiary-container); margin-top: 8px; background: var(--md-sys-color-surface-container-highest); }
 .quick-edit { display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container); }
 .quick-edit__head { display: flex; flex-direction: column; gap: 4px; }
 .quick-edit__title { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; color: var(--md-sys-color-on-surface); }
