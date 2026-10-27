@@ -561,9 +561,16 @@ a.frame { display: block; }
   background: var(--md-sys-color-surface-container-lowest); box-shadow: var(--md-sys-elevation-level1);
 }
 .frame::before { z-index: 1; border-radius: inherit; }
-.frame video, .frame__placeholder { width: 100%; height: 100%; border-radius: var(--md-sys-shape-corner-large); }
+/* O vídeo fica num recorte de cantos de 16 px: a aproximação do hover não passa por cima da moldura. */
+.frame__media { display: block; width: 100%; height: 100%; overflow: hidden; border-radius: var(--md-sys-shape-corner-large); }
+.frame video, .frame__placeholder { width: 100%; height: 100%; }
 .frame video { display: block; object-fit: cover; pointer-events: none; background: var(--md-sys-color-surface-container-highest); }
 .frame__placeholder { display: grid; place-items: center; background: var(--md-sys-color-surface-container-highest); }
+/* Mouse sobre o card: o vídeo aproxima de leve dentro da moldura (só onde há hover; com movimento reduzido, não). */
+.frame video { transition: transform var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard); }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .frame:hover video, .frame:focus-visible video { transform: scale(1.06); }
+}
 /* --- Página do vídeo: o vídeo centralizado sobre ele mesmo desfocado e a folha lateral (M3 side sheet) --- */
 .viewer { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
 .viewer__stage { position: relative; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; min-height: 60vh; padding: 16px 72px; /* 8 px da borda + 48 px do botão + 16 px até o vídeo */ overflow: hidden; background: #2a2a2a; }

@@ -89,7 +89,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   data" (desligado por padrão). Tudo no navegador, sem recarregar, e guardado
   no `localStorage` por lista (`lista-<modelo>`, `lista-videos`). Miniatura só
   baixa quando aparece na tela e enquadra o rosto (`videos.face`, achado pelo
-  agendamento, um vídeo por minuto; sem rosto, o terço de cima). A busca pela fala de `/videos` fica no servidor.
+  agendamento, um vídeo por minuto; sem rosto, o terço de cima). Com mouse, o
+  vídeo aproxima de leve (1,06, 300 ms) dentro da moldura. A busca pela fala de `/videos` fica no servidor.
 - Página do vídeo (`/video/<id>`, aberta por qualquer lista; `?de=` diz para
   onde a seta e o X voltam, só caminho do site): ocupa a tela abaixo da barra
   superior. À esquerda, o vídeo no formato dele (sem faixas) sobre fundo

@@ -752,7 +752,7 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
         const status = cardStatus(v);
         const structure = o.structureOf(v);
         const label = esc([v.prompt, status.kind === "done" ? null : status.label, formatDate(v.created_at), structure.name, durationLabel(v, structure)].filter(Boolean).join(" · "));
-        return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}" aria-label="${label}" title="${label}">${thumb(v, status)}</a>`;
+        return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}" aria-label="${label}" title="${label}"><span class="frame__media">${thumb(v, status)}</span></a>`;
       })
       .join("");
     const rows = list
