@@ -40,7 +40,7 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "calendar_today", "check", "check_circle", "chevron_left", "chevron_right",
+  "add", "apps", "auto_awesome", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "calendar_today", "check", "check_circle", "chevron_left", "chevron_right",
   "close", "content_copy", "content_cut", "crop_square", "download", "edit", "error", "face", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq",
   "grid_view", "hd", "hourglass_top", "info", "lock", "logout", "more_vert", "movie", "notes", "palette", "pause", "payments", "person_add", "play_arrow",
   "record_voice_over", "refresh", "schedule", "search", "send", "swap_vert", "translate", "videocam", "view_list", "volume_off", "volume_up",
@@ -585,7 +585,7 @@ function quickEditPreview(v: Video): string {
             ${segmented("pausa", "Pausas", PAUSES, DEFAULT_PAUSE, "edicao-rapida")}
             ${segmented("camera", "Câmera", CAMERAS, DEFAULT_CAMERA, "edicao-rapida")}
           </div>
-          <button class="button button--tonal interactive quick-edit__preview" type="button" data-qe-preview disabled><span class="icon">play_arrow</span><span>Tocar prévia</span></button>
+          <button class="button button--tonal interactive quick-edit__preview" type="button" data-qe-preview><span class="icon">auto_awesome</span><span>Gerar prévia</span></button>
           <input type="hidden" name="trechos" form="edicao-rapida" data-qe-parts>
           <div class="quick-edit__actions">
             <button class="button button--outlined interactive" type="button" data-qe-close>Cancelar</button>
@@ -1197,19 +1197,6 @@ const SCRIPT = `(() => {
       if (!isQe && !qe.hidden) qe.querySelector("[data-qe-close]").click();
     });
     if (qe) qe.querySelector("[data-qe-close]").addEventListener("click", () => { for (const o of tabs) o.setAttribute("aria-selected", String(o.dataset.tab === "info")); info.hidden = false; });
-    // "Tocar prévia" na folha: o mesmo botão de tocar do player, espelhado (ícone, texto e se está ligado).
-    const preview = viewer.querySelector("[data-qe-preview]"), play = document.querySelector("[data-qe-play]");
-    if (preview && play) {
-      const mirror = () => {
-        const on = play.querySelector(".icon").textContent === "pause";
-        preview.disabled = play.disabled;
-        preview.firstElementChild.textContent = on ? "pause" : "play_arrow";
-        preview.lastElementChild.textContent = on ? "Pausar prévia" : "Tocar prévia";
-      };
-      new MutationObserver(mirror).observe(play, { attributes: true, subtree: true, childList: true, characterData: true });
-      preview.addEventListener("click", () => play.click());
-      mirror();
-    }
     // Barra do player (peças do M3: botão de ícone cheio, slider, tempo e botões de ícone).
     // Na prévia da edição rápida, o tocar comanda a prévia e o tempo é o dela; o slider fica parado.
     const bar = document.querySelector("[data-vbar]"), video = document.querySelector(".viewer__player video");
@@ -1524,7 +1511,8 @@ const PREVIEW_SCRIPT = `(() => {
     play.disabled = !parts.length || !track;
     clock.textContent = fmt(0) + " / " + fmt(total);
     help();
-    if (track && parts.length) restart();
+    // Pronta (e de novo a cada troca de escolha), a prévia já começa a tocar.
+    if (track && parts.length) { restart(); toggle(); }
   };
 
   // Toca do começo: os trechos do áudio emendados, com 5 ms de fade nas pontas (o corte não estala).
@@ -1571,16 +1559,25 @@ const PREVIEW_SCRIPT = `(() => {
   player.addEventListener("click", (e) => { if (!qe.hidden && e.target === canvas) toggle(); });
   play.addEventListener("click", toggle);
 
-  opener.addEventListener("click", async () => {
-    qe.hidden = false; opener.hidden = true; controls.hidden = false;
+  // Abrir a edição rápida só mostra as escolhas; a prévia começa no "Gerar prévia" e,
+  // pronta, toca pela barra do player (o botão não vira um segundo tocar).
+  const generate = qe.querySelector("[data-qe-preview]");
+  const setGenerate = (icon, label, disabled) => { generate.firstElementChild.textContent = icon; generate.lastElementChild.textContent = label; generate.disabled = disabled; };
+  const intro = () => { summary.textContent = "Escolha as pausas e a câmera e toque em Gerar prévia para ver o resultado."; };
+  opener.addEventListener("click", () => {
+    qe.hidden = false; opener.hidden = true;
+    help(); intro();
+    setGenerate("auto_awesome", "Gerar prévia", false);
+  });
+  generate.addEventListener("click", async () => {
+    setGenerate("hourglass_top", "Gerando prévia…", true);
+    controls.hidden = false;
     player.classList.add("is-previewing");
     // O som da prévia sai pelo Web Audio: no iPhone, assim ele toca mesmo com o modo silencioso.
     try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
     main.pause();
     if (canvas) canvas.hidden = false;
-    help();
-    qe.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    if (silences) return build();
+    if (silences) { build(); return setGenerate("check", "Prévia gerada", true); }
     summary.textContent = "Analisando o vídeo…";
     play.disabled = true;
     try {
@@ -1609,9 +1606,11 @@ const PREVIEW_SCRIPT = `(() => {
         }
       } catch {}
       build();
+      setGenerate("check", "Prévia gerada", true);
       if (!track) { const note = document.createElement("p"); note.className = "qe-result__note"; note.textContent = "Este navegador não mostra a prévia, mas o vídeo editado sai com as escolhas abaixo."; summary.append(note); }
     } catch {
       summary.textContent = "Não deu para analisar o vídeo neste navegador. O vídeo editado sai com as escolhas abaixo, sem prévia.";
+      setGenerate("auto_awesome", "Gerar prévia", false);
     }
   });
   qe.querySelector("[data-qe-close]").addEventListener("click", () => {
@@ -1623,7 +1622,8 @@ const PREVIEW_SCRIPT = `(() => {
     qe.hidden = true; opener.hidden = false; controls.hidden = true;
     player.classList.remove("is-previewing");
   });
-  qe.addEventListener("change", () => { help(); if (silences) build(); });
+  // Trocar as escolhas com a prévia gerada refaz a prévia na hora.
+  qe.addEventListener("change", () => { help(); if (silences && player.classList.contains("is-previewing")) build(); });
   form.addEventListener("submit", () => { qe.querySelector("[type=submit]").disabled = true; });
 })();`;
 

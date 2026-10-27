@@ -103,8 +103,13 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   extras) em bloco próprio e Detalhes no card de linhas (ícone, rótulo, valor);
   embaixo, Refazer (volta ao modelo com tudo preenchido, `?refazer=<id>`) e
   Baixar (menu quando há mais de uma versão). Na Edição rápida, o card
-  "Resultado da edição", Pausas, Câmera, "Tocar prévia" e, presos embaixo,
-  Cancelar e Gerar editado.
+  "Resultado da edição", Pausas, Câmera, "Gerar prévia" e, presos embaixo,
+  Cancelar e Gerar editado. Abrir a aba não analisa nada: a prévia só é feita no
+  "Gerar prévia" e, pronta, começa a tocar (e recomeça a cada troca de escolha);
+  o botão vira "Prévia gerada", desligado, e nunca é um segundo tocar (quem toca e
+  pausa é a barra do player).
+- Página do vídeo na tela larga: tem a altura da janela, nunca rola; o vídeo
+  encolhe para caber (pelo formato) e a folha rola por dentro.
 - Textos: frases de ajuda curtas, numa linha; na língua de quem usa, nunca de
   quem desenvolve (nada de nome de segredo ou de modelo técnico na tela; o
   detalhe vai para o log). Avisos de configuração não aparecem no computador

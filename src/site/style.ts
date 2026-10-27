@@ -575,7 +575,9 @@ a.frame { display: block; }
 /* A moldura tem o formato do vídeo e cabe inteira na área (pela altura ou pela largura, o que bater
    primeiro): sem faixas em cima e embaixo no 16:9 nem dos lados no 9:16. */
 .viewer__player .player__frame { width: min(100cqw, 100cqh * var(--ratio, 9 / 16)); height: auto; max-width: none; aspect-ratio: var(--ratio, 9 / 16); }
-.viewer__player .player__frame video { object-fit: cover; }
+/* O vídeo preenche a moldura por posição absoluta: o tamanho natural dele (1280 px de altura num 720p) não empurra a moldura. */
+.viewer__player .player__frame { min-height: 0; }
+.viewer__player .player__frame video { position: absolute; inset: 0; object-fit: cover; }
 .viewer__stage .stage { position: relative; z-index: 1; width: min(420px, 100%); }
 /* A barra abaixo do vídeo: barra de ferramentas flutuante do M3 (cantos inteiros, surface-container-high),
    tocar num botão de ícone cheio de 48 px, tempo em label-large e o slider do M3 Expressive. */
@@ -674,7 +676,9 @@ a.frame { display: block; }
 .menu--up > summary { list-style: none; }
 .menu--up .menu__list { top: auto; bottom: calc(100% + 4px); left: 0; right: auto; min-width: 100%; }
 @media (min-width: 840px) {
-  .viewer { grid-template-columns: minmax(0, 1fr) var(--layout-config); height: calc(100dvh - var(--bar-height, 72px)); }
+  /* A página do vídeo tem a altura da janela, nem mais: o vídeo encolhe para caber e a folha rola por dentro.
+     (flex: none, senão o flex do body ignora a altura e a página cresce com o conteúdo da folha.) */
+  .viewer { flex: none; grid-template-columns: minmax(0, 1fr) var(--layout-config); grid-template-rows: minmax(0, 1fr); height: calc(100dvh - var(--bar-height, 72px)); overflow: hidden; }
   .viewer__stage { min-height: 0; }
   .viewer__sheet { border-left: 1px solid var(--md-sys-color-outline-variant); }
 }
