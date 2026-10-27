@@ -39,6 +39,8 @@ export interface Video {
   edit_started_at: string | null;
   /** O plano da edição (src/quickedit.ts), em JSON. */
   edit_plan: string | null;
+  /** Onde está o rosto (container/rosto.py), em JSON; null enquanto ninguém pediu. */
+  face: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -86,7 +88,7 @@ export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "res
 export type VideoChanges = Partial<
   Pick<
     Video,
-    "job_id" | "status" | "video_key" | "cost" | "error" | "audio_status" | "processed_key" | "audio_error" | "audio_started_at" | "edit_status" | "edited_key" | "edit_error"
+    "job_id" | "status" | "video_key" | "cost" | "error" | "audio_status" | "processed_key" | "audio_error" | "audio_started_at" | "edit_status" | "edited_key" | "edit_error" | "face"
   >
 >;
 

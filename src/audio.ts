@@ -15,6 +15,9 @@ import type { containerPlan } from "./quickedit";
 
 export type ContainerPlan = ReturnType<typeof containerPlan>;
 
+/** Centro e altura do rosto, em frações do quadro; vazio se não achou. */
+export type Face = { x: number; y: number; altura: number } | Record<string, never>;
+
 export class AudioFixer extends Container {
   defaultPort = 8080;
   sleepAfter = "3m";
@@ -27,6 +30,8 @@ export interface AudioApi {
   treat(mp4: ReadableStream, size: number): Promise<Response>;
   /** Devolve o MP4 com a edição rápida (corpo com content-length) ou lança erro. */
   edit(mp4: ReadableStream, size: number, plan: ContainerPlan): Promise<Response>;
+  /** Onde está o rosto no vídeo (container/rosto.py). */
+  face(mp4: ReadableStream, size: number): Promise<Face>;
 }
 
 export class ContainerAudio implements AudioApi {
@@ -38,6 +43,14 @@ export class ContainerAudio implements AudioApi {
 
   edit(mp4: ReadableStream, size: number, plan: ContainerPlan): Promise<Response> {
     return this.post("/editar", "Edição rápida", mp4, size, { "x-plano": JSON.stringify(plan) });
+  }
+
+  async face(mp4: ReadableStream, size: number): Promise<Face> {
+    const res = await getContainer(this.ns, "audio").fetch(
+      new Request("http://audio/rosto", { method: "POST", body: mp4, headers: { "content-length": String(size) } }),
+    );
+    if (!res.ok) throw new Error(`Detecção do rosto falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
+    return (await res.json()) as Face;
   }
 
   private async post(path: string, what: string, mp4: ReadableStream, size: number, headers: Record<string, string> = {}): Promise<Response> {

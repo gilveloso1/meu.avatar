@@ -51,8 +51,10 @@ export const RULES = {
   tail: 0.6,
   /** A câmera só muda de enquadramento depois de pelo menos isso no mesmo (s). */
   minShot: 2.5,
-  /** Altura do rosto no quadro (fração) e onde ele fica no quadro com zoom. */
+  /** Sem rosto achado: onde ele costuma ficar (fração do quadro). */
+  faceX: 0.5,
   faceY: 0.25,
+  /** Onde o centro do rosto fica, na altura, no quadro com zoom. */
   faceInFrame: 1 / 3,
 };
 
@@ -159,8 +161,21 @@ export function parsePlan(pause: string, camera: string, parts: string): EditPla
 }
 
 /** O que vai para o contêiner (cabeçalho x-plano do POST /editar). */
-export function containerPlan(plan: EditPlan): { pausa: number; zooms: number[]; trechos?: Part[] } {
+export function containerPlan(
+  plan: EditPlan,
+  face: { x: number; y: number } | null = null,
+): { pausa: number; zooms: number[]; trechos?: Part[]; rosto?: { x: number; y: number } } {
   const pause = PAUSES.find((p) => p.value === plan.pause)?.pause ?? 0.2;
   const zooms = CAMERAS.find((c) => c.value === plan.camera)?.zooms ?? [1];
-  return plan.parts ? { pausa: pause, zooms, trechos: plan.parts } : { pausa: pause, zooms };
+  return { pausa: pause, zooms, ...(plan.parts ? { trechos: plan.parts } : {}), ...(face ? { rosto: face } : {}) };
+}
+
+/** O rosto guardado no vídeo (coluna face), se tem centro; senão null. */
+export function storedFace(json: string | null): { x: number; y: number } | null {
+  try {
+    const f = json ? (JSON.parse(json) as { x?: unknown; y?: unknown }) : null;
+    return f && typeof f.x === "number" && typeof f.y === "number" ? { x: f.x, y: f.y } : null;
+  } catch {
+    return null;
+  }
 }

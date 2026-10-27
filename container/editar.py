@@ -10,12 +10,14 @@ no HeyGen Avatar IV):
   3. volume das redes: −14 LUFS e pico até −1,5 dBFS (loudnorm linear, só
      ganho, como no tratar.sh).
 
-O rosto do avatar fica no terço de cima do quadro (foto de frente, meio
-corpo): o zoom mira no centro, um pouco acima do meio.
+O zoom mira no rosto (rosto.py, YuNet): o centro dele fica no meio, na
+largura, e a um terço do alto do quadro com zoom, sem sair do vídeo. Sem
+rosto achado, mira no centro, um pouco acima do meio.
 
 O plano (opcional, JSON) vem da prévia do site (src/quickedit.ts): "pausa"
 (a de referência, s), "zooms" (em ordem, um a cada troca) e "trechos"
-([início, fim, zoom] no original). Com os trechos, os cortes são exatamente
+([início, fim, zoom] no original), e "rosto" ({"x", "y"}, frações do
+quadro, achado antes pelo site; sem ele, o rosto.py acha aqui). Com os trechos, os cortes são exatamente
 os da prévia; sem eles, os silêncios são achados aqui e o ritmo() faz o mesmo
 que o planParts() de lá (mudou um, mude o outro).
 
@@ -47,8 +49,9 @@ CAUDA = 0.6
 PLANO_MIN = 2.5
 # Enquadramentos, em ordem: 1 é o quadro todo; 1,5 é o close no rosto.
 ZOOMS = [1.0, 1.25, 1.0, 1.5]
-# Altura do rosto no quadro original (fração da altura) e onde ele fica no quadro com zoom.
-ROSTO_Y = 0.25
+# Sem rosto achado: onde ele costuma ficar (fração do quadro). E onde o centro
+# dele fica, na altura, no quadro com zoom.
+ROSTO_X, ROSTO_Y = 0.5, 0.25
 ROSTO_NO_QUADRO = 1 / 3
 
 
@@ -118,11 +121,11 @@ def ritmo(duracao, silencios, pausa=PAUSA, zooms=ZOOMS):
     return partes
 
 
-def enquadramento(zoom, w, h):
-    """crop do ffmpeg para o zoom, mirando no rosto."""
+def enquadramento(zoom, w, h, rosto):
+    """crop do ffmpeg para o zoom, mirando no rosto (o mesmo recorte da prévia)."""
     cw, ch = round(w / zoom / 2) * 2, round(h / zoom / 2) * 2
-    x = (w - cw) // 2
-    y = min(max(0, round(ROSTO_Y * h - ROSTO_NO_QUADRO * ch)), h - ch)
+    x = min(max(0, round(rosto["x"] * w - cw / 2)), w - cw)
+    y = min(max(0, round(rosto["y"] * h - ROSTO_NO_QUADRO * ch)), h - ch)
     return f"crop={cw}:{ch}:{x}:{y},scale={w}:{h}:flags=lanczos,setsar=1"
 
 
@@ -147,15 +150,31 @@ def do_plano(plano, duracao, silencios):
     return partes
 
 
+def do_rosto(plano, entrada, partes):
+    """O rosto do plano, conferido; sem ele (e com zoom), acha aqui; sem rosto, o padrão."""
+    r = plano.get("rosto")
+    if r is None and any(z > 1 for _, _, z in partes):
+        from rosto import detectar  # OpenCV só quando precisa (e só no contêiner)
+
+        r = detectar(entrada) or None
+    if r is None:
+        return {"x": ROSTO_X, "y": ROSTO_Y}
+    if not (isinstance(r, dict) and all(isinstance(r.get(k), (int, float)) and 0 <= r[k] <= 1 for k in ("x", "y"))):
+        raise SystemExit("Rosto inválido no plano.")
+    return {"x": float(r["x"]), "y": float(r["y"])}
+
+
 def main(entrada, saida, plano=None):
     duracao, silencios, (w, h), m = analisar(entrada)
-    partes = do_plano(json.loads(plano) if plano else {}, duracao, silencios)
+    plano = json.loads(plano) if plano else {}
+    partes = do_plano(plano, duracao, silencios)
     if not partes:
         raise SystemExit("O vídeo não tem fala.")
+    rosto = do_rosto(plano, entrada, partes)
     filtros, rotulos = [], []
     for i, (a, b, zoom) in enumerate(partes):
         d = b - a
-        quadro = enquadramento(zoom, w, h)
+        quadro = enquadramento(zoom, w, h, rosto)
         filtros.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS,{quadro}[v{i}]")
         # Fades de 10 ms nas pontas: o corte não estala.
         filtros.append(f"[0:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS,afade=t=in:d=0.01,afade=t=out:st={d - 0.01:.3f}:d=0.01[a{i}]")

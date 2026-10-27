@@ -571,6 +571,54 @@ describe("edição rápida", () => {
     expect(audio!.plans[1]).toEqual({ pausa: 0.1, zooms: [1] });
   });
 
+  it("o rosto é achado pelo contêiner na primeira vez, fica guardado e vai no plano da edição", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    const session = await cookie();
+    const rosto = () => call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: session } }), api, audio);
+    let res = await rosto();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ x: 0.46, y: 0.44, altura: 0.25 });
+    res = await rosto();
+    expect(await res.json()).toEqual({ x: 0.46, y: 0.44, altura: 0.25 });
+    expect(audio!.faces).toBe(1);
+    expect(await new Db(env.DB).videoById(video.id)).toMatchObject({ face: JSON.stringify({ x: 0.46, y: 0.44, altura: 0.25 }) });
+
+    await pedir(video.id, api, audio, session, { pausa: "media", camera: "close" });
+    await studio.editNext();
+    expect(audio!.plans[0]).toEqual({ pausa: 0.2, zooms: [1, 1.25, 1, 1.5], rosto: { x: 0.46, y: 0.44 } });
+  });
+
+  it("sem rosto achado, a resposta é vazia e o plano vai sem rosto (o contêiner tenta de novo)", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    audio!.faceFound = {};
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: await cookie() } }), api, audio);
+    expect(await res.json()).toEqual({});
+    await pedir(video.id, api, audio);
+    await studio.editNext();
+    expect(audio!.plans[0]).not.toHaveProperty("rosto");
+  });
+
+  it("conta comum não pede o rosto de um vídeo do HeyGen", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: await memberCookie() } }), api, audio);
+    expect(res.status).toBe(403);
+    expect(audio!.faces).toBe(0);
+  });
+
+  it("sem login, o rosto manda para /entrar", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`), api, audio);
+    expect(res.headers.get("location")).toBe("/entrar");
+    expect(audio!.faces).toBe(0);
+  });
+
+  it("o Wan não tem rosto para a edição rápida", async () => {
+    const { api, audio, video } = await pronto("wan");
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: await cookie() } }), api, audio);
+    expect(res.status).toBe(400);
+    expect(audio!.faces).toBe(0);
+  });
+
   it("plano inválido não entra na fila", async () => {
     const { api, audio, video } = await pronto("heygen");
     const casos: Record<string, string>[] = [

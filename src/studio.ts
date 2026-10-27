@@ -1,7 +1,7 @@
-import type { AudioApi } from "./audio";
+import type { AudioApi, Face } from "./audio";
 import { Db, OPEN_STATUSES, type Role, type Video } from "./db";
 import { validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
-import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan } from "./quickedit";
+import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import { canUse, InputError, structureById, type Structure, type Values } from "./structures";
 
 export { InputError } from "./structures";
@@ -192,6 +192,36 @@ export class Studio {
     return queued;
   }
 
+  /**
+   * Onde está o rosto do vídeo, para o zoom da edição rápida: o guardado ou,
+   * na primeira vez, o que o contêiner achar (e fica guardado). Sem contêiner
+   * ou se ele falhar, null (a prévia usa o padrão).
+   */
+  async face(video: Video, user: { role: Role }): Promise<Face | null> {
+    const structure = structureById(video.structure);
+    if (!structure || !canUse(structure, user.role)) throw new ForbiddenError("Sem acesso a este vídeo.");
+    if (!structure.quickEdit) throw new InputError(`${structure.name} não tem edição rápida.`);
+    if (video.face) {
+      try {
+        return JSON.parse(video.face) as Face;
+      } catch {
+        // Guardado ilegível: acha de novo.
+      }
+    }
+    const key = video.processed_key ?? video.video_key;
+    if (!this.audio || !key) return null;
+    const original = await this.media.get(key);
+    if (!original) return null;
+    try {
+      const face = await this.audio.face(original.body, original.size);
+      await this.db.updateVideo(video.id, { face: JSON.stringify(face) });
+      return face;
+    } catch (err) {
+      console.error("Falha ao achar o rosto", video.id, err);
+      return null;
+    }
+  }
+
   /** Agendamento: faz a edição rápida do próximo vídeo da fila, a partir da versão com o áudio tratado, se houver. */
   async editNext(now = new Date()): Promise<Video | null> {
     if (!this.audio) return null;
@@ -201,7 +231,9 @@ export class Studio {
     try {
       const key = `videos/${video.id}.editado.mp4`;
       const plan = parseStoredPlan(video.edit_plan);
-      await this.runInContainer(video.processed_key ?? video.video_key, key, (body, size) => this.audio!.edit(body, size, containerPlan(plan)));
+      // O rosto achado na prévia; sem ele, o contêiner acha sozinho.
+      const face = storedFace(video.face);
+      await this.runInContainer(video.processed_key ?? video.video_key, key, (body, size) => this.audio!.edit(body, size, containerPlan(plan, face)));
       return (await this.db.updateVideo(video.id, { edit_status: "done", edited_key: key, edit_error: null }))!;
     } catch (err) {
       console.error("Falha na edição rápida", video.id, err);

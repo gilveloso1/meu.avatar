@@ -128,6 +128,8 @@ export class Site {
 
     const quickEdit = /^\/videos\/([0-9a-f-]{36})\/edicao-rapida$/.exec(path);
     if (post && quickEdit) return this.quickEdit(request, user, quickEdit[1]!);
+    const face = /^\/videos\/([0-9a-f-]{36})\/rosto$/.exec(path);
+    if (!post && face) return this.face(user, face[1]!);
 
     // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo;
     // /videos/<id>.editado.mp4: a edição rápida.
@@ -345,6 +347,20 @@ ${error ? snackbar(error) : ""}`;
     return redirect(`/modelo/${structure.id}?video=${video.id}`);
   }
 
+  /** Onde está o rosto (JSON), para a prévia da edição rápida mirar o zoom. */
+  private async face(user: User, id: string): Promise<Response> {
+    const video = await this.db.videoById(id);
+    if (!video) return new Response("não encontrado", { status: 404 });
+    try {
+      const face = await this.studio.face(video, user);
+      return new Response(JSON.stringify(face ?? {}), { headers: { "content-type": "application/json", ...SECURITY_HEADERS } });
+    } catch (err) {
+      if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
+      if (err instanceof InputError) return new Response(err.message, { status: 400 });
+      throw err;
+    }
+  }
+
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
     if (!this.studio.canGenerate) return { model: null, error: null };
     try {
@@ -528,8 +544,8 @@ function selectedVideo(v: Video, structure: Structure, showOriginal: boolean): s
 function workNotice(v: Video, status: ReturnType<typeof cardStatus>): string {
   const editing = v.edit_status === "pending" || v.edit_status === "processing";
   const text = editing
-    ? `Fica pronto em uns 4 minutos e aparece aqui sozinho. Enquanto isso, o player mostra ${v.edited_key ? "a edição anterior" : "o original"}.`
-    : "Fica pronto em uns 2 minutos e aparece aqui sozinho. Enquanto isso, o player mostra o som como veio do modelo.";
+    ? `Quando ficar pronto, aparece aqui sozinho. Enquanto isso, o player mostra ${v.edited_key ? "a edição anterior" : "o original"}.`
+    : "Quando ficar pronto, aparece aqui sozinho. Enquanto isso, o player mostra o som como veio do modelo.";
   return `<div class="work-notice" role="status">
           <span class="icon" aria-hidden="true">${status.icon}</span>
           <div class="work-notice__body">
@@ -549,6 +565,7 @@ function workNotice(v: Video, status: ReturnType<typeof cardStatus>): string {
 function quickEditPreview(v: Video): string {
   const config = {
     src: videoSrc(v),
+    face: `/videos/${v.id}/rosto`,
     rules: RULES,
     pauses: Object.fromEntries(PAUSES.map((p) => [p.value, p.pause])),
     cameras: Object.fromEntries(CAMERAS.map((c) => [c.value, c.zooms])),
@@ -1114,7 +1131,7 @@ const PREVIEW_SCRIPT = `(() => {
   };
 
   // --- Estado: o áudio, o vídeo lido, os trechos e a reprodução.
-  let actx = null, buf = null, silences = null, track = null, canvas = null, g2d = null;
+  let actx = null, buf = null, silences = null, track = null, canvas = null, g2d = null, face = { x: R.faceX, y: R.faceY };
   let parts = [], starts = [], total = 0, run = null, raf = 0;
   let decoder = null, next = 0, flushed = false, frames = [], drawn = false;
 
@@ -1145,13 +1162,15 @@ const PREVIEW_SCRIPT = `(() => {
     }
     if (decoder && next >= track.samples.length && !flushed) { flushed = true; quiet(decoder.flush()); }
   };
-  // O zoom é uma transformação do canvas sobre o quadro inteiro, não um recorte no
-  // drawImage: o Safari (e todo navegador do iPhone) ignora o recorte com VideoFrame.
+  // O zoom mira no rosto (achado no contêiner), o mesmo recorte do editar.py. É uma
+  // transformação do canvas sobre o quadro inteiro, não um recorte no drawImage: o
+  // Safari (e todo navegador do iPhone) ignora o recorte com VideoFrame.
   const draw = (f) => {
     drawn = true;
     const z = f.z, w = canvas.width, h = canvas.height, cw = w / z, ch = h / z;
-    const y = Math.min(Math.max(0, R.faceY * h - R.faceInFrame * ch), h - ch);
-    g2d.setTransform(z, 0, 0, z, -((w - cw) / 2) * z, -y * z);
+    const x = Math.min(Math.max(0, face.x * w - cw / 2), w - cw);
+    const y = Math.min(Math.max(0, face.y * h - R.faceInFrame * ch), h - ch);
+    g2d.setTransform(z, 0, 0, z, -x * z, -y * z);
     g2d.drawImage(f.frame, 0, 0, w, h);
     g2d.setTransform(1, 0, 0, 1, 0, 0);
   };
@@ -1267,7 +1286,11 @@ const PREVIEW_SCRIPT = `(() => {
     play.disabled = true;
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      // O rosto vem junto (o contêiner acha na primeira vez); sem ele, o padrão.
+      const found = fetch(cfg.face).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
       const bytes = new Uint8Array(await (await fetch(cfg.src)).arrayBuffer());
+      const f = await found;
+      if (typeof f.x === "number" && typeof f.y === "number") face = { x: f.x, y: f.y };
       // decodeAudioData fica com o buffer: vai uma cópia.
       buf = await actx.decodeAudioData(bytes.slice().buffer);
       silences = findSilences();

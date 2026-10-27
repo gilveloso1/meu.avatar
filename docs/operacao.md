@@ -94,8 +94,25 @@ acha os silêncios sozinho. O que o `editar.py` faz:
    silêncio do começo e do fim;
 2. de tempos em tempos muda o enquadramento num corte (no "Close": aberto,
    médio 1,25×, aberto, close 1,5×), como se fossem duas câmeras; o zoom
-   mira no rosto, no terço de cima;
+   mira no rosto (veja abaixo): centro dele no meio, na largura, e a um
+   terço do alto, sem sair do vídeo;
 3. volume em −14 LUFS e pico até −1,5 dBFS (loudnorm linear).
+
+**Rosto.** O contêiner acha o rosto (`container/rosto.py`): detector YuNet
+do OpenCV nos quadros-chave do vídeo, em meia resolução, e vale a mediana
+(não segue cada balanço da cabeça). Pedir um instante qualquer do vídeo
+obrigava o ffmpeg a decodificar desde o quadro-chave anterior (o HeyGen põe
+um a cada 10 s): eram 67 s no contêiner; só com os quadros-chave, 3,8 s. A
+prévia pede o rosto (`GET /videos/<id>/rosto`) junto com o vídeo; na primeira
+vez o Worker manda o MP4 ao contêiner (`POST /rosto`, com a sua própria vez,
+para não esperar uma edição) e guarda o resultado na coluna `face`. A edição
+leva esse rosto no plano; sem ele, o `editar.py` acha sozinho. Sem rosto
+achado, o zoom mira onde ele costuma ficar (centro, a 25% da altura).
+Medido: no vídeo do Ibovespa o rosto fica em 0,51 × 0,25; no outro vídeo do
+HeyGen, em 0,46 × 0,44 (a regra fixa de antes cortava mal esse). O OpenCV e
+o numpy vão na imagem como rodas baixadas e conferidas pelo SHA-256
+(`container/rodas/`, `baixar-binarios.sh`), e o modelo em `yunet.onnx`:
+a imagem passou de ~490 MB para ~820 MB.
 
 O ritmo orgânico (`planParts` em `src/quickedit.ts`, `ritmo` no
 `editar.py`) parte de uma pausa de referência (Curtas 0,1 s, Médias 0,2 s,
