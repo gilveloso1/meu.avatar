@@ -607,7 +607,8 @@ a.frame { display: block; }
 .viewer__nav--next { right: 8px; }
 .viewer__nav[hidden] { display: none; }
 .viewer__sheet { display: flex; flex-direction: column; min-height: 0; background: var(--md-sys-color-surface-container-low); }
-.viewer__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 24px; }
+/* Cabeçalho da folha: o status na mesma margem de 24 px do conteúdo; o X com o ícone a 24 px da borda (botão de 48 px). */
+.viewer__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 64px; padding: 8px 12px 8px 24px; }
 .viewer__body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 24px; }
 .viewer__panel { display: flex; flex-direction: column; gap: 24px; }
 .viewer__panel[hidden] { display: none; }
@@ -655,7 +656,8 @@ a.frame { display: block; }
 /* O botão que abre a edição rápida fica escondido: quem abre é a aba (a edição o mostra de novo ao fechar). */
 .viewer [data-qe-open] { display: none; }
 /* Abas principais do M3: 48 px, indicador de 3 px na cor primary embaixo do escolhido. */
-.tabs { display: flex; padding: 0 12px; border-bottom: 1px solid var(--md-sys-color-outline-variant); }
+/* Abas fixas do M3: de borda a borda da folha, cada uma com a mesma largura. */
+.tabs { display: flex; padding: 0; border-bottom: 1px solid var(--md-sys-color-outline-variant); }
 .tabs__tab {
   flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; margin: 0; padding: 0 16px;
   border: 0; background: none; color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem;
@@ -805,8 +807,7 @@ a.frame { display: block; }
      Sem o vídeo pronto, o mesmo espaço mostra o status e o progresso. A folha continua na página,
      sem o cabeçalho (status e X repetiriam o que já está acima e a seta da barra superior). */
   .viewer__stage { display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: 0; padding: 12px 16px 16px; background: none; }
-  /* Abas fixas do M3 no celular: de borda a borda, cada uma com metade da largura; 16 px acima delas. */
-  .tabs { padding: 0; }
+  /* 16 px entre a barra do player e as abas (que já vão de borda a borda). */
   .viewer__nav { display: none; }
   .viewer__player { width: 100%; height: auto; container-type: normal; }
   .viewer__player .player__frame { width: min(100%, calc(56svh * var(--ratio, 9 / 16))); height: auto; aspect-ratio: var(--ratio, 9 / 16); border-radius: var(--md-sys-shape-corner-large); box-shadow: none; }
