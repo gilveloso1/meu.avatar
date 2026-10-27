@@ -4,6 +4,7 @@ import { Db } from "../src/db";
 import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
 import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, SPEECH_LEAD, STYLES } from "../src/prompt";
+import { planParts, RULES } from "../src/quickedit";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { call, cookie, FakeAudioApi, FakeVideoApi, memberCookie, postForm, SITE, sign, WAN } from "./helpers";
 
@@ -532,7 +533,7 @@ describe("edição rápida", () => {
     expect(page).toMatch(/name="camera" value="close" form="edicao-rapida"[^>]* checked/);
     expect(page).toContain("Gerar vídeo editado");
     // A explicação da opção escolhida aparece embaixo de cada ajuste.
-    expect(page).toContain('data-help-for="pausa">Deixa um respiro curto entre as frases.');
+    expect(page).toContain('data-help-for="pausa">Respiro curto entre as frases.');
     expect(page).toContain('data-help-for="camera">Como o Zoom, mas de vez em quando chega bem perto do rosto.');
 
     const trechos = [[0.42, 7.417, 1], [7.928, 10.91, 1.25]];
@@ -550,7 +551,7 @@ describe("edição rápida", () => {
     expect(editado).toMatchObject({ edit_status: "done", edited_key: `videos/${video.id}.editado.mp4` });
     expect(await studio.editNext()).toBeNull();
     expect(audio!.edits).toBe(1);
-    expect(audio!.plans).toEqual([{ folga: 0.15, zooms: [1, 1.25], trechos }]);
+    expect(audio!.plans).toEqual([{ pausa: 0.35, zooms: [1, 1.25], trechos }]);
 
     const mp4 = await call(new Request(`${SITE}/videos/${video.id}.editado.mp4?baixar`, { headers: { cookie: session } }), api, audio);
     expect(await mp4.text()).toBe("mp4-falso+editado");
@@ -565,7 +566,7 @@ describe("edição rápida", () => {
     expect(page).toContain(BOTAO);
     expect((await pedir(video.id, api, audio, session, { pausa: "curta", camera: "parada" })).status).toBe(303);
     await studio.editNext();
-    expect(audio!.plans[1]).toEqual({ folga: 0.04, zooms: [1] });
+    expect(audio!.plans[1]).toEqual({ pausa: 0.1, zooms: [1] });
   });
 
   it("plano inválido não entra na fila", async () => {
@@ -647,5 +648,69 @@ describe("edição rápida", () => {
   it("sem contêiner, a edição é recusada", async () => {
     const { api, video } = await pronto("heygen", null);
     expect((await pedir(video.id, api, null)).status).toBe(400);
+  });
+});
+
+describe("ritmo orgânico da edição rápida", () => {
+  // Falas (início, fim) viram silêncios entre elas, num vídeo de `fim` segundos.
+  const silencios = (falas: number[][], fim: number) => {
+    const out: number[][] = [];
+    let t = 0;
+    for (const [a, b] of falas) {
+      if (a! > t) out.push([t, a!]);
+      t = b!;
+    }
+    if (fim > t) out.push([t, fim]);
+    return out;
+  };
+  // Quanto de pausa sobrou entre o trecho k e o k+1.
+  const sobra = (parts: number[][], falas: number[][], k: number) => parts[k]![1]! - falas[k]![1]! + (falas[k + 1]![0]! - parts[k + 1]![0]!);
+
+  it("a pausa que sobra segue a original: a longa continua maior que a curta, e as duas encurtam", () => {
+    const falas = [[0.5, 4], [4.4, 8], [9.2, 12.5], [12.9, 16]];
+    const parts = planParts(silencios(falas, 16.5), 16.5, 0.2, [1], RULES);
+    expect(parts).toHaveLength(4);
+    const curta = sobra(parts, falas, 0), longa = sobra(parts, falas, 1);
+    expect(longa).toBeGreaterThan(curta);
+    expect(longa).toBeLessThan(1.2);
+    expect(curta).toBeLessThan(0.4);
+  });
+
+  it("fala curta de um dos lados ganha pausa extra", () => {
+    const longas = [[0.5, 4], [4.4, 8], [8.4, 12]];
+    const comCurta = [[0.5, 4], [4.4, 5.1], [5.5, 9]];
+    const normal = sobra(planParts(silencios(longas, 12.5), 12.5, 0.2, [1], RULES), longas, 0);
+    const curta = sobra(planParts(silencios(comCurta, 9.5), 9.5, 0.2, [1], RULES), comCurta, 0);
+    expect(curta).toBeGreaterThan(normal + 0.05);
+  });
+
+  it("quando quase nada sairia, não corta: a pausa fica inteira", () => {
+    const falas = [[0.5, 4], [4.3, 8]];
+    const parts = planParts(silencios(falas, 8.5), 8.5, 0.35, [1], RULES);
+    expect(parts).toHaveLength(1);
+  });
+
+  it("a câmera só troca depois de 2,5 s no mesmo enquadramento", () => {
+    const falas = [[0.5, 1.6], [2.2, 3.3], [3.9, 5], [5.6, 6.7], [7.3, 8.4], [9, 10.1]];
+    const parts = planParts(silencios(falas, 10.5), 10.5, 0.2, [1, 1.25], RULES);
+    expect(parts.length).toBeGreaterThan(3);
+    let desde = 0;
+    parts.forEach((p, k) => {
+      if (k > 0 && p[2] !== parts[k - 1]![2]) {
+        expect(desde).toBeGreaterThanOrEqual(RULES.minShot);
+        desde = 0;
+      }
+      desde += p[1] - p[0];
+    });
+    expect(parts.some((p, k) => k > 0 && p[2] === parts[k - 1]![2])).toBe(true);
+  });
+
+  it("a função vai inteira no script da página: roda igual fora dela", async () => {
+    const page = await (await get("/modelo/heygen")).text();
+    const source = /const planParts = ([\s\S]*?);\n {2}const bar = /.exec(page)?.[1];
+    expect(source).toBeTruthy();
+    const copia = new Function(`return (${source})`)() as typeof planParts;
+    const falas = [[0.5, 4], [4.4, 5.1], [5.5, 9], [10, 12]];
+    expect(copia(silencios(falas, 12.5), 12.5, 0.2, [1, 1.25, 1, 1.5], RULES)).toEqual(planParts(silencios(falas, 12.5), 12.5, 0.2, [1, 1.25, 1, 1.5], RULES));
   });
 });

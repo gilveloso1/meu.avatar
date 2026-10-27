@@ -2,22 +2,24 @@
 """Edição rápida de um vídeo de avatar falando (receita testada em 27/10/2026
 no HeyGen Avatar IV):
 
-  1. corta os silêncios: pausas de mais de 0,25 s viram 0,16 s, e some o
-     silêncio do começo e do fim;
-  2. a cada corte, muda o enquadramento (aberto, médio, aberto, close), como
-     se fossem duas câmeras: o zoom esconde o "pulo" do corte;
+  1. corta os silêncios com ritmo orgânico (ritmo()): cada pausa que sobra
+     segue a original, comprimida, e ganha mais em volta de falas curtas;
+     some o silêncio do começo e do fim;
+  2. de tempos em tempos (no mínimo 2,5 s no mesmo), muda o enquadramento
+     num corte (aberto, médio, aberto, close), como se fossem duas câmeras;
   3. volume das redes: −14 LUFS e pico até −1,5 dBFS (loudnorm linear, só
      ganho, como no tratar.sh).
 
 O rosto do avatar fica no terço de cima do quadro (foto de frente, meio
 corpo): o zoom mira no centro, um pouco acima do meio.
 
-O plano (opcional, JSON) vem da prévia do site (src/quickedit.ts): "folga"
-(s), "zooms" (em ordem, um a cada corte) e "trechos" ([início, fim, zoom] no
-original). Com os trechos, os cortes são exatamente os da prévia; sem eles,
-os silêncios são achados aqui, com as mesmas regras.
+O plano (opcional, JSON) vem da prévia do site (src/quickedit.ts): "pausa"
+(a de referência, s), "zooms" (em ordem, um a cada troca) e "trechos"
+([início, fim, zoom] no original). Com os trechos, os cortes são exatamente
+os da prévia; sem eles, os silêncios são achados aqui e o ritmo() faz o mesmo
+que o planParts() de lá (mudou um, mude o outro).
 
-  editar.py entrada.mp4 saida.mp4 ['{"folga": 0.08, "zooms": [1, 1.25]}']
+  editar.py entrada.mp4 saida.mp4 ['{"pausa": 0.2, "zooms": [1, 1.25]}']
 """
 import json
 import re
@@ -27,10 +29,22 @@ import sys
 # Silêncio: abaixo de −35 dB por mais de 0,25 s.
 RUIDO_DB = -35
 SILENCIO_MIN = 0.25
-# Quanto de pausa sobra de cada lado de um corte.
-FOLGA = 0.08
+# Menos que isso entre dois silêncios é estalo ou respiração, não fala.
+FALA_MIN = 0.15
+# Pausa de referência que sobra num corte (as "Médias" do site).
+PAUSA = 0.2
 # Trechos mais curtos que isso entram no anterior (não vale um corte).
 TRECHO_MIN = 0.6
+# Pausa que sobra: entre metade e 2,5 vezes a de referência, nunca mais que a original.
+PAUSA_MIN, PAUSA_MAX = 0.5, 2.5
+# Fala mais curta que isso de um dos lados ganha pausa extra.
+BLOCO_CURTO = 1.2
+# Cortar menos que isso não vale: a pausa fica inteira.
+CORTE_MIN = 0.08
+# Da pausa que sobra, esta parte fica depois da fala; o resto, antes da seguinte.
+CAUDA = 0.6
+# A câmera só muda depois de pelo menos isso no mesmo enquadramento (s).
+PLANO_MIN = 2.5
 # Enquadramentos, em ordem: 1 é o quadro todo; 1,5 é o close no rosto.
 ZOOMS = [1.0, 1.25, 1.0, 1.5]
 # Altura do rosto no quadro original (fração da altura) e onde ele fica no quadro com zoom.
@@ -60,25 +74,47 @@ def analisar(entrada):
     return duracao, silencios, (int(w), int(h)), medida
 
 
-def trechos(duracao, silencios, folga=FOLGA):
-    """Os trechos com fala, com um pouco de pausa de cada lado."""
-    falas, fim = [], 0.0
+def ritmo(duracao, silencios, pausa=PAUSA, zooms=ZOOMS):
+    """Ritmo orgânico: os trechos do vídeo final com o zoom de cada um (igual ao planParts)."""
+    blocos, fim = [], 0.0
     for s, e in silencios:
-        # Menos que isso entre dois silêncios é estalo ou respiração, não fala.
-        if s - fim > 0.15:
-            falas.append((fim, s))
+        if s - fim > FALA_MIN:
+            blocos.append((fim, s))
         fim = e
-    if duracao - fim > 0.15:
-        falas.append((fim, duracao))
-    partes = []
-    for a, b in falas:
-        # Com folga grande, a pausa toda some: o trecho começa onde o anterior acabou.
-        a, b = max(0.0, a - folga, partes[-1][1] if partes else 0.0), min(duracao, b + folga)
-        # Fala curta demais para um corte: junta com a anterior, pausa e tudo.
-        if partes and b - a < TRECHO_MIN:
-            partes[-1][1] = b
+    if duracao - fim > FALA_MIN:
+        blocos.append((fim, duracao))
+    if not blocos:
+        return []
+    vaos = [blocos[i + 1][0] - blocos[i][1] for i in range(len(blocos) - 1)]
+    mediana = sorted(vaos)[len(vaos) // 2] if vaos else 1.0
+    fica = []
+    for i, g in enumerate(vaos):
+        # A pausa segue a original, comprimida pela raiz; fala curta de um dos lados ganha mais.
+        curto = min(blocos[i][1] - blocos[i][0], blocos[i + 1][1] - blocos[i + 1][0])
+        p = pausa * (g / mediana) ** 0.5
+        if curto < BLOCO_CURTO:
+            p += pausa * (BLOCO_CURTO - curto) / BLOCO_CURTO
+        fica.append(min(g, max(pausa * PAUSA_MIN, min(pausa * PAUSA_MAX, p))))
+    cortes, inicio = [], max(0.0, blocos[0][0] - pausa * (1 - CAUDA))
+    for i in range(len(blocos)):
+        if i == len(blocos) - 1:
+            cortes.append([inicio, min(duracao, blocos[i][1] + pausa * CAUDA)])
+        elif vaos[i] - fica[i] >= CORTE_MIN:
+            cortes.append([inicio, blocos[i][1] + fica[i] * CAUDA])
+            inicio = blocos[i + 1][0] - fica[i] * (1 - CAUDA)
+    juntos = []
+    for c in cortes:
+        # Trecho curto demais para um corte: junta com o anterior, pausa e tudo.
+        if juntos and c[1] - c[0] < TRECHO_MIN:
+            juntos[-1][1] = c[1]
         else:
-            partes.append([a, b])
+            juntos.append(list(c))
+    partes, plano, desde = [], 0, 0.0
+    for k, (a, b) in enumerate(juntos):
+        if k > 0 and desde >= PLANO_MIN:
+            plano, desde = plano + 1, 0.0
+        partes.append((round(a, 3), round(b, 3), zooms[plano % len(zooms)]))
+        desde += b - a
     return partes
 
 
@@ -92,14 +128,14 @@ def enquadramento(zoom, w, h):
 
 def do_plano(plano, duracao, silencios):
     """Os trechos com o zoom de cada um: os do plano, conferidos, ou achados aqui."""
-    folga = plano.get("folga", FOLGA)
+    pausa = plano.get("pausa", PAUSA)
     zooms = plano.get("zooms", ZOOMS)
-    if not (isinstance(folga, (int, float)) and 0 <= folga <= 0.5):
-        raise SystemExit("Folga inválida no plano.")
+    if not (isinstance(pausa, (int, float)) and 0 < pausa <= 1):
+        raise SystemExit("Pausa inválida no plano.")
     if not (isinstance(zooms, list) and zooms and all(isinstance(z, (int, float)) and 1 <= z <= 2 for z in zooms)):
         raise SystemExit("Zooms inválidos no plano.")
     if "trechos" not in plano:
-        return [(a, b, zooms[i % len(zooms)]) for i, (a, b) in enumerate(trechos(duracao, silencios, folga))]
+        return ritmo(duracao, silencios, pausa, zooms)
     partes, fim = [], 0.0
     for t in plano["trechos"]:
         if not (isinstance(t, list) and len(t) == 3 and all(isinstance(n, (int, float)) for n in t) and 1 <= t[2] <= 2):

@@ -73,13 +73,32 @@ som (mediana). No iPhone, o som da prévia toca mesmo no modo silencioso
 conseguir ler o áudio, vai só a escolha de pausas e câmera, e o contêiner
 acha os silêncios sozinho. O que o `editar.py` faz:
 
-1. corta os silêncios: pausas de mais de 0,25 s (abaixo de −35 dB) viram
-   0,08 a 0,3 s, conforme as pausas escolhidas, e some o silêncio do começo
-   e do fim;
-2. a cada corte muda o enquadramento (no "Close": aberto, médio 1,25×,
-   aberto, close 1,5×), como se fossem duas câmeras; o zoom mira no rosto,
-   no terço de cima;
+1. corta os silêncios (pausas de mais de 0,25 s abaixo de −35 dB) com
+   **ritmo orgânico**, em vez de deixar toda pausa do mesmo tamanho; some o
+   silêncio do começo e do fim;
+2. de tempos em tempos muda o enquadramento num corte (no "Close": aberto,
+   médio 1,25×, aberto, close 1,5×), como se fossem duas câmeras; o zoom
+   mira no rosto, no terço de cima;
 3. volume em −14 LUFS e pico até −1,5 dBFS (loudnorm linear).
+
+O ritmo orgânico (`planParts` em `src/quickedit.ts`, `ritmo` no
+`editar.py`) parte de uma pausa de referência (Curtas 0,1 s, Médias 0,2 s,
+Longas 0,35 s) e varia cada uma:
+
+- a pausa que sobra segue a original, comprimida pela raiz (referência ×
+  √(original ÷ mediana das pausas)): o fim de uma ideia continua respirando
+  mais que uma vírgula;
+- fala curta (menos de 1,2 s) de um dos lados ganha pausa extra, até mais
+  uma de referência: blocos curtos não ficam espremidos;
+- fica entre metade e 2,5 vezes a referência, nunca mais que a original; se
+  sairiam menos de 0,08 s, não corta;
+- 60% da pausa fica depois da fala e 40% antes da seguinte;
+- a câmera só troca de enquadramento depois de 2,5 s no mesmo: os outros
+  cortes ficam no enquadramento de antes.
+
+No último vídeo do HeyGen (Médias, Close): as pausas, que antes ficavam
+todas em 0,16 s, ficaram entre 0,17 e 0,34 s; 11 cortes e 6 trocas de câmera,
+em vez de uma troca a cada corte; 40,2 s → 36,1 s.
 
 Parte da versão com o áudio tratado, se houver. O editado fica em
 `videos/<id>.editado.mp4`; o player passa a mostrar o editado, com "Ver

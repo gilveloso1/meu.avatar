@@ -21,7 +21,7 @@ import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth
 import type { Db, User, Video, VideoStatus } from "../db";
 import type { VideoModel } from "../openrouter";
 import { styleById } from "../prompt";
-import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, RULES } from "../quickedit";
+import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
 import { canUse, type Defaults, estimate, type Field, lowestPrice, type Option, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
 import { ForbiddenError, InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
 import { CSS } from "./style";
@@ -529,7 +529,7 @@ function quickEditPreview(v: Video): string {
   const config = {
     src: videoSrc(v),
     rules: RULES,
-    pauses: Object.fromEntries(PAUSES.map((p) => [p.value, p.pad])),
+    pauses: Object.fromEntries(PAUSES.map((p) => [p.value, p.pause])),
     cameras: Object.fromEntries(CAMERAS.map((c) => [c.value, c.zooms])),
   };
   return `<section class="quick-edit" data-quick-edit='${esc(JSON.stringify(config))}' hidden aria-labelledby="edicao-rapida-titulo">
@@ -899,6 +899,7 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar; 
  * rápida. Com vídeo na fila, atualiza a página de tempos em tempos.
  */
 const SCRIPT = `(() => {
+  const planParts = ${String(planParts)};
   const bar = document.querySelector("[data-app-bar]");
   if (bar) {
     const onScroll = () => bar.classList.toggle("is-scrolled", window.scrollY > 0);
@@ -1058,23 +1059,15 @@ const SCRIPT = `(() => {
       clock.textContent = fmt(0) + " / " + fmt(total);
     };
     const build = () => {
-      const pad = cfg.pauses[form.elements.pausa.value], zooms = cfg.cameras[form.elements.camera.value];
-      const duration = buf.duration, speech = [];
-      let end = 0;
-      for (const [a, b] of silences) { if (a - end > R.minSpeech) speech.push([end, a]); end = b; }
-      if (duration - end > R.minSpeech) speech.push([end, duration]);
-      const out = [];
-      for (const [a, b] of speech) {
-        const last = out[out.length - 1], from = Math.max(0, a - pad, last ? last[1] : 0), to = Math.min(duration, b + pad);
-        if (last && to - from < R.minPart) last[1] = to; else out.push([from, to]);
-      }
-      parts = out.map(([a, b], i) => [+a.toFixed(3), +b.toFixed(3), zooms[i % zooms.length]]);
+      const duration = buf.duration;
+      parts = planParts(silences, duration, cfg.pauses[form.elements.pausa.value], cfg.cameras[form.elements.camera.value], R);
+      const shots = parts.filter((p, i) => i > 0 && p[2] !== parts[i - 1][2]).length;
       starts = [];
       total = 0;
       for (const p of parts) { starts.push(total); total += p[1] - p[0]; }
       input.value = parts.length ? JSON.stringify(parts) : "";
       summary.textContent = parts.length
-        ? (parts.length - 1) + " cortes: o vídeo fica com " + fmt(total) + " (era " + fmt(duration) + ")."
+        ? (parts.length - 1) + " cortes e " + shots + " trocas de câmera: o vídeo fica com " + fmt(total) + " (era " + fmt(duration) + ")."
         : "Não achei fala no áudio.";
       play.disabled = !parts.length;
       help();
@@ -1129,7 +1122,9 @@ const SCRIPT = `(() => {
       if (travel && travel.v.currentTime >= travel.target - 0.02) { travel.v.pause(); travel.v.playbackRate = 1; run.travel = null; }
       // O player da frente segue o som: atrasou ou adiantou, muda um pouco a velocidade.
       const cur = vids[k % 2], diff = parts[k][0] + (t - starts[k]) - cur.currentTime;
-      cur.playbackRate = Math.abs(diff) > 0.25 ? (diff > 0 ? 1.25 : 0.8) : Math.abs(diff) > 0.06 ? (diff > 0 ? 1.08 : 0.93) : 1;
+      // Só mexe com folga: cada troca de velocidade pode dar um tranco pequeno no celular.
+      const rate = Math.abs(diff) > 0.3 ? (diff > 0 ? 1.2 : 0.85) : Math.abs(diff) > 0.12 ? (diff > 0 ? 1.06 : 0.95) : Math.abs(diff) < 0.04 ? 1 : cur.playbackRate;
+      if (rate !== cur.playbackRate) cur.playbackRate = rate;
       clock.textContent = fmt(Math.max(0, Math.min(t, total))) + " / " + fmt(total);
       raf = requestAnimationFrame(tick);
     };
