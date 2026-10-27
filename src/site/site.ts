@@ -1244,7 +1244,12 @@ const SCRIPT = `(() => {
       for (const ev of ["play", "pause", "timeupdate", "loadedmetadata", "ended", "seeked"]) video.addEventListener(ev, sync);
       seek.addEventListener("input", () => { if (video.duration) video.currentTime = (Number(seek.value) / 1000) * video.duration; seek.style.setProperty("--p", (Number(seek.value) / 10) + "%"); });
       mute.addEventListener("click", () => { video.muted = !video.muted; setIcon(mute, video.muted ? "volume_off" : "volume_up", video.muted ? "Ligar o som" : "Tirar o som"); });
-      full.addEventListener("click", () => (document.fullscreenElement ? document.exitFullscreen() : frame.requestFullscreen && frame.requestFullscreen()).catch?.(() => {}));
+      // Tela cheia da moldura; no iPhone (sem tela cheia de elemento), a do próprio vídeo.
+      full.addEventListener("click", () => {
+        if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {});
+        if (frame.requestFullscreen) return void frame.requestFullscreen().catch(() => {});
+        if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+      });
       document.addEventListener("fullscreenchange", () => setIcon(full, document.fullscreenElement ? "fullscreen_exit" : "fullscreen", document.fullscreenElement ? "Sair da tela cheia" : "Tela cheia"));
       addEventListener("keydown", (e) => { if (e.key === " " && !(e.target.closest && e.target.closest("input, textarea, select, button, a, summary"))) { e.preventDefault(); toggle(); } });
       new MutationObserver(sync).observe(stage, { attributes: true, attributeFilter: ["class"] });

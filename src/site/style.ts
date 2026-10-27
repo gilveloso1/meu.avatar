@@ -832,6 +832,10 @@ a.frame { display: block; }
   .library__end .fab { position: fixed; right: 16px; bottom: 16px; z-index: 5; box-shadow: var(--md-sys-elevation-level3, var(--md-sys-elevation-level2)); }
 }
 
+/* Tela cheia: sem cantos arredondados nem sombra, o vídeo inteiro no centro (faixas pretas, se o formato pedir). */
+.viewer__player .player__frame:fullscreen { width: 100vw; height: 100vh; max-width: none; aspect-ratio: auto; border-radius: 0; box-shadow: none; background: #000; }
+.viewer__player .player__frame:fullscreen video { object-fit: contain; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
