@@ -112,9 +112,12 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 - Celular (até 599 px): só duas vistas (cards dois por linha e Detalhes, este só
   com Texto e Status); os chips numa linha só que rola para o lado; a
   configuração sem o card branco e sem a sobra embaixo do botão, os campos na
-  largura toda; na página do vídeo, o vídeo na largura toda, o fundo escuro só do
-  tamanho dele mais a barra do player, sem as setas de anterior e próximo; o FAB
-  "Novo vídeo" preso no canto.
+  largura toda; na página do vídeo (mídia do M3), o vídeo num contêiner de cantos
+  de 16 px sobre a superfície da página, no formato dele e com no máximo 56% da
+  altura da tela, a barra do player logo abaixo, sem faixa escura, sem as setas e
+  sem o cabeçalho da folha; sem vídeo pronto, um card compacto com o status (e o
+  motivo da falha, que então não se repete na folha); o FAB "Novo vídeo" preso no
+  canto.
 
 ## Contas
 

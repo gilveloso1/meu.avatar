@@ -793,13 +793,21 @@ a.frame { display: block; }
 /* Celular: as setas vão por cima do vídeo (sem a margem dos lados), a barra ocupa a largura toda
    e os cards médios ficam dois por linha. */
 @media (max-width: 599px) {
-  /* Página do vídeo: o vídeo na largura toda e o fundo só do tamanho dele (mais a barra);
-     sem as setas de anterior e próximo, que ficariam por cima do vídeo. */
-  .viewer__stage { display: block; min-height: 0; padding: 0 0 8px; }
+  /* Página do vídeo no celular (mídia do M3): o vídeo num contêiner de cantos arredondados sobre a
+     superfície da página, no formato dele e com no máximo 56% da altura da tela (o resto da página
+     aparece embaixo); a barra logo abaixo, na mesma superfície; sem faixa escura e sem as setas.
+     Sem o vídeo pronto, o mesmo espaço mostra o status e o progresso. A folha continua na página,
+     sem o cabeçalho (status e X repetiriam o que já está acima e a seta da barra superior). */
+  .viewer__stage { display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: 0; padding: 12px 16px 4px; background: none; }
   .viewer__nav { display: none; }
-  .viewer__player { height: auto; container-type: normal; }
-  .viewer__player .player__frame { width: 100%; height: auto; border-radius: 0; box-shadow: none; }
-  .vbar { width: auto; margin: 8px 8px 0; }
+  .viewer__player { width: 100%; height: auto; container-type: normal; }
+  .viewer__player .player__frame { width: min(100%, calc(56svh * var(--ratio, 9 / 16))); height: auto; aspect-ratio: var(--ratio, 9 / 16); border-radius: var(--md-sys-shape-corner-large); box-shadow: none; }
+  /* Sem vídeo (na fila ou com falha): um card compacto, da altura do conteúdo. */
+  .viewer__stage .stage { width: 100%; min-height: 0; padding: 24px 16px; gap: 12px; border-radius: var(--md-sys-shape-corner-large); }
+  .viewer__stage .stage > .icon { font-size: 32px; }
+  .vbar { width: 100%; margin: 0; box-shadow: none; }
+  .viewer__sheet { background: none; }
+  .viewer__head { display: none; }
   .vbar__time { min-width: 0; }
   .vbar__seek { min-width: 0; margin: 0 4px; }
   .frames, .library[data-grouped="false"]:not([data-view="d"]) .library__groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

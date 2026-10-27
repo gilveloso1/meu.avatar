@@ -345,8 +345,9 @@ ${error ? snackbar(error) : ""}`;
       { term: "Custo", description: v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—" },
       { term: "Criado em", description: formatDate(v.created_at) },
     ];
+    // Sem MP4, o motivo da falha já está no card do vídeo: na folha ficam só os do áudio e da edição.
     const errors = [
-      v.error,
+      v.video_key ? v.error : null,
       v.audio_status === "failed" ? `Áudio não tratado: ${v.audio_error ?? "erro desconhecido"}` : null,
       v.edit_status === "failed" ? `Edição rápida falhou: ${v.edit_error ?? "erro desconhecido"}` : null,
     ].filter((e): e is string => Boolean(e));
@@ -378,7 +379,7 @@ ${error ? snackbar(error) : ""}`;
         </div>`;
     const body = `
 <main class="viewer" id="conteudo">
-  <section class="viewer__stage" aria-label="Vídeo">
+  <section class="viewer__stage" aria-label="Vídeo" style="--ratio:${ratio}">
     <a class="viewer__nav viewer__nav--prev icon-button interactive" data-nav="prev" hidden aria-label="Vídeo anterior" title="Vídeo anterior"><span class="icon">chevron_left</span></a>
     ${media}
     ${
