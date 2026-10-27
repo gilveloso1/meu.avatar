@@ -45,6 +45,29 @@ pago (375 min de vCPU e 25 GiB·h de memória por mês) cobre uns 500 vídeos.
 
 O contêiner não tem acesso à internet (`enableInternet = false`).
 
+## Edição rápida
+
+Botão "Edição rápida" no vídeo pronto das estruturas com `quickEdit` (hoje só
+o HeyGen). O clique põe o vídeo na fila (`edit_status`: pending → processing →
+done/failed); o agendamento manda um por rodada para o mesmo contêiner
+(`POST /editar`), que roda `container/editar.py`:
+
+1. corta os silêncios: pausas de mais de 0,25 s (abaixo de −35 dB) viram
+   0,16 s, e some o silêncio do começo e do fim;
+2. a cada corte muda o enquadramento (aberto, médio 1,25×, aberto, close
+   1,5×), como se fossem duas câmeras; o zoom mira no rosto, no terço de cima;
+3. volume em −14 LUFS e pico até −1,5 dBFS (loudnorm linear).
+
+Parte da versão com o áudio tratado, se houver. O editado fica em
+`videos/<id>.editado.mp4`; o player passa a mostrar o editado, com "Ver
+original" ao lado. Se falhar, o motivo aparece em "Detalhes" e o botão volta.
+Uma edição que passa de 20 minutos vira falha.
+
+Medido em 27/10/2026 no último vídeo do HeyGen (40 s, 720p, 9:16): 40,2 s →
+35,0 s em 13 trechos; 2 min 34 s no contêiner com os limites do tipo "basic"
+(`docker run --cpus 0.25 --memory 1g`). Para testar sem o site:
+`python3 container/editar.py entrada.mp4 saida.mp4` (precisa de ffmpeg).
+
 A foto do avatar fica pública em `/midia/avatares/<uuid>.jpg` (nome impossível
 de adivinhar), porque o provedor do vídeo baixa de lá. O resto pede login.
 

@@ -38,7 +38,7 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "add_photo_alternate", "arrow_drop_down", "arrow_upward", "check", "check_circle", "close", "download", "error", "face", "graphic_eq", "grid_view", "left_panel_close", "left_panel_open", "more_vert", "right_panel_close", "right_panel_open",
+  "add", "add_photo_alternate", "arrow_drop_down", "arrow_upward", "check", "check_circle", "close", "content_cut", "download", "error", "face", "graphic_eq", "grid_view", "left_panel_close", "left_panel_open", "more_vert", "right_panel_close", "right_panel_open",
   "edit", "hourglass_top", "info", "lock", "logout", "movie", "person_add", "play_arrow", "record_voice_over", "schedule", "search", "send", "subdirectory_arrow_right",
   "videocam", "view_list",
 ];
@@ -120,17 +120,23 @@ export class Site {
       // Estrutura que não existe ou que a pessoa não pode usar: a página nem aparece.
       const structure = structureById(model[1]);
       if (!structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
-      return post ? this.createVideo(request, user, structure) : this.modelPage(user, structure, url.searchParams.get("video"));
+      return post
+        ? this.createVideo(request, user, structure)
+        : this.modelPage(user, structure, url.searchParams.get("video"), undefined, undefined, url.searchParams.has("original"));
     }
 
-    // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo.
-    const file = /^\/videos\/([0-9a-f-]{36})(\.original)?\.mp4$/.exec(path);
+    const quickEdit = /^\/videos\/([0-9a-f-]{36})\/edicao-rapida$/.exec(path);
+    if (post && quickEdit) return this.quickEdit(user, quickEdit[1]!);
+
+    // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo;
+    // /videos/<id>.editado.mp4: a edição rápida.
+    const file = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.mp4$/.exec(path);
     if (request.method === "GET" && file) {
       const video = await this.db.videoById(file[1]!);
-      const original = Boolean(file[2]);
-      const key = original ? video?.video_key : (video?.processed_key ?? video?.video_key);
+      const version = file[2];
+      const key = version === "original" ? video?.video_key : version === "editado" ? video?.edited_key : (video?.processed_key ?? video?.video_key);
       if (!video || !key) return new Response("não encontrado", { status: 404 });
-      const name = `meu-avatar-${video.id.slice(0, 8)}${original ? "-original" : ""}.mp4`;
+      const name = `meu-avatar-${video.id.slice(0, 8)}${version ? `-${version}` : ""}.mp4`;
       return this.object(request, key, "private, max-age=86400", url.searchParams.has("baixar") ? name : undefined);
     }
 
@@ -240,7 +246,7 @@ export class Site {
    * direita; os painéis dos lados se recolhem. Sem `?video=`, fica o mais novo;
    * sem vídeos, a apresentação do modelo e as falas prontas.
    */
-  private async modelPage(user: User, structure: Structure, selectedId: string | null, values?: Values, error?: string): Promise<Response> {
+  private async modelPage(user: User, structure: Structure, selectedId: string | null, values?: Values, error?: string, showOriginal = false): Promise<Response> {
     const { model, error: modelError } = await this.tryModel(structure);
     const banner = modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
     const sections = structure.sections(model, this.config.defaults);
@@ -293,7 +299,7 @@ export class Site {
     </section>
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
-      ${selected ? selectedVideo(selected, structure) : intro}
+      ${selected ? selectedVideo(selected, structure, showOriginal) : intro}
       ${speech ? composerBar(speech, value, seconds, cost, Boolean(model)) : ""}
     </div>
   </form>
@@ -315,8 +321,24 @@ export class Site {
   </section>
 </main>
 ${selected ? videoDialog(selected, structure) : ""}
+${selected && canQuickEdit(selected, structure) ? `<form id="edicao-rapida" method="post" action="/videos/${selected.id}/edicao-rapida" hidden></form>` : ""}
 ${error ? snackbar(error) : ""}`;
     return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, footer: false, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
+  }
+
+  /** Botão "Edição rápida": põe o vídeo na fila do contêiner e volta para ele. */
+  private async quickEdit(user: User, id: string): Promise<Response> {
+    const video = await this.db.videoById(id);
+    const structure = video ? structureById(video.structure) : undefined;
+    if (!video || !structure) return new Response("não encontrado", { status: 404 });
+    try {
+      await this.studio.requestQuickEdit(video, user);
+    } catch (err) {
+      if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
+      if (!(err instanceof InputError)) throw err;
+      return this.modelPage(user, structure, video.id, undefined, err.message);
+    }
+    return redirect(`/modelo/${structure.id}?video=${video.id}`);
   }
 
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
@@ -390,12 +412,16 @@ ${error ? snackbar(error) : ""}`;
   }
 }
 
-/** O que o cartão mostra: o status do vídeo e, depois de pronto, o do tratamento do áudio. */
+/** O que o cartão mostra: o status do vídeo e, depois de pronto, o do tratamento do áudio e o da edição rápida. */
 function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; kind: "busy" | "done" | "error" } {
   const minutes = (iso: string | null) => (iso ? Math.max(0, Math.floor((now - Date.parse(iso)) / 60_000)) : 0);
   if (v.status === "completed" && (v.audio_status === "pending" || v.audio_status === "processing")) {
     const since = minutes(v.audio_status === "processing" ? v.audio_started_at : v.updated_at);
     return { label: `Tratando áudio · ${since} min`, icon: "graphic_eq", kind: "busy" };
+  }
+  if (v.status === "completed" && (v.edit_status === "pending" || v.edit_status === "processing")) {
+    const since = minutes(v.edit_status === "processing" ? v.edit_started_at : v.updated_at);
+    return { label: `Editando · ${since} min`, icon: "content_cut", kind: "busy" };
   }
   const status = STATUS[v.status];
   // Na fila: quanto tempo já passou, para não parecer travado (720p leva uns 10 min).
@@ -405,9 +431,9 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
 /** Cor do ícone de cada modelo, na ordem dos cards. */
 const MODEL_TONES = ["primary", "tertiary", "secondary"] as const;
 
-/** Ícone num contêiner tonal, na cor do grupo de status: pronto, na fila, áudio ou erro. */
+/** Ícone num contêiner tonal, na cor do grupo de status: pronto, na fila, áudio ou edição, ou erro. */
 function statusTile(status: ReturnType<typeof cardStatus>, large = false): string {
-  const tone = status.kind === "done" ? "primary" : status.kind === "error" ? "error" : status.icon === "graphic_eq" ? "tertiary" : "secondary";
+  const tone = status.kind === "done" ? "primary" : status.kind === "error" ? "error" : status.icon === "graphic_eq" || status.icon === "content_cut" ? "tertiary" : "secondary";
   return `<span class="icon-tile${large ? " icon-tile--large" : ""} icon-tile--${tone}" aria-hidden="true"><span class="icon">${status.kind === "done" ? "play_arrow" : status.icon}</span></span>`;
 }
 
@@ -455,10 +481,13 @@ function paneHead(id: string, title: string, side: "left" | "right"): string {
 }
 
 /** O vídeo escolhido, no centro da página do modelo: o player (ou o andamento, ou o erro), a fala e as ações. */
-function selectedVideo(v: Video, structure: Structure): string {
+function selectedVideo(v: Video, structure: Structure, showOriginal: boolean): string {
   const status = cardStatus(v);
+  // Com a edição rápida pronta, o player mostra a editada; "Ver original" troca.
+  const edited = Boolean(v.edited_key) && !showOriginal;
+  const src = edited ? `/videos/${v.id}.editado.mp4` : videoSrc(v);
   const media = v.video_key
-    ? `<div class="player" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"><video controls preload="metadata" playsinline src="${videoSrc(v)}"></video></div>`
+    ? `<div class="player" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"><video controls preload="metadata" playsinline src="${src}"></video></div>`
     : status.kind === "error"
       ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p>${v.error ? `<p class="stage__text">${esc(v.error)}</p>` : ""}</div>`
       : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">Leva alguns minutos. A página se atualiza sozinha.</p></div>`;
@@ -471,11 +500,28 @@ function selectedVideo(v: Video, structure: Structure): string {
           <p class="selected__text">${esc(v.prompt)}</p>
         </div>
         <div class="selected__actions">
-          ${v.video_key ? `<a class="button button--text interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>Baixar MP4</a>` : ""}
+          ${v.video_key ? `<a class="button button--text interactive" href="${edited ? `/videos/${v.id}.editado.mp4` : `/videos/${v.id}.mp4`}?baixar" download><span class="icon">download</span>Baixar MP4</a>` : ""}
+          ${canQuickEdit(v, structure) ? `<button class="button button--text interactive" type="submit" form="edicao-rapida"><span class="icon">content_cut</span>Edição rápida</button>` : ""}
+          ${v.edited_key ? `<a class="button button--text interactive" href="/modelo/${structure.id}?video=${v.id}${edited ? "&amp;original" : ""}"><span class="icon">movie</span>${edited ? "Ver original" : "Ver editado"}</a>` : ""}
           <button class="button button--text interactive" type="button" data-fill="${esc(v.prompt)}"><span class="icon">edit</span>Usar esta fala</button>
           <button class="button button--text interactive" type="button" data-dialog-open="detalhes-${v.id}"><span class="icon">info</span>Detalhes</button>
         </div>
       </section>`;
+}
+
+/**
+ * O botão "Edição rápida" aparece no vídeo pronto da estrutura que tem edição,
+ * enquanto ela não foi feita (ou falhou) e o áudio não está na fila.
+ */
+function canQuickEdit(v: Video, structure: Structure): boolean {
+  return (
+    structure.quickEdit &&
+    v.status === "completed" &&
+    Boolean(v.video_key) &&
+    (v.edit_status === null || v.edit_status === "failed") &&
+    v.audio_status !== "pending" &&
+    v.audio_status !== "processing"
+  );
 }
 
 /** A caixa da fala, embaixo do centro: o campo, a duração e o custo estimados e o botão de gerar. */
@@ -511,7 +557,11 @@ function videoDialog(v: Video, structure: Structure): string {
     { term: "Criado em", description: formatDate(v.created_at) },
     { term: "Modelo", description: v.model },
   ];
-  const errors = [v.error, v.audio_status === "failed" ? `Áudio não tratado: ${v.audio_error ?? "erro desconhecido"}` : null].filter((e): e is string => Boolean(e));
+  const errors = [
+    v.error,
+    v.audio_status === "failed" ? `Áudio não tratado: ${v.audio_error ?? "erro desconhecido"}` : null,
+    v.edit_status === "failed" ? `Edição rápida falhou: ${v.edit_error ?? "erro desconhecido"}` : null,
+  ].filter((e): e is string => Boolean(e));
   return `
 <dialog class="dialog" id="detalhes-${v.id}" aria-labelledby="detalhes-${v.id}-titulo">
   <div class="dialog__header">
@@ -541,6 +591,7 @@ function videoDialog(v: Video, structure: Structure): string {
       <h3 class="dialog__title">Arquivos</h3>
       <div class="dialog__files">
         <a class="button button--tonal interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>${v.processed_key ? "Baixar com áudio tratado" : "Baixar MP4"}</a>
+        ${v.edited_key ? `<a class="button button--outlined interactive" href="/videos/${v.id}.editado.mp4?baixar" download><span class="icon">download</span>Editado</a>` : ""}
         ${v.processed_key ? `<a class="button button--outlined interactive" href="/videos/${v.id}.original.mp4?baixar" download><span class="icon">download</span>Original</a>` : ""}
       </div>
     </section>`

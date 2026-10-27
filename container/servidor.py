@@ -1,9 +1,11 @@
 """Servidor do contêiner de áudio: POST /tratar com o MP4 no corpo devolve o
-MP4 com o áudio tratado (tratar.sh). GET /saude responde ok. Um vídeo por vez."""
+MP4 com o áudio tratado (tratar.sh); POST /editar devolve a edição rápida
+(editar.py). GET /saude responde ok. Um vídeo por vez."""
 import os, subprocess, tempfile, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LIMITE = 300 * 1024 * 1024  # 300 MB
+COMANDOS = {"/tratar": ["/app/tratar.sh"], "/editar": ["python3", "/app/editar.py"]}
 uma_vez = threading.Lock()
 
 
@@ -14,7 +16,8 @@ class Handler(BaseHTTPRequestHandler):
         self.responder(404, b"nao encontrado", "text/plain")
 
     def do_POST(self):
-        if self.path != "/tratar":
+        comando = COMANDOS.get(self.path)
+        if not comando:
             return self.responder(404, b"nao encontrado", "text/plain")
         tamanho = int(self.headers.get("content-length") or 0)
         if not 0 < tamanho <= LIMITE:
@@ -29,7 +32,7 @@ class Handler(BaseHTTPRequestHandler):
                         return self.responder(400, b"corpo incompleto", "text/plain")
                     f.write(bloco)
                     restante -= len(bloco)
-            r = subprocess.run(["/app/tratar.sh", entrada, saida], capture_output=True, timeout=600)
+            r = subprocess.run([*comando, entrada, saida], capture_output=True, timeout=600)
             if r.returncode != 0:
                 return self.responder(500, (r.stderr or b"falhou")[-2000:], "text/plain")
             self.send_response(200)

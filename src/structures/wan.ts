@@ -16,6 +16,7 @@ export const WAN: Structure = {
   icon: "movie",
   access: "all",
   treatAudio: true,
+  quickEdit: false,
   wordsPerSecond: WORDS_PER_SECOND,
   cost: { sku: "duration_seconds_{resolucao}", seconds: { field: "duracao" } },
 

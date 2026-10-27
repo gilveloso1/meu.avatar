@@ -22,7 +22,7 @@ export interface NewVideoInput {
 }
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
-/** Depois disso, um tratamento de áudio que não terminou conta como falha. */
+/** Depois disso, um tratamento de áudio (ou uma edição rápida) que não terminou conta como falha. */
 export const AUDIO_TIMEOUT_MS = 20 * 60_000;
 
 /** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
@@ -165,19 +165,54 @@ export class Studio {
     const video = await this.db.claimAudio(now.toISOString());
     if (!video) return null;
     try {
-      const original = video.video_key ? await this.media.get(video.video_key) : null;
-      if (!original) throw new Error("O vídeo original não está no R2.");
-      const res = await this.audio.treat(original.body, original.size);
-      // Repassa o MP4 tratado direto para o R2, sem carregar tudo na memória do Worker.
-      const size = Number(res.headers.get("content-length"));
       const key = `videos/${video.id}.tratado.mp4`;
-      const stream = new FixedLengthStream(size);
-      await Promise.all([res.body!.pipeTo(stream.writable), this.media.put(key, stream.readable, { httpMetadata: { contentType: "video/mp4" } })]);
+      await this.runInContainer(video.video_key, key, (body, size) => this.audio!.treat(body, size));
       return (await this.db.updateVideo(video.id, { audio_status: "done", processed_key: key, audio_error: null }))!;
     } catch (err) {
       console.error("Falha ao tratar o áudio", video.id, err);
       return (await this.db.updateVideo(video.id, { audio_status: "failed", audio_error: errorMessage(err) }))!;
     }
+  }
+
+  /**
+   * Botão "Edição rápida": confere o acesso e se o vídeo pode ser editado, e
+   * põe na fila do contêiner. Pedir de novo refaz a edição.
+   */
+  async requestQuickEdit(video: Video, user: { role: Role }, now = new Date()): Promise<Video> {
+    const structure = structureById(video.structure);
+    if (!structure || !canUse(structure, user.role)) throw new ForbiddenError("Sem acesso a este vídeo.");
+    if (!structure.quickEdit) throw new InputError(`${structure.name} não tem edição rápida.`);
+    if (!this.audio) throw new InputError("A edição rápida precisa do contêiner, que não está ligado aqui.");
+    if (video.status !== "completed" || !video.video_key) throw new InputError("O vídeo ainda não está pronto.");
+    if (video.audio_status === "pending" || video.audio_status === "processing") throw new InputError("Espere o tratamento do áudio terminar.");
+    const queued = await this.db.queueEdit(video.id, now.toISOString());
+    if (!queued) throw new InputError("A edição rápida deste vídeo já está em andamento.");
+    return queued;
+  }
+
+  /** Agendamento: faz a edição rápida do próximo vídeo da fila, a partir da versão com o áudio tratado, se houver. */
+  async editNext(now = new Date()): Promise<Video | null> {
+    if (!this.audio) return null;
+    await this.db.failStaleEdit(new Date(now.getTime() - AUDIO_TIMEOUT_MS).toISOString(), now.toISOString());
+    const video = await this.db.claimEdit(now.toISOString());
+    if (!video) return null;
+    try {
+      const key = `videos/${video.id}.editado.mp4`;
+      await this.runInContainer(video.processed_key ?? video.video_key, key, (body, size) => this.audio!.edit(body, size));
+      return (await this.db.updateVideo(video.id, { edit_status: "done", edited_key: key, edit_error: null }))!;
+    } catch (err) {
+      console.error("Falha na edição rápida", video.id, err);
+      return (await this.db.updateVideo(video.id, { edit_status: "failed", edit_error: errorMessage(err) }))!;
+    }
+  }
+
+  /** Manda o MP4 do R2 para o contêiner e grava a resposta em `to`, sem carregar tudo na memória do Worker. */
+  private async runInContainer(from: string | null, to: string, run: (body: ReadableStream, size: number) => Promise<Response>): Promise<void> {
+    const original = from ? await this.media.get(from) : null;
+    if (!original) throw new Error("O vídeo original não está no R2.");
+    const res = await run(original.body, original.size);
+    const stream = new FixedLengthStream(Number(res.headers.get("content-length")));
+    await Promise.all([res.body!.pipeTo(stream.writable), this.media.put(to, stream.readable, { httpMetadata: { contentType: "video/mp4" } })]);
   }
 
   /**

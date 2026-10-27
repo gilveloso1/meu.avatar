@@ -73,7 +73,8 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
 
 - Cada modelo de vídeo é uma estrutura em `src/structures/` (hoje `wan.ts` e
   `heygen.ts`): campos do formulário, prompt de sistema, montagem do pedido,
-  regra de custo e se o áudio passa pelo contêiner. A tela inicial tem um card
+  regra de custo, se o áudio passa pelo contêiner e se o vídeo pronto tem o
+  botão "Edição rápida" (`quickEdit`, `container/editar.py`). A tela inicial tem um card
   por modelo e uma aba com os vídeos de todos (`/videos`); a página do modelo
   (`/modelo/<id>`) tem três painéis: a configuração, o vídeo escolhido
   (`?video=<id>`) com a caixa da fala embaixo, e a lista de vídeos dele, com

@@ -503,3 +503,117 @@ describe("HeyGen Avatar IV", () => {
     expect(audio.calls).toBe(0);
   });
 });
+
+describe("edição rápida", () => {
+  const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
+
+  async function pronto(structure: "heygen" | "wan", audio: FakeAudioApi | null = new FakeAudioApi()) {
+    const api = new FakeVideoApi();
+    await post(api, structure === "heygen" ? { fala: FALA, imagem: foto() } : PEDIDO, structure, audio);
+    api.finish("job-1", { status: "completed", usage: { cost: 0.25 } });
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api, audio });
+    await studio.syncOpen();
+    const [video] = await new Db(env.DB).recentVideos();
+    return { api, audio, studio, video: video! };
+  }
+
+  const pedir = async (id: string, api: FakeVideoApi, audio: FakeAudioApi | null, session?: string) =>
+    call(postForm(`/videos/${id}/edicao-rapida`, {}, { cookie: session ?? (await cookie()) }), api, audio);
+
+  it("o botão aparece no vídeo pronto do HeyGen; o agendamento edita e o player mostra a editada", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    const session = await cookie();
+    let page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), api, audio)).text();
+    expect(page).toContain(`action="/videos/${video.id}/edicao-rapida"`);
+    expect(page).toContain('form="edicao-rapida"');
+
+    const res = await pedir(video.id, api, audio, session);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/modelo/heygen?video=${video.id}`);
+    page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), api, audio)).text();
+    expect(page).toContain("Editando");
+    expect(page).toContain("data-refresh=");
+    expect(page).not.toContain('form="edicao-rapida"');
+    // Pedir de novo enquanto está na fila não duplica.
+    expect((await pedir(video.id, api, audio, session)).status).toBe(400);
+
+    const editado = (await studio.editNext())!;
+    expect(editado).toMatchObject({ edit_status: "done", edited_key: `videos/${video.id}.editado.mp4` });
+    expect(await studio.editNext()).toBeNull();
+    expect(audio!.edits).toBe(1);
+
+    const mp4 = await call(new Request(`${SITE}/videos/${video.id}.editado.mp4?baixar`, { headers: { cookie: session } }), api, audio);
+    expect(await mp4.text()).toBe("mp4-falso+editado");
+    expect(mp4.headers.get("content-disposition")).toContain("-editado.mp4");
+    page = await (await call(new Request(`${SITE}/modelo/heygen?video=${video.id}`, { headers: { cookie: session } }), api, audio)).text();
+    expect(page).toContain(`src="/videos/${video.id}.editado.mp4"`);
+    expect(page).toContain("Ver original");
+    page = await (await call(new Request(`${SITE}/modelo/heygen?video=${video.id}&original`, { headers: { cookie: session } }), api, audio)).text();
+    expect(page).toContain(`src="/videos/${video.id}.mp4"`);
+    expect(page).toContain("Ver editado");
+  });
+
+  it("se o contêiner falhar, o motivo aparece e o botão volta", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    await pedir(video.id, api, audio);
+    audio!.fail = "Edição rápida falhou (HTTP 500): ffmpeg";
+    expect(await studio.editNext()).toMatchObject({ edit_status: "failed", edited_key: null });
+    const page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(page).toContain("Edição rápida falhou: Edição rápida falhou (HTTP 500)");
+    expect(page).toContain('form="edicao-rapida"');
+  });
+
+  it("edição que não termina em 20 minutos vira falha", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    await pedir(video.id, api, audio);
+    const db = new Db(env.DB);
+    const inicio = new Date("2026-10-27T12:00:00Z");
+    await db.claimEdit(inicio.toISOString());
+    expect(await db.claimEdit(inicio.toISOString())).toBeNull();
+    await studio.editNext(new Date(inicio.getTime() + 21 * 60_000));
+    expect(await db.videoById(video.id)).toMatchObject({ edit_status: "failed", edit_error: "A edição rápida não terminou a tempo." });
+  });
+
+  it("o Wan não tem edição rápida: sem botão e recusada mesmo mandando direto", async () => {
+    const { api, audio, studio, video } = await pronto("wan");
+    await studio.treatNextAudio();
+    const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(page).not.toContain("edicao-rapida");
+    expect((await pedir(video.id, api, audio)).status).toBe(400);
+    expect(await studio.editNext()).toBeNull();
+  });
+
+  it("vídeo que ainda não ficou pronto não é editado", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await post(api, { fala: FALA, imagem: foto() }, "heygen", audio);
+    const [video] = await new Db(env.DB).recentVideos();
+    expect((await pedir(video!.id, api, audio)).status).toBe(400);
+    expect(await new Db(env.DB).videoById(video!.id)).toMatchObject({ edit_status: null });
+  });
+
+  it("conta comum não pede a edição rápida de um vídeo do HeyGen", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const res = await pedir(video.id, api, audio, await memberCookie());
+    expect(res.status).toBe(403);
+    expect(await new Db(env.DB).videoById(video.id)).toMatchObject({ edit_status: null });
+  });
+
+  it("sem login, a edição rápida manda para /entrar", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const res = await call(postForm(`/videos/${video.id}/edicao-rapida`, {}), api, audio);
+    expect(res.headers.get("location")).toBe("/entrar");
+    expect(await new Db(env.DB).videoById(video.id)).toMatchObject({ edit_status: null });
+  });
+
+  it("formulário de outro site não pede a edição", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const req = new Request(`${SITE}/videos/${video.id}/edicao-rapida`, { method: "POST", headers: { origin: "https://outro.site", cookie: await cookie() } });
+    expect((await call(req, api, audio)).status).toBe(403);
+  });
+
+  it("sem contêiner, a edição é recusada", async () => {
+    const { api, video } = await pronto("heygen", null);
+    expect((await pedir(video.id, api, null)).status).toBe(400);
+  });
+});

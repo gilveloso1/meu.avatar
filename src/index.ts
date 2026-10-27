@@ -78,7 +78,8 @@ export default {
   async scheduled(_controller, env): Promise<void> {
     const studio = createStudio(env);
     await studio.syncOpen();
-    // Depois de buscar os prontos, trata o áudio de um vídeo da fila.
+    // Depois de buscar os prontos, trata o áudio de um vídeo da fila e faz uma edição rápida pedida.
     await studio.treatNextAudio();
+    await studio.editNext();
   },
 } satisfies ExportedHandler<Env>;

@@ -99,13 +99,21 @@ export function sessionPair(res: Response): string {
 /** Contêiner de áudio de mentira: devolve o MP4 com um sufixo, ou falha. */
 export class FakeAudioApi implements AudioApi {
   calls = 0;
+  edits = 0;
   fail: string | null = null;
   async treat(mp4: ReadableStream, size: number) {
     this.calls++;
+    return this.answer(mp4, size, "+tratado");
+  }
+  async edit(mp4: ReadableStream, size: number) {
+    this.edits++;
+    return this.answer(mp4, size, "+editado");
+  }
+  private async answer(mp4: ReadableStream, size: number, suffix: string) {
     const original = new Uint8Array(await new Response(mp4).arrayBuffer());
     if (original.length !== size) throw new Error(`tamanho errado: ${original.length} != ${size}`);
     if (this.fail) throw new Error(this.fail);
-    const out = new TextEncoder().encode(new TextDecoder().decode(original) + "+tratado");
+    const out = new TextEncoder().encode(new TextDecoder().decode(original) + suffix);
     return new Response(out, { headers: { "content-length": String(out.length), "content-type": "video/mp4" } });
   }
 }
