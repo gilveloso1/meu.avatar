@@ -612,6 +612,7 @@ describe("edição rápida", () => {
     const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api, audio)).text();
     expect(page).not.toContain(BOTAO);
     expect(page).not.toContain("/edicao-rapida");
+    expect(page).not.toContain("const planParts");
     expect((await pedir(video.id, api, audio)).status).toBe(400);
     expect(await studio.editNext()).toBeNull();
   });
@@ -705,9 +706,14 @@ describe("ritmo orgânico da edição rápida", () => {
     expect(parts.some((p, k) => k > 0 && p[2] === parts[k - 1]![2])).toBe(true);
   });
 
-  it("a função vai inteira no script da página: roda igual fora dela", async () => {
-    const page = await (await get("/modelo/heygen")).text();
-    const source = /const planParts = ([\s\S]*?);\n {2}const bar = /.exec(page)?.[1];
+  it("a função vai inteira no script da prévia: roda igual fora dela", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await post(api, { fala: FALA, imagem: new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" }) }, "heygen", audio);
+    api.finish("job-1", { status: "completed" });
+    await createStudio({ ...env, SITE_URL: SITE }, { api, audio }).syncOpen();
+    const page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    const source = /const planParts = ([\s\S]*?);\n {2}const qe = /.exec(page)?.[1];
     expect(source).toBeTruthy();
     const copia = new Function(`return (${source})`)() as typeof planParts;
     const falas = [[0.5, 4], [4.4, 5.1], [5.5, 9], [10, 12]];

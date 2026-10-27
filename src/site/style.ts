@@ -555,7 +555,7 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .player__frame { position: relative; aspect-ratio: var(--ratio, 9 / 16); height: min(420px, 60vh); max-width: calc(100% - 32px); overflow: hidden; border-radius: var(--md-sys-shape-corner-large); background: #000; }
 .player video { display: block; width: 100%; height: 100%; object-fit: contain; }
 /* Prévia da edição rápida: o zoom de cada trecho é um scale no vídeo; os controles próprios ficam por cima. */
-.player.is-previewing video { position: absolute; inset: 0; cursor: pointer; }
+.player__canvas { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; background: #000; cursor: pointer; }
 .player__controls {
   position: absolute; z-index: 2; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 4px; padding-right: 16px;
   border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface);

@@ -322,7 +322,7 @@ export class Site {
   </section>
 </main>
 ${selected ? videoDialog(selected, structure) : ""}
-${selected && canQuickEdit(selected, structure) ? `<form id="edicao-rapida" method="post" action="/videos/${selected.id}/edicao-rapida" hidden></form>` : ""}
+${selected && canQuickEdit(selected, structure) ? `<form id="edicao-rapida" method="post" action="/videos/${selected.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
 ${error ? snackbar(error) : ""}`;
     return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, footer: false, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
   }
@@ -895,11 +895,10 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar; 
  * formulário: custo e duração estimados, contador da fala, explicação da opção
  * escolhida, prévia da foto e os botões que põem um texto na caixa da fala
  * (falas prontas e "Usar esta fala"). Menus dos cards e da conta, e os painéis
- * da página do modelo que se recolhem (lembrados no navegador). A prévia da edição
- * rápida. Com vídeo na fila, atualiza a página de tempos em tempos.
+ * da página do modelo que se recolhem (lembrados no navegador). Com vídeo na fila,
+ * atualiza a página de tempos em tempos (a prévia da edição rápida tem o seu, PREVIEW_SCRIPT).
  */
 const SCRIPT = `(() => {
-  const planParts = ${String(planParts)};
   const bar = document.querySelector("[data-app-bar]");
   if (bar) {
     const onScroll = () => bar.classList.toggle("is-scrolled", window.scrollY > 0);
@@ -1000,199 +999,282 @@ const SCRIPT = `(() => {
     f.addEventListener("submit", () => { f.querySelector("[type=submit]").disabled = true; });
   }
 
-  // Edição rápida: a prévia acha os silêncios no áudio (pico de cada 10 ms) e monta os trechos
-  // com as regras do contêiner. Sem pular o vídeo de um ponto a outro: o HeyGen põe um
-  // quadro-chave a cada 10 s, e cada pulo trava. O som sai do áudio já lido, com os trechos
-  // emendados; dois players mudos se revezam: enquanto um mostra o trecho, o outro corre (mais
-  // rápido) até o começo do próximo e espera lá. No corte, só trocam de lugar.
-  const qe = document.querySelector("[data-quick-edit]");
-  if (qe) {
-    const cfg = JSON.parse(qe.dataset.quickEdit), R = cfg.rules;
-    const player = document.querySelector("[data-player]"), main = player.querySelector("video");
-    const controls = player.querySelector("[data-qe-controls]"), play = controls.querySelector("[data-qe-play]"), clock = controls.querySelector("[data-qe-time]");
-    const opener = document.querySelector("[data-qe-open]"), summary = qe.querySelector("[data-qe-summary]"), input = qe.querySelector("[data-qe-parts]");
-    const form = document.getElementById("edicao-rapida"), savedSrc = main.getAttribute("src");
-    let ctx = null, buf = null, silences = null, parts = [], starts = [], total = 0, vids = [], run = null, raf = 0;
-    const fmt = (s) => s.toFixed(1).replace(".", ",") + " s";
-    const quiet = (p) => { if (p && p.catch) p.catch(() => {}); };
-    const findSilences = () => {
-      const win = Math.round(buf.sampleRate / 100), n = Math.ceil(buf.length / win), limit = Math.pow(10, R.noiseDb / 20);
-      const chans = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i));
-      const out = [];
-      let start = -1;
-      for (let w = 0; w <= n; w++) {
-        let peak = 1;
-        if (w < n) { peak = 0; for (const c of chans) for (let i = w * win, e = Math.min(c.length, i + win); i < e; i++) peak = Math.max(peak, Math.abs(c[i])); }
-        const t = Math.min((w * win) / buf.sampleRate, buf.duration);
-        if (peak < limit) { if (start < 0) start = t; }
-        else if (start >= 0) { if (t - start >= R.minSilence) out.push([start, t]); start = -1; }
-      }
-      return out;
-    };
-    // Zoom z mirando no rosto: o mesmo recorte do contêiner, como origem do scale.
-    const frame = (v, z) => {
-      const y = Math.min(Math.max(0, R.faceY - R.faceInFrame / z), 1 - 1 / z);
-      v.style.transform = z > 1 ? "scale(" + z + ")" : "";
-      v.style.transformOrigin = z > 1 ? "50% " + ((y * z) / (z - 1)) * 100 + "%" : "";
-    };
-    const front = (v) => { for (const o of vids) o.style.zIndex = o === v ? "1" : "0"; };
-    const setPlaying = (on) => {
-      play.querySelector(".icon").textContent = on ? "pause" : "play_arrow";
-      play.setAttribute("aria-label", on ? "Pausar a prévia" : "Tocar a prévia");
-      play.title = play.getAttribute("aria-label");
-    };
-    const help = () => {
-      for (const p of qe.querySelectorAll("[data-help-for]")) {
-        const checked = [...form.elements[p.dataset.helpFor]].find((r) => r.checked);
-        p.textContent = (checked && checked.dataset.description) || "";
-      }
-    };
-    // Parado no começo: cada player no começo do seu primeiro trecho (o 1º e o 2º).
-    const reset = () => {
-      stop();
-      vids.forEach((v, i) => {
-        v.pause(); v.playbackRate = 1;
-        const p = parts[i] || parts[0];
-        if (p && Math.abs(v.currentTime - p[0]) > 0.02) v.currentTime = p[0];
-      });
-      if (parts.length) { front(vids[0]); frame(vids[0], parts[0][2]); }
-      clock.textContent = fmt(0) + " / " + fmt(total);
-    };
-    const build = () => {
-      const duration = buf.duration;
-      parts = planParts(silences, duration, cfg.pauses[form.elements.pausa.value], cfg.cameras[form.elements.camera.value], R);
-      const shots = parts.filter((p, i) => i > 0 && p[2] !== parts[i - 1][2]).length;
-      starts = [];
-      total = 0;
-      for (const p of parts) { starts.push(total); total += p[1] - p[0]; }
-      input.value = parts.length ? JSON.stringify(parts) : "";
-      summary.textContent = parts.length
-        ? (parts.length - 1) + " cortes e " + shots + " trocas de câmera: o vídeo fica com " + fmt(total) + " (era " + fmt(duration) + ")."
-        : "Não achei fala no áudio.";
-      play.disabled = !parts.length;
-      help();
-      reset();
-    };
-    const stop = () => {
-      cancelAnimationFrame(raf);
-      if (run) for (const s of run.sources) try { s.stop(); } catch {}
-      run = null;
-      vids.forEach((v) => v.pause());
-      setPlaying(false);
-    };
-    // Toca do começo: os trechos do áudio emendados, com 5 ms de fade nas pontas (o corte não estala).
-    const start = () => {
-      const t0 = ctx.currentTime + 0.05, sources = [];
-      parts.forEach((p, i) => {
-        const at = t0 + starts[i], d = p[1] - p[0], src = ctx.createBufferSource(), g = ctx.createGain();
-        src.buffer = buf; src.connect(g); g.connect(ctx.destination);
-        g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(1, at + 0.005);
-        g.gain.setValueAtTime(1, at + d - 0.005); g.gain.linearRampToValueAtTime(0, at + d);
-        src.start(at, p[0], d);
-        sources.push(src);
-      });
-      run = { t0, sources, k: 0, travel: null, paused: false };
-      quiet(vids[0].play());
-      setPlaying(true);
-      raf = requestAnimationFrame(tick);
-    };
-    const tick = () => {
-      if (!run || run.paused) return;
-      const t = ctx.currentTime - run.t0;
-      if (t >= total) { reset(); return; }
-      let k = run.k;
-      while (k + 1 < parts.length && t >= starts[k + 1]) k++;
-      if (k !== run.k) {
-        // Corte: o player que esperava no começo do trecho k vai para a frente e toca.
-        const next = vids[k % 2], prev = vids[(k + 1) % 2];
-        next.playbackRate = 1; quiet(next.play());
-        front(next); frame(next, parts[k][2]);
-        run.k = k;
-        run.travel = null;
-        prev.pause();
-        const target = parts[k + 1] && parts[k + 1][0];
-        if (target !== undefined && prev !== next) {
-          // Corre até o começo do trecho seguinte enquanto este toca; longe demais, pula (escondido).
-          const rate = (target - prev.currentTime) / ((parts[k][1] - parts[k][0]) * 0.85);
-          if (rate > 0 && rate <= 4) { prev.playbackRate = Math.max(1, rate); quiet(prev.play()); run.travel = { v: prev, target }; }
-          else prev.currentTime = target;
-        }
-      }
-      const travel = run.travel;
-      if (travel && travel.v.currentTime >= travel.target - 0.02) { travel.v.pause(); travel.v.playbackRate = 1; run.travel = null; }
-      // O player da frente segue o som: atrasou ou adiantou, muda um pouco a velocidade.
-      const cur = vids[k % 2], diff = parts[k][0] + (t - starts[k]) - cur.currentTime;
-      // Só mexe com folga: cada troca de velocidade pode dar um tranco pequeno no celular.
-      const rate = Math.abs(diff) > 0.3 ? (diff > 0 ? 1.2 : 0.85) : Math.abs(diff) > 0.12 ? (diff > 0 ? 1.06 : 0.95) : Math.abs(diff) < 0.04 ? 1 : cur.playbackRate;
-      if (rate !== cur.playbackRate) cur.playbackRate = rate;
-      clock.textContent = fmt(Math.max(0, Math.min(t, total))) + " / " + fmt(total);
-      raf = requestAnimationFrame(tick);
-    };
-    const toggle = () => {
-      if (qe.hidden || !parts.length) return;
-      quiet(ctx.resume());
-      if (!run) return start();
-      run.paused = !run.paused;
-      if (run.paused) {
-        quiet(ctx.suspend());
-        vids.forEach((v) => v.pause());
-        cancelAnimationFrame(raf);
-      } else {
-        quiet(vids[run.k % 2].play());
-        if (run.travel) quiet(run.travel.v.play());
-        raf = requestAnimationFrame(tick);
-      }
-      setPlaying(!run.paused);
-    };
-    player.addEventListener("click", (e) => { if (!qe.hidden && e.target.matches("video")) toggle(); });
-    play.addEventListener("click", toggle);
-    opener.addEventListener("click", async () => {
-      dirty = true;
-      qe.hidden = false; opener.hidden = true; controls.hidden = false;
-      player.classList.add("is-previewing");
-      // O som da prévia sai pelo Web Audio: no iPhone, assim ele toca mesmo com o modo silencioso.
-      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
-      main.pause(); main.controls = false; main.muted = true;
-      if (main.getAttribute("src") !== cfg.src) main.src = cfg.src;
-      const second = main.cloneNode();
-      second.removeAttribute("controls"); second.muted = true; second.preload = "auto";
-      main.after(second);
-      vids = [main, second];
-      help();
-      qe.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      if (silences) return build();
-      summary.textContent = "Analisando o áudio…";
-      play.disabled = true;
-      try {
-        ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-        buf = await ctx.decodeAudioData(await (await fetch(cfg.src)).arrayBuffer());
-        silences = findSilences();
-        build();
-      } catch {
-        summary.textContent = "Não deu para analisar o áudio neste navegador. O vídeo editado sai com as escolhas abaixo, sem prévia.";
-      }
-    });
-    qe.querySelector("[data-qe-close]").addEventListener("click", () => {
-      stop();
-      if (vids[1]) vids[1].remove();
-      vids = [];
-      qe.hidden = true; opener.hidden = false; controls.hidden = true;
-      player.classList.remove("is-previewing");
-      frame(main, 1); main.style.zIndex = ""; main.playbackRate = 1;
-      main.muted = false; main.controls = true;
-      if (main.getAttribute("src") !== savedSrc) main.src = savedSrc;
-    });
-    qe.addEventListener("change", () => { help(); if (silences) build(); });
-    form.addEventListener("submit", () => { qe.querySelector("[type=submit]").disabled = true; });
-  }
-
   // Vídeo na fila: confere de novo de tempos em tempos, sem perder o que está sendo
   // escrito, sem fechar um diálogo aberto e sem cortar um vídeo que está tocando.
   const refresh = Number(document.body.dataset.refresh);
   if (refresh) setInterval(() => {
     const playing = [...document.querySelectorAll("video")].some((v) => !v.paused);
-    if (!dirty && !playing && !document.querySelector("dialog[open]")) location.reload();
+    if (!dirty && !playing && !document.querySelector("dialog[open]") && !document.querySelector(".is-previewing")) location.reload();
   }, refresh * 1000);
+})();`;
+
+/**
+ * Prévia da edição rápida (só nas páginas com o botão). O navegador baixa o MP4
+ * uma vez: o áudio vira um AudioBuffer (para achar os silêncios e tocar os
+ * trechos emendados) e o vídeo é decodificado em ordem, do começo, pelo
+ * WebCodecs: um leitor de MP4 pequeno tira as amostras H.264 e o VideoDecoder
+ * devolve os quadros; os das pausas cortadas são descartados logo, os outros
+ * vão para um canvas no tempo do relógio do som, com o mesmo recorte de zoom
+ * do contêiner. Nada de pular o vídeo de um ponto a outro (o HeyGen tem um
+ * quadro-chave a cada 10 s): é o que deixa a prévia fluida também no iPhone.
+ */
+const PREVIEW_SCRIPT = `(() => {
+  const planParts = ${String(planParts)};
+  const qe = document.querySelector("[data-quick-edit]");
+  if (!qe) return;
+  const cfg = JSON.parse(qe.dataset.quickEdit), R = cfg.rules;
+  const player = document.querySelector("[data-player]"), main = player.querySelector("video");
+  const controls = player.querySelector("[data-qe-controls]"), play = controls.querySelector("[data-qe-play]"), clock = controls.querySelector("[data-qe-time]");
+  const opener = document.querySelector("[data-qe-open]"), summary = qe.querySelector("[data-qe-summary]"), input = qe.querySelector("[data-qe-parts]");
+  const form = document.getElementById("edicao-rapida");
+  const fmt = (s) => s.toFixed(1).replace(".", ",") + " s";
+  const quiet = (p) => { if (p && p.catch) p.catch(() => {}); };
+
+  // --- MP4: a faixa de vídeo H.264 (avc1), com as amostras na ordem de decodificação.
+  const demux = (bytes) => {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const boxes = (s, e) => {
+      const out = {};
+      for (let o = s; o + 8 <= e;) {
+        let size = dv.getUint32(o), h = 8;
+        const type = String.fromCharCode(bytes[o + 4], bytes[o + 5], bytes[o + 6], bytes[o + 7]);
+        if (size === 1) { size = Number(dv.getBigUint64(o + 8)); h = 16; } else if (size === 0) size = e - o;
+        if (size < h) break;
+        (out[type] = out[type] || []).push({ s: o + h, e: o + size });
+        o += size;
+      }
+      return out;
+    };
+    const one = (b, path) => path.split(".").reduce((x, t) => x && (boxes(x.s, x.e)[t] || [])[0], b);
+    const moov = boxes(0, bytes.byteLength).moov[0];
+    for (const trak of boxes(moov.s, moov.e).trak) {
+      const hdlr = one(trak, "mdia.hdlr");
+      if (String.fromCharCode(...bytes.subarray(hdlr.s + 8, hdlr.s + 12)) !== "vide") continue;
+      const mdhd = one(trak, "mdia.mdhd"), scale = dv.getUint32(mdhd.s + (bytes[mdhd.s] === 1 ? 20 : 12));
+      // Lista de edição: o primeiro trecho com mídia diz onde a exibição começa.
+      let shift = 0;
+      const elst = one(trak, "edts.elst");
+      if (elst) {
+        const v1 = bytes[elst.s] === 1;
+        for (let i = 0, n = dv.getUint32(elst.s + 4); i < n; i++) {
+          const at = elst.s + 8 + i * (v1 ? 20 : 12), t = v1 ? Number(dv.getBigInt64(at + 8)) : dv.getInt32(at + 4);
+          if (t >= 0) { shift = t; break; }
+        }
+      }
+      const stbl = one(trak, "mdia.minf.stbl"), k = boxes(stbl.s, stbl.e);
+      const entry = k.stsd[0].s + 8, avcC = boxes(entry + 86, entry + dv.getUint32(entry)).avcC;
+      if (String.fromCharCode(...bytes.subarray(entry + 4, entry + 8)) !== "avc1" || !avcC) return null;
+      const desc = bytes.slice(avcC[0].s, avcC[0].e);
+      const hex = (n) => n.toString(16).padStart(2, "0");
+      const table = (b, w) => { const n = dv.getUint32(b.s + 4), out = []; for (let i = 0; i < n; i++) out.push(w(b.s + 8 + i)); return out; };
+      const n = dv.getUint32(k.stsz[0].s + 8), fixed = dv.getUint32(k.stsz[0].s + 4);
+      const sizes = Array.from({ length: n }, (_, i) => fixed || dv.getUint32(k.stsz[0].s + 12 + i * 4));
+      const dts = [], dur = [];
+      let t = 0;
+      for (const [c, d] of table(k.stts[0], (o) => o).map((_, i) => [dv.getUint32(k.stts[0].s + 8 + i * 8), dv.getUint32(k.stts[0].s + 12 + i * 8)])) for (let j = 0; j < c; j++) { dts.push(t); dur.push(d); t += d; }
+      const cts = new Array(n).fill(0);
+      if (k.ctts) { let i = 0; const b = k.ctts[0]; for (let e = 0, m = dv.getUint32(b.s + 4); e < m; e++) { const c = dv.getUint32(b.s + 8 + e * 8), off = dv.getInt32(b.s + 12 + e * 8); for (let j = 0; j < c; j++) cts[i++] = off; } }
+      const keys = k.stss ? new Set(Array.from({ length: dv.getUint32(k.stss[0].s + 4) }, (_, i) => dv.getUint32(k.stss[0].s + 8 + i * 4) - 1)) : null;
+      const co64 = !k.stco, cob = (k.stco || k.co64)[0], chunks = Array.from({ length: dv.getUint32(cob.s + 4) }, (_, i) => co64 ? Number(dv.getBigUint64(cob.s + 8 + i * 8)) : dv.getUint32(cob.s + 8 + i * 4));
+      const stsc = k.stsc[0], runs = Array.from({ length: dv.getUint32(stsc.s + 4) }, (_, i) => [dv.getUint32(stsc.s + 8 + i * 12), dv.getUint32(stsc.s + 12 + i * 12)]);
+      const samples = [];
+      let s = 0;
+      chunks.forEach((off, c) => {
+        let per = 0;
+        for (const [first, count] of runs) if (first - 1 <= c) per = count;
+        for (let j = 0; j < per && s < n; j++, s++) {
+          samples.push({ data: bytes.subarray(off, off + sizes[s]), key: keys ? keys.has(s) : true, ts: Math.round(((dts[s] + cts[s] - shift) / scale) * 1e6), dur: Math.round((dur[s] / scale) * 1e6) });
+          off += sizes[s];
+        }
+      });
+      return { codec: "avc1." + hex(desc[1]) + hex(desc[2]) + hex(desc[3]), description: desc, width: dv.getUint16(entry + 32), height: dv.getUint16(entry + 34), samples };
+    }
+    return null;
+  };
+
+  // --- Estado: o áudio, o vídeo lido, os trechos e a reprodução.
+  let actx = null, buf = null, silences = null, track = null, canvas = null, g2d = null;
+  let parts = [], starts = [], total = 0, run = null, raf = 0;
+  let decoder = null, next = 0, flushed = false, frames = [], drawn = false;
+
+  const findSilences = () => {
+    const win = Math.round(buf.sampleRate / 100), n = Math.ceil(buf.length / win), limit = Math.pow(10, R.noiseDb / 20);
+    const chans = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i));
+    const out = [];
+    let start = -1;
+    for (let w = 0; w <= n; w++) {
+      let peak = 1;
+      if (w < n) { peak = 0; for (const c of chans) for (let i = w * win, e = Math.min(c.length, i + win); i < e; i++) peak = Math.max(peak, Math.abs(c[i])); }
+      const t = Math.min((w * win) / buf.sampleRate, buf.duration);
+      if (peak < limit) { if (start < 0) start = t; }
+      else if (start >= 0) { if (t - start >= R.minSilence) out.push([start, t]); start = -1; }
+    }
+    return out;
+  };
+  // O trecho (índice) que tem o instante t do original, ou -1 se ele foi cortado.
+  const partAt = (t) => { for (let i = 0; i < parts.length; i++) if (t >= parts[i][0] - 0.02 && t < parts[i][1] + 0.02) return i; return -1; };
+
+  // Decodifica em ordem; os quadros das pausas cortadas saem e já são fechados. Ficam
+  // poucos quadros prontos na frente: o decodificador do celular tem poucos para emprestar
+  // e para se muitos ficam abertos (por isso o desenhado também é fechado na hora).
+  const feed = () => {
+    while (decoder && decoder.state === "configured" && next < track.samples.length && decoder.decodeQueueSize < 4 && frames.length < 6) {
+      const s = track.samples[next++];
+      decoder.decode(new EncodedVideoChunk({ type: s.key ? "key" : "delta", timestamp: s.ts, duration: s.dur, data: s.data }));
+    }
+    if (decoder && next >= track.samples.length && !flushed) { flushed = true; quiet(decoder.flush()); }
+  };
+  const draw = (f) => {
+    drawn = true;
+    const z = f.z, w = canvas.width, h = canvas.height, cw = w / z, ch = h / z;
+    const y = Math.min(Math.max(0, R.faceY * h - R.faceInFrame * ch), h - ch);
+    g2d.drawImage(f.frame, (w - cw) / 2, y, cw, ch, 0, 0, w, h);
+  };
+  const restart = () => {
+    if (decoder && decoder.state !== "closed") decoder.close();
+    for (const f of frames) f.frame.close();
+    frames = []; drawn = false; next = 0; flushed = false;
+    decoder = new VideoDecoder({
+      output: (frame) => {
+        const t = frame.timestamp / 1e6, i = partAt(t);
+        if (i < 0) frame.close();
+        else {
+          frames.push({ frame, t, z: parts[i][2] });
+          if (!run && !drawn) draw(frames[0]);
+        }
+        feed();
+      },
+      error: () => { summary.textContent = "A prévia falhou neste navegador. O vídeo editado sai com as escolhas abaixo."; },
+    });
+    decoder.configure({ codec: track.codec, description: track.description, codedWidth: track.width, codedHeight: track.height });
+    feed();
+  };
+
+  const setPlaying = (on) => {
+    play.querySelector(".icon").textContent = on ? "pause" : "play_arrow";
+    play.setAttribute("aria-label", on ? "Pausar a prévia" : "Tocar a prévia");
+    play.title = play.getAttribute("aria-label");
+  };
+  const help = () => {
+    for (const p of qe.querySelectorAll("[data-help-for]")) {
+      const checked = [...form.elements[p.dataset.helpFor]].find((r) => r.checked);
+      p.textContent = (checked && checked.dataset.description) || "";
+    }
+  };
+  const stop = () => {
+    cancelAnimationFrame(raf);
+    if (run) for (const s of run.sources) try { s.stop(); } catch {}
+    run = null;
+    setPlaying(false);
+  };
+  const build = () => {
+    stop();
+    const duration = buf.duration;
+    parts = planParts(silences, duration, cfg.pauses[form.elements.pausa.value], cfg.cameras[form.elements.camera.value], R);
+    const shots = parts.filter((p, i) => i > 0 && p[2] !== parts[i - 1][2]).length;
+    starts = []; total = 0;
+    for (const p of parts) { starts.push(total); total += p[1] - p[0]; }
+    input.value = parts.length ? JSON.stringify(parts) : "";
+    summary.textContent = parts.length
+      ? (parts.length - 1) + " cortes e " + shots + " trocas de câmera: o vídeo fica com " + fmt(total) + " (era " + fmt(duration) + ")."
+      : "Não achei fala no áudio.";
+    play.disabled = !parts.length || !track;
+    clock.textContent = fmt(0) + " / " + fmt(total);
+    help();
+    if (track && parts.length) restart();
+  };
+
+  // Toca do começo: os trechos do áudio emendados, com 5 ms de fade nas pontas (o corte não estala).
+  const start = () => {
+    const t0 = actx.currentTime + 0.1, sources = [];
+    parts.forEach((p, i) => {
+      const at = t0 + starts[i], d = p[1] - p[0], src = actx.createBufferSource(), g = actx.createGain();
+      src.buffer = buf; src.connect(g); g.connect(actx.destination);
+      g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(1, at + 0.005);
+      g.gain.setValueAtTime(1, at + d - 0.005); g.gain.linearRampToValueAtTime(0, at + d);
+      src.start(at, p[0], d);
+      sources.push(src);
+    });
+    run = { t0, sources, paused: false };
+    setPlaying(true);
+    raf = requestAnimationFrame(tick);
+  };
+  const tick = () => {
+    if (!run || run.paused) return;
+    const t = actx.currentTime - run.t0;
+    if (t >= total) { stop(); restart(); clock.textContent = fmt(0) + " / " + fmt(total); return; }
+    if (t >= 0) {
+      let k = 0;
+      while (k + 1 < parts.length && t >= starts[k + 1]) k++;
+      const at = parts[k][0] + (t - starts[k]);
+      // O quadro da vez: o mais novo que já devia aparecer; vai para o canvas e é fechado.
+      let due = null;
+      while (frames.length && frames[0].t <= at + 0.02) { if (due) due.frame.close(); due = frames.shift(); }
+      if (due) { draw(due); due.frame.close(); }
+      clock.textContent = fmt(Math.min(t, total)) + " / " + fmt(total);
+    }
+    feed();
+    raf = requestAnimationFrame(tick);
+  };
+  const toggle = () => {
+    if (qe.hidden || !parts.length || !track) return;
+    quiet(actx.resume());
+    if (!run) return start();
+    run.paused = !run.paused;
+    if (run.paused) { quiet(actx.suspend()); cancelAnimationFrame(raf); }
+    else raf = requestAnimationFrame(tick);
+    setPlaying(!run.paused);
+  };
+  player.addEventListener("click", (e) => { if (!qe.hidden && e.target === canvas) toggle(); });
+  play.addEventListener("click", toggle);
+
+  opener.addEventListener("click", async () => {
+    qe.hidden = false; opener.hidden = true; controls.hidden = false;
+    player.classList.add("is-previewing");
+    // O som da prévia sai pelo Web Audio: no iPhone, assim ele toca mesmo com o modo silencioso.
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
+    main.pause();
+    if (canvas) canvas.hidden = false;
+    help();
+    qe.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (silences) return build();
+    summary.textContent = "Analisando o vídeo…";
+    play.disabled = true;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const bytes = new Uint8Array(await (await fetch(cfg.src)).arrayBuffer());
+      // decodeAudioData fica com o buffer: vai uma cópia.
+      buf = await actx.decodeAudioData(bytes.slice().buffer);
+      silences = findSilences();
+      try {
+        const t = typeof VideoDecoder === "function" ? demux(bytes) : null;
+        const ok = t && (await VideoDecoder.isConfigSupported({ codec: t.codec, description: t.description, codedWidth: t.width, codedHeight: t.height })).supported;
+        if (ok) {
+          track = t;
+          canvas = document.createElement("canvas");
+          canvas.className = "player__canvas";
+          canvas.width = t.width; canvas.height = t.height;
+          g2d = canvas.getContext("2d");
+          main.after(canvas);
+        }
+      } catch {}
+      build();
+      if (!track) summary.textContent += " Este navegador não faz a prévia; o vídeo editado sai com as escolhas abaixo.";
+    } catch {
+      summary.textContent = "Não deu para analisar o vídeo neste navegador. O vídeo editado sai com as escolhas abaixo, sem prévia.";
+    }
+  });
+  qe.querySelector("[data-qe-close]").addEventListener("click", () => {
+    stop();
+    if (decoder && decoder.state !== "closed") decoder.close();
+    for (const f of frames) f.frame.close();
+    frames = []; drawn = false; decoder = null;
+    if (canvas) canvas.hidden = true;
+    qe.hidden = true; opener.hidden = false; controls.hidden = true;
+    player.classList.remove("is-previewing");
+  });
+  qe.addEventListener("change", () => { help(); if (silences) build(); });
+  form.addEventListener("submit", () => { qe.querySelector("[type=submit]").disabled = true; });
 })();`;
 
 function formatDate(iso: string): string {

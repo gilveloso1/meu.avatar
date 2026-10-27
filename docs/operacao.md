@@ -55,15 +55,28 @@ a cada 10 ms) e toca o vídeo sem as pausas, com o zoom de cada trecho (um
 close) mudam a prévia na hora, com uma linha explicando a opção escolhida; as
 regras estão em `src/quickedit.ts` e no `editar.py` (mudou uma, mude a outra).
 
-A prévia nunca pula o vídeo de um ponto a outro durante a reprodução: o
-HeyGen põe um quadro-chave só a cada 10 s, e cada pulo travava a imagem até
-0,7 s (medido no Chromium com a CPU 4× mais lenta). O som sai do áudio já
-lido, com os trechos emendados (Web Audio, 5 ms de fade nas pontas); dois
-players mudos se revezam: enquanto um mostra o trecho, o outro corre (até 4×)
-até o começo do próximo e espera parado ali. No corte, só trocam de lugar.
-Medido do mesmo jeito: nenhuma trava acima de 100 ms e a imagem a 30 ms do
-som (mediana). No iPhone, o som da prévia toca mesmo no modo silencioso
-(`navigator.audioSession`).
+A prévia não usa o player de vídeo. O HeyGen põe um quadro-chave só a cada
+10 s, e pular o player de um trecho para o outro travava a imagem (até 0,7 s);
+a versão seguinte, com dois players mudos se revezando, ainda dava trancos no
+iPhone (Chrome e Safari usam o mesmo motor lá). Agora o script baixa o MP4 uma
+vez e:
+
+- o áudio vira um AudioBuffer (Web Audio): acha os silêncios e toca os trechos
+  emendados, com 5 ms de fade nas pontas; ele é o relógio da prévia;
+- um leitor de MP4 pequeno (no próprio script, sem biblioteca) tira as
+  amostras H.264, com os quadros B (`ctts`) e a lista de edição (`elst`) para
+  a boca bater com o som; o `VideoDecoder` (WebCodecs, iOS 16.4 em diante)
+  decodifica em ordem, do começo, sem pular; os quadros das pausas cortadas
+  são fechados na hora, e ficam no máximo 6 prontos na frente (o
+  decodificador do celular tem poucos para emprestar);
+- cada quadro vai para um `<canvas>` quando o relógio do som chega nele, com
+  o mesmo recorte de zoom do contêiner, e é fechado.
+
+Medido no Chromium (25 fps): 753 quadros em 30 s, sem quadro fora dos trechos
+e a imagem a menos de 30 ms do som em 90% do tempo. Sem WebCodecs, a prévia
+avisa e o vídeo editado sai do mesmo jeito. No iPhone, o som da prévia toca
+mesmo no modo silencioso (`navigator.audioSession`). O script da prévia
+(`PREVIEW_SCRIPT` em `src/site/site.ts`) só vai nas páginas com o botão.
 
 "Gerar vídeo editado" manda os trechos da prévia e põe o vídeo na fila
 (`edit_status`: pending → processing → done/failed; o plano fica em
