@@ -51,11 +51,13 @@ export const RULES = {
   tail: 0.6,
   /** A câmera só muda de enquadramento depois de pelo menos isso no mesmo (s). */
   minShot: 2.5,
-  /** Sem rosto achado: onde ele costuma ficar (fração do quadro). */
-  faceX: 0.5,
-  faceY: 0.25,
-  /** Onde o centro do rosto fica, na altura, no quadro com zoom (um pouco acima de 1/3). */
-  faceInFrame: 0.28,
+  /**
+   * Sem rosto achado: onde os olhos costumam ficar (fração do quadro). O zoom
+   * amplia em torno do ponto entre os olhos: ele fica no mesmo lugar da tela
+   * no aberto e com zoom, e a linha dos olhos não pula no corte.
+   */
+  eyesX: 0.5,
+  eyesY: 0.22,
 };
 
 /** Um trecho do vídeo final: começo e fim no original (s) e o zoom. */

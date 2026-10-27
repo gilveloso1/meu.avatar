@@ -10,14 +10,13 @@ no HeyGen Avatar IV):
   3. volume das redes: −14 LUFS e pico até −1,5 dBFS (loudnorm linear, só
      ganho, como no tratar.sh).
 
-O zoom mira no rosto (rosto.py, YuNet): o centro dele fica no meio, na
-largura, e a 28% do alto do quadro com zoom (um pouco acima de um terço),
-sem sair do vídeo. Sem
-rosto achado, mira no centro, um pouco acima do meio.
+O zoom amplia em torno do ponto entre os olhos (rosto.py, YuNet): ele fica
+no mesmo lugar do quadro no aberto e com zoom, e a linha dos olhos não pula
+no corte. Sem rosto achado, amplia em torno de onde os olhos costumam ficar.
 
 O plano (opcional, JSON) vem da prévia do site (src/quickedit.ts): "pausa"
 (a de referência, s), "zooms" (em ordem, um a cada troca) e "trechos"
-([início, fim, zoom] no original), e "rosto" ({"x", "y"}, frações do
+([início, fim, zoom] no original), e "rosto" ({"x", "y"}: o ponto entre os olhos, frações do
 quadro, achado antes pelo site; sem ele, o rosto.py acha aqui). Com os trechos, os cortes são exatamente
 os da prévia; sem eles, os silêncios são achados aqui e o ritmo() faz o mesmo
 que o planParts() de lá (mudou um, mude o outro).
@@ -50,10 +49,8 @@ CAUDA = 0.6
 PLANO_MIN = 2.5
 # Enquadramentos, em ordem: 1 é o quadro todo; 1,5 é o close no rosto.
 ZOOMS = [1.0, 1.25, 1.0, 1.5]
-# Sem rosto achado: onde ele costuma ficar (fração do quadro). E onde o centro
-# dele fica, na altura, no quadro com zoom.
-ROSTO_X, ROSTO_Y = 0.5, 0.25
-ROSTO_NO_QUADRO = 0.28
+# Sem rosto achado: onde os olhos costumam ficar (fração do quadro).
+OLHOS_X, OLHOS_Y = 0.5, 0.22
 
 
 def ffmpeg(*args):
@@ -125,8 +122,9 @@ def ritmo(duracao, silencios, pausa=PAUSA, zooms=ZOOMS):
 def enquadramento(zoom, w, h, rosto):
     """crop do ffmpeg para o zoom, mirando no rosto (o mesmo recorte da prévia)."""
     cw, ch = round(w / zoom / 2) * 2, round(h / zoom / 2) * 2
-    x = min(max(0, round(rosto["x"] * w - cw / 2)), w - cw)
-    y = min(max(0, round(rosto["y"] * h - ROSTO_NO_QUADRO * ch)), h - ch)
+    # Amplia em torno do ponto entre os olhos: ele fica no mesmo lugar do quadro.
+    x = round(rosto["x"] * (w - cw))
+    y = round(rosto["y"] * (h - ch))
     return f"crop={cw}:{ch}:{x}:{y},scale={w}:{h}:flags=lanczos,setsar=1"
 
 
@@ -159,7 +157,7 @@ def do_rosto(plano, entrada, partes):
 
         r = detectar(entrada) or None
     if r is None:
-        return {"x": ROSTO_X, "y": ROSTO_Y}
+        return {"x": OLHOS_X, "y": OLHOS_Y}
     if not (isinstance(r, dict) and all(isinstance(r.get(k), (int, float)) and 0 <= r[k] <= 1 for k in ("x", "y"))):
         raise SystemExit("Rosto inválido no plano.")
     return {"x": float(r["x"]), "y": float(r["y"])}

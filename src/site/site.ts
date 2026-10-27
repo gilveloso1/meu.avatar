@@ -1131,7 +1131,7 @@ const PREVIEW_SCRIPT = `(() => {
   };
 
   // --- Estado: o áudio, o vídeo lido, os trechos e a reprodução.
-  let actx = null, buf = null, silences = null, track = null, canvas = null, g2d = null, face = { x: R.faceX, y: R.faceY };
+  let actx = null, buf = null, silences = null, track = null, canvas = null, g2d = null, face = { x: R.eyesX, y: R.eyesY };
   let parts = [], starts = [], total = 0, run = null, raf = 0;
   let decoder = null, next = 0, flushed = false, frames = [], drawn = false;
 
@@ -1162,14 +1162,14 @@ const PREVIEW_SCRIPT = `(() => {
     }
     if (decoder && next >= track.samples.length && !flushed) { flushed = true; quiet(decoder.flush()); }
   };
-  // O zoom mira no rosto (achado no contêiner), o mesmo recorte do editar.py. É uma
-  // transformação do canvas sobre o quadro inteiro, não um recorte no drawImage: o
-  // Safari (e todo navegador do iPhone) ignora o recorte com VideoFrame.
+  // O zoom amplia em torno do ponto entre os olhos (achado no contêiner): ele fica no mesmo
+  // lugar da tela no aberto e com zoom, o mesmo recorte do editar.py. É uma transformação
+  // do canvas sobre o quadro inteiro, não um recorte no drawImage: o Safari (e todo
+  // navegador do iPhone) ignora o recorte com VideoFrame.
   const draw = (f) => {
     drawn = true;
     const z = f.z, w = canvas.width, h = canvas.height, cw = w / z, ch = h / z;
-    const x = Math.min(Math.max(0, face.x * w - cw / 2), w - cw);
-    const y = Math.min(Math.max(0, face.y * h - R.faceInFrame * ch), h - ch);
+    const x = face.x * (w - cw), y = face.y * (h - ch);
     g2d.setTransform(z, 0, 0, z, -x * z, -y * z);
     g2d.drawImage(f.frame, 0, 0, w, h);
     g2d.setTransform(1, 0, 0, 1, 0, 0);

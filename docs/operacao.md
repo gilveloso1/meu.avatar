@@ -94,20 +94,24 @@ acha os silêncios sozinho. O que o `editar.py` faz:
    silêncio do começo e do fim;
 2. de tempos em tempos muda o enquadramento num corte (no "Close": aberto,
    médio 1,25×, aberto, close 1,5×), como se fossem duas câmeras; o zoom
-   mira no rosto (veja abaixo): centro dele no meio, na largura, e a 28%
-   do alto (um pouco acima de um terço), sem sair do vídeo;
+   amplia em torno do ponto entre os olhos (veja abaixo): ele fica no mesmo
+   lugar da tela no aberto e com zoom, e a linha dos olhos não pula no corte;
 3. volume em −14 LUFS e pico até −1,5 dBFS (loudnorm linear).
 
-**Rosto.** O contêiner acha o rosto (`container/rosto.py`): detector YuNet
-do OpenCV nos quadros-chave do vídeo, em meia resolução, e vale a mediana
-(não segue cada balanço da cabeça). Pedir um instante qualquer do vídeo
+**Rosto.** O contêiner acha o ponto entre os olhos (`container/rosto.py`):
+detector YuNet do OpenCV nos quadros-chave do vídeo, em meia resolução, e
+vale a mediana (não segue cada balanço da cabeça). O zoom amplia em torno
+desse ponto (recorte em x = olhos × (largura − largura do recorte), o mesmo
+na altura): os olhos ficam na mesma posição da tela no aberto, no médio e no
+close, e o corte não faz a linha dos olhos pular. Pedir um instante qualquer do vídeo
 obrigava o ffmpeg a decodificar desde o quadro-chave anterior (o HeyGen põe
 um a cada 10 s): eram 67 s no contêiner; só com os quadros-chave, 3,8 s. A
 prévia pede o rosto (`GET /videos/<id>/rosto`) junto com o vídeo; na primeira
 vez o Worker manda o MP4 ao contêiner (`POST /rosto`, com a sua própria vez,
 para não esperar uma edição) e guarda o resultado na coluna `face`. A edição
 leva esse rosto no plano; sem ele, o `editar.py` acha sozinho. Sem rosto
-achado, o zoom mira onde ele costuma ficar (centro, a 25% da altura).
+achado, amplia em torno de onde os olhos costumam ficar (centro, a 22% da
+altura).
 A prévia espera o rosto até 6 s e segue com o padrão; se ele chegar depois,
 o zoom passa a mirar nele.
 
@@ -118,8 +122,8 @@ registrou "Can't read from request stream after response has been sent").
 Agora o Worker espera até 2 min o contêiner subir antes de mandar o vídeo
 (`ContainerAudio.ready`), e a detecção do rosto tenta de novo uma vez.
 
-Medido: no vídeo do Ibovespa o rosto fica em 0,51 × 0,25; no outro vídeo do
-HeyGen, em 0,46 × 0,44 (a regra fixa de antes cortava mal esse). O OpenCV e
+Medido: no vídeo do Ibovespa os olhos ficam em 0,50 × 0,23; no outro vídeo
+do HeyGen, em 0,46 × 0,42 (a regra fixa de antes cortava mal esse). O OpenCV e
 o numpy vão na imagem como rodas baixadas e conferidas pelo SHA-256
 (`container/rodas/`, `baixar-binarios.sh`), e o modelo em `yunet.onnx`:
 a imagem passou de ~490 MB para ~820 MB.

@@ -6,8 +6,9 @@ resto (pedir um instante qualquer obriga a decodificar desde o quadro-chave
 anterior, e o HeyGen põe um a cada 10 s). Vale a mediana, para não seguir cada
 balanço da cabeça.
 
-Responde com o centro do rosto e a altura dele, em frações do quadro:
-  rosto.py video.mp4  →  {"x": 0.46, "y": 0.435, "altura": 0.249}
+Responde com o ponto entre os olhos (o zoom amplia em torno dele) e a altura
+do rosto, em frações do quadro:
+  rosto.py video.mp4  →  {"x": 0.46, "y": 0.4, "altura": 0.249}
 Sem rosto em nenhum quadro-chave, responde {}.
 """
 import json
@@ -43,9 +44,9 @@ def detectar(video):
     for q in quadros:
         _, rostos = detector.detect(np.frombuffer(q, np.uint8).reshape(h, w, 3))
         if rostos is not None and len(rostos):
-            # O rosto mais confiável do quadro.
-            x, y, rw, rh = (float(v) for v in max(rostos, key=lambda f: f[14])[:4])
-            achados.append(((x + rw / 2) / w, (y + rh / 2) / h, rh / h))
+            # O rosto mais confiável do quadro; os olhos são os pontos 4-5 e 6-7 do YuNet.
+            f = [float(v) for v in max(rostos, key=lambda r: r[14])]
+            achados.append(((f[4] + f[6]) / 2 / w, (f[5] + f[7]) / 2 / h, f[3] / h))
     if not achados:
         return {}
     return {chave: round(statistics.median(a[i] for a in achados), 3) for i, chave in enumerate(("x", "y", "altura"))}
