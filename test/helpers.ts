@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { handle } from "../src/index";
-import type { AudioApi } from "../src/audio";
+import type { AudioApi, ContainerPlan, Face } from "../src/audio";
 import { randomToken, sha256 } from "../src/auth";
 import type { VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
 
@@ -99,13 +99,31 @@ export function sessionPair(res: Response): string {
 /** Contêiner de áudio de mentira: devolve o MP4 com um sufixo, ou falha. */
 export class FakeAudioApi implements AudioApi {
   calls = 0;
+  edits = 0;
+  plans: ContainerPlan[] = [];
+  faces = 0;
+  faceFound: Face = { x: 0.46, y: 0.44, altura: 0.25 };
   fail: string | null = null;
   async treat(mp4: ReadableStream, size: number) {
     this.calls++;
+    return this.answer(mp4, size, "+tratado");
+  }
+  async edit(mp4: ReadableStream, size: number, plan: ContainerPlan) {
+    this.edits++;
+    this.plans.push(plan);
+    return this.answer(mp4, size, "+editado");
+  }
+  async face(mp4: ArrayBuffer) {
+    this.faces++;
+    if (new TextDecoder().decode(mp4) !== "mp4-falso") throw new Error("o MP4 não chegou inteiro");
+    if (this.fail) throw new Error(this.fail);
+    return this.faceFound;
+  }
+  private async answer(mp4: ReadableStream, size: number, suffix: string) {
     const original = new Uint8Array(await new Response(mp4).arrayBuffer());
     if (original.length !== size) throw new Error(`tamanho errado: ${original.length} != ${size}`);
     if (this.fail) throw new Error(this.fail);
-    const out = new TextEncoder().encode(new TextDecoder().decode(original) + "+tratado");
+    const out = new TextEncoder().encode(new TextDecoder().decode(original) + suffix);
     return new Response(out, { headers: { "content-length": String(out.length), "content-type": "video/mp4" } });
   }
 }

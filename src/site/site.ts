@@ -21,7 +21,8 @@ import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth
 import type { Db, User, Video, VideoStatus } from "../db";
 import type { VideoModel } from "../openrouter";
 import { styleById } from "../prompt";
-import { canUse, type Defaults, estimate, type Field, lowestPrice, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
+import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
+import { canUse, type Defaults, estimate, type Field, lowestPrice, type Option, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
 import { ForbiddenError, InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
@@ -38,8 +39,8 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "add_photo_alternate", "arrow_drop_down", "arrow_upward", "check", "check_circle", "close", "download", "error", "face", "graphic_eq", "grid_view", "left_panel_close", "left_panel_open", "more_vert", "right_panel_close", "right_panel_open",
-  "edit", "hourglass_top", "info", "lock", "logout", "movie", "person_add", "play_arrow", "record_voice_over", "schedule", "search", "send", "subdirectory_arrow_right",
+  "add", "add_photo_alternate", "arrow_drop_down", "arrow_upward", "check", "check_circle", "close", "content_cut", "download", "error", "face", "graphic_eq", "grid_view", "left_panel_close", "left_panel_open", "more_vert", "right_panel_close", "right_panel_open",
+  "edit", "hourglass_top", "info", "lock", "logout", "movie", "pause", "person_add", "play_arrow", "record_voice_over", "schedule", "search", "send", "subdirectory_arrow_right",
   "videocam", "view_list",
 ];
 
@@ -120,17 +121,25 @@ export class Site {
       // Estrutura que não existe ou que a pessoa não pode usar: a página nem aparece.
       const structure = structureById(model[1]);
       if (!structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
-      return post ? this.createVideo(request, user, structure) : this.modelPage(user, structure, url.searchParams.get("video"));
+      return post
+        ? this.createVideo(request, user, structure)
+        : this.modelPage(user, structure, url.searchParams.get("video"), undefined, undefined, url.searchParams.has("original"));
     }
 
-    // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo.
-    const file = /^\/videos\/([0-9a-f-]{36})(\.original)?\.mp4$/.exec(path);
+    const quickEdit = /^\/videos\/([0-9a-f-]{36})\/edicao-rapida$/.exec(path);
+    if (post && quickEdit) return this.quickEdit(request, user, quickEdit[1]!);
+    const face = /^\/videos\/([0-9a-f-]{36})\/rosto$/.exec(path);
+    if (!post && face) return this.face(user, face[1]!);
+
+    // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo;
+    // /videos/<id>.editado.mp4: a edição rápida.
+    const file = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.mp4$/.exec(path);
     if (request.method === "GET" && file) {
       const video = await this.db.videoById(file[1]!);
-      const original = Boolean(file[2]);
-      const key = original ? video?.video_key : (video?.processed_key ?? video?.video_key);
+      const version = file[2];
+      const key = version === "original" ? video?.video_key : version === "editado" ? video?.edited_key : (video?.processed_key ?? video?.video_key);
       if (!video || !key) return new Response("não encontrado", { status: 404 });
-      const name = `meu-avatar-${video.id.slice(0, 8)}${original ? "-original" : ""}.mp4`;
+      const name = `meu-avatar-${video.id.slice(0, 8)}${version ? `-${version}` : ""}.mp4`;
       return this.object(request, key, "private, max-age=86400", url.searchParams.has("baixar") ? name : undefined);
     }
 
@@ -240,7 +249,7 @@ export class Site {
    * direita; os painéis dos lados se recolhem. Sem `?video=`, fica o mais novo;
    * sem vídeos, a apresentação do modelo e as falas prontas.
    */
-  private async modelPage(user: User, structure: Structure, selectedId: string | null, values?: Values, error?: string): Promise<Response> {
+  private async modelPage(user: User, structure: Structure, selectedId: string | null, values?: Values, error?: string, showOriginal = false): Promise<Response> {
     const { model, error: modelError } = await this.tryModel(structure);
     const banner = modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
     const sections = structure.sections(model, this.config.defaults);
@@ -293,7 +302,7 @@ export class Site {
     </section>
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
-      ${selected ? selectedVideo(selected, structure) : intro}
+      ${selected ? selectedVideo(selected, structure, showOriginal) : intro}
       ${speech ? composerBar(speech, value, seconds, cost, Boolean(model)) : ""}
     </div>
   </form>
@@ -315,8 +324,41 @@ export class Site {
   </section>
 </main>
 ${selected ? videoDialog(selected, structure) : ""}
+${selected && canQuickEdit(selected, structure) ? `<form id="edicao-rapida" method="post" action="/videos/${selected.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
 ${error ? snackbar(error) : ""}`;
     return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, footer: false, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
+  }
+
+  /** "Gerar vídeo editado", na prévia da edição rápida: põe o vídeo na fila do contêiner e volta para ele. */
+  private async quickEdit(request: Request, user: User, id: string): Promise<Response> {
+    const video = await this.db.videoById(id);
+    const structure = video ? structureById(video.structure) : undefined;
+    if (!video || !structure) return new Response("não encontrado", { status: 404 });
+    const form = await request.formData();
+    const field = (name: string) => String(form.get(name) ?? "");
+    try {
+      const plan = parsePlan(field("pausa") || DEFAULT_PAUSE, field("camera") || DEFAULT_CAMERA, field("trechos"));
+      await this.studio.requestQuickEdit(video, user, plan);
+    } catch (err) {
+      if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
+      if (!(err instanceof InputError)) throw err;
+      return this.modelPage(user, structure, video.id, undefined, err.message);
+    }
+    return redirect(`/modelo/${structure.id}?video=${video.id}`);
+  }
+
+  /** Onde está o rosto (JSON), para a prévia da edição rápida mirar o zoom. */
+  private async face(user: User, id: string): Promise<Response> {
+    const video = await this.db.videoById(id);
+    if (!video) return new Response("não encontrado", { status: 404 });
+    try {
+      const face = await this.studio.face(video, user);
+      return new Response(JSON.stringify(face ?? {}), { headers: { "content-type": "application/json", ...SECURITY_HEADERS } });
+    } catch (err) {
+      if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
+      if (err instanceof InputError) return new Response(err.message, { status: 400 });
+      throw err;
+    }
   }
 
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
@@ -390,12 +432,16 @@ ${error ? snackbar(error) : ""}`;
   }
 }
 
-/** O que o cartão mostra: o status do vídeo e, depois de pronto, o do tratamento do áudio. */
+/** O que o cartão mostra: o status do vídeo e, depois de pronto, o do tratamento do áudio e o da edição rápida. */
 function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; kind: "busy" | "done" | "error" } {
   const minutes = (iso: string | null) => (iso ? Math.max(0, Math.floor((now - Date.parse(iso)) / 60_000)) : 0);
   if (v.status === "completed" && (v.audio_status === "pending" || v.audio_status === "processing")) {
     const since = minutes(v.audio_status === "processing" ? v.audio_started_at : v.updated_at);
     return { label: `Tratando áudio · ${since} min`, icon: "graphic_eq", kind: "busy" };
+  }
+  if (v.status === "completed" && (v.edit_status === "pending" || v.edit_status === "processing")) {
+    const since = minutes(v.edit_status === "processing" ? v.edit_started_at : v.updated_at);
+    return { label: `Editando o vídeo · ${since} min`, icon: "content_cut", kind: "busy" };
   }
   const status = STATUS[v.status];
   // Na fila: quanto tempo já passou, para não parecer travado (720p leva uns 10 min).
@@ -405,9 +451,9 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
 /** Cor do ícone de cada modelo, na ordem dos cards. */
 const MODEL_TONES = ["primary", "tertiary", "secondary"] as const;
 
-/** Ícone num contêiner tonal, na cor do grupo de status: pronto, na fila, áudio ou erro. */
+/** Ícone num contêiner tonal, na cor do grupo de status: pronto, na fila, áudio ou edição, ou erro. */
 function statusTile(status: ReturnType<typeof cardStatus>, large = false): string {
-  const tone = status.kind === "done" ? "primary" : status.kind === "error" ? "error" : status.icon === "graphic_eq" ? "tertiary" : "secondary";
+  const tone = status.kind === "done" ? "primary" : status.kind === "error" ? "error" : status.icon === "graphic_eq" || status.icon === "content_cut" ? "tertiary" : "secondary";
   return `<span class="icon-tile${large ? " icon-tile--large" : ""} icon-tile--${tone}" aria-hidden="true"><span class="icon">${status.kind === "done" ? "play_arrow" : status.icon}</span></span>`;
 }
 
@@ -455,27 +501,123 @@ function paneHead(id: string, title: string, side: "left" | "right"): string {
 }
 
 /** O vídeo escolhido, no centro da página do modelo: o player (ou o andamento, ou o erro), a fala e as ações. */
-function selectedVideo(v: Video, structure: Structure): string {
+function selectedVideo(v: Video, structure: Structure, showOriginal: boolean): string {
   const status = cardStatus(v);
+  // Com a edição rápida pronta, o player mostra a editada; "Ver original" troca.
+  const edited = Boolean(v.edited_key) && !showOriginal;
+  const src = edited ? `/videos/${v.id}.editado.mp4` : videoSrc(v);
+  const quick = canQuickEdit(v, structure);
   const media = v.video_key
-    ? `<div class="player" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"><video controls preload="metadata" playsinline src="${videoSrc(v)}"></video></div>`
+    ? `<div class="player" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"${quick ? " data-player" : ""}><div class="player__frame"><video controls preload="metadata" playsinline src="${src}"></video>${
+        quick
+          ? `<div class="player__controls" data-qe-controls hidden><button class="icon-button interactive" type="button" data-qe-play aria-label="Tocar a prévia" title="Tocar a prévia"><span class="icon">play_arrow</span></button><span class="player__time" data-qe-time></span></div>`
+          : ""
+      }</div></div>`
     : status.kind === "error"
       ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p>${v.error ? `<p class="stage__text">${esc(v.error)}</p>` : ""}</div>`
       : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">Leva alguns minutos. A página se atualiza sozinha.</p></div>`;
   const meta = [status.label, formatDate(v.created_at), durationLabel(v, structure), v.resolution, v.aspect_ratio].join(" · ");
   return `
       <section class="selected" aria-label="Vídeo escolhido">
+        ${v.video_key && status.kind === "busy" ? workNotice(v, status) : ""}
         ${media}
         <div class="selected__body">
           <p class="selected__meta">${esc(meta)}</p>
           <p class="selected__text">${esc(v.prompt)}</p>
         </div>
         <div class="selected__actions">
-          ${v.video_key ? `<a class="button button--text interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>Baixar MP4</a>` : ""}
+          ${v.video_key ? `<a class="button button--text interactive" href="${edited ? `/videos/${v.id}.editado.mp4` : `/videos/${v.id}.mp4`}?baixar" download><span class="icon">download</span>Baixar MP4</a>` : ""}
+          ${quick ? `<button class="button button--text interactive" type="button" data-qe-open><span class="icon">content_cut</span>Edição rápida</button>` : ""}
+          ${v.edited_key ? `<a class="button button--text interactive" href="/modelo/${structure.id}?video=${v.id}${edited ? "&amp;original" : ""}"><span class="icon">movie</span>${edited ? "Ver original" : "Ver editado"}</a>` : ""}
           <button class="button button--text interactive" type="button" data-fill="${esc(v.prompt)}"><span class="icon">edit</span>Usar esta fala</button>
           <button class="button button--text interactive" type="button" data-dialog-open="detalhes-${v.id}"><span class="icon">info</span>Detalhes</button>
         </div>
+        ${quick ? quickEditPreview(v) : ""}
       </section>`;
+}
+
+/**
+ * Aviso em cima do player enquanto o contêiner trabalha num vídeo pronto (edição
+ * rápida ou tratamento do áudio): o player segue com a versão de antes, e sem o
+ * aviso parecia que nada tinha acontecido.
+ */
+function workNotice(v: Video, status: ReturnType<typeof cardStatus>): string {
+  const editing = v.edit_status === "pending" || v.edit_status === "processing";
+  const text = editing
+    ? `Quando ficar pronto, aparece aqui sozinho. Enquanto isso, o player mostra ${v.edited_key ? "a edição anterior" : "o original"}.`
+    : "Quando ficar pronto, aparece aqui sozinho. Enquanto isso, o player mostra o som como veio do modelo.";
+  return `<div class="work-notice" role="status">
+          <span class="icon" aria-hidden="true">${status.icon}</span>
+          <div class="work-notice__body">
+            <p class="work-notice__title">${esc(status.label)}</p>
+            <p class="work-notice__text">${esc(text)}</p>
+            <div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>
+          </div>
+        </div>`;
+}
+
+/**
+ * Prévia da edição rápida, aberta pelo botão: o player toca o vídeo pulando as
+ * pausas e com o zoom de cada trecho; pausas e câmera mudam a prévia na hora.
+ * "Gerar vídeo editado" manda os trechos para o contêiner (formulário
+ * #edicao-rapida, fora do formulário da fala).
+ */
+function quickEditPreview(v: Video): string {
+  const config = {
+    src: videoSrc(v),
+    face: `/videos/${v.id}/rosto`,
+    rules: RULES,
+    pauses: Object.fromEntries(PAUSES.map((p) => [p.value, p.pause])),
+    cameras: Object.fromEntries(CAMERAS.map((c) => [c.value, c.zooms])),
+  };
+  return `<section class="quick-edit" data-quick-edit='${esc(JSON.stringify(config))}' hidden aria-labelledby="edicao-rapida-titulo">
+          <div class="quick-edit__head">
+            <h2 class="quick-edit__title" id="edicao-rapida-titulo">Edição rápida</h2>
+            <p class="quick-edit__summary" data-qe-summary role="status"></p>
+          </div>
+          <div class="quick-edit__fields">
+            ${segmented("pausa", "Pausas", PAUSES, DEFAULT_PAUSE, "edicao-rapida")}
+            ${segmented("camera", "Câmera", CAMERAS, DEFAULT_CAMERA, "edicao-rapida")}
+          </div>
+          <input type="hidden" name="trechos" form="edicao-rapida" data-qe-parts>
+          <div class="quick-edit__actions">
+            <button class="button button--text interactive" type="button" data-qe-close>Cancelar</button>
+            <button class="button button--filled interactive" type="submit" form="edicao-rapida"><span class="icon">content_cut</span>Gerar vídeo editado</button>
+          </div>
+        </section>`;
+}
+
+/**
+ * O botão "Edição rápida" aparece no vídeo pronto da estrutura que tem edição,
+ * quando nem ela nem o tratamento do áudio estão na fila (editado, dá para refazer).
+ */
+function canQuickEdit(v: Video, structure: Structure): boolean {
+  return (
+    structure.quickEdit &&
+    v.status === "completed" &&
+    Boolean(v.video_key) &&
+    v.edit_status !== "pending" &&
+    v.edit_status !== "processing" &&
+    v.audio_status !== "pending" &&
+    v.audio_status !== "processing"
+  );
+}
+
+/** Escolha única em botão segmentado; `form` liga os botões a um formulário de fora. */
+function segmented(name: string, label: string, options: Option[], selected: string, form?: string): string {
+  const owner = form ? ` form="${form}"` : "";
+  // Opções com explicação: a da escolhida aparece embaixo (o script troca ao mudar).
+  const help = options.find((o) => o.value === selected)?.description;
+  return `<fieldset class="segmented-field">
+          <legend class="segmented-field__label">${esc(label)}</legend>
+          <div class="segmented-button">${options
+            .map(
+              (o) =>
+                `<label class="segmented-button__segment interactive"><input type="radio" name="${name}" value="${esc(o.value)}"${owner}${o.description ? ` data-description="${esc(o.description)}"` : ""}${o.value === selected ? " checked" : ""}><span class="icon segmented-button__check" aria-hidden="true">check</span><span>${esc(o.label)}</span></label>`,
+            )
+            .join("")}</div>
+          ${help !== undefined ? `<p class="segmented-field__help" data-help-for="${name}">${esc(help)}</p>` : ""}
+        </fieldset>`;
 }
 
 /** A caixa da fala, embaixo do centro: o campo, a duração e o custo estimados e o botão de gerar. */
@@ -511,7 +653,11 @@ function videoDialog(v: Video, structure: Structure): string {
     { term: "Criado em", description: formatDate(v.created_at) },
     { term: "Modelo", description: v.model },
   ];
-  const errors = [v.error, v.audio_status === "failed" ? `Áudio não tratado: ${v.audio_error ?? "erro desconhecido"}` : null].filter((e): e is string => Boolean(e));
+  const errors = [
+    v.error,
+    v.audio_status === "failed" ? `Áudio não tratado: ${v.audio_error ?? "erro desconhecido"}` : null,
+    v.edit_status === "failed" ? `Edição rápida falhou: ${v.edit_error ?? "erro desconhecido"}` : null,
+  ].filter((e): e is string => Boolean(e));
   return `
 <dialog class="dialog" id="detalhes-${v.id}" aria-labelledby="detalhes-${v.id}-titulo">
   <div class="dialog__header">
@@ -541,6 +687,7 @@ function videoDialog(v: Video, structure: Structure): string {
       <h3 class="dialog__title">Arquivos</h3>
       <div class="dialog__files">
         <a class="button button--tonal interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>${v.processed_key ? "Baixar com áudio tratado" : "Baixar MP4"}</a>
+        ${v.edited_key ? `<a class="button button--outlined interactive" href="/videos/${v.id}.editado.mp4?baixar" download><span class="icon">download</span>Editado</a>` : ""}
         ${v.processed_key ? `<a class="button button--outlined interactive" href="/videos/${v.id}.original.mp4?baixar" download><span class="icon">download</span>Original</a>` : ""}
       </div>
     </section>`
@@ -597,17 +744,8 @@ function formField(f: Field, value: Values): string {
           ${supporting ? `<p class="text-field__supporting" id="${f.name}-ajuda">${supporting}</p>` : ""}
         </div>`;
     }
-    case "segmented": {
-      const selected = value(f.name);
-      return `<fieldset class="segmented-field">
-          <legend class="segmented-field__label">${esc(f.label)}</legend>
-          <div class="segmented-button">${f.options
-            .map(
-              (o) => `<label class="segmented-button__segment interactive"><input type="radio" name="${f.name}" value="${esc(o.value)}"${o.value === selected ? " checked" : ""}><span class="icon segmented-button__check" aria-hidden="true">check</span><span>${esc(o.label)}</span></label>`,
-            )
-            .join("")}</div>
-        </fieldset>`;
-    }
+    case "segmented":
+      return segmented(f.name, f.label, f.options, value(f.name));
     case "image":
       return `<label class="file-picker">
           <input type="file" name="${f.name}" accept="image/jpeg,image/png,image/webp"${f.required ? " required" : ""} data-image>
@@ -795,8 +933,8 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar; 
  * formulário: custo e duração estimados, contador da fala, explicação da opção
  * escolhida, prévia da foto e os botões que põem um texto na caixa da fala
  * (falas prontas e "Usar esta fala"). Menus dos cards e da conta, e os painéis
- * da página do modelo que se recolhem (lembrados no navegador). Com vídeo na fila, atualiza a página de tempos
- * em tempos.
+ * da página do modelo que se recolhem (lembrados no navegador). Com vídeo na fila,
+ * atualiza a página de tempos em tempos (a prévia da edição rápida tem o seu, PREVIEW_SCRIPT).
  */
 const SCRIPT = `(() => {
   const bar = document.querySelector("[data-app-bar]");
@@ -904,8 +1042,290 @@ const SCRIPT = `(() => {
   const refresh = Number(document.body.dataset.refresh);
   if (refresh) setInterval(() => {
     const playing = [...document.querySelectorAll("video")].some((v) => !v.paused);
-    if (!dirty && !playing && !document.querySelector("dialog[open]")) location.reload();
+    if (!dirty && !playing && !document.querySelector("dialog[open]") && !document.querySelector(".is-previewing")) location.reload();
   }, refresh * 1000);
+})();`;
+
+/**
+ * Prévia da edição rápida (só nas páginas com o botão). O navegador baixa o MP4
+ * uma vez: o áudio vira um AudioBuffer (para achar os silêncios e tocar os
+ * trechos emendados) e o vídeo é decodificado em ordem, do começo, pelo
+ * WebCodecs: um leitor de MP4 pequeno tira as amostras H.264 e o VideoDecoder
+ * devolve os quadros; os das pausas cortadas são descartados logo, os outros
+ * vão para um canvas no tempo do relógio do som, com o mesmo recorte de zoom
+ * do contêiner. Nada de pular o vídeo de um ponto a outro (o HeyGen tem um
+ * quadro-chave a cada 10 s): é o que deixa a prévia fluida também no iPhone.
+ */
+const PREVIEW_SCRIPT = `(() => {
+  const planParts = ${String(planParts)};
+  const qe = document.querySelector("[data-quick-edit]");
+  if (!qe) return;
+  const cfg = JSON.parse(qe.dataset.quickEdit), R = cfg.rules;
+  const player = document.querySelector("[data-player]"), main = player.querySelector("video");
+  const controls = player.querySelector("[data-qe-controls]"), play = controls.querySelector("[data-qe-play]"), clock = controls.querySelector("[data-qe-time]");
+  const opener = document.querySelector("[data-qe-open]"), summary = qe.querySelector("[data-qe-summary]"), input = qe.querySelector("[data-qe-parts]");
+  const form = document.getElementById("edicao-rapida");
+  const fmt = (s) => s.toFixed(1).replace(".", ",") + " s";
+  const quiet = (p) => { if (p && p.catch) p.catch(() => {}); };
+
+  // --- MP4: a faixa de vídeo H.264 (avc1), com as amostras na ordem de decodificação.
+  const demux = (bytes) => {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const boxes = (s, e) => {
+      const out = {};
+      for (let o = s; o + 8 <= e;) {
+        let size = dv.getUint32(o), h = 8;
+        const type = String.fromCharCode(bytes[o + 4], bytes[o + 5], bytes[o + 6], bytes[o + 7]);
+        if (size === 1) { size = Number(dv.getBigUint64(o + 8)); h = 16; } else if (size === 0) size = e - o;
+        if (size < h) break;
+        (out[type] = out[type] || []).push({ s: o + h, e: o + size });
+        o += size;
+      }
+      return out;
+    };
+    const one = (b, path) => path.split(".").reduce((x, t) => x && (boxes(x.s, x.e)[t] || [])[0], b);
+    const moov = boxes(0, bytes.byteLength).moov[0];
+    for (const trak of boxes(moov.s, moov.e).trak) {
+      const hdlr = one(trak, "mdia.hdlr");
+      if (String.fromCharCode(...bytes.subarray(hdlr.s + 8, hdlr.s + 12)) !== "vide") continue;
+      const mdhd = one(trak, "mdia.mdhd"), scale = dv.getUint32(mdhd.s + (bytes[mdhd.s] === 1 ? 20 : 12));
+      // Lista de edição: o primeiro trecho com mídia diz onde a exibição começa.
+      let shift = 0;
+      const elst = one(trak, "edts.elst");
+      if (elst) {
+        const v1 = bytes[elst.s] === 1;
+        for (let i = 0, n = dv.getUint32(elst.s + 4); i < n; i++) {
+          const at = elst.s + 8 + i * (v1 ? 20 : 12), t = v1 ? Number(dv.getBigInt64(at + 8)) : dv.getInt32(at + 4);
+          if (t >= 0) { shift = t; break; }
+        }
+      }
+      const stbl = one(trak, "mdia.minf.stbl"), k = boxes(stbl.s, stbl.e);
+      const entry = k.stsd[0].s + 8, avcC = boxes(entry + 86, entry + dv.getUint32(entry)).avcC;
+      if (String.fromCharCode(...bytes.subarray(entry + 4, entry + 8)) !== "avc1" || !avcC) return null;
+      const desc = bytes.slice(avcC[0].s, avcC[0].e);
+      const hex = (n) => n.toString(16).padStart(2, "0");
+      const table = (b, w) => { const n = dv.getUint32(b.s + 4), out = []; for (let i = 0; i < n; i++) out.push(w(b.s + 8 + i)); return out; };
+      const n = dv.getUint32(k.stsz[0].s + 8), fixed = dv.getUint32(k.stsz[0].s + 4);
+      const sizes = Array.from({ length: n }, (_, i) => fixed || dv.getUint32(k.stsz[0].s + 12 + i * 4));
+      const dts = [], dur = [];
+      let t = 0;
+      for (const [c, d] of table(k.stts[0], (o) => o).map((_, i) => [dv.getUint32(k.stts[0].s + 8 + i * 8), dv.getUint32(k.stts[0].s + 12 + i * 8)])) for (let j = 0; j < c; j++) { dts.push(t); dur.push(d); t += d; }
+      const cts = new Array(n).fill(0);
+      if (k.ctts) { let i = 0; const b = k.ctts[0]; for (let e = 0, m = dv.getUint32(b.s + 4); e < m; e++) { const c = dv.getUint32(b.s + 8 + e * 8), off = dv.getInt32(b.s + 12 + e * 8); for (let j = 0; j < c; j++) cts[i++] = off; } }
+      const keys = k.stss ? new Set(Array.from({ length: dv.getUint32(k.stss[0].s + 4) }, (_, i) => dv.getUint32(k.stss[0].s + 8 + i * 4) - 1)) : null;
+      const co64 = !k.stco, cob = (k.stco || k.co64)[0], chunks = Array.from({ length: dv.getUint32(cob.s + 4) }, (_, i) => co64 ? Number(dv.getBigUint64(cob.s + 8 + i * 8)) : dv.getUint32(cob.s + 8 + i * 4));
+      const stsc = k.stsc[0], runs = Array.from({ length: dv.getUint32(stsc.s + 4) }, (_, i) => [dv.getUint32(stsc.s + 8 + i * 12), dv.getUint32(stsc.s + 12 + i * 12)]);
+      const samples = [];
+      let s = 0;
+      chunks.forEach((off, c) => {
+        let per = 0;
+        for (const [first, count] of runs) if (first - 1 <= c) per = count;
+        for (let j = 0; j < per && s < n; j++, s++) {
+          samples.push({ data: bytes.subarray(off, off + sizes[s]), key: keys ? keys.has(s) : true, ts: Math.round(((dts[s] + cts[s] - shift) / scale) * 1e6), dur: Math.round((dur[s] / scale) * 1e6) });
+          off += sizes[s];
+        }
+      });
+      return { codec: "avc1." + hex(desc[1]) + hex(desc[2]) + hex(desc[3]), description: desc, width: dv.getUint16(entry + 32), height: dv.getUint16(entry + 34), samples };
+    }
+    return null;
+  };
+
+  // --- Estado: o áudio, o vídeo lido, os trechos e a reprodução.
+  let actx = null, buf = null, silences = null, track = null, canvas = null, g2d = null, face = { x: R.eyesX, y: R.eyesY };
+  let parts = [], starts = [], total = 0, run = null, raf = 0;
+  let decoder = null, next = 0, flushed = false, frames = [], drawn = false;
+
+  const findSilences = () => {
+    const win = Math.round(buf.sampleRate / 100), n = Math.ceil(buf.length / win), limit = Math.pow(10, R.noiseDb / 20);
+    const chans = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i));
+    const out = [];
+    let start = -1;
+    for (let w = 0; w <= n; w++) {
+      let peak = 1;
+      if (w < n) { peak = 0; for (const c of chans) for (let i = w * win, e = Math.min(c.length, i + win); i < e; i++) peak = Math.max(peak, Math.abs(c[i])); }
+      const t = Math.min((w * win) / buf.sampleRate, buf.duration);
+      if (peak < limit) { if (start < 0) start = t; }
+      else if (start >= 0) { if (t - start >= R.minSilence) out.push([start, t]); start = -1; }
+    }
+    return out;
+  };
+  // O trecho (índice) que tem o instante t do original, ou -1 se ele foi cortado.
+  const partAt = (t) => { for (let i = 0; i < parts.length; i++) if (t >= parts[i][0] - 0.02 && t < parts[i][1] + 0.02) return i; return -1; };
+
+  // Decodifica em ordem; os quadros das pausas cortadas saem e já são fechados. Ficam
+  // poucos quadros prontos na frente: o decodificador do celular tem poucos para emprestar
+  // e para se muitos ficam abertos (por isso o desenhado também é fechado na hora).
+  const feed = () => {
+    while (decoder && decoder.state === "configured" && next < track.samples.length && decoder.decodeQueueSize < 4 && frames.length < 6) {
+      const s = track.samples[next++];
+      decoder.decode(new EncodedVideoChunk({ type: s.key ? "key" : "delta", timestamp: s.ts, duration: s.dur, data: s.data }));
+    }
+    if (decoder && next >= track.samples.length && !flushed) { flushed = true; quiet(decoder.flush()); }
+  };
+  // O zoom amplia em torno do ponto entre os olhos (achado no contêiner): ele fica no mesmo
+  // lugar da tela no aberto e com zoom, o mesmo recorte do editar.py. É uma transformação
+  // do canvas sobre o quadro inteiro, não um recorte no drawImage: o Safari (e todo
+  // navegador do iPhone) ignora o recorte com VideoFrame.
+  const draw = (f) => {
+    drawn = true;
+    const z = f.z, w = canvas.width, h = canvas.height, cw = w / z, ch = h / z;
+    const x = face.x * (w - cw), y = face.y * (h - ch);
+    g2d.setTransform(z, 0, 0, z, -x * z, -y * z);
+    g2d.drawImage(f.frame, 0, 0, w, h);
+    g2d.setTransform(1, 0, 0, 1, 0, 0);
+  };
+  const restart = () => {
+    if (decoder && decoder.state !== "closed") decoder.close();
+    for (const f of frames) f.frame.close();
+    frames = []; drawn = false; next = 0; flushed = false;
+    decoder = new VideoDecoder({
+      output: (frame) => {
+        const t = frame.timestamp / 1e6, i = partAt(t);
+        if (i < 0) frame.close();
+        else {
+          frames.push({ frame, t, z: parts[i][2] });
+          if (!run && !drawn) draw(frames[0]);
+        }
+        feed();
+      },
+      error: () => { summary.textContent = "A prévia falhou neste navegador. O vídeo editado sai com as escolhas abaixo."; },
+    });
+    decoder.configure({ codec: track.codec, description: track.description, codedWidth: track.width, codedHeight: track.height });
+    feed();
+  };
+
+  const setPlaying = (on) => {
+    play.querySelector(".icon").textContent = on ? "pause" : "play_arrow";
+    play.setAttribute("aria-label", on ? "Pausar a prévia" : "Tocar a prévia");
+    play.title = play.getAttribute("aria-label");
+  };
+  const help = () => {
+    for (const p of qe.querySelectorAll("[data-help-for]")) {
+      const checked = [...form.elements[p.dataset.helpFor]].find((r) => r.checked);
+      p.textContent = (checked && checked.dataset.description) || "";
+    }
+  };
+  const stop = () => {
+    cancelAnimationFrame(raf);
+    if (run) for (const s of run.sources) try { s.stop(); } catch {}
+    run = null;
+    setPlaying(false);
+  };
+  const build = () => {
+    stop();
+    const duration = buf.duration;
+    parts = planParts(silences, duration, cfg.pauses[form.elements.pausa.value], cfg.cameras[form.elements.camera.value], R);
+    const shots = parts.filter((p, i) => i > 0 && p[2] !== parts[i - 1][2]).length;
+    starts = []; total = 0;
+    for (const p of parts) { starts.push(total); total += p[1] - p[0]; }
+    input.value = parts.length ? JSON.stringify(parts) : "";
+    summary.textContent = parts.length
+      ? (parts.length - 1) + " cortes e " + shots + " trocas de câmera: o vídeo fica com " + fmt(total) + " (era " + fmt(duration) + ")."
+      : "Não achei fala no áudio.";
+    play.disabled = !parts.length || !track;
+    clock.textContent = fmt(0) + " / " + fmt(total);
+    help();
+    if (track && parts.length) restart();
+  };
+
+  // Toca do começo: os trechos do áudio emendados, com 5 ms de fade nas pontas (o corte não estala).
+  const start = () => {
+    const t0 = actx.currentTime + 0.1, sources = [];
+    parts.forEach((p, i) => {
+      const at = t0 + starts[i], d = p[1] - p[0], src = actx.createBufferSource(), g = actx.createGain();
+      src.buffer = buf; src.connect(g); g.connect(actx.destination);
+      g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(1, at + 0.005);
+      g.gain.setValueAtTime(1, at + d - 0.005); g.gain.linearRampToValueAtTime(0, at + d);
+      src.start(at, p[0], d);
+      sources.push(src);
+    });
+    run = { t0, sources, paused: false };
+    setPlaying(true);
+    raf = requestAnimationFrame(tick);
+  };
+  const tick = () => {
+    if (!run || run.paused) return;
+    const t = actx.currentTime - run.t0;
+    if (t >= total) { stop(); restart(); clock.textContent = fmt(0) + " / " + fmt(total); return; }
+    if (t >= 0) {
+      let k = 0;
+      while (k + 1 < parts.length && t >= starts[k + 1]) k++;
+      const at = parts[k][0] + (t - starts[k]);
+      // O quadro da vez: o mais novo que já devia aparecer; vai para o canvas e é fechado.
+      let due = null;
+      while (frames.length && frames[0].t <= at + 0.02) { if (due) due.frame.close(); due = frames.shift(); }
+      if (due) { draw(due); due.frame.close(); }
+      clock.textContent = fmt(Math.min(t, total)) + " / " + fmt(total);
+    }
+    feed();
+    raf = requestAnimationFrame(tick);
+  };
+  const toggle = () => {
+    if (qe.hidden || !parts.length || !track) return;
+    quiet(actx.resume());
+    if (!run) return start();
+    run.paused = !run.paused;
+    if (run.paused) { quiet(actx.suspend()); cancelAnimationFrame(raf); }
+    else raf = requestAnimationFrame(tick);
+    setPlaying(!run.paused);
+  };
+  player.addEventListener("click", (e) => { if (!qe.hidden && e.target === canvas) toggle(); });
+  play.addEventListener("click", toggle);
+
+  opener.addEventListener("click", async () => {
+    qe.hidden = false; opener.hidden = true; controls.hidden = false;
+    player.classList.add("is-previewing");
+    // O som da prévia sai pelo Web Audio: no iPhone, assim ele toca mesmo com o modo silencioso.
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
+    main.pause();
+    if (canvas) canvas.hidden = false;
+    help();
+    qe.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (silences) return build();
+    summary.textContent = "Analisando o vídeo…";
+    play.disabled = true;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      // O rosto vem junto (o contêiner acha na primeira vez); sem ele, o padrão.
+      const found = fetch(cfg.face).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+      const bytes = new Uint8Array(await (await fetch(cfg.src)).arrayBuffer());
+      // Na primeira vez o contêiner pode estar subindo: espera o rosto até 6 s e segue
+      // com o padrão; se ele chegar depois, o zoom passa a mirar nele.
+      const useFace = (f) => { if (f && typeof f.x === "number" && typeof f.y === "number") face = { x: f.x, y: f.y }; };
+      found.then(useFace);
+      await Promise.race([found, new Promise((ok) => setTimeout(ok, 6000))]);
+      // decodeAudioData fica com o buffer: vai uma cópia.
+      buf = await actx.decodeAudioData(bytes.slice().buffer);
+      silences = findSilences();
+      try {
+        const t = typeof VideoDecoder === "function" ? demux(bytes) : null;
+        const ok = t && (await VideoDecoder.isConfigSupported({ codec: t.codec, description: t.description, codedWidth: t.width, codedHeight: t.height })).supported;
+        if (ok) {
+          track = t;
+          canvas = document.createElement("canvas");
+          canvas.className = "player__canvas";
+          canvas.width = t.width; canvas.height = t.height;
+          g2d = canvas.getContext("2d");
+          main.after(canvas);
+        }
+      } catch {}
+      build();
+      if (!track) summary.textContent += " Este navegador não faz a prévia; o vídeo editado sai com as escolhas abaixo.";
+    } catch {
+      summary.textContent = "Não deu para analisar o vídeo neste navegador. O vídeo editado sai com as escolhas abaixo, sem prévia.";
+    }
+  });
+  qe.querySelector("[data-qe-close]").addEventListener("click", () => {
+    stop();
+    if (decoder && decoder.state !== "closed") decoder.close();
+    for (const f of frames) f.frame.close();
+    frames = []; drawn = false; decoder = null;
+    if (canvas) canvas.hidden = true;
+    qe.hidden = true; opener.hidden = false; controls.hidden = true;
+    player.classList.remove("is-previewing");
+  });
+  qe.addEventListener("change", () => { help(); if (silences) build(); });
+  form.addEventListener("submit", () => { qe.querySelector("[type=submit]").disabled = true; });
 })();`;
 
 function formatDate(iso: string): string {
@@ -951,6 +1371,8 @@ function csp(nonce: string): string {
     "font-src https://fonts.gstatic.com",
     "img-src 'self' blob:",
     "media-src 'self'",
+    // A prévia da edição rápida baixa o vídeo para achar os silêncios.
+    "connect-src 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",

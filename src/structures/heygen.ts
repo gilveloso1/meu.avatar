@@ -51,6 +51,7 @@ export const HEYGEN_AVATAR: Structure = {
   access: "admin",
   // A voz vem pronta do texto para fala: sem o chiado do Wan, não passa pelo contêiner.
   treatAudio: false,
+  quickEdit: true,
   wordsPerSecond: WORDS_PER_SECOND,
   cost: { sku: "duration_seconds", seconds: { speech: "fala" } },
 

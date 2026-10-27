@@ -552,7 +552,16 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 
 .selected { display: flex; flex-direction: column; gap: 16px; }
 .player { display: flex; justify-content: center; padding: 16px 0; background: var(--md-sys-color-on-surface); border-radius: var(--md-sys-shape-corner-extra-large); }
-.player video { aspect-ratio: var(--ratio, 9 / 16); height: min(420px, 60vh); width: auto; max-width: calc(100% - 32px); object-fit: contain; border-radius: var(--md-sys-shape-corner-large); background: #000; }
+.player__frame { position: relative; aspect-ratio: var(--ratio, 9 / 16); height: min(420px, 60vh); max-width: calc(100% - 32px); overflow: hidden; border-radius: var(--md-sys-shape-corner-large); background: #000; }
+.player video { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* Prévia da edição rápida: o zoom de cada trecho é um scale no vídeo; os controles próprios ficam por cima. */
+.player__canvas { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; background: #000; cursor: pointer; }
+.player__controls {
+  position: absolute; z-index: 2; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 4px; padding-right: 16px;
+  border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface);
+}
+.player__controls .icon-button { color: inherit; }
+.player__time { font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; font-variant-numeric: tabular-nums; }
 .stage {
   min-height: 452px; padding: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center;
   border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface-variant);
@@ -567,6 +576,27 @@ textarea.text-field__input { min-height: 200px; resize: vertical; display: block
 .selected__meta { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .selected__text { font: 400 1.125rem/1.75rem var(--md-ref-typeface-plain); white-space: pre-wrap; overflow-wrap: anywhere; }
 .selected__actions { display: flex; flex-wrap: wrap; gap: 4px; margin-left: -12px; }
+/* O script esconde o botão "Edição rápida" e os controles da prévia; display dos componentes não ganha do hidden. */
+.selected [hidden] { display: none; }
+/* Aviso de trabalho em andamento (edição rápida, tratamento do áudio), em cima do player. */
+.work-notice {
+  display: flex; gap: 16px; align-items: flex-start; padding: 16px 24px;
+  border-radius: var(--md-sys-shape-corner-extra-large);
+  background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container);
+}
+.work-notice > .icon { margin-top: 2px; }
+.work-notice__body { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.work-notice__title { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
+.work-notice__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
+.work-notice .linear-progress { --progress-gap: var(--md-sys-color-tertiary-container); margin-top: 8px; background: var(--md-sys-color-surface-container-highest); }
+.quick-edit { display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container); }
+.quick-edit__head { display: flex; flex-direction: column; gap: 4px; }
+.quick-edit__title { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; color: var(--md-sys-color-on-surface); }
+.quick-edit__summary { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.quick-edit__fields { display: flex; flex-wrap: wrap; gap: 16px 24px; }
+.quick-edit .segmented-field { flex: 1 1 260px; }
+.segmented-field__help { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.quick-edit__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
 /* Caixa da fala: campo de cantos inteiros com a estimativa e o botão de gerar; nas telas largas, presa embaixo ao rolar. */
 .composer-bar { margin-top: auto; padding: 16px 0 8px; display: flex; flex-direction: column; gap: 4px; background: var(--md-sys-color-surface); }

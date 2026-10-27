@@ -31,6 +31,16 @@ export interface Video {
   processed_key: string | null;
   audio_error: string | null;
   audio_started_at: string | null;
+  /** Edição rápida no contêiner (container/editar.py); null enquanto ninguém pediu. */
+  edit_status: AudioStatus | null;
+  /** Chave no R2 do MP4 editado. */
+  edited_key: string | null;
+  edit_error: string | null;
+  edit_started_at: string | null;
+  /** O plano da edição (src/quickedit.ts), em JSON. */
+  edit_plan: string | null;
+  /** Onde está o rosto (container/rosto.py), em JSON; null enquanto ninguém pediu. */
+  face: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -76,7 +86,10 @@ function toUserLogin(row: UserRow): UserLogin {
 
 export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "user_id" | "request_prompt" | "style" | "language" | "extra" | "structure" | "settings">;
 export type VideoChanges = Partial<
-  Pick<Video, "job_id" | "status" | "video_key" | "cost" | "error" | "audio_status" | "processed_key" | "audio_error" | "audio_started_at">
+  Pick<
+    Video,
+    "job_id" | "status" | "video_key" | "cost" | "error" | "audio_status" | "processed_key" | "audio_error" | "audio_started_at" | "edit_status" | "edited_key" | "edit_error" | "face"
+  >
 >;
 
 /** Status em que o vídeo ainda pode mudar (vale consultar o OpenRouter). */
@@ -175,6 +188,41 @@ export class Db {
       .prepare(
         `UPDATE videos SET audio_status = 'failed', audio_error = 'O tratamento do áudio não terminou a tempo.', updated_at = ?
          WHERE audio_status = 'processing' AND audio_started_at < ?`,
+      )
+      .bind(nowIso, beforeIso)
+      .run();
+    return result.meta.changes;
+  }
+
+  /** Põe o vídeo na fila da edição rápida, com o plano, se ele não está nela. */
+  queueEdit(id: string, plan: string, nowIso: string): Promise<Video | null> {
+    return this.d1
+      .prepare(
+        `UPDATE videos SET edit_status = 'pending', edit_plan = ?, edit_error = NULL, updated_at = ?
+         WHERE id = ? AND (edit_status IS NULL OR edit_status NOT IN ('pending', 'processing')) RETURNING *`,
+      )
+      .bind(plan, nowIso, id)
+      .first<Video>();
+  }
+
+  /** Como claimAudio, para a edição rápida. */
+  claimEdit(nowIso: string): Promise<Video | null> {
+    return this.d1
+      .prepare(
+        `UPDATE videos SET edit_status = 'processing', edit_started_at = ?, updated_at = ?
+         WHERE id = (SELECT id FROM videos WHERE edit_status = 'pending' ORDER BY updated_at LIMIT 1)
+         RETURNING *`,
+      )
+      .bind(nowIso, nowIso)
+      .first<Video>();
+  }
+
+  /** Edições que começaram antes de `beforeIso` e não terminaram: viram falha. */
+  async failStaleEdit(beforeIso: string, nowIso: string): Promise<number> {
+    const result = await this.d1
+      .prepare(
+        `UPDATE videos SET edit_status = 'failed', edit_error = 'A edição rápida não terminou a tempo.', updated_at = ?
+         WHERE edit_status = 'processing' AND edit_started_at < ?`,
       )
       .bind(nowIso, beforeIso)
       .run();

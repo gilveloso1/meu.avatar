@@ -4,6 +4,7 @@ import { Db } from "../src/db";
 import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
 import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, SPEECH_LEAD, STYLES } from "../src/prompt";
+import { planParts, RULES } from "../src/quickedit";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { call, cookie, FakeAudioApi, FakeVideoApi, memberCookie, postForm, SITE, sign, WAN } from "./helpers";
 
@@ -501,5 +502,271 @@ describe("HeyGen Avatar IV", () => {
     expect(video).toMatchObject({ status: "completed", audio_status: null, cost: 0.25 });
     expect(await studio.treatNextAudio()).toBeNull();
     expect(audio.calls).toBe(0);
+  });
+});
+
+describe("edição rápida", () => {
+  const BOTAO = 'type="button" data-qe-open>';
+  const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
+
+  async function pronto(structure: "heygen" | "wan", audio: FakeAudioApi | null = new FakeAudioApi()) {
+    const api = new FakeVideoApi();
+    await post(api, structure === "heygen" ? { fala: FALA, imagem: foto() } : PEDIDO, structure, audio);
+    api.finish("job-1", { status: "completed", usage: { cost: 0.25 } });
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api, audio });
+    await studio.syncOpen();
+    const [video] = await new Db(env.DB).recentVideos();
+    return { api, audio, studio, video: video! };
+  }
+
+  const pedir = async (id: string, api: FakeVideoApi, audio: FakeAudioApi | null, session?: string, fields: Record<string, string> = {}) =>
+    call(postForm(`/videos/${id}/edicao-rapida`, fields, { cookie: session ?? (await cookie()) }), api, audio);
+
+  it("o botão abre a prévia no vídeo pronto do HeyGen; o agendamento edita com os trechos dela e o player mostra a editada", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    const session = await cookie();
+    let page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), api, audio)).text();
+    expect(page).toContain(`action="/videos/${video.id}/edicao-rapida"`);
+    expect(page).toContain(BOTAO);
+    expect(page).toContain("data-quick-edit=");
+    expect(page).toMatch(/name="pausa" value="media" form="edicao-rapida"[^>]* checked/);
+    expect(page).toMatch(/name="camera" value="close" form="edicao-rapida"[^>]* checked/);
+    expect(page).toContain("Gerar vídeo editado");
+    // A explicação da opção escolhida aparece embaixo de cada ajuste.
+    expect(page).toContain('data-help-for="pausa">Respiro curto entre as frases.');
+    expect(page).toContain('data-help-for="camera">Como o Zoom, mas de vez em quando chega bem perto do rosto.');
+
+    const trechos = [[0.42, 7.417, 1], [7.928, 10.91, 1.25]];
+    const res = await pedir(video.id, api, audio, session, { pausa: "longa", camera: "zoom", trechos: JSON.stringify(trechos) });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/modelo/heygen?video=${video.id}`);
+    page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), api, audio)).text();
+    expect(page).toContain("Editando o vídeo");
+    expect(page).toContain('class="work-notice"');
+    expect(page).toContain("Enquanto isso, o player mostra o original.");
+    expect(page).toContain("data-refresh=");
+    expect(page).not.toContain(BOTAO);
+    // Pedir de novo enquanto está na fila não duplica.
+    expect((await pedir(video.id, api, audio, session)).status).toBe(400);
+
+    const editado = (await studio.editNext())!;
+    expect(editado).toMatchObject({ edit_status: "done", edited_key: `videos/${video.id}.editado.mp4` });
+    expect(await studio.editNext()).toBeNull();
+    expect(audio!.edits).toBe(1);
+    expect(audio!.plans).toEqual([{ pausa: 0.35, zooms: [1, 1.25], trechos }]);
+
+    const mp4 = await call(new Request(`${SITE}/videos/${video.id}.editado.mp4?baixar`, { headers: { cookie: session } }), api, audio);
+    expect(await mp4.text()).toBe("mp4-falso+editado");
+    expect(mp4.headers.get("content-disposition")).toContain("-editado.mp4");
+    page = await (await call(new Request(`${SITE}/modelo/heygen?video=${video.id}`, { headers: { cookie: session } }), api, audio)).text();
+    expect(page).toContain(`src="/videos/${video.id}.editado.mp4"`);
+    expect(page).toContain("Ver original");
+    page = await (await call(new Request(`${SITE}/modelo/heygen?video=${video.id}&original`, { headers: { cookie: session } }), api, audio)).text();
+    expect(page).toContain(`src="/videos/${video.id}.mp4"`);
+    expect(page).toContain("Ver editado");
+    // Editado, dá para refazer com outras escolhas; sem os trechos da prévia, o contêiner acha os silêncios.
+    expect(page).toContain(BOTAO);
+    expect((await pedir(video.id, api, audio, session, { pausa: "curta", camera: "parada" })).status).toBe(303);
+    await studio.editNext();
+    expect(audio!.plans[1]).toEqual({ pausa: 0.1, zooms: [1] });
+  });
+
+  it("o rosto é achado pelo contêiner na primeira vez, fica guardado e vai no plano da edição", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    const session = await cookie();
+    const rosto = () => call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: session } }), api, audio);
+    let res = await rosto();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ x: 0.46, y: 0.44, altura: 0.25 });
+    res = await rosto();
+    expect(await res.json()).toEqual({ x: 0.46, y: 0.44, altura: 0.25 });
+    expect(audio!.faces).toBe(1);
+    expect(await new Db(env.DB).videoById(video.id)).toMatchObject({ face: JSON.stringify({ x: 0.46, y: 0.44, altura: 0.25 }) });
+
+    await pedir(video.id, api, audio, session, { pausa: "media", camera: "close" });
+    await studio.editNext();
+    expect(audio!.plans[0]).toEqual({ pausa: 0.2, zooms: [1, 1.25, 1, 1.5], rosto: { x: 0.46, y: 0.44 } });
+  });
+
+  it("sem rosto achado, a resposta é vazia e o plano vai sem rosto (o contêiner tenta de novo)", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    audio!.faceFound = {};
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: await cookie() } }), api, audio);
+    expect(await res.json()).toEqual({});
+    await pedir(video.id, api, audio);
+    await studio.editNext();
+    expect(audio!.plans[0]).not.toHaveProperty("rosto");
+  });
+
+  it("conta comum não pede o rosto de um vídeo do HeyGen", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: await memberCookie() } }), api, audio);
+    expect(res.status).toBe(403);
+    expect(audio!.faces).toBe(0);
+  });
+
+  it("sem login, o rosto manda para /entrar", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`), api, audio);
+    expect(res.headers.get("location")).toBe("/entrar");
+    expect(audio!.faces).toBe(0);
+  });
+
+  it("o Wan não tem rosto para a edição rápida", async () => {
+    const { api, audio, video } = await pronto("wan");
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: await cookie() } }), api, audio);
+    expect(res.status).toBe(400);
+    expect(audio!.faces).toBe(0);
+  });
+
+  it("plano inválido não entra na fila", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const casos: Record<string, string>[] = [
+      { pausa: "enorme" },
+      { camera: "drone" },
+      { trechos: "não é json" },
+      { trechos: "[]" },
+      { trechos: JSON.stringify([[2, 1, 1]]) },
+      { trechos: JSON.stringify([[0, 2, 3]]) },
+      { trechos: JSON.stringify([[0, 2, 1], [1, 3, 1]]) },
+      { trechos: JSON.stringify(Array.from({ length: 201 }, (_, i) => [i, i + 0.5, 1])) },
+    ];
+    for (const fields of casos) expect((await pedir(video.id, api, audio, undefined, fields)).status).toBe(400);
+    expect(await new Db(env.DB).videoById(video.id)).toMatchObject({ edit_status: null });
+  });
+
+  it("se o contêiner falhar, o motivo aparece e o botão volta", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    await pedir(video.id, api, audio);
+    audio!.fail = "Edição rápida falhou (HTTP 500): ffmpeg";
+    expect(await studio.editNext()).toMatchObject({ edit_status: "failed", edited_key: null });
+    const page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(page).toContain("Edição rápida falhou: Edição rápida falhou (HTTP 500)");
+    expect(page).toContain(BOTAO);
+  });
+
+  it("edição que não termina em 20 minutos vira falha", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    await pedir(video.id, api, audio);
+    const db = new Db(env.DB);
+    const inicio = new Date("2026-10-27T12:00:00Z");
+    await db.claimEdit(inicio.toISOString());
+    expect(await db.claimEdit(inicio.toISOString())).toBeNull();
+    await studio.editNext(new Date(inicio.getTime() + 21 * 60_000));
+    expect(await db.videoById(video.id)).toMatchObject({ edit_status: "failed", edit_error: "A edição rápida não terminou a tempo." });
+  });
+
+  it("o Wan não tem edição rápida: sem botão e recusada mesmo mandando direto", async () => {
+    const { api, audio, studio, video } = await pronto("wan");
+    await studio.treatNextAudio();
+    const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(page).not.toContain(BOTAO);
+    expect(page).not.toContain("/edicao-rapida");
+    expect(page).not.toContain("const planParts");
+    expect((await pedir(video.id, api, audio)).status).toBe(400);
+    expect(await studio.editNext()).toBeNull();
+  });
+
+  it("vídeo que ainda não ficou pronto não é editado", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await post(api, { fala: FALA, imagem: foto() }, "heygen", audio);
+    const [video] = await new Db(env.DB).recentVideos();
+    expect((await pedir(video!.id, api, audio)).status).toBe(400);
+    expect(await new Db(env.DB).videoById(video!.id)).toMatchObject({ edit_status: null });
+  });
+
+  it("conta comum não pede a edição rápida de um vídeo do HeyGen", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const res = await pedir(video.id, api, audio, await memberCookie());
+    expect(res.status).toBe(403);
+    expect(await new Db(env.DB).videoById(video.id)).toMatchObject({ edit_status: null });
+  });
+
+  it("sem login, a edição rápida manda para /entrar", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const res = await call(postForm(`/videos/${video.id}/edicao-rapida`, {}), api, audio);
+    expect(res.headers.get("location")).toBe("/entrar");
+    expect(await new Db(env.DB).videoById(video.id)).toMatchObject({ edit_status: null });
+  });
+
+  it("formulário de outro site não pede a edição", async () => {
+    const { api, audio, video } = await pronto("heygen");
+    const req = new Request(`${SITE}/videos/${video.id}/edicao-rapida`, { method: "POST", headers: { origin: "https://outro.site", cookie: await cookie() } });
+    expect((await call(req, api, audio)).status).toBe(403);
+  });
+
+  it("sem contêiner, a edição é recusada", async () => {
+    const { api, video } = await pronto("heygen", null);
+    expect((await pedir(video.id, api, null)).status).toBe(400);
+  });
+});
+
+describe("ritmo orgânico da edição rápida", () => {
+  // Falas (início, fim) viram silêncios entre elas, num vídeo de `fim` segundos.
+  const silencios = (falas: number[][], fim: number) => {
+    const out: number[][] = [];
+    let t = 0;
+    for (const [a, b] of falas) {
+      if (a! > t) out.push([t, a!]);
+      t = b!;
+    }
+    if (fim > t) out.push([t, fim]);
+    return out;
+  };
+  // Quanto de pausa sobrou entre o trecho k e o k+1.
+  const sobra = (parts: number[][], falas: number[][], k: number) => parts[k]![1]! - falas[k]![1]! + (falas[k + 1]![0]! - parts[k + 1]![0]!);
+
+  it("a pausa que sobra segue a original: a longa continua maior que a curta, e as duas encurtam", () => {
+    const falas = [[0.5, 4], [4.4, 8], [9.2, 12.5], [12.9, 16]];
+    const parts = planParts(silencios(falas, 16.5), 16.5, 0.2, [1], RULES);
+    expect(parts).toHaveLength(4);
+    const curta = sobra(parts, falas, 0), longa = sobra(parts, falas, 1);
+    expect(longa).toBeGreaterThan(curta);
+    expect(longa).toBeLessThan(1.2);
+    expect(curta).toBeLessThan(0.4);
+  });
+
+  it("fala curta de um dos lados ganha pausa extra", () => {
+    const longas = [[0.5, 4], [4.4, 8], [8.4, 12]];
+    const comCurta = [[0.5, 4], [4.4, 5.1], [5.5, 9]];
+    const normal = sobra(planParts(silencios(longas, 12.5), 12.5, 0.2, [1], RULES), longas, 0);
+    const curta = sobra(planParts(silencios(comCurta, 9.5), 9.5, 0.2, [1], RULES), comCurta, 0);
+    expect(curta).toBeGreaterThan(normal + 0.05);
+  });
+
+  it("quando quase nada sairia, não corta: a pausa fica inteira", () => {
+    const falas = [[0.5, 4], [4.3, 8]];
+    const parts = planParts(silencios(falas, 8.5), 8.5, 0.35, [1], RULES);
+    expect(parts).toHaveLength(1);
+  });
+
+  it("a câmera só troca depois de 2,5 s no mesmo enquadramento", () => {
+    const falas = [[0.5, 1.6], [2.2, 3.3], [3.9, 5], [5.6, 6.7], [7.3, 8.4], [9, 10.1]];
+    const parts = planParts(silencios(falas, 10.5), 10.5, 0.2, [1, 1.25], RULES);
+    expect(parts.length).toBeGreaterThan(3);
+    let desde = 0;
+    parts.forEach((p, k) => {
+      if (k > 0 && p[2] !== parts[k - 1]![2]) {
+        expect(desde).toBeGreaterThanOrEqual(RULES.minShot);
+        desde = 0;
+      }
+      desde += p[1] - p[0];
+    });
+    expect(parts.some((p, k) => k > 0 && p[2] === parts[k - 1]![2])).toBe(true);
+  });
+
+  it("a função vai inteira no script da prévia: roda igual fora dela", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await post(api, { fala: FALA, imagem: new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" }) }, "heygen", audio);
+    api.finish("job-1", { status: "completed" });
+    await createStudio({ ...env, SITE_URL: SITE }, { api, audio }).syncOpen();
+    const page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    const source = /const planParts = ([\s\S]*?);\n {2}const qe = /.exec(page)?.[1];
+    expect(source).toBeTruthy();
+    const copia = new Function(`return (${source})`)() as typeof planParts;
+    const falas = [[0.5, 4], [4.4, 5.1], [5.5, 9], [10, 12]];
+    expect(copia(silencios(falas, 12.5), 12.5, 0.2, [1, 1.25, 1, 1.5], RULES)).toEqual(planParts(silencios(falas, 12.5), 12.5, 0.2, [1, 1.25, 1, 1.5], RULES));
   });
 });

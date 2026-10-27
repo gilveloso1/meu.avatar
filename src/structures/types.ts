@@ -104,6 +104,8 @@ export interface Structure {
   access: "all" | "admin";
   /** O áudio pronto passa pelo contêiner (src/audio.ts). */
   treatAudio: boolean;
+  /** O vídeo pronto tem o botão "Edição rápida" (container/editar.py). */
+  quickEdit: boolean;
   /** Palavras por segundo da fala, para o contador e o custo. */
   wordsPerSecond: { min: number; max: number };
   cost: CostRule;

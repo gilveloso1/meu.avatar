@@ -14,7 +14,7 @@ Você no navegador ──▶ Worker "meu-avatar" (Cloudflare), com conta (e-mail
 OpenRouter ──aviso──▶ POST /openrouter/webhook
                         └─ confere o status na API; pronto: baixa o MP4 para o R2
 
-A cada 2 minutos ──▶ o mesmo Worker confere os vídeos ainda na fila
+A cada minuto ────▶ o mesmo Worker confere os vídeos ainda na fila
                      (rede de segurança se o aviso se perder)
                      e manda um vídeo pronto para o contêiner de áudio:
                      Contêiner "AudioFixer" (ffmpeg + DeepFilterNet 3)
@@ -44,6 +44,121 @@ contêiner "basic" (1/4 de vCPU): ≈ US$ 0,001 por vídeo. A franquia do plano
 pago (375 min de vCPU e 25 GiB·h de memória por mês) cobre uns 500 vídeos.
 
 O contêiner não tem acesso à internet (`enableInternet = false`).
+
+## Edição rápida
+
+Botão "Edição rápida" no vídeo pronto das estruturas com `quickEdit` (hoje só
+o HeyGen). O botão abre a **prévia**, no próprio navegador e sem gerar
+arquivo: o script baixa o vídeo, acha os silêncios no áudio (Web Audio, pico
+a cada 10 ms) e toca o vídeo sem as pausas, com o zoom de cada trecho (um
+`scale` no vídeo). Pausas (curtas, médias, longas) e câmera (parada, zoom,
+close) mudam a prévia na hora, com uma linha explicando a opção escolhida; as
+regras estão em `src/quickedit.ts` e no `editar.py` (mudou uma, mude a outra).
+
+A prévia não usa o player de vídeo. O HeyGen põe um quadro-chave só a cada
+10 s, e pular o player de um trecho para o outro travava a imagem (até 0,7 s);
+a versão seguinte, com dois players mudos se revezando, ainda dava trancos no
+iPhone (Chrome e Safari usam o mesmo motor lá). Agora o script baixa o MP4 uma
+vez e:
+
+- o áudio vira um AudioBuffer (Web Audio): acha os silêncios e toca os trechos
+  emendados, com 5 ms de fade nas pontas; ele é o relógio da prévia;
+- um leitor de MP4 pequeno (no próprio script, sem biblioteca) tira as
+  amostras H.264, com os quadros B (`ctts`) e a lista de edição (`elst`) para
+  a boca bater com o som; o `VideoDecoder` (WebCodecs, iOS 16.4 em diante)
+  decodifica em ordem, do começo, sem pular; os quadros das pausas cortadas
+  são fechados na hora, e ficam no máximo 6 prontos na frente (o
+  decodificador do celular tem poucos para emprestar);
+- cada quadro vai para um `<canvas>` quando o relógio do som chega nele, com
+  o mesmo recorte de zoom do contêiner, e é fechado. O zoom é uma
+  transformação do canvas (`setTransform`) sobre o quadro inteiro: o recorte
+  pelo `drawImage` com `VideoFrame` funciona no Chromium, mas o iPhone
+  ignorou (a prévia tocava sem zoom).
+
+Medido no Chromium (25 fps): 753 quadros em 30 s, sem quadro fora dos trechos
+e a imagem a menos de 30 ms do som em 90% do tempo. Sem WebCodecs, a prévia
+avisa e o vídeo editado sai do mesmo jeito. No iPhone, o som da prévia toca
+mesmo no modo silencioso (`navigator.audioSession`). O script da prévia
+(`PREVIEW_SCRIPT` em `src/site/site.ts`) só vai nas páginas com o botão.
+
+"Gerar vídeo editado" manda os trechos da prévia e põe o vídeo na fila
+(`edit_status`: pending → processing → done/failed; o plano fica em
+`edit_plan`). O agendamento manda um por rodada para o mesmo contêiner
+(`POST /editar`, plano no cabeçalho `x-plano`), que roda
+`container/editar.py` com exatamente aqueles cortes. Se o navegador não
+conseguir ler o áudio, vai só a escolha de pausas e câmera, e o contêiner
+acha os silêncios sozinho. O que o `editar.py` faz:
+
+1. corta os silêncios (pausas de mais de 0,25 s abaixo de −35 dB) com
+   **ritmo orgânico**, em vez de deixar toda pausa do mesmo tamanho; some o
+   silêncio do começo e do fim;
+2. de tempos em tempos muda o enquadramento num corte (no "Close": aberto,
+   médio 1,25×, aberto, close 1,5×), como se fossem duas câmeras; o zoom
+   amplia em torno do ponto entre os olhos (veja abaixo): ele fica no mesmo
+   lugar da tela no aberto e com zoom, e a linha dos olhos não pula no corte;
+3. volume em −14 LUFS e pico até −1,5 dBFS (loudnorm linear).
+
+**Rosto.** O contêiner acha o ponto entre os olhos (`container/rosto.py`):
+detector YuNet do OpenCV nos quadros-chave do vídeo, em meia resolução, e
+vale a mediana (não segue cada balanço da cabeça). O zoom amplia em torno
+desse ponto (recorte em x = olhos × (largura − largura do recorte), o mesmo
+na altura): os olhos ficam na mesma posição da tela no aberto, no médio e no
+close, e o corte não faz a linha dos olhos pular. Pedir um instante qualquer do vídeo
+obrigava o ffmpeg a decodificar desde o quadro-chave anterior (o HeyGen põe
+um a cada 10 s): eram 67 s no contêiner; só com os quadros-chave, 3,8 s. A
+prévia pede o rosto (`GET /videos/<id>/rosto`) junto com o vídeo; na primeira
+vez o Worker manda o MP4 ao contêiner (`POST /rosto`, com a sua própria vez,
+para não esperar uma edição) e guarda o resultado na coluna `face`. A edição
+leva esse rosto no plano; sem ele, o `editar.py` acha sozinho. Sem rosto
+achado, amplia em torno de onde os olhos costumam ficar (centro, a 22% da
+altura).
+A prévia espera o rosto até 6 s e segue com o padrão; se ele chegar depois,
+o zoom passa a mirar nele.
+
+**Partida a frio.** A biblioteca de contêineres espera 8 s pela instância e
+20 s pela porta. Na primeira partida depois de um deploy, com a imagem de
+~820 MB, isso não bastou (27/10/2026: o rosto não foi achado e o Worker
+registrou "Can't read from request stream after response has been sent").
+Agora o Worker espera até 2 min o contêiner subir antes de mandar o vídeo
+(`ContainerAudio.ready`), e a detecção do rosto tenta de novo uma vez.
+
+Medido: no vídeo do Ibovespa os olhos ficam em 0,50 × 0,23; no outro vídeo
+do HeyGen, em 0,46 × 0,42 (a regra fixa de antes cortava mal esse). O OpenCV e
+o numpy vão na imagem como rodas baixadas e conferidas pelo SHA-256
+(`container/rodas/`, `baixar-binarios.sh`), e o modelo em `yunet.onnx`:
+a imagem passou de ~490 MB para ~820 MB.
+
+O ritmo orgânico (`planParts` em `src/quickedit.ts`, `ritmo` no
+`editar.py`) parte de uma pausa de referência (Curtas 0,1 s, Médias 0,2 s,
+Longas 0,35 s) e varia cada uma:
+
+- a pausa que sobra segue a original, comprimida pela raiz (referência ×
+  √(original ÷ mediana das pausas)): o fim de uma ideia continua respirando
+  mais que uma vírgula;
+- fala curta (menos de 1,2 s) de um dos lados ganha pausa extra, até mais
+  uma de referência: blocos curtos não ficam espremidos;
+- fica entre metade e 2,5 vezes a referência, nunca mais que a original; se
+  sairiam menos de 0,08 s, não corta;
+- 60% da pausa fica depois da fala e 40% antes da seguinte;
+- a câmera só troca de enquadramento depois de 2,5 s no mesmo: os outros
+  cortes ficam no enquadramento de antes.
+
+No último vídeo do HeyGen (Médias, Close): as pausas, que antes ficavam
+todas em 0,16 s, ficaram entre 0,17 e 0,34 s; 11 cortes e 6 trocas de câmera,
+em vez de uma troca a cada corte; 40,2 s → 36,1 s.
+
+Parte da versão com o áudio tratado, se houver. O editado fica em
+`videos/<id>.editado.mp4`; o player passa a mostrar o editado, com "Ver
+original" ao lado, e o botão continua lá para refazer com outras escolhas. Se
+falhar, o motivo aparece em "Detalhes".
+Uma edição que passa de 20 minutos vira falha.
+
+Medido em 27/10/2026 no último vídeo do HeyGen (40 s, 720p, 9:16): 40,2 s →
+35,0 s em 13 trechos; 2 min 34 s no contêiner com os limites do tipo "basic"
+(`docker run --cpus 0.25 --memory 1g`). A prévia no Chromium achou 12 cortes
+(35,2 s) e o contêiner, com esses trechos, entregou 35,3 s. Para testar sem o
+site:
+`python3 container/editar.py entrada.mp4 saida.mp4` (precisa de ffmpeg).
 
 A foto do avatar fica pública em `/midia/avatares/<uuid>.jpg` (nome impossível
 de adivinhar), porque o provedor do vídeo baixa de lá. O resto pede login.
@@ -79,7 +194,7 @@ Portadas do estuda.mais (`src/auth.ts`):
 | Domínio | <https://meuavatar.ia.br> e www (domínios personalizados do Worker, no ar desde 25/10/2026; [detalhes](#o-domínio-meuavatariabr)) |
 | Banco D1 | `meu-avatar` (o id está em `wrangler.jsonc`) |
 | Bucket R2 | `meu-avatar` |
-| Agendamento | a cada 2 minutos (`triggers.crons` em `wrangler.jsonc`) |
+| Agendamento | a cada minuto (`triggers.crons` em `wrangler.jsonc`; era a cada 2 até 27/10/2026, e a edição rápida esperava até 2 min na fila) |
 | Contêiner de áudio | `AudioFixer` (aplicação `meu-avatar-audiofixer`), tipo "basic", 1 instância (`containers` em `wrangler.jsonc`); no ar desde 25/10/2026. Primeiro vídeo tratado (25 s, 720p) em ~1 min 20 s, contando a partida do contêiner |
 
 ## Onde ficam as chaves
