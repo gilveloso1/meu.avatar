@@ -13,6 +13,10 @@ export default defineConfig(async () => {
             TEST_MIGRATIONS: migrations,
             BCRYPT_COST: "4",
             OPENROUTER_WEBHOOK_SECRET: "segredo-webhook",
+            // O plugin também lê o .dev.vars do computador: os testes nunca rodam como "local"
+            // nem com a chave de verdade do OpenRouter (a API dos testes é a falsa, test/helpers.ts).
+            AMBIENTE: "",
+            OPENROUTER_API_KEY: "",
           },
         },
       }),

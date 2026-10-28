@@ -16,16 +16,16 @@ import { InputError, type Option } from "./structures/types";
  * e as que ficam em volta de falas curtas sobram mais longas.
  */
 export const PAUSES: (Option & { pause: number })[] = [
-  { value: "curta", label: "Curtas", pause: 0.1, description: "Ritmo rápido, de Reels e TikTok. As pausas que eram maiores e as em volta de falas curtas ficam um pouco mais longas." },
-  { value: "media", label: "Médias", pause: 0.2, description: "Respiro curto entre as frases. As pausas seguem o ritmo da fala: o fim de uma ideia respira mais que uma vírgula." },
-  { value: "longa", label: "Longas", pause: 0.35, description: "Só encurta as pausas grandes. A fala fica mais calma." },
+  { value: "curta", label: "Curtas", pause: 0.1, description: "Ritmo rápido, de Reels e TikTok." },
+  { value: "media", label: "Médias", pause: 0.2, description: "Respiro curto entre as frases." },
+  { value: "longa", label: "Longas", pause: 0.35, description: "Só encurta as pausas grandes." },
 ];
 
 /** Câmera: os enquadramentos, em ordem, um a cada corte (1 é o quadro todo; "Close" alterna zoom e close). */
 export const CAMERAS: (Option & { zooms: number[] })[] = [
-  { value: "parada", label: "Parada", zooms: [1], description: "Sem zoom: só tira as pausas. Nos cortes, a pessoa pode dar um pulinho na tela." },
-  { value: "zoom", label: "Zoom", zooms: [1, 1.25], description: "Em alguns cortes, alterna entre o quadro inteiro e um pouco mais perto, no máximo a cada 2,5 s. Parece troca de câmera." },
-  { value: "close", label: "Close", zooms: [1, 1.25, 1, 1.5], description: "Como o Zoom, mas de vez em quando chega bem perto do rosto. O mais dinâmico." },
+  { value: "parada", label: "Parada", zooms: [1], description: "Sem zoom, só tira as pausas." },
+  { value: "zoom", label: "Zoom", zooms: [1, 1.25], description: "Alterna o quadro, como troca de câmera." },
+  { value: "close", label: "Close", zooms: [1, 1.25, 1, 1.5], description: "Chega bem perto do rosto. O mais dinâmico." },
 ];
 
 export const DEFAULT_PAUSE = "media";

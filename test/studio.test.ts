@@ -68,7 +68,8 @@ describe("acesso", () => {
 
   it("sem chave do OpenRouter, avisa e desliga o botão", async () => {
     const page = await (await get("/modelo/wan", undefined, null)).text();
-    expect(page).toContain("OPENROUTER_API_KEY");
+    expect(page).toContain("A criação de vídeos está pausada no momento.");
+    expect(page).not.toContain("OPENROUTER_API_KEY");
     expect(page).toContain('type="submit" disabled');
   });
 
@@ -92,7 +93,7 @@ describe("telas", () => {
     expect(await (await get("/?q=nada")).text()).toContain("Nenhum modelo encontrado");
   });
 
-  it("a página de vídeos junta os modelos, filtra por status e pela fala, e abre na página do modelo", async () => {
+  it("a página de vídeos junta os modelos na mesma lista da página do modelo, com busca pela fala, e abre na página do vídeo", async () => {
     const api = new FakeVideoApi();
     await post(api, PEDIDO);
     await post(api, { ...PEDIDO, fala: "Promoção de verão" });
@@ -101,44 +102,54 @@ describe("telas", () => {
     const [verao, oi] = await new Db(env.DB).recentVideos();
 
     const page = await (await get("/videos", undefined, api)).text();
-    expect(page).toContain(`href="/modelo/wan?video=${verao!.id}"`);
-    expect(page).toContain(`href="/modelo/wan?video=${oi!.id}"`);
+    expect(page).toContain('data-library="videos"');
+    expect(page).toContain(`href="/video/${verao!.id}?de=%2Fvideos"`);
+    // O status vai em cada item: o filtro por status é feito no navegador.
+    expect(page).toContain(`data-video="${oi!.id}" data-kind="error"`);
+    expect(page).toContain(`data-video="${verao!.id}" data-kind="busy"`);
     expect(page).toContain("data-refresh=");
 
-    const erro = await (await get("/videos?status=erro", undefined, api)).text();
-    expect(erro).toContain(oi!.id);
-    expect(erro).not.toContain(verao!.id);
-    expect(erro).not.toContain("data-refresh=");
-
-    const busca = await (await get("/videos?q=ver%C3%A3o&ver=lista", undefined, api)).text();
+    const busca = await (await get("/videos?q=ver%C3%A3o", undefined, api)).text();
     expect(busca).toContain(verao!.id);
     expect(busca).not.toContain(oi!.id);
-    expect(busca).toContain('class="list-row interactive"');
-    // Trocar o filtro guarda a busca e a vista.
-    expect(busca).toContain('href="/videos?q=ver%C3%A3o&amp;status=prontos&amp;ver=lista"');
+    // A página do vídeo volta para a busca.
+    expect(busca).toContain(`href="/video/${verao!.id}?de=%2Fvideos%3Fq%3Dver%25C3%25A3o"`);
+    expect(await (await get("/videos?q=nada-disso", undefined, api)).text()).toContain("Nenhum vídeo encontrado");
 
     // O menu do card do modelo leva aos vídeos só dele.
     expect(await (await get("/", undefined, api)).text()).toContain('href="/videos?modelo=wan"');
     expect(await (await get("/videos?modelo=heygen", undefined, api)).text()).not.toContain(oi!.id);
   });
 
-  it("a página do modelo mostra o vídeo escolhido; sem vídeos, a apresentação e as falas prontas", async () => {
+  it("a página do modelo lista os vídeos dele (os mais novos primeiro) e cada um abre na página do vídeo", async () => {
     const vazia = await (await get("/modelo/wan")).text();
-    expect(vazia).toContain("Comece por uma fala pronta");
-    expect(vazia).toContain("data-fill=");
+    expect(vazia).toContain("Os vídeos gerados aparecem aqui.");
+    expect(vazia).not.toContain('class="library__groups"');
 
     const api = new FakeVideoApi();
     await post(api, PEDIDO);
     await post(api, { ...PEDIDO, fala: "Segundo vídeo" });
     const [segundo, primeiro] = await new Db(env.DB).recentVideos();
-    // Sem ?video=, o mais novo; com ele, o escolhido, marcado na lista.
-    expect(await (await get("/modelo/wan", undefined, api)).text()).toContain(`id="detalhes-${segundo!.id}"`);
-    const page = await (await get(`/modelo/wan?video=${primeiro!.id}`, undefined, api)).text();
-    expect(page).toContain(`id="detalhes-${primeiro!.id}"`);
-    expect(page).not.toContain(`id="detalhes-${segundo!.id}"`);
-    expect(page).toContain(`href="/modelo/wan?video=${primeiro!.id}" aria-current="true"`);
-    expect(page).toContain(`data-fill="${FALA}"`);
+    const page = await (await get("/modelo/wan", undefined, api)).text();
+    expect(page).toContain('data-library="wan"');
+    expect(page.indexOf(`href="/video/${segundo!.id}?de=%2Fmodelo%2Fwan"`)).toBeLessThan(page.indexOf(`href="/video/${primeiro!.id}?de=%2Fmodelo%2Fwan"`));
+    // Vistas (cards em três tamanhos e detalhes), filtro, ordem e agrupar por data.
+    for (const view of ["p", "m", "g", "d"]) expect(page).toContain(`data-view="${view}"`);
+    expect(page).toContain('data-group-toggle aria-pressed="false"');
+    expect(page).toContain('<h3 class="vgroup__title">Hoje</h3>');
+    // Sem MP4 ainda, o card mostra o ícone do status no lugar da miniatura.
+    expect(page).toContain('<span class="frame__placeholder">');
     expect(page).not.toContain("Comece por uma fala pronta");
+  });
+
+  it("Refazer abre o modelo com o texto e os ajustes do vídeo", async () => {
+    const api = new FakeVideoApi();
+    await post(api, { ...PEDIDO, fala: "Texto para refazer" });
+    const [video] = await new Db(env.DB).recentVideos();
+    const page = await (await get(`/modelo/wan?refazer=${video!.id}`, undefined, api)).text();
+    expect(page).toContain(">Texto para refazer</textarea>");
+    // Vídeo de outro modelo não preenche nada.
+    expect(await (await get(`/modelo/heygen?refazer=${video!.id}`, undefined, api)).text()).not.toContain("Texto para refazer");
   });
 });
 
@@ -171,6 +182,16 @@ describe("acesso negado à estrutura em teste", () => {
     const page = await (await get(`/modelo/wan?video=${heygen!.id}`, await memberCookie(), api)).text();
     expect(page).not.toContain(heygen!.id);
     expect(page).not.toContain(FALA);
+  });
+
+  it("conta comum não abre a página de um vídeo do HeyGen, nem pedindo o Refazer pelo Wan", async () => {
+    const api = new FakeVideoApi();
+    await post(api, { fala: FALA, voz: VOICES[0]!.value, imagem: new File([new Uint8Array([1])], "eu.png", { type: "image/png" }) }, "heygen");
+    const [heygen] = await new Db(env.DB).recentVideos();
+    const member = await memberCookie();
+    expect((await get(`/video/${heygen!.id}`, member, api)).status).toBe(404);
+    expect((await get(`/video/${heygen!.id}`, undefined, api)).status).toBe(200);
+    expect(await (await get(`/modelo/wan?refazer=${heygen!.id}`, member, api)).text()).not.toContain(FALA);
   });
 
   it("conta comum não abre o formulário do HeyGen", async () => {
@@ -287,6 +308,41 @@ describe("gerar vídeo", () => {
   });
 });
 
+describe("página do vídeo", () => {
+  it("sem login manda para /entrar; vídeo que não existe dá 404", async () => {
+    expect((await call(new Request(`${SITE}/video/${crypto.randomUUID()}`))).status).toBe(303);
+    expect((await get(`/video/${crypto.randomUUID()}`)).status).toBe(404);
+  });
+
+  it("a seta e o X voltam para a lista de onde veio, só dentro do site", async () => {
+    const api = new FakeVideoApi();
+    await post(api, PEDIDO);
+    const [video] = await new Db(env.DB).recentVideos();
+    const volta = async (de: string) => {
+      const page = await (await get(`/video/${video!.id}?de=${encodeURIComponent(de)}`, undefined, api)).text();
+      return /data-back="([^"]*)"/.exec(page)?.[1];
+    };
+    expect(await volta("/videos?q=oi")).toBe("/videos?q=oi");
+    // Endereço de outro site (ou //outro) não serve: volta para o modelo do vídeo.
+    expect(await volta("//exemplo.com/x")).toBe("/modelo/wan");
+    expect(await volta("https://exemplo.com")).toBe("/modelo/wan");
+    expect(await (await get(`/video/${video!.id}`, undefined, api)).text()).toContain('data-back="/modelo/wan"');
+  });
+
+  it("sem edição rápida (Wan), a folha não tem abas; o texto livre tem bloco próprio só quando preenchido", async () => {
+    const api = new FakeVideoApi();
+    await post(api, { ...PEDIDO, instrucoes: "olha para a câmera" });
+    await post(api, PEDIDO);
+    const [semInstrucoes, comInstrucoes] = await new Db(env.DB).recentVideos();
+    const com = await (await get(`/video/${comInstrucoes!.id}`, undefined, api)).text();
+    expect(com).not.toContain('role="tablist"');
+    expect(com).toContain('<h2 class="viewer__title">Instruções extras</h2>');
+    expect(com).not.toContain('<dt class="qe-result__label">Instruções extras</dt>');
+    const sem = await (await get(`/video/${semInstrucoes!.id}`, undefined, api)).text();
+    expect(sem).not.toContain("Instruções extras");
+  });
+});
+
 describe("acompanhar", () => {
   it("webhook assinado: confere na API, guarda o MP4 no R2 e mostra o player", async () => {
     const api = new FakeVideoApi();
@@ -305,10 +361,16 @@ describe("acompanhar", () => {
     expect(video).toMatchObject({ status: "completed", cost: 1.25, video_key: `videos/${video!.id}.mp4` });
     expect(await (await env.MIDIA.get(video!.video_key!))!.text()).toBe("mp4-falso");
 
-    const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api)).text();
-    expect(page).toContain(`<video controls preload="metadata" playsinline src="/videos/${video!.id}.mp4">`);
+    // A página do vídeo: o player com a barra própria (sem os controles do navegador), o custo e o download.
+    const page = await (await call(new Request(`${SITE}/video/${video!.id}`, { headers: { cookie: await cookie() } }), api)).text();
+    expect(page).toContain(`<video autoplay preload="metadata" playsinline src="/videos/${video!.id}.mp4">`);
+    expect(page).toContain("data-vbar");
     expect(page).toContain("US$ 1.25");
-    expect(page).not.toContain('data-refresh=');
+    expect(page).toContain(`href="/videos/${video!.id}.mp4?baixar"`);
+    expect(page).not.toContain("data-refresh=");
+    // Na lista do modelo, a miniatura só baixa quando aparece na tela (data-src).
+    const lista = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api)).text();
+    expect(lista).toContain(`<video data-src="/videos/${video!.id}.mp4" preload="metadata"`);
 
     const mp4 = await call(new Request(`${SITE}/videos/${video!.id}.mp4`, { headers: { cookie: await cookie(), range: "bytes=0-2" } }), api);
     expect(mp4.status).toBe(206);
@@ -336,10 +398,12 @@ describe("acompanhar", () => {
     expect(byJob["job-1"]!.status).toBe("in_progress");
     expect(byJob["job-2"]).toMatchObject({ status: "failed", error: "Content policy violation" });
 
-    // Enquanto há vídeo na fila, a página se atualiza sozinha.
+    // Enquanto há vídeo na fila, a página se atualiza sozinha; o motivo da falha aparece na página do vídeo.
     const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api)).text();
     expect(page).toContain('data-refresh=');
-    expect(page).toContain("Content policy violation");
+    const falhou = await (await call(new Request(`${SITE}/video/${byJob["job-2"]!.id}`, { headers: { cookie: await cookie() } }), api)).text();
+    expect(falhou).toContain("Content policy violation");
+    expect(falhou).toContain("status-line--error");
 
     // Terminado, não consulta mais.
     api.finish("job-1", { status: "completed" });
@@ -395,7 +459,12 @@ describe("tratamento do áudio", () => {
 
     page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: session } }), api, audio)).text();
     expect(page).not.toContain("data-refresh=");
-    expect(page).toContain(`/videos/${video.id}.original.mp4?baixar`);
+    // Com o tratado, o "Baixar" vira menu com as duas versões.
+    const pagina = await (await call(new Request(`${SITE}/video/${video.id}`, { headers: { cookie: session } }), api, audio)).text();
+    expect(pagina).toContain(`/videos/${video.id}.original.mp4?baixar`);
+    // "Original" é o do player (com o áudio tratado); o de antes do tratamento tem nome próprio.
+    expect(pagina).toContain(`href="/videos/${video.id}.mp4?baixar" download><span class="icon">movie</span>Original</a>`);
+    expect(pagina).toContain("Sem tratamento de áudio");
   });
 
   it("se o contêiner falhar, o vídeo continua com o original e o motivo aparece", async () => {
@@ -404,7 +473,7 @@ describe("tratamento do áudio", () => {
     const { api, studio } = await prontoParaTratar(audio);
     const video = (await studio.treatNextAudio())!;
     expect(video).toMatchObject({ audio_status: "failed", processed_key: null, audio_error: "Tratamento do áudio falhou (HTTP 500): ffmpeg" });
-    const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    const page = await (await call(new Request(`${SITE}/video/${video.id}`, { headers: { cookie: await cookie() } }), api, audio)).text();
     expect(page).toContain("Áudio não tratado: Tratamento do áudio falhou");
     const mp4 = await call(new Request(`${SITE}/videos/${video.id}.mp4`, { headers: { cookie: await cookie() } }), api, audio);
     expect(await mp4.text()).toBe("mp4-falso");
@@ -467,12 +536,15 @@ describe("HeyGen Avatar IV", () => {
     // Duração estimada pela fala (11 palavras a 2,4 por segundo).
     expect(video!.duration).toBe(5);
 
-    // Fica na página do HeyGen, não na do Wan, com os detalhes no "Ver mais".
+    // Fica na página do HeyGen, não na do Wan; os detalhes estão na página do vídeo.
     const page = await (await get("/modelo/heygen", undefined, api)).text();
     expect(page).toContain("≈ 5 s");
-    expect(page).toContain(`data-dialog-open="detalhes-${video!.id}"`);
-    expect(page).toContain("<dt>Voz</dt><dd>Orus · masculina · multilíngue</dd>");
-    expect(page).toContain("<dt>Expressividade</dt><dd>Média</dd>");
+    expect(page).toContain(`href="/video/${video!.id}?de=%2Fmodelo%2Fheygen"`);
+    const detalhes = await (await get(`/video/${video!.id}`, undefined, api)).text();
+    expect(detalhes).toContain('<dt class="qe-result__label">Voz</dt><dd class="qe-result__value">Orus · masculina · multilíngue</dd>');
+    expect(detalhes).toContain('<dt class="qe-result__label">Expressividade</dt><dd class="qe-result__value">Média</dd>');
+    // O movimento é texto livre: tem bloco próprio, fora da lista.
+    expect(detalhes).toContain('<h2 class="viewer__title">Movimento</h2><div class="viewer__card"><p class="viewer__text">aponta para a câmera</p>');
     expect(await (await get("/modelo/wan", undefined, api)).text()).not.toContain(video!.id);
     expect(await (await get("/", undefined, api)).text()).toContain("1 vídeo");
   });
@@ -506,7 +578,7 @@ describe("HeyGen Avatar IV", () => {
 });
 
 describe("edição rápida", () => {
-  const BOTAO = 'type="button" data-qe-open>';
+  const BOTAO = 'data-tab="qe"';
   const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
 
   async function pronto(structure: "heygen" | "wan", audio: FakeAudioApi | null = new FakeAudioApi()) {
@@ -522,32 +594,34 @@ describe("edição rápida", () => {
   const pedir = async (id: string, api: FakeVideoApi, audio: FakeAudioApi | null, session?: string, fields: Record<string, string> = {}) =>
     call(postForm(`/videos/${id}/edicao-rapida`, fields, { cookie: session ?? (await cookie()) }), api, audio);
 
-  it("o botão abre a prévia no vídeo pronto do HeyGen; o agendamento edita com os trechos dela e o player mostra a editada", async () => {
+  it("a aba Edição rápida abre a prévia no vídeo pronto do HeyGen; o agendamento edita com os trechos dela e o player mostra a editada", async () => {
     const { api, audio, studio, video } = await pronto("heygen");
     const session = await cookie();
-    let page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), api, audio)).text();
+    const ver = async (query = "") => (await call(new Request(`${SITE}/video/${video.id}${query}`, { headers: { cookie: session } }), api, audio)).text();
+    let page = await ver();
     expect(page).toContain(`action="/videos/${video.id}/edicao-rapida"`);
     expect(page).toContain(BOTAO);
     expect(page).toContain("data-quick-edit=");
     expect(page).toMatch(/name="pausa" value="media" form="edicao-rapida"[^>]* checked/);
     expect(page).toMatch(/name="camera" value="close" form="edicao-rapida"[^>]* checked/);
-    expect(page).toContain("Gerar vídeo editado");
-    // A explicação da opção escolhida aparece embaixo de cada ajuste.
-    expect(page).toContain('data-help-for="pausa">Respiro curto entre as frases.');
-    expect(page).toContain('data-help-for="camera">Como o Zoom, mas de vez em quando chega bem perto do rosto.');
+    expect(page).toContain("Gerar editado");
+    expect(page).toContain("data-qe-preview");
+    // A ajuda da opção escolhida aparece embaixo de cada ajuste, curta.
+    expect(page).toContain('data-help-for="pausa">Respiro curto entre as frases.</p>');
+    expect(page).toContain('data-help-for="camera">Chega bem perto do rosto. O mais dinâmico.</p>');
 
     const trechos = [[0.42, 7.417, 1], [7.928, 10.91, 1.25]];
     const res = await pedir(video.id, api, audio, session, { pausa: "longa", camera: "zoom", trechos: JSON.stringify(trechos) });
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe(`/modelo/heygen?video=${video.id}`);
-    page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), api, audio)).text();
+    expect(res.headers.get("location")).toBe(`/video/${video.id}`);
+    page = await ver();
     expect(page).toContain("Editando o vídeo");
-    expect(page).toContain('class="work-notice"');
-    expect(page).toContain("Enquanto isso, o player mostra o original.");
     expect(page).toContain("data-refresh=");
     expect(page).not.toContain(BOTAO);
-    // Pedir de novo enquanto está na fila não duplica.
-    expect((await pedir(video.id, api, audio, session)).status).toBe(400);
+    // Pedir de novo enquanto está na fila não duplica: a página do vídeo volta com o aviso.
+    const repetido = await pedir(video.id, api, audio, session);
+    expect(repetido.status).toBe(400);
+    expect(await repetido.text()).toContain("data-snackbar");
 
     const editado = (await studio.editNext())!;
     expect(editado).toMatchObject({ edit_status: "done", edited_key: `videos/${video.id}.editado.mp4` });
@@ -558,17 +632,63 @@ describe("edição rápida", () => {
     const mp4 = await call(new Request(`${SITE}/videos/${video.id}.editado.mp4?baixar`, { headers: { cookie: session } }), api, audio);
     expect(await mp4.text()).toBe("mp4-falso+editado");
     expect(mp4.headers.get("content-disposition")).toContain("-editado.mp4");
-    page = await (await call(new Request(`${SITE}/modelo/heygen?video=${video.id}`, { headers: { cookie: session } }), api, audio)).text();
-    expect(page).toContain(`src="/videos/${video.id}.editado.mp4"`);
-    expect(page).toContain("Ver original");
-    page = await (await call(new Request(`${SITE}/modelo/heygen?video=${video.id}&original`, { headers: { cookie: session } }), api, audio)).text();
+    // A edição que vale fica guardada: quando e com que escolhas.
+    expect(editado.edited_at).toBeTruthy();
+    expect(JSON.parse(editado.edited_plan!)).toMatchObject({ pause: "longa", camera: "zoom" });
+    page = await ver();
+    // O player abre no editado, com o endereço da edição (muda a cada uma, por causa do cache).
+    const editadoSrc = `/videos/${video.id}.editado.mp4?v=${encodeURIComponent(editado.edited_at!)}`;
+    expect(page).toContain(`src="${editadoSrc}"`);
+    expect(page).toContain("Este vídeo já foi editado");
+    expect(page).toContain('<span class="qe-result__label">Pausas</span><span class="qe-result__value">Longas</span>');
+    expect(page).toContain('<span class="qe-result__label">Câmera</span><span class="qe-result__value">Zoom</span>');
+    expect(page).toContain("data-qe-again");
+    expect(page).toContain("Substituir editado");
+    // As escolhas da edição que vale vêm marcadas.
+    expect(page).toMatch(/name="pausa" value="longa" form="edicao-rapida"[^>]* checked/);
+    // Original | Editado só na aba Edição rápida (a Informações não repete).
+    expect(page).not.toContain("Ver o original");
+    page = await ver("?original");
     expect(page).toContain(`src="/videos/${video.id}.mp4"`);
-    expect(page).toContain("Ver editado");
     // Editado, dá para refazer com outras escolhas; sem os trechos da prévia, o contêiner acha os silêncios.
     expect(page).toContain(BOTAO);
     expect((await pedir(video.id, api, audio, session, { pausa: "curta", camera: "parada" })).status).toBe(303);
-    await studio.editNext();
+    const refeito = (await studio.editNext(new Date(Date.parse(editado.edited_at!) + 60_000)))!;
     expect(audio!.plans[1]).toEqual({ pausa: 0.1, zooms: [1] });
+    expect(refeito.edited_at).not.toBe(editado.edited_at);
+    expect(await ver()).toContain(`.editado.mp4?v=${encodeURIComponent(refeito.edited_at!)}`);
+  });
+
+  it("se a nova edição falhar, a página continua mostrando a edição que vale, com as escolhas dela", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    await pedir(video.id, api, audio, undefined, { pausa: "longa", camera: "zoom" });
+    await studio.editNext();
+    await pedir(video.id, api, audio, undefined, { pausa: "curta", camera: "parada" });
+    audio!.fail = "Edição rápida falhou (HTTP 500): ffmpeg";
+    await studio.editNext();
+    const page = await (await call(new Request(`${SITE}/video/${video.id}`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(page).toContain('<span class="qe-result__label">Pausas</span><span class="qe-result__value">Longas</span>');
+    expect(page).toContain(`src="/videos/${video.id}.editado.mp4?v=`);
+  });
+
+  it("o agendamento acha o rosto dos vídeos prontos, um por vez, e a miniatura das listas enquadra nele", async () => {
+    const { api, audio, studio, video } = await pronto("heygen");
+    // Antes de achar: o terço de cima do vídeo (9:16 num quadrado).
+    let lista = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(lista).toContain('style="object-position:50.0% 28.6%"');
+    expect(await studio.findNextFace()).toMatchObject({ id: video.id, face: JSON.stringify({ x: 0.46, y: 0.44, altura: 0.25 }) });
+    expect(await studio.findNextFace()).toBeNull();
+    expect(audio!.faces).toBe(1);
+    // Os olhos (y = 0,44 do quadro) a 40% da altura do quadrado.
+    lista = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    expect(lista).toContain('style="object-position:50.0% 49.1%"');
+  });
+
+  it("se o contêiner não achar o rosto, o agendamento grava vazio e não tenta de novo", async () => {
+    const { audio, studio, video } = await pronto("heygen");
+    audio!.fail = "Rosto (HTTP 500)";
+    expect(await studio.findNextFace()).toMatchObject({ id: video.id, face: "{}" });
+    expect(await studio.findNextFace()).toBeNull();
   });
 
   it("o rosto é achado pelo contêiner na primeira vez, fica guardado e vai no plano da edição", async () => {
@@ -640,7 +760,7 @@ describe("edição rápida", () => {
     await pedir(video.id, api, audio);
     audio!.fail = "Edição rápida falhou (HTTP 500): ffmpeg";
     expect(await studio.editNext()).toMatchObject({ edit_status: "failed", edited_key: null });
-    const page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    const page = await (await call(new Request(`${SITE}/video/${video.id}`, { headers: { cookie: await cookie() } }), api, audio)).text();
     expect(page).toContain("Edição rápida falhou: Edição rápida falhou (HTTP 500)");
     expect(page).toContain(BOTAO);
   });
@@ -659,7 +779,7 @@ describe("edição rápida", () => {
   it("o Wan não tem edição rápida: sem botão e recusada mesmo mandando direto", async () => {
     const { api, audio, studio, video } = await pronto("wan");
     await studio.treatNextAudio();
-    const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    const page = await (await call(new Request(`${SITE}/video/${video.id}`, { headers: { cookie: await cookie() } }), api, audio)).text();
     expect(page).not.toContain(BOTAO);
     expect(page).not.toContain("/edicao-rapida");
     expect(page).not.toContain("const planParts");
@@ -762,7 +882,8 @@ describe("ritmo orgânico da edição rápida", () => {
     await post(api, { fala: FALA, imagem: new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" }) }, "heygen", audio);
     api.finish("job-1", { status: "completed" });
     await createStudio({ ...env, SITE_URL: SITE }, { api, audio }).syncOpen();
-    const page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
+    const [video] = await new Db(env.DB).recentVideos();
+    const page = await (await call(new Request(`${SITE}/video/${video!.id}`, { headers: { cookie: await cookie() } }), api, audio)).text();
     const source = /const planParts = ([\s\S]*?);\n {2}const qe = /.exec(page)?.[1];
     expect(source).toBeTruthy();
     const copia = new Function(`return (${source})`)() as typeof planParts;

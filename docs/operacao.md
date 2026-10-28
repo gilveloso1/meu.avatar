@@ -275,9 +275,10 @@ DNS da zona (falta a permissão "DNS: Read").
 
 ```bash
 npm install
-printf 'OPENROUTER_API_KEY=...\n' > .dev.vars
+printf 'AMBIENTE=local\nOPENROUTER_API_KEY=...\n' > .dev.vars
 npm run db:migrar:local
-npx wrangler dev --var SITE_URL:http://localhost:8787
+npm run exemplos   # opcional: vídeos de exemplo no banco local (precisa do ffmpeg)
+npx wrangler dev --var SITE_URL:http://localhost:8787 --enable-containers=false
 npm test
 npm run typecheck
 ```

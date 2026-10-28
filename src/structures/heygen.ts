@@ -62,22 +62,22 @@ export const HEYGEN_AVATAR: Structure = {
       {
         title: "Fala",
         fields: [
+          { kind: "select", name: "voz", label: "Voz", options: VOICES, value: VOICES[0]!.value, supporting: "Para português, use uma voz multilíngue." },
           {
             kind: "textarea",
             name: "fala",
-            label: "Fala",
+            label: "Texto",
             maxLength: MAX_SCRIPT,
             placeholder: "O texto que a voz lê. Ex.: Oi, gente! Hoje eu vou mostrar…",
             supporting: "O texto que a voz lê. A duração do vídeo segue a fala.",
             speech: true,
           },
-          { kind: "select", name: "voz", label: "Voz", options: VOICES, value: VOICES[0]!.value, supporting: "Para português, use uma voz multilíngue." },
         ],
       },
       {
         title: "Avatar",
         fields: [
-          { kind: "image", name: "imagem", label: "Foto do avatar", required: true, supporting: "Obrigatória. Rosto de frente, bem iluminado." },
+          { kind: "image", name: "imagem", label: "Foto do avatar", required: true, supporting: "" },
           { kind: "segmented", name: "expressividade", label: "Expressividade", options: EXPRESSIVENESS, value: "low" },
           {
             kind: "text",
@@ -85,7 +85,7 @@ export const HEYGEN_AVATAR: Structure = {
             label: "Movimento",
             maxLength: MAX_MOTION,
             placeholder: "Ex.: aponta para a câmera no final",
-            supporting: "Opcional: gestos e movimentos, além do olhar fixo e dos gestos contidos.",
+            supporting: "Opcional. Gestos que o avatar faz enquanto fala.",
           },
         ],
       },

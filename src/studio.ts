@@ -222,6 +222,25 @@ export class Studio {
     }
   }
 
+  /**
+   * Agendamento: procura o rosto de um vídeo pronto que ainda não tem (para enquadrar a miniatura
+   * nas listas e já deixar pronto para a edição rápida). Sem rosto ou se o contêiner falhar, grava
+   * {} para não tentar de novo a cada minuto (a prévia da edição rápida usa o padrão).
+   */
+  async findNextFace(): Promise<Video | null> {
+    if (!this.audio) return null;
+    const video = await this.db.nextWithoutFace();
+    if (!video) return null;
+    let face: Face | Record<string, never> = {};
+    try {
+      const original = await this.media.get((video.processed_key ?? video.video_key)!);
+      if (original) face = await this.audio.face(await original.arrayBuffer());
+    } catch (err) {
+      console.error("Falha ao achar o rosto (agendamento)", video.id, err);
+    }
+    return this.db.updateVideo(video.id, { face: JSON.stringify(face) });
+  }
+
   /** Agendamento: faz a edição rápida do próximo vídeo da fila, a partir da versão com o áudio tratado, se houver. */
   async editNext(now = new Date()): Promise<Video | null> {
     if (!this.audio) return null;
@@ -234,7 +253,8 @@ export class Studio {
       // O rosto achado na prévia; sem ele, o contêiner acha sozinho.
       const face = storedFace(video.face);
       await this.runInContainer(video.processed_key ?? video.video_key, key, (body, size) => this.audio!.edit(body, size, containerPlan(plan, face)));
-      return (await this.db.updateVideo(video.id, { edit_status: "done", edited_key: key, edit_error: null }))!;
+      // A edição que vale passa a ser esta: guarda quando e com que escolhas (a página mostra e o endereço muda).
+      return (await this.db.updateVideo(video.id, { edit_status: "done", edited_key: key, edited_at: now.toISOString(), edited_plan: video.edit_plan, edit_error: null }))!;
     } catch (err) {
       console.error("Falha na edição rápida", video.id, err);
       return (await this.db.updateVideo(video.id, { edit_status: "failed", edit_error: errorMessage(err) }))!;
@@ -263,7 +283,7 @@ export class Studio {
   }
 
   private requireApi(): VideoApi {
-    if (!this.api) throw new InputError("Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY).");
+    if (!this.api) throw new InputError("A criação de vídeos está pausada no momento. Tente de novo mais tarde.");
     return this.api;
   }
 }

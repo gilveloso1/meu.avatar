@@ -19,10 +19,9 @@
  */
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { Db, User, Video, VideoStatus } from "../db";
-import type { VideoModel } from "../openrouter";
-import { styleById } from "../prompt";
+import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, type Field, lowestPrice, type Option, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
+import { canUse, type Defaults, estimate, type Field, type Option, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
 import { ForbiddenError, InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
@@ -30,6 +29,8 @@ import { DARK, LIGHT } from "./theme";
 export interface SiteConfig {
   /** Padrões do formulário (wrangler.jsonc). */
   defaults: Defaults;
+  /** Rodando no computador (AMBIENTE=local no .dev.vars): esconde os avisos de configuração. */
+  local?: boolean;
 }
 
 const SITE_NAME = "Meu Avatar";
@@ -39,16 +40,10 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "add_photo_alternate", "arrow_drop_down", "arrow_upward", "check", "check_circle", "close", "content_cut", "download", "error", "face", "graphic_eq", "grid_view", "left_panel_close", "left_panel_open", "more_vert", "right_panel_close", "right_panel_open",
-  "edit", "hourglass_top", "info", "lock", "logout", "movie", "pause", "person_add", "play_arrow", "record_voice_over", "schedule", "search", "send", "subdirectory_arrow_right",
-  "videocam", "view_list",
-];
-
-/** Falas prontas da página do modelo sem vídeos: um clique põe o texto na caixa da fala. */
-const IDEAS = [
-  { label: "Apresentação", text: "Oi! Eu sou [SEU NOME] e aqui você vai encontrar [O QUE VOCÊ FAZ]." },
-  { label: "Oferta", text: "Só hoje: [PRODUTO] com [DESCONTO]. Corre que é por tempo limitado!" },
-  { label: "Convite", text: "Hoje tem live às [HORÁRIO]. Ative o lembrete e venha conversar comigo." },
+  "add", "apps", "auto_awesome", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "calendar_today", "check", "check_circle", "chevron_left", "chevron_right",
+  "close", "content_copy", "content_cut", "crop_square", "download", "edit", "error", "face", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq",
+  "grid_view", "hd", "hourglass_top", "info", "lock", "logout", "more_vert", "movie", "notes", "palette", "pause", "payments", "person_add", "play_arrow",
+  "record_voice_over", "refresh", "schedule", "search", "send", "swap_vert", "translate", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -123,8 +118,12 @@ export class Site {
       if (!structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
       return post
         ? this.createVideo(request, user, structure)
-        : this.modelPage(user, structure, url.searchParams.get("video"), undefined, undefined, url.searchParams.has("original"));
+        : this.modelPage(user, structure, await this.redoValues(structure, url.searchParams.get("refazer")));
     }
+
+    // A página do vídeo: o player ocupa a tela, com as informações numa folha lateral.
+    const watch = /^\/video\/([0-9a-f-]{36})$/.exec(path);
+    if (!post && watch) return this.videoPage(user, watch[1]!, url);
 
     const quickEdit = /^\/videos\/([0-9a-f-]{36})\/edicao-rapida$/.exec(path);
     if (post && quickEdit) return this.quickEdit(request, user, quickEdit[1]!);
@@ -181,77 +180,42 @@ export class Site {
   /** Os vídeos de todos os modelos que a pessoa pode usar, com filtro por status, busca pela fala e grade ou lista. */
   private async videosPage(user: User, url: URL): Promise<Response> {
     const q = (url.searchParams.get("q") ?? "").trim();
-    const filter = FILTERS.find((f) => f.id === url.searchParams.get("status")) ?? FILTERS[0];
-    const list = url.searchParams.get("ver") === "lista";
     // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
     const only = url.searchParams.get("modelo") ?? "";
     const usable = STRUCTURES.filter((s) => canUse(s, user.role) && (!only || s.id === only));
-    const all = await this.db.videosByStructures(usable.map((s) => s.id), q);
-    const videos = all.filter((v) => !filter.kind || cardStatus(v).kind === filter.kind);
+    const videos = await this.db.videosByStructures(usable.map((s) => s.id), q);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
-    const keep = { q, status: filter.id, ver: list ? "lista" : "", modelo: only };
-    // Os links da página guardam os outros parâmetros: trocar o filtro não perde a busca nem a vista.
-    const link = (changes: Record<string, string>) => {
-      const params = new URLSearchParams({ ...keep, ...changes });
-      for (const [k, v] of [...params]) if (!v) params.delete(k);
-      const s = params.toString();
-      return `/videos${s ? `?${s}` : ""}`;
-    };
-    const chips = FILTERS.map(
-      (f) =>
-        `<a class="chip interactive" href="${esc(link({ status: f.id }))}"${f === filter ? ' aria-current="true"' : ""}>${f === filter ? '<span class="icon">check</span>' : ""}${esc(f.label)}</a>`,
-    ).join("");
-    const items = videos.map((v) => {
-      const structure = structureById(v.structure)!;
-      const status = cardStatus(v);
-      const meta = [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ");
-      const href = `/modelo/${structure.id}?video=${v.id}`;
-      if (list) {
-        return `<a class="list-row interactive" href="${href}">${statusTile(status)}<span class="list-row__headline">${esc(v.prompt)}</span><span class="list-row__supporting">${esc(`${status.label} · ${meta}`)}</span></a>`;
-      }
-      return tileCard({
-        href,
-        tile: statusTile(status, true),
-        headline: v.prompt,
-        supporting: meta,
-        hidden: `${status.label} · `,
-        menu: [
-          { label: "Abrir", icon: "play_arrow", href },
-          ...(v.video_key ? [{ label: "Baixar MP4", icon: "download", href: `/videos/${v.id}.mp4?baixar`, download: true }] : []),
-        ],
-      });
-    });
-    const empty = q || filter.id || only ? emptyState("search", "Nenhum vídeo encontrado", "Tente outro filtro ou outra busca.") : emptyState("movie", "Nenhum vídeo ainda", "Escolha um modelo para gerar o primeiro.");
+    // A mesma lista da página do modelo (filtro, ordem, vista e agrupamento no navegador); a busca pela fala fica no servidor.
+    const from = `/videos${url.search}`;
     const body = `
 <main class="page" id="conteudo">
-  <div class="page__head">
-    <h1 class="page__headline">${only && usable[0] ? `Vídeos · ${esc(usable[0].name)}` : "Vídeos"}</h1>
-    <a class="fab fab--extended interactive" href="/"><span class="icon">add</span>Novo vídeo</a>
-  </div>
-  <nav class="chip-set" aria-label="Filtrar por status">${chips}</nav>
-  ${!items.length ? empty : list ? `<div class="list-box">${items.join("")}</div>` : `<div class="tile-grid">${items.join("")}</div>`}
+  ${videoLibrary(videos, {
+    key: only ? `videos-${only}` : "videos",
+    from,
+    title: only && usable[0] ? `Vídeos · ${usable[0].name}` : "Vídeos",
+    heading: "h1",
+    action: `<a class="fab fab--extended interactive" href="/"><span class="icon">add</span>Novo vídeo</a>`,
+    empty: q || only ? emptyState("search", "Nenhum vídeo encontrado", "Tente outra busca.") : emptyState("movie", "Nenhum vídeo ainda", "Escolha um modelo para gerar o primeiro."),
+    structureOf: (v) => structureById(v.structure)!,
+  })}
 </main>`;
-    const view = `<nav class="view-toggle" aria-label="Visualização">
-      <a class="view-toggle__option interactive" href="${esc(link({ ver: "" }))}"${list ? "" : ' aria-current="true"'} aria-label="Grade" title="Grade"><span class="icon">grid_view</span></a>
-      <a class="view-toggle__option interactive" href="${esc(link({ ver: "lista" }))}"${list ? ' aria-current="true"' : ""} aria-label="Lista" title="Lista"><span class="icon">view_list</span></a>
-    </nav>`;
     return html(
       page(`Vídeos · ${SITE_NAME}`, body, {
         refresh: waiting,
-        bar: { user, tab: "videos", search: { action: "/videos", label: "Pesquisar pela fala", q, keep: { status: filter.id, ver: keep.ver, modelo: only } }, extra: view },
+        bar: { user, tab: "videos", search: { action: "/videos", label: "Pesquisar pela fala", q, keep: { modelo: only } } },
       }),
     );
   }
 
+
   /**
-   * A página do modelo em três painéis: a configuração do vídeo à esquerda, o
-   * vídeo escolhido e a caixa da fala no centro, e os vídeos do modelo à
-   * direita; os painéis dos lados se recolhem. Sem `?video=`, fica o mais novo;
-   * sem vídeos, a apresentação do modelo e as falas prontas.
+   * A página do modelo: a configuração do vídeo à esquerda (com o botão de gerar no fim)
+   * e, no centro, os vídeos do modelo (videoLibrary). Tocar num vídeo abre /video/<id>.
    */
-  private async modelPage(user: User, structure: Structure, selectedId: string | null, values?: Values, error?: string, showOriginal = false): Promise<Response> {
+  private async modelPage(user: User, structure: Structure, values?: Values, error?: string): Promise<Response> {
     const { model, error: modelError } = await this.tryModel(structure);
-    const banner = modelError ?? (this.studio.canGenerate ? null : "Falta a chave do OpenRouter (segredo OPENROUTER_API_KEY): dá para ver os vídeos, mas não gerar novos.");
+    // Sem a chave do OpenRouter: no computador, nenhum aviso; no ar, um aviso na língua de quem usa.
+    const banner = modelError ?? (this.studio.canGenerate || this.config.local ? null : "A criação de vídeos está pausada no momento. Seus vídeos continuam aqui para ver e baixar.");
     const sections = structure.sections(model, this.config.defaults);
     const value = values ?? defaultValues(sections);
     const cost = model ? estimate(structure, model, value) : undefined;
@@ -263,70 +227,39 @@ export class Site {
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const videos = await this.db.videosByStructure(structure.id);
-    // Só vale um vídeo deste modelo: o id de outro não abre nada aqui.
-    const selected = videos.find((v) => v.id === selectedId) ?? videos[0];
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
 
-    // A fala vai na caixa do centro; a foto abre o painel; o resto segue as seções da estrutura.
+    // A foto abre o painel; o resto (a fala inclusive) segue as seções da estrutura.
     const fields = sections.flatMap((s) => s.fields);
-    const speech = fields.find((f): f is Extract<Field, { kind: "textarea" }> => f.kind === "textarea");
+    const speech = fields.some((f) => f.kind === "textarea");
     const images = fields.filter((f) => f.kind === "image");
-    const rest = sections.map((s) => ({ ...s, fields: s.fields.filter((f) => f.kind !== "textarea" && f.kind !== "image") })).filter((s) => s.fields.length);
-    const price = model ? lowestPrice(model) : undefined;
-    const tone = MODEL_TONES[STRUCTURES.indexOf(structure) % MODEL_TONES.length];
-
-    const intro = `
-      <div class="model-intro">
-        <span class="icon-tile icon-tile--hero icon-tile--${tone}" aria-hidden="true"><span class="icon">${esc(structure.icon)}</span></span>
-        <h2 class="model-intro__headline">${esc(structure.name)}</h2>
-        <p class="model-intro__supporting">${esc([structure.model.replace(/\/.*/, ""), price !== undefined ? `a partir de US$ ${price.toFixed(2)}/s` : null, "nenhum vídeo ainda"].filter(Boolean).join(" · "))}</p>
-        <p class="model-intro__text">${esc(structure.summary)}</p>
-      </div>
-      <section class="ideas" aria-labelledby="ideias">
-        <h3 class="ideas__title" id="ideias">Comece por uma fala pronta</h3>
-        <div class="ideas__grid">${IDEAS.map(
-          (i) =>
-            `<button class="idea interactive" type="button" data-fill="${esc(i.text)}"><span class="idea__label">${esc(i.label)}</span><span class="idea__text">${esc(i.text)}</span><span class="icon" aria-hidden="true">subdirectory_arrow_right</span></button>`,
-        ).join("")}</div>
-      </section>`;
+    const rest = sections.map((s) => ({ ...s, fields: s.fields.filter((f) => f.kind !== "image") })).filter((s) => s.fields.length);
 
     const body = `
 <main class="workspace" id="conteudo">
   <form class="workspace__form" method="post" action="/modelo/${structure.id}" enctype="multipart/form-data" data-composer='${esc(JSON.stringify(config))}'>
-    <section class="pane pane--config" aria-labelledby="configuracao" data-pane="config">
-      ${paneHead("configuracao", "Configuração", "left")}
+    <section class="pane pane--config" aria-labelledby="configuracao">
+      <div class="pane__head"><h2 class="pane__headline" id="configuracao">Configuração</h2></div>
       <div class="pane__body" id="configuracao-corpo">
         ${images.map((f) => formField(f, value)).join("")}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
+      ${speech ? generateBar(seconds, cost, Boolean(model) && (this.studio.canGenerate || Boolean(this.config.local))) : ""}
     </section>
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
-      ${selected ? selectedVideo(selected, structure, showOriginal) : intro}
-      ${speech ? composerBar(speech, value, seconds, cost, Boolean(model)) : ""}
+      ${videoLibrary(videos, {
+        key: structure.id,
+        from: `/modelo/${structure.id}`,
+        title: "Vídeos",
+        empty: emptyState("videocam", "Os vídeos gerados aparecem aqui.", "Escolha a foto e os ajustes, escreva a fala e toque em Gerar vídeo."),
+        structureOf: () => structure,
+      })}
     </div>
   </form>
-  <section class="pane pane--videos" aria-labelledby="videos" data-pane="videos">
-    ${paneHead("videos", `Vídeos <span class="pane__count">${videos.length}</span>`, "right")}
-    <div class="pane__body" id="videos-corpo">
-    ${
-      videos.length
-        ? `<nav class="pane-list" aria-label="Vídeos de ${esc(structure.name)}">${videos
-            .map((v) => {
-              const status = cardStatus(v);
-              const current = v === selected ? ' aria-current="true"' : "";
-              return `<a class="pane-list__item interactive" href="/modelo/${structure.id}?video=${v.id}"${current}>${statusTile(status)}<span class="pane-list__text"><span class="pane-list__headline">${esc(v.prompt)}</span><span class="pane-list__supporting">${esc([status.label, formatDate(v.created_at), durationLabel(v, structure)].join(" · "))}</span></span></a>`;
-            })
-            .join("")}</nav>`
-        : `<div class="pane-empty"><span class="icon">videocam</span><p class="pane-empty__title">Os vídeos gerados aparecem aqui.</p><p>Escolha a foto e os ajustes, escreva a fala embaixo e toque na seta para gerar.</p></div>`
-    }
-    </div>
-  </section>
 </main>
-${selected ? videoDialog(selected, structure) : ""}
-${selected && canQuickEdit(selected, structure) ? `<form id="edicao-rapida" method="post" action="/videos/${selected.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
 ${error ? snackbar(error) : ""}`;
-    return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, footer: false, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
+    return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
   }
 
   /** "Gerar vídeo editado", na prévia da edição rápida: põe o vídeo na fila do contêiner e volta para ele. */
@@ -342,9 +275,9 @@ ${error ? snackbar(error) : ""}`;
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
-      return this.modelPage(user, structure, video.id, undefined, err.message);
+      return this.videoPage(user, video.id, new URL(request.url), err.message);
     }
-    return redirect(`/modelo/${structure.id}?video=${video.id}`);
+    return redirect(`/video/${video.id}`);
   }
 
   /** Onde está o rosto (JSON), para a prévia da edição rápida mirar o zoom. */
@@ -361,12 +294,148 @@ ${error ? snackbar(error) : ""}`;
     }
   }
 
+  /**
+   * "Refazer": os valores do formulário tirados de um vídeo já feito (texto e ajustes).
+   * Só os campos que existem na estrutura usam esses valores; o resto fica no padrão.
+   */
+  private async redoValues(structure: Structure, id: string | null): Promise<Values | undefined> {
+    const v = id ? await this.db.videoById(id) : null;
+    if (!v || v.structure !== structure.id) return undefined;
+    const { model } = await this.tryModel(structure);
+    const base = defaultValues(structure.sections(model, this.config.defaults));
+    let settings: Record<string, string> = {};
+    try { settings = JSON.parse(v.settings ?? "{}"); } catch {}
+    const from: Record<string, string | null | undefined> = {
+      fala: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
+      estilo: v.style, idioma: v.language, instrucoes: v.extra, movimento: settings.motion_prompt ?? v.extra,
+      voz: settings.voice_id, expressividade: settings.expressiveness,
+    };
+    return (name) => from[name] || base(name);
+  }
+
+  /** A página do vídeo: o vídeo centralizado sobre ele mesmo desfocado e, ao lado, a folha com as informações. */
+  private async videoPage(user: User, id: string, url: URL, error?: string): Promise<Response> {
+    const v = await this.db.videoById(id);
+    const structure = v && structureById(v.structure);
+    if (!v || !structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
+    // De onde a pessoa veio (só caminhos do próprio site): a seta e o X voltam para lá.
+    const from = url.searchParams.get("de") ?? "";
+    const back = /^\/(?!\/)/.test(from) ? from : `/modelo/${structure.id}`;
+    const showOriginal = url.searchParams.has("original");
+    const status = cardStatus(v);
+    const quick = canQuickEdit(v, structure);
+    const edited = Boolean(v.edited_key) && !showOriginal;
+    const src = edited ? editedSrc(v) : videoSrc(v);
+    const ratio = esc(v.aspect_ratio.replace(":", " / "));
+    const media = v.video_key
+      ? `<div class="player viewer__player" style="--ratio:${ratio}"${quick ? " data-player" : ""}><div class="player__frame"><video autoplay preload="metadata" playsinline src="${src}"></video>${
+          quick ? `<div class="player__controls" data-qe-controls hidden><button class="icon-button interactive" type="button" data-qe-play aria-label="Tocar a prévia" title="Tocar a prévia"><span class="icon">play_arrow</span></button><span class="player__time" data-qe-time></span></div>` : ""
+        }</div></div>`
+      : status.kind === "error"
+        ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p>${v.error ? `<p class="stage__text">${esc(v.error)}</p>` : ""}</div>`
+        : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">Leva alguns minutos. A página se atualiza sozinha.</p></div>`;
+    // Campos de texto livre (movimento, instruções) ganham um bloco próprio, como o Texto; vazios não aparecem.
+    const all = [{ term: "Modelo", description: structure.name }, ...structure.details(v)];
+    const notes = all.filter((d) => FREE_TEXT.has(d.term) && d.description !== "—");
+    const details = [
+      ...all.filter((d) => !FREE_TEXT.has(d.term)),
+      { term: "Duração", description: durationLabel(v, structure) },
+      { term: "Resolução", description: v.resolution },
+      { term: "Formato", description: v.aspect_ratio },
+      { term: "Custo", description: v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—" },
+      { term: "Criado em", description: formatDate(v.created_at) },
+    ];
+    // Sem MP4, o motivo da falha já está no card do vídeo: na folha ficam só os do áudio e da edição.
+    const errors = [
+      v.video_key ? v.error : null,
+      v.audio_status === "failed" ? `Áudio não tratado: ${v.audio_error ?? "erro desconhecido"}` : null,
+      v.edit_status === "failed" ? `Edição rápida falhou: ${v.edit_error ?? "erro desconhecido"}` : null,
+    ].filter((e): e is string => Boolean(e));
+    const downloads: MenuItem[] = v.video_key
+      ? [
+          // "Original" é o vídeo como aparece no player sem edição (com o áudio tratado, se houver);
+          // o que veio do modelo, antes do tratamento, só aparece quando existe o tratado.
+          { label: "Original", icon: "movie", href: `/videos/${v.id}.mp4?baixar`, download: true },
+          ...(v.edited_key ? [{ label: "Editado", icon: "content_cut", href: `${editedSrc(v)}&baixar`, download: true }] : []),
+          ...(v.processed_key ? [{ label: "Sem tratamento de áudio", icon: "graphic_eq", href: `/videos/${v.id}.original.mp4?baixar`, download: true }] : []),
+        ]
+      : [];
+    const avatar = v.image_key?.startsWith("avatares/") ? `<img class="viewer__avatar" src="/midia/${esc(v.image_key)}" alt="Foto do avatar">` : "";
+    const info = `
+        <div class="viewer__panel" data-tab-panel="info">
+          ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
+          <section class="viewer__section">
+            <div class="viewer__section-head"><h2 class="viewer__title">Texto</h2><button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button></div>
+            <div class="viewer__card">${avatar}<p class="viewer__text">${esc(v.prompt)}</p></div>
+          </section>
+          ${notes
+            .map((d) => `<section class="viewer__section"><h2 class="viewer__title">${esc(d.term)}</h2><div class="viewer__card"><p class="viewer__text">${esc(d.description)}</p></div></section>`)
+            .join("")}
+          <section class="viewer__card viewer__details" aria-labelledby="detalhes-titulo">
+            <h2 class="qe-result__title" id="detalhes-titulo">Detalhes</h2>
+            <dl>${details.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${DETAIL_ICONS[d.term] ?? "info"}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.description)}</dd></div>`).join("")}</dl>
+          </section>
+        </div>`;
+    const body = `
+<main class="viewer" id="conteudo">
+  <section class="viewer__stage" aria-label="Vídeo" style="--ratio:${ratio}">
+    <a class="viewer__nav viewer__nav--prev icon-button interactive" data-nav="prev" hidden aria-label="Vídeo anterior" title="Vídeo anterior"><span class="icon">chevron_left</span></a>
+    ${media}
+    ${
+      v.video_key
+        ? `<div class="vbar" data-vbar role="group" aria-label="Controles do vídeo">
+      <button class="vbar__play interactive" type="button" data-vbar-play aria-label="Tocar" title="Tocar"><span class="icon">play_arrow</span></button>
+      <span class="vbar__time" data-vbar-time>0:00 / 0:00</span>
+      <input class="vbar__seek" type="range" min="0" max="1000" step="1" value="0" data-vbar-seek aria-label="Posição no vídeo">
+      <button class="icon-button interactive" type="button" data-vbar-mute aria-label="Tirar o som" title="Tirar o som"><span class="icon">volume_up</span></button>
+      <button class="icon-button interactive" type="button" data-vbar-full aria-label="Tela cheia" title="Tela cheia"><span class="icon">fullscreen</span></button>
+    </div>`
+        : ""
+    }
+    <a class="viewer__nav viewer__nav--next icon-button interactive" data-nav="next" hidden aria-label="Próximo vídeo" title="Próximo vídeo"><span class="icon">chevron_right</span></a>
+  </section>
+  <aside class="viewer__sheet" aria-label="Informações do vídeo" data-viewer="${v.id}" data-back="${esc(back)}">
+    <div class="viewer__head">
+      <p class="status-line status-line--${status.kind}"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label)}</p>
+      <a class="icon-button interactive" href="${esc(back)}" aria-label="Fechar" title="Fechar"><span class="icon">close</span></a>
+    </div>
+    ${
+      quick
+        ? `<div class="tabs" role="tablist">
+      <button class="tabs__tab interactive" type="button" role="tab" data-tab="info" aria-selected="true"><span class="tabs__content"><span class="icon">info</span>Informações</span></button>
+      <button class="tabs__tab interactive" type="button" role="tab" data-tab="qe" aria-selected="false"><span class="tabs__content"><span class="icon">content_cut</span>Edição rápida</span></button>
+    </div>
+    <button type="button" data-qe-open hidden></button>`
+        : ""
+    }
+    <div class="viewer__body">
+      ${info}
+      ${quick ? quickEditPreview(v, showOriginal) : ""}
+    </div>
+    <div class="viewer__actions">
+      <a class="button button--filled interactive" href="/modelo/${structure.id}?refazer=${v.id}"><span class="icon">refresh</span>Refazer</a>
+      ${downloads.length === 1 ? `<a class="button button--outlined interactive" href="${downloads[0]!.href}" download><span class="icon">download</span>Baixar</a>` : downloads.length ? downloadMenu(downloads) : ""}
+    </div>
+  </aside>
+</main>
+${quick ? `<form id="edicao-rapida" method="post" action="/videos/${v.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
+${error ? snackbar(error) : ""}`;
+    return html(page(`Vídeo · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
+  }
+
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
-    if (!this.studio.canGenerate) return { model: null, error: null };
     try {
+      // Sem a chave: no computador, a lista pública de modelos (o formulário mostra todas as opções);
+      // no ar, nada (o aviso diz que a criação está pausada). Assim os testes não vão à rede.
+      if (!this.studio.canGenerate) {
+        if (!this.config.local) return { model: null, error: null };
+        const model = (await OpenRouterVideo.listModels()).find((m) => m.id === structure.model);
+        return { model: model ?? null, error: null };
+      }
       return { model: await this.studio.model(structure.model), error: null };
     } catch (err) {
-      return { model: null, error: `Não deu para ler o modelo ${structure.model}: ${err instanceof Error ? err.message : err}` };
+      console.error(`Não deu para ler o modelo ${structure.model}:`, err);
+      return { model: null, error: "Não foi possível carregar as opções deste modelo agora. Atualize a página em instantes." };
     }
   }
 
@@ -381,7 +450,7 @@ ${error ? snackbar(error) : ""}`;
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
-      return this.modelPage(user, structure, null, values, err.message);
+      return this.modelPage(user, structure, values, err.message);
     }
     return redirect(`/modelo/${structure.id}?video=${video.id}`);
   }
@@ -492,77 +561,13 @@ function tileCard(c: { href: string; tile: string; headline: string; supporting:
     </article>`;
 }
 
-/** Título do painel lateral com o botão de recolher (o painel da esquerda recolhe para a esquerda, o da direita para a direita). */
-function paneHead(id: string, title: string, side: "left" | "right"): string {
-  return `<div class="pane__head">
-        <h2 class="pane__headline" id="${id}">${title}</h2>
-        <button class="icon-button interactive pane__toggle" type="button" data-pane-toggle="${side}" aria-controls="${id}-corpo" aria-expanded="true" aria-label="Recolher o painel" title="Recolher o painel"><span class="icon">${side}_panel_close</span></button>
-      </div>`;
-}
-
-/** O vídeo escolhido, no centro da página do modelo: o player (ou o andamento, ou o erro), a fala e as ações. */
-function selectedVideo(v: Video, structure: Structure, showOriginal: boolean): string {
-  const status = cardStatus(v);
-  // Com a edição rápida pronta, o player mostra a editada; "Ver original" troca.
-  const edited = Boolean(v.edited_key) && !showOriginal;
-  const src = edited ? `/videos/${v.id}.editado.mp4` : videoSrc(v);
-  const quick = canQuickEdit(v, structure);
-  const media = v.video_key
-    ? `<div class="player" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"${quick ? " data-player" : ""}><div class="player__frame"><video controls preload="metadata" playsinline src="${src}"></video>${
-        quick
-          ? `<div class="player__controls" data-qe-controls hidden><button class="icon-button interactive" type="button" data-qe-play aria-label="Tocar a prévia" title="Tocar a prévia"><span class="icon">play_arrow</span></button><span class="player__time" data-qe-time></span></div>`
-          : ""
-      }</div></div>`
-    : status.kind === "error"
-      ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p>${v.error ? `<p class="stage__text">${esc(v.error)}</p>` : ""}</div>`
-      : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">Leva alguns minutos. A página se atualiza sozinha.</p></div>`;
-  const meta = [status.label, formatDate(v.created_at), durationLabel(v, structure), v.resolution, v.aspect_ratio].join(" · ");
-  return `
-      <section class="selected" aria-label="Vídeo escolhido">
-        ${v.video_key && status.kind === "busy" ? workNotice(v, status) : ""}
-        ${media}
-        <div class="selected__body">
-          <p class="selected__meta">${esc(meta)}</p>
-          <p class="selected__text">${esc(v.prompt)}</p>
-        </div>
-        <div class="selected__actions">
-          ${v.video_key ? `<a class="button button--text interactive" href="${edited ? `/videos/${v.id}.editado.mp4` : `/videos/${v.id}.mp4`}?baixar" download><span class="icon">download</span>Baixar MP4</a>` : ""}
-          ${quick ? `<button class="button button--text interactive" type="button" data-qe-open><span class="icon">content_cut</span>Edição rápida</button>` : ""}
-          ${v.edited_key ? `<a class="button button--text interactive" href="/modelo/${structure.id}?video=${v.id}${edited ? "&amp;original" : ""}"><span class="icon">movie</span>${edited ? "Ver original" : "Ver editado"}</a>` : ""}
-          <button class="button button--text interactive" type="button" data-fill="${esc(v.prompt)}"><span class="icon">edit</span>Usar esta fala</button>
-          <button class="button button--text interactive" type="button" data-dialog-open="detalhes-${v.id}"><span class="icon">info</span>Detalhes</button>
-        </div>
-        ${quick ? quickEditPreview(v) : ""}
-      </section>`;
-}
-
-/**
- * Aviso em cima do player enquanto o contêiner trabalha num vídeo pronto (edição
- * rápida ou tratamento do áudio): o player segue com a versão de antes, e sem o
- * aviso parecia que nada tinha acontecido.
- */
-function workNotice(v: Video, status: ReturnType<typeof cardStatus>): string {
-  const editing = v.edit_status === "pending" || v.edit_status === "processing";
-  const text = editing
-    ? `Quando ficar pronto, aparece aqui sozinho. Enquanto isso, o player mostra ${v.edited_key ? "a edição anterior" : "o original"}.`
-    : "Quando ficar pronto, aparece aqui sozinho. Enquanto isso, o player mostra o som como veio do modelo.";
-  return `<div class="work-notice" role="status">
-          <span class="icon" aria-hidden="true">${status.icon}</span>
-          <div class="work-notice__body">
-            <p class="work-notice__title">${esc(status.label)}</p>
-            <p class="work-notice__text">${esc(text)}</p>
-            <div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div>
-          </div>
-        </div>`;
-}
-
 /**
  * Prévia da edição rápida, aberta pelo botão: o player toca o vídeo pulando as
  * pausas e com o zoom de cada trecho; pausas e câmera mudam a prévia na hora.
  * "Gerar vídeo editado" manda os trechos para o contêiner (formulário
  * #edicao-rapida, fora do formulário da fala).
  */
-function quickEditPreview(v: Video): string {
+function quickEditPreview(v: Video, showOriginal = false): string {
   const config = {
     src: videoSrc(v),
     face: `/videos/${v.id}/rosto`,
@@ -570,19 +575,47 @@ function quickEditPreview(v: Video): string {
     pauses: Object.fromEntries(PAUSES.map((p) => [p.value, p.pause])),
     cameras: Object.fromEntries(CAMERAS.map((c) => [c.value, c.zooms])),
   };
-  return `<section class="quick-edit" data-quick-edit='${esc(JSON.stringify(config))}' hidden aria-labelledby="edicao-rapida-titulo">
+  // Já editado: as escolhas da edição que vale vêm marcadas, e a aba diz quando e como foi feita.
+  let plan: { pause?: string; camera?: string } = {};
+  // Vídeos editados antes das colunas edited_*: o último plano e o início da edição.
+  try { plan = v.edited_key ? JSON.parse(v.edited_plan ?? v.edit_plan ?? "{}") : {}; } catch {}
+  const pause = PAUSES.find((p) => p.value === plan.pause), camera = CAMERAS.find((c) => c.value === plan.camera);
+  const editedAt = v.edited_at ?? v.edit_started_at;
+  const when = v.edited_key && editedAt ? formatDate(editedAt) : null;
+  const rows = [
+    when ? { icon: "calendar_today", label: "Editado em", value: when } : null,
+    pause ? { icon: "content_cut", label: "Pausas", value: pause.label } : null,
+    camera ? { icon: "videocam", label: "Câmera", value: camera.label } : null,
+  ].filter((r): r is { icon: string; label: string; value: string } => r !== null);
+  const existing = v.edited_key
+    ? `<div class="qe-existing" data-qe-existing>
+            <div class="segmented-button qe-versions" role="group" aria-label="Versão no player">
+              <button class="segmented-button__segment interactive" type="button" data-version="${videoSrc(v)}"${showOriginal ? ' aria-current="true"' : ""}>Original</button>
+              <button class="segmented-button__segment interactive" type="button" data-version="${esc(editedSrc(v))}"${showOriginal ? "" : ' aria-current="true"'}><span class="icon">content_cut</span>Editado</button>
+            </div>
+            <section class="viewer__card qe-existing__card" aria-labelledby="ja-editado">
+              <h3 class="qe-result__title" id="ja-editado">Este vídeo já foi editado</h3>
+              ${rows.map((r) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${r.icon}</span><span class="qe-result__label">${esc(r.label)}</span><span class="qe-result__value">${esc(r.value)}</span></div>`).join("")}
+            </section>
+            <button class="button button--outlined interactive qe-existing__again" type="button" data-qe-again><span class="icon">edit</span>Editar de novo</button>
+            <p class="qe-existing__warn"><span class="icon">info</span>A nova edição substitui a atual.</p>
+          </div>`
+    : "";
+  return `<section class="quick-edit" data-quick-edit='${esc(JSON.stringify(config))}'${v.edited_key ? " data-edited" : ""} hidden aria-labelledby="edicao-rapida-titulo">
+          ${existing}
           <div class="quick-edit__head">
             <h2 class="quick-edit__title" id="edicao-rapida-titulo">Edição rápida</h2>
             <p class="quick-edit__summary" data-qe-summary role="status"></p>
           </div>
           <div class="quick-edit__fields">
-            ${segmented("pausa", "Pausas", PAUSES, DEFAULT_PAUSE, "edicao-rapida")}
-            ${segmented("camera", "Câmera", CAMERAS, DEFAULT_CAMERA, "edicao-rapida")}
+            ${segmented("pausa", "Pausas", PAUSES, pause?.value ?? DEFAULT_PAUSE, "edicao-rapida")}
+            ${segmented("camera", "Câmera", CAMERAS, camera?.value ?? DEFAULT_CAMERA, "edicao-rapida")}
           </div>
+          <button class="button button--tonal interactive quick-edit__preview" type="button" data-qe-preview><span class="icon">auto_awesome</span><span>Gerar prévia</span></button>
           <input type="hidden" name="trechos" form="edicao-rapida" data-qe-parts>
           <div class="quick-edit__actions">
-            <button class="button button--text interactive" type="button" data-qe-close>Cancelar</button>
-            <button class="button button--filled interactive" type="submit" form="edicao-rapida"><span class="icon">content_cut</span>Gerar vídeo editado</button>
+            <button class="button button--outlined interactive" type="button" data-qe-close>Cancelar</button>
+            <button class="button button--filled interactive" type="submit" form="edicao-rapida"><span class="icon">content_cut</span>${v.edited_key ? "Substituir editado" : "Gerar editado"}</button>
           </div>
         </section>`;
 }
@@ -621,16 +654,154 @@ function segmented(name: string, label: string, options: Option[], selected: str
 }
 
 /** A caixa da fala, embaixo do centro: o campo, a duração e o custo estimados e o botão de gerar. */
-function composerBar(f: Extract<Field, { kind: "textarea" }>, value: Values, seconds: string, cost: number | undefined, enabled: boolean): string {
+/** Detalhes que são texto livre: saem da lista e viram um bloco próprio na página do vídeo. */
+const FREE_TEXT = new Set(["Movimento", "Instruções extras"]);
+
+/** Ícone de cada linha dos detalhes do vídeo (precisa estar em ICONS); o que faltar usa "info". */
+const DETAIL_ICONS: Record<string, string> = {
+  Modelo: "movie", Voz: "record_voice_over", Expressividade: "face", Movimento: "gesture",
+  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes",
+  Duração: "schedule", Resolução: "hd", Formato: "aspect_ratio", Custo: "payments", "Criado em": "calendar_today",
+};
+
+/** Botão "Baixar" com menu das versões do vídeo (original, áudio tratado, editado). */
+function downloadMenu(items: MenuItem[]): string {
+  return `<details class="menu menu--up" data-menu>
+        <summary class="button button--outlined interactive"><span class="icon">download</span>Baixar<span class="icon">arrow_drop_down</span></summary>
+        <div class="menu__list" role="menu">${items.map((i) => `<a class="menu__item interactive" role="menuitem" href="${i.href}" download><span class="icon">${i.icon}</span>${esc(i.label)}</a>`).join("")}</div>
+      </details>`;
+}
+
+/**
+ * Onde a miniatura quadrada corta o vídeo (object-position): com o rosto achado (rosto.py: o ponto
+ * entre os olhos, em frações do quadro), os olhos ficam a 40% da altura e no meio da largura;
+ * sem ele, o terço de cima (onde o rosto costuma estar).
+ */
+function thumbPosition(v: Video): string {
+  let face: { x?: number; y?: number } = {};
+  try { face = JSON.parse(v.face ?? "{}"); } catch {}
+  const fx = typeof face.x === "number" ? face.x : 0.5, fy = typeof face.y === "number" ? face.y : 0.35;
+  const [w, h] = v.aspect_ratio.split(":").map(Number);
+  const ratio = w && h ? h / w : 16 / 9;
+  // Corte no eixo que sobra: a parte do vídeo fora do quadrado, de 0 a 100%.
+  const pct = (r: number, f: number, target: number) => (r > 1 ? Math.min(100, Math.max(0, ((r * f - target) / (r - 1)) * 100)) : 50);
+  return `${pct(1 / ratio, fx, 0.5).toFixed(1)}% ${pct(ratio, fy, 0.4).toFixed(1)}%`;
+}
+
+/** Dia no fuso de São Paulo (AAAA-MM-DD), para agrupar por data. */
+function dayKey(iso: string | number): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+/** Grupo de data do vídeo: Hoje, Ontem, Últimos 7 dias, Últimos 30 dias e, antes disso, o mês. */
+function dateGroup(iso: string, now = Date.now()): string {
+  const days = Math.round((Date.parse(dayKey(now)) - Date.parse(dayKey(iso))) / 86_400_000);
+  if (days <= 0) return "Hoje";
+  if (days === 1) return "Ontem";
+  if (days < 7) return "Últimos 7 dias";
+  if (days < 30) return "Últimos 30 dias";
+  const month = new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", month: "long", year: "numeric" });
+  return month.charAt(0).toUpperCase() + month.slice(1);
+}
+
+/**
+ * A área central: os vídeos do modelo agrupados por data, em cards quadrados numa moldura
+ * (três tamanhos) ou em detalhes (uma linha por vídeo, com as colunas). Filtro, ordem e
+ * vista trocam no navegador, sem recarregar: o que está no formulário não se perde.
+ */
+interface LibraryOptions {
+  /** Onde a escolha de vista, filtro, ordem e agrupamento fica guardada no navegador ("lista-<key>"). */
+  key: string;
+  /** Página de onde o vídeo é aberto: a seta e o X da página do vídeo voltam para ela. */
+  from: string;
+  /** Título da lista e o nível dele (h1 na aba Vídeos, h2 na página do modelo). */
+  title: string;
+  heading?: "h1" | "h2";
+  /** Ação ao lado do título (o "Novo vídeo" da aba Vídeos). */
+  action?: string;
+  /** O que mostrar sem vídeos. */
+  empty: string;
+  structureOf: (v: Video) => Structure;
+}
+
+function videoLibrary(videos: Video[], o: LibraryOptions): string {
+  const h = o.heading ?? "h2";
+  const head = (count: string) => `<${h} class="library__title">${esc(o.title)} <span class="pane__count"${count === "" ? "" : " data-library-count"}>${count || 0}</span></${h}>`;
+  if (!videos.length) return `<div class="library"><div class="library__head">${head("")}${o.action ?? ""}</div>${o.empty}</div>`;
+  const chips = FILTERS.map(
+    (f, i) => `<button class="chip interactive" type="button" data-filter="${f.kind ?? ""}" aria-pressed="${i === 0}"><span class="icon chip__check">check</span>${esc(f.label)}</button>`,
+  ).join("");
+  const views = [
+    { id: "p", label: "Cards pequenos", icon: "apps" },
+    { id: "m", label: "Cards médios", icon: "grid_view" },
+    { id: "g", label: "Cards grandes", icon: "crop_square" },
+    { id: "d", label: "Detalhes", icon: "view_list" },
+  ]
+    .map((z) => `<button class="segmented-button__segment interactive" type="button" data-view="${z.id}"${z.id === "m" ? ' aria-current="true"' : ""} aria-label="${z.label}" title="${z.label}"><span class="icon">${z.icon}</span></button>`)
+    .join("");
+  const groups = new Map<string, Video[]>();
+  for (const v of videos) {
+    const g = dateGroup(v.created_at);
+    groups.set(g, [...(groups.get(g) ?? []), v]);
+  }
+  const thumb = (v: Video, status: ReturnType<typeof cardStatus>) =>
+    v.video_key ? `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>` : `<span class="frame__placeholder">${statusTile(status, true)}</span>`;
+  const section = ([title, list]: [string, Video[]]) => {
+    const frames = list
+      .map((v) => {
+        const status = cardStatus(v);
+        const structure = o.structureOf(v);
+        const label = esc([v.prompt, status.kind === "done" ? null : status.label, formatDate(v.created_at), structure.name, durationLabel(v, structure)].filter(Boolean).join(" · "));
+        return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}" aria-label="${label}" title="${label}"><span class="frame__media">${thumb(v, status)}</span></a>`;
+      })
+      .join("");
+    const rows = list
+      .map((v) => {
+        const status = cardStatus(v), structure = o.structureOf(v);
+        return `<a class="vrow interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" role="row" data-video="${v.id}" data-kind="${status.kind}">
+          <span class="vrow__thumb" role="cell">${thumb(v, status)}</span>
+          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(v.prompt)}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
+          <span class="vrow__status vrow__status--${status.kind}" role="cell"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label.replace(/ · .*/, ""))}</span>
+          <span role="cell">${esc(durationLabel(v, structure))}</span>
+          <span class="vrow__wide" role="cell">${esc(`${v.aspect_ratio} · ${v.resolution}`)}</span>
+          <span class="vrow__wide" role="cell">${v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—"}</span>
+          <span role="cell">${esc(formatDate(v.created_at))}</span>
+        </a>`;
+      })
+      .join("");
+    return `<section class="vgroup" data-group>
+        <h3 class="vgroup__title">${esc(title)}</h3>
+        <div class="frames" data-items>${frames}</div>
+        <div class="vrows" role="rowgroup" data-items>${rows}</div>
+      </section>`;
+  };
+  return `<div class="library" data-library="${esc(o.key)}" data-view="m" data-grouped="false">
+      <div class="library__head">
+        ${head(String(videos.length))}
+        <div class="library__end"><div class="segmented-button library__sizes" role="group" aria-label="Vista">${views}</div>${o.action ?? ""}</div>
+      </div>
+      <div class="chip-set library__tools" role="toolbar" aria-label="Filtrar e ordenar">
+        ${chips}
+        <span class="library__divider" aria-hidden="true"></span>
+        <button class="chip interactive" type="button" data-sort aria-label="Ordem: mais recentes primeiro"><span class="icon">swap_vert</span><span data-sort-label>Mais recentes</span></button>
+        <button class="chip interactive" type="button" data-group-toggle aria-pressed="false"><span class="icon chip__check">check</span>Agrupar por data</button>
+      </div>
+      <div class="vrows__head" role="row" aria-hidden="true"><span></span><span>Texto</span><span>Status</span><span>Duração</span><span class="vrow__wide">Formato</span><span class="vrow__wide">Custo</span><span>Criado em</span></div>
+      <p class="library__empty" data-library-empty hidden>Nenhum vídeo com esse filtro.</p>
+      <div class="library__groups" data-groups>${[...groups].map(section).join("")}</div>
+    </div>`;
+}
+
+/** Fim do painel de configuração: duração e custo estimados e o botão de gerar, na largura toda. */
+function generateBar(seconds: string, cost: number | undefined, enabled: boolean): string {
+  const costLabel = cost !== undefined ? `US$ ${cost.toFixed(2)}` : "—";
   return `
-      <div class="composer-bar">
-        <div class="composer-bar__box">
-          <textarea class="composer-bar__input" id="${f.name}" name="${f.name}" rows="2" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-label="${esc(f.label)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}>${esc(value(f.name))}</textarea>
-          <span class="composer-bar__meta"><span data-seconds>${esc(seconds)}</span> · <span data-cost>${cost !== undefined ? `US$ ${cost.toFixed(2)}` : "—"}</span></span>
-          <button class="composer-bar__send interactive" type="submit"${enabled ? "" : " disabled"} aria-label="Gerar vídeo" title="Gerar vídeo"><span class="icon">arrow_upward</span></button>
+      <div class="pane__footer">
+        <div class="estimate-list">
+          <div class="estimate-list__item"><span class="icon">schedule</span><span class="estimate-list__label">Duração</span><span class="estimate-list__value" data-seconds>${esc(seconds)}</span></div>
+          <div class="estimate-list__item"><span class="icon">payments</span><span class="estimate-list__label">Custo estimado</span><span class="estimate-list__value" data-cost>${costLabel}</span></div>
         </div>
-        <p class="text-field__supporting" id="${f.name}-ajuda"><span${f.speech ? ` data-words data-default="${esc(f.supporting)}"` : ""}>${esc(f.supporting)}</span><span data-count>${value(f.name).length}/${f.maxLength}</span></p>
-        <p class="composer-bar__note">Vídeos gerados com inteligência artificial pelo OpenRouter. Confira antes de publicar.</p>
+        <button class="button button--filled interactive" type="submit"${enabled ? "" : " disabled"}><span class="icon">send</span>Gerar vídeo</button>
       </div>`;
 }
 
@@ -639,65 +810,11 @@ function emptyState(icon: string, title: string, text: string): string {
 }
 
 /**
- * "Detalhes": o vídeo maior e tudo sobre ele, organizado em seções. Diálogo
- * básico do M3 nas telas médias e maiores; diálogo de tela cheia no celular.
+ * O endereço do editado muda a cada edição (?v=<quando ficou pronta>): o navegador guarda o
+ * MP4 por um dia, e sem isso continuaria mostrando (e baixando) a edição anterior.
  */
-function videoDialog(v: Video, structure: Structure): string {
-  const status = cardStatus(v);
-  const details = [
-    ...structure.details(v),
-    { term: "Duração", description: durationLabel(v, structure) },
-    { term: "Resolução", description: v.resolution },
-    { term: "Formato", description: v.aspect_ratio },
-    { term: "Custo", description: v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—" },
-    { term: "Criado em", description: formatDate(v.created_at) },
-    { term: "Modelo", description: v.model },
-  ];
-  const errors = [
-    v.error,
-    v.audio_status === "failed" ? `Áudio não tratado: ${v.audio_error ?? "erro desconhecido"}` : null,
-    v.edit_status === "failed" ? `Edição rápida falhou: ${v.edit_error ?? "erro desconhecido"}` : null,
-  ].filter((e): e is string => Boolean(e));
-  return `
-<dialog class="dialog" id="detalhes-${v.id}" aria-labelledby="detalhes-${v.id}-titulo">
-  <div class="dialog__header">
-    <button class="icon-button interactive dialog__close" type="button" aria-label="Fechar" data-dialog-close><span class="icon">close</span></button>
-    <h2 class="dialog__headline" id="detalhes-${v.id}-titulo">${esc(structure.name)} · ${esc(formatDate(v.created_at))}</h2>
-  </div>
-  <div class="dialog__content">
-    ${v.video_key ? `<video class="dialog__video" controls preload="none" playsinline src="${videoSrc(v)}" style="--ratio:${esc(v.aspect_ratio.replace(":", " / "))}"></video>` : ""}
-    <p class="status-line status-line--${status.kind}"><span class="icon">${status.icon}</span>${esc(status.label)}</p>
-    ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
-    <section class="dialog__section">
-      <h3 class="dialog__title">Fala</h3>
-      <p class="dialog__text">${esc(v.prompt)}</p>
-    </section>
-    <section class="dialog__section">
-      <h3 class="dialog__title">Configurações</h3>
-      <dl class="details">${details.map((d) => `<div class="details__item"><dt>${esc(d.term)}</dt><dd>${esc(d.description)}</dd></div>`).join("")}</dl>
-    </section>
-    ${
-      v.request_prompt && v.request_prompt !== v.prompt
-        ? `<details class="dialog__section dialog__prompt"><summary class="dialog__title interactive">Prompt enviado ao modelo</summary><p class="dialog__text">${esc(v.request_prompt)}</p></details>`
-        : ""
-    }
-    ${
-      v.video_key
-        ? `<section class="dialog__section">
-      <h3 class="dialog__title">Arquivos</h3>
-      <div class="dialog__files">
-        <a class="button button--tonal interactive" href="/videos/${v.id}.mp4?baixar" download><span class="icon">download</span>${v.processed_key ? "Baixar com áudio tratado" : "Baixar MP4"}</a>
-        ${v.edited_key ? `<a class="button button--outlined interactive" href="/videos/${v.id}.editado.mp4?baixar" download><span class="icon">download</span>Editado</a>` : ""}
-        ${v.processed_key ? `<a class="button button--outlined interactive" href="/videos/${v.id}.original.mp4?baixar" download><span class="icon">download</span>Original</a>` : ""}
-      </div>
-    </section>`
-        : ""
-    }
-  </div>
-  <div class="dialog__actions">
-    <button class="button button--text interactive" type="button" data-dialog-close>Fechar</button>
-  </div>
-</dialog>`;
+function editedSrc(v: Video): string {
+  return `/videos/${v.id}.editado.mp4?v=${encodeURIComponent(v.edited_at ?? v.updated_at)}`;
 }
 
 function videoSrc(v: Video): string {
@@ -721,13 +838,13 @@ function formField(f: Field, value: Values): string {
   switch (f.kind) {
     case "textarea":
       return `<div class="text-field">
-          <textarea class="text-field__input" id="${f.name}" name="${f.name}" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}>${esc(value(f.name))}</textarea>
+          <textarea class="text-field__input" id="${f.name}" name="${f.name}" rows="1" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}>${esc(value(f.name))}</textarea>
           <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
           <p class="text-field__supporting" id="${f.name}-ajuda"><span${f.speech ? ` data-words data-default="${esc(f.supporting)}"` : ""}>${esc(f.supporting)}</span><span data-count>${value(f.name).length}/${f.maxLength}</span></p>
         </div>`;
     case "text":
       return `<div class="text-field">
-          <input class="text-field__input" id="${f.name}" name="${f.name}" type="text" maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda" value="${esc(value(f.name))}">
+          <textarea class="text-field__input" id="${f.name}" name="${f.name}" rows="1" maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda">${esc(value(f.name))}</textarea>
           <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
           <p class="text-field__supporting" id="${f.name}-ajuda"><span>${esc(f.supporting)}</span></p>
         </div>`;
@@ -747,17 +864,14 @@ function formField(f: Field, value: Values): string {
     case "segmented":
       return segmented(f.name, f.label, f.options, value(f.name));
     case "image":
-      return `<label class="file-picker">
-          <input type="file" name="${f.name}" accept="image/jpeg,image/png,image/webp"${f.required ? " required" : ""} data-image>
-          <span class="file-picker__button interactive" title="JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB"><span class="icon">add_photo_alternate</span><span data-image-action>Adicionar foto</span></span>
-          <span class="file-picker__row">
-            <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
-            <span class="file-picker__text">
-              <span class="file-picker__label">${esc(f.label)}</span>
-              <span class="file-picker__name" data-image-name data-empty="${f.required ? "Nenhuma foto" : "Opcional"}">${f.required ? "Nenhuma foto" : "Opcional"}</span>
-              <span class="file-picker__hint">${esc(f.supporting)}</span>
-            </span>
+      return `<label class="file-picker interactive" title="JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB">
+          <input type="file" name="${f.name}" accept="image/jpeg,image/png,image/webp" aria-label="${esc(f.label)}"${f.required ? " required" : ""} data-image>
+          <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
+          <span class="file-picker__text">
+            <span class="file-picker__name" data-image-name data-empty="Adicionar ${esc(f.label.toLowerCase())}">Adicionar ${esc(f.label.toLowerCase())}</span>
+            <span class="file-picker__hint" data-image-hint data-empty="${esc(f.supporting)}">${esc(f.supporting)}</span>
           </span>
+          <span class="icon file-picker__trailing" data-image-trailing hidden>edit</span>
         </label>`;
   }
 }
@@ -820,7 +934,7 @@ function closedPage(): string {
 
 function authHead(title: string, text: string): string {
   return `<div class="login__head">
-      <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
+      <span class="top-app-bar__logo"><span class="icon">face</span></span>
       <h1 class="login__title">${esc(title)}</h1>
       ${text ? `<p class="login__text">${esc(text)}</p>` : ""}
     </div>`;
@@ -852,12 +966,12 @@ function snackbar(text: string): string {
  * a marca (que volta para Modelos), o nome do modelo, o botão de sair e a conta.
  */
 type Search = { action: string; label: string; q: string; keep?: Record<string, string> };
-type Bar = false | { user: User; tab: "modelos" | "videos"; search: Search; extra?: string } | { user: User; back: string; title: string };
+type Bar = false | { user: User; tab: "modelos" | "videos"; search: Search } | { user: User; back: string; title: string };
 
 function accountActions(user: User): string {
   const initial = esc((user.name.trim()[0] ?? "?").toUpperCase());
-  return `<form class="top-app-bar__action" method="post" action="/sair"><button class="icon-button interactive" type="submit" aria-label="Sair da conta de ${esc(user.name)}" title="Sair"><span class="icon">logout</span></button></form>
-    <details class="menu menu--account" data-menu>
+  // Sair fica só no menu do perfil.
+  return `<details class="menu menu--account" data-menu>
       <summary class="avatar interactive" aria-label="Sua conta: ${esc(user.name)}" title="${esc(user.name)}">${initial}</summary>
       <div class="menu__list">
         <p class="menu__header"><span class="menu__name">${esc(user.name)}</span><span class="menu__email">${esc(user.email)}</span></p>
@@ -868,8 +982,9 @@ function accountActions(user: User): string {
 }
 
 function brand(href: string, label?: string): string {
-  return `<a class="top-app-bar__brand interactive" href="${href}"${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ""}>
-    <span class="top-app-bar__logo"><span class="icon">videocam</span></span>
+  // No M3 a marca da barra superior não é botão: sem camada de estado, só o foco do teclado.
+  return `<a class="top-app-bar__brand" href="${href}"${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ""}>
+    <span class="top-app-bar__logo"><span class="icon">face</span></span>
     ${label ? "" : `<span class="top-app-bar__title">${SITE_NAME}</span>`}
   </a>`;
 }
@@ -877,7 +992,7 @@ function brand(href: string, label?: string): string {
 function topAppBar(bar: Exclude<Bar, false>): string {
   if ("back" in bar) {
     return `<header class="top-app-bar" data-app-bar>
-  ${brand(bar.back, "Voltar para Modelos")}
+  <a class="icon-button interactive" href="${bar.back}" aria-label="Voltar para Modelos" title="Voltar para Modelos"><span class="icon">arrow_back</span></a>
   <h1 class="top-app-bar__title top-app-bar__title--page">${esc(bar.title)}</h1>
   <div class="top-app-bar__actions">${accountActions(bar.user)}</div>
 </header>`;
@@ -896,13 +1011,12 @@ function topAppBar(bar: Exclude<Bar, false>): string {
       <span class="icon" aria-hidden="true">search</span>
       <input class="search-field__input" type="search" name="q" value="${esc(search.q)}" placeholder="${esc(search.label)}" aria-label="${esc(search.label)}">${keep}
     </form>
-    ${bar.extra ?? ""}
   </div>
   <div class="top-app-bar__actions">${accountActions(bar.user)}</div>
 </header>`;
 }
 
-function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar; footer?: boolean }): string {
+function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -922,7 +1036,6 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar; 
   <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
   ${opts.bar ? topAppBar(opts.bar) : ""}
   ${body}
-  ${opts.footer === false ? "" : `<footer class="footer"><div class="footer__inner"><p class="footer__text">Vídeos gerados com inteligência artificial pelo OpenRouter.</p></div></footer>`}
   <script nonce="${NONCE}">${SCRIPT}</script>
 </body>
 </html>`;
@@ -950,61 +1063,274 @@ const SCRIPT = `(() => {
     for (const m of document.querySelectorAll("details[data-menu][open]")) if (!m.contains(el) || (el && el.closest(".menu__item"))) m.open = false;
     const close = el && el.closest("[data-snackbar-close]");
     if (close) close.closest("[data-snackbar]").hidden = true;
-    // Fala pronta ou "Usar esta fala": o texto vai para a caixa da fala.
-    const fill = el && el.closest("[data-fill]");
-    const speechBox = document.querySelector("[data-speech]");
-    if (fill && speechBox) {
-      speechBox.value = fill.dataset.fill;
-      speechBox.dispatchEvent(new Event("input", { bubbles: true }));
-      speechBox.focus();
-    }
-    // Detalhes: abre o diálogo do vídeo; fechar, ou tocar fora dele, fecha.
-    const open = el && el.closest("[data-dialog-open]");
-    if (open) document.getElementById(open.dataset.dialogOpen).showModal();
-    if (el && (el.closest("[data-dialog-close]") || el.matches("dialog"))) el.closest("dialog").close();
   });
   addEventListener("keydown", (e) => {
     if (e.key === "Escape") for (const m of document.querySelectorAll("details[data-menu][open]")) { m.open = false; m.querySelector("summary").focus(); }
   });
 
-  // Painéis da página do modelo: o botão recolhe e abre; a escolha fica guardada.
+  // Guardar escolhas no navegador (pode falhar: janela anônima, armazenamento bloqueado).
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
-  const setPane = (pane, open) => {
-    const b = pane.querySelector("[data-pane-toggle]"), side = b.dataset.paneToggle;
-    pane.classList.toggle("is-collapsed", !open);
-    b.setAttribute("aria-expanded", String(open));
-    b.setAttribute("aria-label", open ? "Recolher o painel" : "Abrir o painel");
-    b.title = b.getAttribute("aria-label");
-    b.querySelector(".icon").textContent = side + (open ? "_panel_close" : "_panel_open");
-    store.set("painel-" + pane.dataset.pane, open ? "aberto" : "fechado");
-  };
-  for (const pane of document.querySelectorAll("[data-pane]")) {
-    if (store.get("painel-" + pane.dataset.pane) === "fechado") setPane(pane, false);
-    pane.querySelector("[data-pane-toggle]").addEventListener("click", () => setPane(pane, pane.classList.contains("is-collapsed")));
+
+  // Campos de seleção: o select fica escondido (é ele que vai no formulário) e um
+  // botão abre um menu do M3 com as opções, igual em todos os navegadores.
+  let selectN = 0;
+  for (const sel of document.querySelectorAll(".text-field--select select")) {
+    const n = ++selectN, label = sel.parentElement.querySelector(".text-field__label"), arrow = sel.parentElement.querySelector(".text-field__trailing");
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "text-field__input"; btn.id = "selecao-" + n;
+    btn.setAttribute("aria-haspopup", "listbox"); btn.setAttribute("aria-expanded", "false");
+    if (sel.hasAttribute("aria-describedby")) btn.setAttribute("aria-describedby", sel.getAttribute("aria-describedby"));
+    const list = document.createElement("div");
+    list.className = "select-menu"; list.id = "selecao-" + n + "-lista"; list.setAttribute("role", "listbox"); list.popover = "auto";
+    list.setAttribute("aria-labelledby", btn.id);
+    btn.setAttribute("aria-controls", list.id);
+    for (const o of sel.options) {
+      const item = document.createElement("div");
+      item.className = "select-menu__item interactive"; item.setAttribute("role", "option"); item.tabIndex = -1;
+      item.dataset.value = o.value; item.textContent = o.textContent;
+      list.append(item);
+    }
+    sel.classList.add("visually-hidden"); sel.tabIndex = -1; sel.setAttribute("aria-hidden", "true");
+    sel.after(btn); document.body.append(list);
+    if (label) { label.htmlFor = btn.id; label.id = btn.id + "-rotulo"; btn.setAttribute("aria-labelledby", label.id + " " + btn.id); }
+    const items = [...list.children];
+    const sync = () => {
+      btn.textContent = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : "";
+      for (const i of items) i.setAttribute("aria-selected", String(i.dataset.value === sel.value));
+    };
+    const place = () => {
+      const r = btn.getBoundingClientRect(), h = list.offsetHeight, below = innerHeight - r.bottom - 8;
+      list.style.left = r.left + "px"; list.style.width = r.width + "px";
+      list.style.top = (below < h && r.top > below ? Math.max(8, r.top - 4 - h) : r.bottom + 4) + "px";
+    };
+    const open = (focusLast) => {
+      list.showPopover(); place();
+      const cur = items.find((i) => i.dataset.value === sel.value) || items[0];
+      (focusLast ? items[items.length - 1] : cur).focus();
+    };
+    const choose = (item) => {
+      if (sel.value !== item.dataset.value) { sel.value = item.dataset.value; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+      sync(); list.hidePopover(); btn.focus();
+    };
+    btn.addEventListener("click", () => (list.matches(":popover-open") ? list.hidePopover() : open(false)));
+    btn.addEventListener("keydown", (e) => {
+      if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); open(e.key === "ArrowUp"); }
+    });
+    list.addEventListener("click", (e) => { const item = e.target.closest("[role=option]"); if (item) choose(item); });
+    list.addEventListener("keydown", (e) => {
+      const at = items.indexOf(document.activeElement);
+      const go = { ArrowDown: Math.min(at + 1, items.length - 1), ArrowUp: Math.max(at - 1, 0), Home: 0, End: items.length - 1 }[e.key];
+      if (go !== undefined) { e.preventDefault(); items[go].focus(); }
+      else if ((e.key === "Enter" || e.key === " ") && at >= 0) { e.preventDefault(); choose(items[at]); }
+      else if (e.key === "Escape") { e.preventDefault(); list.hidePopover(); btn.focus(); }
+      else if (e.key === "Tab") list.hidePopover();
+    });
+    list.addEventListener("toggle", (e) => {
+      const isOpen = e.newState === "open";
+      btn.setAttribute("aria-expanded", String(isOpen)); btn.classList.toggle("is-open", isOpen);
+      if (arrow) arrow.textContent = isOpen ? "arrow_drop_up" : "arrow_drop_down";
+    });
+    // Rolar a página ou o painel com o menu aberto: fecha, para ele não ficar solto.
+    addEventListener("scroll", (e) => { if (list.matches(":popover-open") && !list.contains(e.target)) list.hidePopover(); }, true);
+    addEventListener("resize", () => { if (list.matches(":popover-open")) list.hidePopover(); });
+    sel.addEventListener("change", sync);
+    sync();
   }
 
-  // Diálogo fechado: o vídeo dele para de tocar.
-  for (const d of document.querySelectorAll("dialog")) d.addEventListener("close", () => d.querySelectorAll("video").forEach((v) => v.pause()));
+  // Campos de texto que crescem com o texto (a fala, o movimento): a altura acompanha o conteúdo.
+  for (const t of document.querySelectorAll("textarea.text-field__input")) {
+    const fit = () => { t.style.height = "auto"; t.style.height = t.scrollHeight + (t.offsetHeight - t.clientHeight) + "px"; };
+    t.addEventListener("input", fit);
+    fit();
+  }
+
+  // Miniaturas: o vídeo só baixa quando aparece na tela (a vista escondida não baixa nada).
+  const thumbs = document.querySelectorAll("video[data-src]");
+  if (thumbs.length) {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) {
+        const v = e.target;
+        // Com o src posto depois, o navegador decodifica o quadro mas nem sempre o desenha: ir ao quadro garante.
+        // O #t=0.5 é para o iPhone, que com preload="metadata" não baixa quadro nenhum sem ele.
+        v.addEventListener("loadeddata", () => { v.currentTime = 0.5; }, { once: true });
+        v.src = v.dataset.src + "#t=0.5"; v.removeAttribute("data-src"); io.unobserve(v);
+      }
+    }, { rootMargin: "200px" });
+    thumbs.forEach((t) => io.observe(t));
+  }
+
+  // Lista de vídeos do modelo: filtro por status, ordem (grupos e itens) e vista (cards ou detalhes).
+  const lib = document.querySelector("[data-library]");
+  if (lib && lib.querySelector("[data-groups]")) {
+    const groups = lib.querySelector("[data-groups]"), count = lib.querySelector("[data-library-count]"), empty = lib.querySelector("[data-library-empty]");
+    const apply = () => {
+      const kind = lib.querySelector("[data-filter][aria-pressed=true]").dataset.filter;
+      let total = 0;
+      for (const g of groups.children) {
+        let n = 0;
+        for (const list of g.querySelectorAll("[data-items]")) for (const it of list.children) { const show = !kind || it.dataset.kind === kind; it.hidden = !show; if (show) n++; }
+        g.hidden = n === 0; total += n / 2;
+      }
+      count.textContent = total; empty.hidden = total > 0;
+    };
+    for (const c of lib.querySelectorAll("[data-filter]")) c.addEventListener("click", () => {
+      for (const o of lib.querySelectorAll("[data-filter]")) o.setAttribute("aria-pressed", String(o === c));
+      apply();
+    });
+    const sort = lib.querySelector("[data-sort]");
+    sort.addEventListener("click", () => {
+      groups.append(...[...groups.children].reverse());
+      for (const list of groups.querySelectorAll("[data-items]")) list.append(...[...list.children].reverse());
+      const label = sort.querySelector("[data-sort-label]"), recent = label.textContent === "Mais recentes";
+      label.textContent = recent ? "Mais antigos" : "Mais recentes";
+      sort.setAttribute("aria-label", recent ? "Ordem: mais antigos primeiro" : "Ordem: mais recentes primeiro");
+    });
+    const grouping = lib.querySelector("[data-group-toggle]");
+    grouping.addEventListener("click", () => {
+      const on = grouping.getAttribute("aria-pressed") !== "true";
+      grouping.setAttribute("aria-pressed", String(on));
+      lib.dataset.grouped = String(on);
+    });
+    for (const b of lib.querySelectorAll("button[data-view]")) b.addEventListener("click", () => {
+      for (const o of lib.querySelectorAll("button[data-view]")) o.toggleAttribute("aria-current", o === b);
+      lib.dataset.view = b.dataset.view;
+    });
+    // Guarda a escolha a cada toque e a refaz ao abrir a página (do mesmo modelo, neste navegador).
+    const key = "lista-" + lib.dataset.library;
+    const save = () => store.set(key, JSON.stringify({
+      view: lib.dataset.view,
+      filter: lib.querySelector("[data-filter][aria-pressed=true]").dataset.filter,
+      old: sort.querySelector("[data-sort-label]").textContent !== "Mais recentes",
+      grouped: lib.dataset.grouped === "true",
+    }));
+    let saved = null;
+    try { saved = JSON.parse(store.get(key) || "null"); } catch {}
+    if (saved) {
+      const pick = (sel) => { const b = lib.querySelector(sel); if (b) b.click(); };
+      pick('button[data-view="' + saved.view + '"]');
+      pick('[data-filter="' + saved.filter + '"]');
+      if (saved.old) sort.click();
+      if (saved.grouped) grouping.click();
+    }
+    lib.addEventListener("click", (e) => { if (e.target.closest("[data-view], [data-filter], [data-sort], [data-group-toggle]")) save(); });
+  }
+
+  // Abrir um vídeo da lista: guarda a ordem que está na tela (com filtro e ordem) para o anterior e o próximo.
+  document.addEventListener("click", (e) => {
+    const a = e.target instanceof Element && e.target.closest("a[data-video]");
+    if (!a) return;
+    const list = [...document.querySelectorAll("a[data-video]")].filter((x) => x.offsetParent && x.className === a.className);
+    try { sessionStorage.setItem("videos-abertos", JSON.stringify({ ids: list.map((x) => x.dataset.video), de: new URL(a.href).searchParams.get("de") || "" })); } catch {}
+  });
+
+  // Página do vídeo: anterior e próximo (setas e teclado), abas da folha e copiar o texto.
+  const viewer = document.querySelector("[data-viewer]");
+  if (viewer) {
+    let opened = null;
+    try { opened = JSON.parse(sessionStorage.getItem("videos-abertos") || "null"); } catch {}
+    const ids = opened ? opened.ids : [], at = ids.indexOf(viewer.dataset.viewer);
+    const link = (id) => "/video/" + id + (opened && opened.de ? "?de=" + encodeURIComponent(opened.de) : "");
+    const prev = document.querySelector('[data-nav="prev"]'), next = document.querySelector('[data-nav="next"]');
+    if (at > 0) { prev.href = link(ids[at - 1]); prev.hidden = false; }
+    if (at >= 0 && at < ids.length - 1) { next.href = link(ids[at + 1]); next.hidden = false; }
+    addEventListener("keydown", (e) => {
+      if (e.target.closest && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      if (e.key === "ArrowLeft" && !prev.hidden) location.href = prev.href;
+      if (e.key === "ArrowRight" && !next.hidden) location.href = next.href;
+      if (e.key === "Escape" && !document.querySelector("details[data-menu][open]")) location.href = viewer.dataset.back;
+    });
+    const tabs = viewer.querySelectorAll("[data-tab]"), info = viewer.querySelector('[data-tab-panel="info"]'), qe = viewer.querySelector("[data-quick-edit]");
+    for (const t of tabs) t.addEventListener("click", () => {
+      const isQe = t.dataset.tab === "qe";
+      for (const o of tabs) o.setAttribute("aria-selected", String(o === t));
+      info.hidden = isQe;
+      if (isQe && qe.hidden) viewer.querySelector("[data-qe-open]").click();
+      if (!isQe && !qe.hidden) qe.querySelector("[data-qe-close]").click();
+    });
+    if (qe) qe.querySelector("[data-qe-close]").addEventListener("click", () => { for (const o of tabs) o.setAttribute("aria-selected", String(o.dataset.tab === "info")); info.hidden = false; });
+    // Barra do player (peças do M3: botão de ícone cheio, slider, tempo e botões de ícone).
+    // Na prévia da edição rápida, o tocar comanda a prévia e o tempo é o dela; o slider fica parado.
+    const bar = document.querySelector("[data-vbar]"), video = document.querySelector(".viewer__player video");
+    if (bar && video) {
+      const stage = document.querySelector(".viewer__player"), frame = stage.querySelector(".player__frame");
+      const playBtn = bar.querySelector("[data-vbar-play]"), time = bar.querySelector("[data-vbar-time]"), seek = bar.querySelector("[data-vbar-seek]");
+      const mute = bar.querySelector("[data-vbar-mute]"), full = bar.querySelector("[data-vbar-full]");
+      const qePlay = document.querySelector("[data-qe-play]"), qeTime = document.querySelector("[data-qe-time]");
+      const clock = (s) => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+      const previewing = () => stage.classList.contains("is-previewing");
+      const setIcon = (b, icon, label) => { b.querySelector(".icon").textContent = icon; b.setAttribute("aria-label", label); b.title = label; };
+      const sync = () => {
+        if (previewing()) {
+          const on = qePlay && qePlay.querySelector(".icon").textContent === "pause";
+          setIcon(playBtn, on ? "pause" : "play_arrow", on ? "Pausar a prévia" : "Tocar a prévia");
+          // O tempo da prévia vem como "0,5 s / 6,0 s": vira o mesmo formato do vídeo (0:00 / 0:06).
+          const n = qeTime ? (qeTime.textContent.match(/[\\d,]+/g) || []).map((x) => Number(x.replace(",", "."))) : [];
+          time.textContent = n.length === 2 ? clock(n[0]) + " / " + clock(n[1]) : "";
+          seek.disabled = true; bar.classList.add("is-preview");
+          return;
+        }
+        bar.classList.remove("is-preview"); seek.disabled = false;
+        setIcon(playBtn, video.paused ? "play_arrow" : "pause", video.paused ? "Tocar" : "Pausar");
+        const d = video.duration || 0, p = d ? video.currentTime / d : 0;
+        if (document.activeElement !== seek) seek.value = String(Math.round(p * 1000));
+        seek.style.setProperty("--p", (Number(seek.value) / 10) + "%");
+        time.textContent = clock(video.currentTime) + " / " + clock(d);
+      };
+      const toggle = () => { if (previewing()) { if (qePlay) qePlay.click(); } else if (video.paused) video.play().catch(() => {}); else video.pause(); };
+      playBtn.addEventListener("click", toggle);
+      video.addEventListener("click", toggle);
+      for (const ev of ["play", "pause", "timeupdate", "loadedmetadata", "ended", "seeked"]) video.addEventListener(ev, sync);
+      seek.addEventListener("input", () => { if (video.duration) video.currentTime = (Number(seek.value) / 1000) * video.duration; seek.style.setProperty("--p", (Number(seek.value) / 10) + "%"); });
+      mute.addEventListener("click", () => { video.muted = !video.muted; setIcon(mute, video.muted ? "volume_off" : "volume_up", video.muted ? "Ligar o som" : "Tirar o som"); });
+      // Tela cheia da moldura; no iPhone (sem tela cheia de elemento), a do próprio vídeo.
+      full.addEventListener("click", () => {
+        if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {});
+        if (frame.requestFullscreen) return void frame.requestFullscreen().catch(() => {});
+        if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+      });
+      document.addEventListener("fullscreenchange", () => setIcon(full, document.fullscreenElement ? "fullscreen_exit" : "fullscreen", document.fullscreenElement ? "Sair da tela cheia" : "Tela cheia"));
+      addEventListener("keydown", (e) => { if (e.key === " " && !(e.target.closest && e.target.closest("input, textarea, select, button, a, summary"))) { e.preventDefault(); toggle(); } });
+      new MutationObserver(sync).observe(stage, { attributes: true, attributeFilter: ["class"] });
+      if (qePlay) new MutationObserver(sync).observe(qePlay, { subtree: true, childList: true, characterData: true });
+      if (qeTime) new MutationObserver(sync).observe(qeTime, { subtree: true, childList: true, characterData: true });
+      sync();
+    }
+
+    // Edição rápida de um vídeo já editado: Original | Editado troca o vídeo do player; os ajustes
+    // só aparecem no "Editar de novo" (que já é a confirmação de que a edição atual será trocada).
+    const qeEl = viewer.querySelector("[data-quick-edit][data-edited]");
+    if (qeEl) {
+      const mainVideo = document.querySelector(".viewer__player video");
+      for (const b of qeEl.querySelectorAll("[data-version]")) b.addEventListener("click", () => {
+        for (const o of qeEl.querySelectorAll("[data-version]")) o.toggleAttribute("aria-current", o === b);
+        if (mainVideo && mainVideo.getAttribute("src") !== b.dataset.version) { mainVideo.src = b.dataset.version; mainVideo.play().catch(() => {}); }
+      });
+      qeEl.querySelector("[data-qe-again]").addEventListener("click", () => qeEl.classList.add("is-again"));
+      qeEl.querySelector("[data-qe-close]").addEventListener("click", () => qeEl.classList.remove("is-again"));
+    }
+
+    for (const c of viewer.querySelectorAll("[data-copy]")) c.addEventListener("click", async () => {
+      const label = c.lastElementChild;
+      try { await navigator.clipboard.writeText(c.dataset.copy); label.textContent = "Copiado"; setTimeout(() => (label.textContent = "Copiar"), 2000); } catch {}
+    });
+  }
 
   const f = document.querySelector("[data-composer]");
   let dirty = false;
   if (f) {
     f.addEventListener("input", () => { dirty = true; });
-    // Campo obrigatório no painel recolhido (a foto do HeyGen): abre o painel para o aviso aparecer.
-    f.addEventListener("invalid", (e) => { const pane = e.target.closest("[data-pane].is-collapsed"); if (pane) setPane(pane, true); }, true);
     const cfg = JSON.parse(f.dataset.composer);
     const val = (name) => (f.elements[name] ? f.elements[name].value || "" : "");
     const speech = f.querySelector("[data-speech]");
     const words = f.querySelector("[data-words]"), count = f.querySelector("[data-count]");
-    const cost = f.querySelector("[data-cost]"), seconds = f.querySelector("[data-seconds]");
     const rate = cfg.rate, mid = (rate.min + rate.max) / 2;
     const update = () => {
       const n = speech.value.split(/\\s+/).filter(Boolean).length;
       const fixed = cfg.seconds.field ? Number(val(cfg.seconds.field)) : 0;
       const s = fixed || (n ? Math.max(1, Math.round(n / mid)) : 0);
       const price = Number(cfg.prices[cfg.sku.replace(/\\{(\\w+)\\}/g, (_, k) => val(k))]);
-      seconds.textContent = s ? (fixed ? "" : "≈ ") + s + " s" : "—";
-      cost.textContent = price && s ? "US$ " + (price * s).toFixed(2) : "—";
+      for (const e of f.querySelectorAll("[data-seconds]")) e.textContent = s ? (fixed ? "" : "≈ ") + s + " s" : "—";
+      for (const e of f.querySelectorAll("[data-cost]")) e.textContent = price && s ? "US$ " + (price * s).toFixed(2) : "—";
       if (fixed) {
         // Duração escolhida: a faixa de palavras que cabe nela.
         const min = Math.round(fixed * rate.min), max = Math.round(fixed * rate.max);
@@ -1025,11 +1351,12 @@ const SCRIPT = `(() => {
     f.addEventListener("input", update);
     update();
 
-    const image = f.querySelector("[data-image]"), preview = f.querySelector("[data-preview]"), name = f.querySelector("[data-image-name]");
+    const image = f.querySelector("[data-image]"), preview = f.querySelector("[data-preview]"), name = f.querySelector("[data-image-name]"), hint = f.querySelector("[data-image-hint]");
     if (image) image.addEventListener("change", () => {
       const file = image.files[0];
       name.textContent = file ? file.name : name.dataset.empty;
-      f.querySelector("[data-image-action]").textContent = file ? "Trocar foto" : "Adicionar foto";
+      hint.textContent = file ? "Trocar foto" : hint.dataset.empty;
+      f.querySelector("[data-image-trailing]").hidden = !file;
       preview.innerHTML = file ? '<img alt="">' : '<span class="icon">face</span>';
       if (file) preview.firstChild.src = URL.createObjectURL(file);
     });
@@ -1040,9 +1367,17 @@ const SCRIPT = `(() => {
   // Vídeo na fila: confere de novo de tempos em tempos, sem perder o que está sendo
   // escrito, sem fechar um diálogo aberto e sem cortar um vídeo que está tocando.
   const refresh = Number(document.body.dataset.refresh);
-  if (refresh) setInterval(() => {
+  // Confere a página em segundo plano e só recarrega quando o status de algum vídeo mudou:
+  // sem a página piscando a cada rodada e sem perder o filtro e a vista escolhidos.
+  const signature = (doc) => [...doc.querySelectorAll("[data-kind][data-video], .status-line")].map((e) => (e.dataset.video || "") + ":" + (e.dataset.kind || e.textContent)).join(",");
+  if (refresh) setInterval(async () => {
     const playing = [...document.querySelectorAll("video")].some((v) => !v.paused);
-    if (!dirty && !playing && !document.querySelector("dialog[open]") && !document.querySelector(".is-previewing")) location.reload();
+    if (dirty || playing || document.querySelector(".is-previewing")) return;
+    try {
+      const res = await fetch(location.href, { headers: { accept: "text/html" } });
+      const next = new DOMParser().parseFromString(await res.text(), "text/html");
+      if (signature(next) !== signature(document)) location.reload();
+    } catch {}
   }, refresh * 1000);
 })();`;
 
@@ -1219,13 +1554,29 @@ const PREVIEW_SCRIPT = `(() => {
     starts = []; total = 0;
     for (const p of parts) { starts.push(total); total += p[1] - p[0]; }
     input.value = parts.length ? JSON.stringify(parts) : "";
-    summary.textContent = parts.length
-      ? (parts.length - 1) + " cortes e " + shots + " trocas de câmera: o vídeo fica com " + fmt(total) + " (era " + fmt(duration) + ")."
-      : "Não achei fala no áudio.";
+    if (parts.length) {
+      // O resultado num card: título e uma linha por número (ícone, rótulo e valor).
+      const cuts = parts.length - 1, saved = duration - total;
+      const row = (icon, label, value) => {
+        const el = document.createElement("div"); el.className = "qe-result__row";
+        const i = document.createElement("span"); i.className = "icon"; i.textContent = icon;
+        const l = document.createElement("span"); l.className = "qe-result__label"; l.textContent = label;
+        const v = document.createElement("span"); v.className = "qe-result__value"; v.textContent = value;
+        el.append(i, l, v); return el;
+      };
+      const title = document.createElement("p"); title.className = "qe-result__title"; title.textContent = "Resultado da edição";
+      summary.replaceChildren(
+        title,
+        row("content_cut", "Cortes nas pausas", cuts ? String(cuts) : "Nenhum"),
+        row("videocam", "Trocas de câmera", shots ? String(shots) : "Nenhuma"),
+        row("schedule", "Duração", fmt(total) + (saved >= 0.05 ? " · " + fmt(saved) + " a menos" : " · sem mudança")),
+      );
+    } else summary.textContent = "Não encontramos fala no áudio deste vídeo, então não há pausas para cortar.";
     play.disabled = !parts.length || !track;
     clock.textContent = fmt(0) + " / " + fmt(total);
     help();
-    if (track && parts.length) restart();
+    // Pronta (e de novo a cada troca de escolha), a prévia já começa a tocar.
+    if (track && parts.length) { restart(); toggle(); }
   };
 
   // Toca do começo: os trechos do áudio emendados, com 5 ms de fade nas pontas (o corte não estala).
@@ -1272,16 +1623,25 @@ const PREVIEW_SCRIPT = `(() => {
   player.addEventListener("click", (e) => { if (!qe.hidden && e.target === canvas) toggle(); });
   play.addEventListener("click", toggle);
 
-  opener.addEventListener("click", async () => {
-    qe.hidden = false; opener.hidden = true; controls.hidden = false;
+  // Abrir a edição rápida só mostra as escolhas; a prévia começa no "Gerar prévia" e,
+  // pronta, toca pela barra do player (o botão não vira um segundo tocar).
+  const generate = qe.querySelector("[data-qe-preview]");
+  const setGenerate = (icon, label, disabled) => { generate.firstElementChild.textContent = icon; generate.lastElementChild.textContent = label; generate.disabled = disabled; };
+  const intro = () => { summary.textContent = "Escolha as pausas e a câmera e toque em Gerar prévia para ver o resultado."; };
+  opener.addEventListener("click", () => {
+    qe.hidden = false; opener.hidden = true;
+    help(); intro();
+    setGenerate("auto_awesome", "Gerar prévia", false);
+  });
+  generate.addEventListener("click", async () => {
+    setGenerate("hourglass_top", "Gerando prévia…", true);
+    controls.hidden = false;
     player.classList.add("is-previewing");
     // O som da prévia sai pelo Web Audio: no iPhone, assim ele toca mesmo com o modo silencioso.
     try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
     main.pause();
     if (canvas) canvas.hidden = false;
-    help();
-    qe.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    if (silences) return build();
+    if (silences) { build(); return setGenerate("check", "Prévia gerada", true); }
     summary.textContent = "Analisando o vídeo…";
     play.disabled = true;
     try {
@@ -1310,9 +1670,11 @@ const PREVIEW_SCRIPT = `(() => {
         }
       } catch {}
       build();
-      if (!track) summary.textContent += " Este navegador não faz a prévia; o vídeo editado sai com as escolhas abaixo.";
+      setGenerate("check", "Prévia gerada", true);
+      if (!track) { const note = document.createElement("p"); note.className = "qe-result__note"; note.textContent = "Este navegador não mostra a prévia, mas o vídeo editado sai com as escolhas abaixo."; summary.append(note); }
     } catch {
       summary.textContent = "Não deu para analisar o vídeo neste navegador. O vídeo editado sai com as escolhas abaixo, sem prévia.";
+      setGenerate("auto_awesome", "Gerar prévia", false);
     }
   });
   qe.querySelector("[data-qe-close]").addEventListener("click", () => {
@@ -1324,7 +1686,8 @@ const PREVIEW_SCRIPT = `(() => {
     qe.hidden = true; opener.hidden = false; controls.hidden = true;
     player.classList.remove("is-previewing");
   });
-  qe.addEventListener("change", () => { help(); if (silences) build(); });
+  // Trocar as escolhas com a prévia gerada refaz a prévia na hora.
+  qe.addEventListener("change", () => { help(); if (silences && player.classList.contains("is-previewing")) build(); });
   form.addEventListener("submit", () => { qe.querySelector("[type=submit]").disabled = true; });
 })();`;
 
