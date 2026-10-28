@@ -25,7 +25,7 @@ caminho no R2).
 | `alibaba/wan-3.0` | Avatar falando, a partir da foto e da fala | No ar | `wan.ts` |
 | `heygen/avatar-iv` | Avatar falando, voz pronta da HeyGen | Em teste | `heygen.ts` |
 | `bytedance/seedance-2.0` | Trocar avatar (vídeo + foto) | **Bloqueado** para vídeo com rosto realista | `seedance.ts` |
-| `runway/aleph-2` | Trocar avatar (vídeo + quadro trocado) | Em teste, pelo terminal: com um quadro-chave só, o rosto volta ao original | — |
+| `runway/aleph-2` | Trocar avatar (vídeo + quadros trocados) | Testado pelo terminal: troca cabelo e cena e mantém o áudio, mas não a identidade do rosto | — |
 | `google/gemini-nano-banana-2.1` | Trocar o rosto no primeiro quadro (ajuda o Aleph 2) | Em teste, pelo terminal | — |
 
 ## Wan 3.0 (`alibaba/wan-3.0`)
@@ -98,11 +98,23 @@ Resultado do teste de 28/10/2026 (job `gen-vid-1793229723-30Hv1IkTp1JqFxeMsa70`)
   O quadro-chave guia só o trecho perto dele. A legenda queimada no vídeo saiu
   com letras trocadas em alguns quadros.
 
-Próximo passo: o mesmo vídeo com **5 quadros-chave** espalhados (0, 1,4, 2,7,
-4,1 e 5,4 s), cada um com o rosto trocado (5 × US$ 0,04 + US$ 1,40 ≈ US$ 1,60).
-Se o rosto ainda voltar, o Aleph 2 não serve para trocar a pessoa inteira e o
-próximo candidato é o Hailuo 3 (`minimax/hailuo-3`, foto como referência) ou o
-Genjutsu pela API do Higgsfield (fora do OpenRouter; ver abaixo).
+Segundo teste, 28/10/2026 (job pronto às 23:44): o mesmo vídeo com **5
+quadros-chave** com o rosto trocado, o máximo que o Aleph 2 aceita (0; 1,35;
+2,7; 4,05 e 5,0 s).
+
+- O último quadro-chave pode ir no máximo até a duração inteira do vídeo: o
+  de 5,5 s conta como 5 (`Keyframe timestamp must be at most 5`).
+- **Custo real: US$ 1,40** de novo, mais US$ 0,22 pelos quadros trocados.
+- Áudio original intacto outra vez (correlação 0,9999).
+- **A troca ficou pela metade:** o cabelo virou o da foto (mais longo,
+  ondulado, com mechas) do começo ao fim, mas o rosto ficou uma mistura das
+  duas, mais perto da pessoa original. Não passa por outra pessoa.
+
+**Conclusão: o Aleph 2 não troca a pessoa inteira.** Ele mantém o áudio e a
+cena muito bem e serve para mudar cabelo, roupa, objetos e cenário, mas não a
+identidade do rosto. Para trocar o avatar, os próximos candidatos são o
+Hailuo 3 (`minimax/hailuo-3`, foto como referência) ou o Genjutsu pela API do
+Higgsfield (fora do OpenRouter; ver abaixo).
 
 ## Fora do OpenRouter: Higgsfield Genjutsu (não testado)
 
