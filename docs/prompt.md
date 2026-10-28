@@ -106,6 +106,38 @@ português. A lista completa da HeyGen pede uma chave da própria HeyGen.
 **Áudio:** o vídeo pronto não passa pelo contêiner (`treatAudio: false`), porque
 a voz vem pronta do texto para fala. Se a medição mostrar problema, é só ligar.
 
+## Trocar avatar, Seedance 2.0 (src/structures/seedance.ts)
+
+Estrutura em teste (só o administrador vê). Recebe um vídeo pronto e a foto de
+outra pessoa e devolve o mesmo vídeo com a pessoa da foto no lugar. O pedido
+pelo OpenRouter (conferido em 28/10/2026, na referência de
+`POST /api/v1/videos`):
+
+| Campo do formulário | No pedido |
+|---|---|
+| **Vídeo de origem** (MP4 ou MOV, de 2 a 15 s, até 50 MB) | `input_references` com `type: "video_url"` (só o Seedance 2 em diante usa referência de vídeo) |
+| **Foto do avatar** (obrigatória) | `input_references` com `type: "image_url"` |
+| **Roupa** (do vídeo ou da foto) | uma frase do prompt |
+| **Instruções extras** (opcional) | no fim do prompt |
+| **Resolução** e **Formato** | `resolution` e `aspect_ratio` |
+
+A duração não é escolhida: o Worker lê a do vídeo enviado (caixa `mvhd` do MP4,
+`src/mp4.ts`) e pede a duração aceita mais perto (4 a 15 s). O prompt de
+sistema (`swapPrompt`) chama o vídeo de "video 1" e a foto de "image 1", pede
+o rosto, o cabelo e o corpo da foto e mantém o resto do vídeo: cena, câmera,
+gestos, expressões, tempo e a mesma fala, com a boca sincronizada.
+
+**Áudio:** no primeiro teste, é o que o modelo gerar (`generate_audio: true`), e
+não passa pelo contêiner. Se a voz não for a do vídeo de origem, o próximo passo
+é o contêiner pôr de volta o áudio original.
+
+**Custo:** o Seedance cobra por tokens de vídeo, (altura × largura × segundos
+× 24) / 1024, com um preço menor quando há vídeo na entrada
+(`video_tokens_with_video_input`, e o de 1080p e de 4K). A estimativa conta os
+segundos do vídeo enviado junto com os do gerado (720p 9:16 ≈ US$ 0,19/s). O
+custo real vem do OpenRouter quando o vídeo fica pronto: conferir no primeiro
+teste se a conta bate.
+
 ## O que o Higgsfield faz
 
 Nos repositórios públicos (`higgsfield-ai/skills`):

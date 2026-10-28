@@ -8,10 +8,12 @@ que ficou para depois) no mesmo PR.
 
 1. **Testar outro modelo de vídeo com áudio próprio** (em andamento: HeyGen
    Avatar IV no ar para o administrador testar)
-2. Voz gerada à parte e avatar falante (o HeyGen Avatar IV já faz isso numa
+2. **Trocar avatar** (em andamento: Seedance 2.0 no ar para o administrador
+   testar; ver abaixo)
+3. Voz gerada à parte e avatar falante (o HeyGen Avatar IV já faz isso numa
    chamada só; ver o item 1)
-3. Convites do administrador
-4. Esqueci a senha
+4. Convites do administrador
+5. Esqueci a senha
 
 ## Onde estamos (25/10/2026)
 
@@ -30,8 +32,8 @@ No ar em <https://meuavatar.ia.br> (e no workers.dev). O que já funciona e
 - **Uma estrutura por modelo** (`src/structures/`): a tela inicial tem um card
   por modelo, com a aba Vídeos ao lado (todos os vídeos, com filtro por
   status); a página do modelo tem três painéis: configuração, o vídeo
-  escolhido com a caixa da fala, e os vídeos daquele modelo. Cada vídeo guarda a estrutura que o gerou. Hoje: Wan 3.0 (para todos) e HeyGen Avatar
-  IV (em teste, só o administrador).
+  escolhido com a caixa da fala, e os vídeos daquele modelo. Cada vídeo guarda a estrutura que o gerou. Hoje: Wan 3.0 (para todos), HeyGen Avatar
+  IV e Trocar avatar, pelo Seedance 2.0 (em teste, só o administrador).
 
 O problema que motiva o item 1: pelo OpenRouter, o Wan 3.0 devolve a voz alta
 demais, cortada e com chiado. O mesmo modelo no Higgsfield sai limpo (os
@@ -119,7 +121,28 @@ caminho para mandar uma voz pronta e o modelo sincronizar a boca.
   segundo.
 - Testes para cada comportamento novo (`test/`, com a API falsa).
 
-## 2. Voz gerada à parte e avatar falante
+## 2. Trocar avatar
+
+Trocar só a pessoa de um vídeo pronto pela de uma foto, mantendo cena, câmera,
+gestos e fala. Escolhido o Seedance 2.0 (`bytedance/seedance-2.0`): recebe o
+vídeo e a foto como referências. Está como estrutura própria
+(`src/structures/seedance.ts`, explicada em `docs/prompt.md`), visível só
+para o administrador. O vídeo vem do computador (MP4 ou MOV, de 2 a 15 s).
+
+Próximos passos:
+
+1. Com a autorização do dono, gerar uma troca com um vídeo do Wan e outra
+   foto. Conferir rosto igual ao da foto, boca sincronizada e cena igual.
+2. Ouvir: a voz é a do vídeo de origem? Se não for, pedir sem áudio e o
+   contêiner junta o áudio original ao vídeo novo.
+3. Conferir se o custo real bate com a estimativa (por tokens, contando o
+   vídeo enviado).
+4. Se valer a pena: botão "Trocar avatar" na página do vídeo, que abre o
+   formulário já com aquele vídeo. Outros candidatos, se o Seedance não
+   servir: `runway/aleph-2` (edição com quadro-chave) e
+   `black-forest-labs/flux-video-edit` (só por texto, mais barato).
+
+## 3. Voz gerada à parte e avatar falante
 
 Só se nenhum modelo do item 1 entregar voz limpa. Gerar a voz num modelo de
 voz (TTS do OpenRouter, `/api/v1/audio/speech`) e animar a foto com um modelo
@@ -128,7 +151,7 @@ que sincroniza a boca com o áudio: `heygen/avatar-iv` no OpenRouter
 referência. É o que o Higgsfield faz no explainer narrado (voz à parte, juntada
 depois). Muda mais o fluxo: duas chamadas e duas esperas por vídeo.
 
-## 3. Convites do administrador
+## 4. Convites do administrador
 
 Hoje o primeiro cadastro vira admin e o cadastro fecha. O admin precisa
 convidar outras pessoas. Portar do estuda.mais (`src/auth.ts` e o painel
@@ -137,11 +160,11 @@ convidar outras pessoas. Portar do estuda.mais (`src/auth.ts` e o painel
 `users` já tem `role` (`admin`/`member`) e aceita `password_hash` nulo
 (convite não aceito).
 
-## 4. Esqueci a senha
+## 5. Esqueci a senha
 
 No estuda.mais é o mesmo link de convite, gerado de novo pelo admin. Para o
 próprio admin, hoje o caminho é apagar a conta no D1 e cadastrar de novo
-(`docs/operacao.md`). Fazer junto com o item 3.
+(`docs/operacao.md`). Fazer junto com o item 4.
 
 ## Pendências pequenas
 

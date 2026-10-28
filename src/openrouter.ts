@@ -12,6 +12,8 @@ export interface VideoModel {
   supported_durations: number[] | null;
   supported_resolutions: string[] | null;
   supported_aspect_ratios: string[] | null;
+  /** Tamanhos exatos ("1280x720"), quando o modelo lista; o Seedance cobra pelos pixels. */
+  supported_sizes?: string[] | null;
   supported_frame_images: FrameType[] | null;
   generate_audio: boolean | null;
   pricing_skus: Record<string, string> | null;
@@ -27,11 +29,19 @@ export interface VideoRequest {
   seed?: number;
   callback_url?: string;
   frame_images?: { type: "image_url"; image_url: { url: string }; frame_type: FrameType }[];
-  /** Imagens de referência (o HeyGen Avatar IV recebe a foto assim). */
-  input_references?: { type: "image_url"; image_url: { url: string } }[];
+  /**
+   * Referências: imagens (o HeyGen Avatar IV recebe a foto assim) e, só no
+   * Seedance 2 em diante, vídeos e áudios.
+   */
+  input_references?: InputReference[];
   /** Opções do provedor, por slug (só as de allowed_passthrough_parameters). */
   provider?: { options: Record<string, Record<string, string>> };
 }
+
+export type InputReference =
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "video_url"; video_url: { url: string } }
+  | { type: "audio_url"; audio_url: { url: string } };
 
 export type JobStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled" | "expired";
 

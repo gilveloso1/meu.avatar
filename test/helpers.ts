@@ -28,7 +28,53 @@ export const HEYGEN: VideoModel = {
   pricing_skus: { duration_seconds: "0.05" },
 };
 
-const MODELS = [WAN, HEYGEN];
+export const SEEDANCE: VideoModel = {
+  id: "bytedance/seedance-2.0",
+  name: "ByteDance: Seedance 2.0",
+  supported_durations: Array.from({ length: 12 }, (_, i) => i + 4),
+  supported_resolutions: ["480p", "720p", "1080p"],
+  supported_aspect_ratios: ["1:1", "3:4", "9:16", "4:3", "16:9"],
+  supported_sizes: ["480x480", "480x640", "480x854", "640x480", "854x480", "720x720", "720x960", "720x1280", "960x720", "1280x720", "1080x1920", "1920x1080"],
+  supported_frame_images: ["first_frame", "last_frame"],
+  generate_audio: true,
+  pricing_skus: { video_tokens: "0.000007", video_tokens_with_video_input: "0.0000043", video_tokens_1080p_with_video_input: "0.0000047" },
+};
+
+const MODELS = [WAN, HEYGEN, SEEDANCE];
+
+/**
+ * Um MP4 mínimo com a duração no cabeçalho (ftyp, mdat e moov > mvhd). A
+ * versão 1 do mvhd usa campos de 64 bits; `moovFirst` põe o moov antes do mdat.
+ */
+export function fakeMp4(seconds: number, { version = 0, moovFirst = false } = {}): Uint8Array<ArrayBuffer> {
+  const timescale = 1000;
+  const box = (type: string, body: Uint8Array) => {
+    const out = new Uint8Array(8 + body.length);
+    new DataView(out.buffer).setUint32(0, out.length);
+    out.set(new TextEncoder().encode(type), 4);
+    out.set(body, 8);
+    return out;
+  };
+  const mvhd = new Uint8Array(version === 1 ? 32 : 20);
+  const view = new DataView(mvhd.buffer);
+  view.setUint8(0, version);
+  if (version === 1) {
+    view.setUint32(20, timescale);
+    view.setBigUint64(24, BigInt(Math.round(seconds * timescale)));
+  } else {
+    view.setUint32(12, timescale);
+    view.setUint32(16, Math.round(seconds * timescale));
+  }
+  const moov = box("moov", box("mvhd", mvhd));
+  const parts = [box("ftyp", new TextEncoder().encode("isom")), ...(moovFirst ? [moov, box("mdat", new Uint8Array(16))] : [box("mdat", new Uint8Array(16)), moov])];
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+}
 
 /** OpenRouter de mentira: guarda os pedidos e responde o status que o teste mandar. */
 export class FakeVideoApi implements VideoApi {

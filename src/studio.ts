@@ -1,7 +1,8 @@
 import type { AudioApi, Face } from "./audio";
 import { Db, OPEN_STATUSES, type Role, type Video } from "./db";
 import { ERROS } from "./erros";
-import { validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
+import { mp4Duration } from "./mp4";
+import { type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import { canUse, InputError, structureById, type Structure, type Values } from "./structures";
 
@@ -19,6 +20,8 @@ export interface NewVideoInput {
   values: Values;
   /** Foto do avatar. */
   image?: File | null;
+  /** Vídeo de origem (estruturas que recebem um vídeo, como a troca de avatar). */
+  video?: File | null;
   /** Quem está pedindo. */
   user: { id: number; role: Role };
 }
@@ -29,6 +32,10 @@ export const AUDIO_TIMEOUT_MS = 20 * 60_000;
 
 /** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+const VIDEO_TYPES: Record<string, string> = { "video/mp4": "mp4", "video/quicktime": "mov" };
+/** Limite do vídeo de origem: o do Seedance para vídeo de referência. */
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
 /** A estrutura existe, mas quem pediu não tem acesso a ela. */
 export class ForbiddenError extends Error {}
@@ -72,12 +79,24 @@ export class Studio {
     if (image && !ext) throw new InputError(ERROS.fotoTipo);
     if (image && image.size > MAX_IMAGE_BYTES) throw new InputError(ERROS.fotoTamanho);
 
+    const upload = input.video && input.video.size > 0 ? input.video : null;
+    const videoExt = upload ? VIDEO_TYPES[upload.type] : undefined;
+    if (upload && !videoExt) throw new InputError(ERROS.videoTipo);
+    if (upload && upload.size > MAX_VIDEO_BYTES) throw new InputError(ERROS.videoTamanho(MAX_VIDEO_BYTES / 1024 / 1024));
+    const videoBytes = upload ? await upload.arrayBuffer() : null;
+    const seconds = videoBytes ? mp4Duration(videoBytes) : null;
+    if (videoBytes && seconds === null) throw new InputError(ERROS.videoLeitura);
+
     const model = await this.model(structure.model);
-    const built = structure.build(input.values, image !== null, model);
+    const built = structure.build(input.values, image !== null, model, seconds !== null ? { seconds } : null);
     const request: VideoRequest = { model: structure.model, ...built.request };
     const placeholder = { type: "image_url" as const, image_url: { url: "" } };
+    const source = { type: "video_url" as const, video_url: { url: "" } };
+    const references: InputReference[] = [];
+    if (built.video) references.push(source);
     if (built.image === "first_frame") request.frame_images = [{ ...placeholder, frame_type: "first_frame" }];
-    if (built.image === "reference") request.input_references = [placeholder];
+    if (built.image === "reference") references.push(placeholder);
+    if (references.length) request.input_references = references;
     const errors = validate(model, request);
     if (errors.length) {
       console.error(`Não suportado por ${structure.model}: ${errors.join("; ")}`);
@@ -93,6 +112,13 @@ export class Studio {
       await this.media.put(imageKey, bytes, { httpMetadata: { contentType: image.type } });
       placeholder.image_url.url = await this.imageUrl(imageKey, image.type, bytes);
     }
+    let sourceKey: string | null = null;
+    if (upload && videoBytes && built.video) {
+      // Como a foto: nome impossível de adivinhar, público só para o provedor baixar.
+      sourceKey = `origens/${crypto.randomUUID()}.${videoExt}`;
+      await this.media.put(sourceKey, videoBytes, { httpMetadata: { contentType: upload.type } });
+      source.video_url.url = await this.imageUrl(sourceKey, upload.type, videoBytes);
+    }
     if (this.config.siteUrl.startsWith("https://")) request.callback_url = `${this.config.siteUrl}/openrouter/webhook`;
 
     const { settings, ...record } = built.record;
@@ -103,7 +129,7 @@ export class Studio {
       image_key: imageKey,
       user_id: input.user.id,
       structure: structure.id,
-      settings: settings ? JSON.stringify(settings) : null,
+      settings: settings || sourceKey ? JSON.stringify({ ...settings, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
     });
 
     try {
@@ -275,8 +301,9 @@ export class Studio {
   }
 
   /**
-   * O provedor baixa a foto pela URL pública do Worker. Em desenvolvimento
-   * (localhost), essa URL não é alcançável de fora: vai a foto em base64.
+   * O provedor baixa a foto (ou o vídeo de origem) pela URL pública do Worker.
+   * Em desenvolvimento (localhost), essa URL não é alcançável de fora: vai o
+   * arquivo em base64.
    */
   private async imageUrl(key: string, type: string, bytes: ArrayBuffer): Promise<string> {
     if (this.config.siteUrl.startsWith("https://")) return `${this.config.siteUrl}/midia/${key}`;

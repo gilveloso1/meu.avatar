@@ -6,8 +6,11 @@ import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
 import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, SPEECH_LEAD, STYLES } from "../src/prompt";
 import { planParts, RULES } from "../src/quickedit";
+import { mp4Duration } from "../src/mp4";
+import { estimate } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
-import { call, cookie, FakeAudioApi, FakeVideoApi, memberCookie, postForm, SITE, sign, WAN } from "./helpers";
+import { outputSeconds, SEEDANCE_SWAP, swapPrompt } from "../src/structures/seedance";
+import { call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
@@ -528,7 +531,7 @@ describe("HeyGen Avatar IV", () => {
     expect(req!.duration).toBeUndefined();
     expect(req!.generate_audio).toBeUndefined();
     expect(req!.frame_images).toBeUndefined();
-    expect(req!.input_references![0]!.image_url.url).toMatch(new RegExp(`^${SITE}/midia/avatares/[0-9a-f-]{36}\\.png$`));
+    expect((req!.input_references![0] as { image_url: { url: string } }).image_url.url).toMatch(new RegExp(`^${SITE}/midia/avatares/[0-9a-f-]{36}\\.png$`));
     expect(req!.provider).toEqual({
       options: { heygen: { voice_id: VOICES[1]!.value, expressiveness: "medium", motion_prompt: `${MOTION_GUIDE} aponta para a câmera` } },
     });
@@ -578,6 +581,117 @@ describe("HeyGen Avatar IV", () => {
     expect(video).toMatchObject({ status: "completed", audio_status: null, cost: 0.25 });
     expect(await studio.treatNextAudio()).toBeNull();
     expect(audio.calls).toBe(0);
+  });
+});
+
+describe("Trocar avatar (Seedance 2.0)", () => {
+  const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
+  const origem = (seconds = 8.4, type = "video/mp4") => new File([fakeMp4(seconds)], "cena.mp4", { type });
+
+  it("lê a duração do MP4, com o moov no começo ou no fim e mvhd de 32 ou 64 bits", () => {
+    expect(mp4Duration(fakeMp4(8.4).buffer)).toBeCloseTo(8.4);
+    expect(mp4Duration(fakeMp4(12, { moovFirst: true }).buffer)).toBeCloseTo(12);
+    expect(mp4Duration(fakeMp4(3.25, { version: 1 }).buffer)).toBeCloseTo(3.25);
+    expect(mp4Duration(new TextEncoder().encode("não é um mp4").buffer as ArrayBuffer)).toBeNull();
+    expect(mp4Duration(new ArrayBuffer(0))).toBeNull();
+  });
+
+  it("a duração pedida é a aceita mais perto da do vídeo enviado", () => {
+    expect(outputSeconds(8.4, SEEDANCE.supported_durations)).toBe(8);
+    expect(outputSeconds(2.2, SEEDANCE.supported_durations)).toBe(4);
+    expect(outputSeconds(15.4, SEEDANCE.supported_durations)).toBe(15);
+  });
+
+  it("o custo é por token, com o vídeo enviado contando junto", () => {
+    const values = (name: string) => ({ resolucao: "720p", formato: "9:16" })[name] ?? "";
+    const perSecond = Number(SEEDANCE_SWAP.prices!(SEEDANCE)["720p_9:16"]);
+    expect(perSecond).toBeCloseTo(((720 * 1280 * 24) / 1024) * 0.0000043 * 2);
+    expect(Number(SEEDANCE_SWAP.prices!(SEEDANCE)["1080p_16:9"])).toBeCloseTo(((1920 * 1080 * 24) / 1024) * 0.0000047 * 2);
+    // Antes de escolher o vídeo, a duração não se sabe no servidor: sem estimativa.
+    expect(estimate(SEEDANCE_SWAP, SEEDANCE, values)).toBeUndefined();
+  });
+
+  it("o formulário pede o vídeo de origem e a foto, sem fala", async () => {
+    const page = await (await get("/modelo/seedance")).text();
+    expect(page).toMatch(/<input type="file" name="video" accept="video\/mp4,video\/quicktime"[^>]* required/);
+    expect(page).toMatch(/<input type="file" name="imagem"[^>]* required/);
+    expect(page).toContain('name="roupa" value="video" checked');
+    expect(page).toContain('name="instrucoes"');
+    expect(page).not.toContain('name="fala"');
+    expect(page).toContain("Gerar vídeo");
+    expect(page).toContain("&quot;720p_9:16&quot;");
+  });
+
+  it("manda o vídeo e a foto como referências, com a duração do vídeo e o áudio do modelo", async () => {
+    const api = new FakeVideoApi();
+    const res = await post(api, { video: origem(), imagem: foto(), roupa: "foto", instrucoes: "mantém os óculos", resolucao: "720p", formato: "9:16" }, "seedance");
+    expect(res.status).toBe(303);
+
+    const [req] = api.submitted;
+    expect(req).toMatchObject({ model: "bytedance/seedance-2.0", duration: 8, resolution: "720p", aspect_ratio: "9:16", generate_audio: true });
+    expect(req!.prompt).toBe(swapPrompt("foto", "mantém os óculos"));
+    expect(req!.prompt).toContain("video 1");
+    expect(req!.frame_images).toBeUndefined();
+    const [video, image] = req!.input_references! as [{ type: string; video_url: { url: string } }, { type: string; image_url: { url: string } }];
+    expect(video.type).toBe("video_url");
+    expect(video.video_url.url).toMatch(new RegExp(`^${SITE}/midia/origens/[0-9a-f-]{36}\\.mp4$`));
+    expect(image.image_url.url).toMatch(new RegExp(`^${SITE}/midia/avatares/[0-9a-f-]{36}\\.png$`));
+
+    // O vídeo de origem fica público para o provedor baixar, sem login.
+    const baixado = await call(new Request(video.video_url.url));
+    expect(baixado.status).toBe(200);
+    expect(baixado.headers.get("content-type")).toBe("video/mp4");
+
+    const [criado] = await new Db(env.DB).recentVideos();
+    expect(criado).toMatchObject({ structure: "seedance", duration: 8, prompt: "mantém os óculos", extra: "mantém os óculos", request_prompt: req!.prompt });
+    const settings = JSON.parse(criado!.settings!);
+    expect(settings).toMatchObject({ outfit: "foto", source_seconds: "8.4" });
+    expect(`${SITE}/midia/${settings.source_key}`).toBe(video.video_url.url);
+
+    const detalhes = await (await get(`/video/${criado!.id}`, undefined, api)).text();
+    expect(detalhes).toContain('<dt class="qe-result__label">Vídeo de origem</dt><dd class="qe-result__value">8,4 s</dd>');
+    expect(detalhes).toContain('<dt class="qe-result__label">Roupa</dt><dd class="qe-result__value">Da foto</dd>');
+    expect(detalhes).toContain('<dt class="qe-result__label">Duração</dt><dd class="qe-result__value">8 s</dd>');
+  });
+
+  it("sem instruções, o texto do vídeo fica vazio e sem o botão de copiar", async () => {
+    const api = new FakeVideoApi();
+    await post(api, { video: origem(5), imagem: foto() }, "seedance");
+    const [criado] = await new Db(env.DB).recentVideos();
+    expect(criado).toMatchObject({ prompt: "", extra: null, duration: 5 });
+    expect(api.submitted[0]!.prompt).toBe(swapPrompt("video", ""));
+    const detalhes = await (await get(`/video/${criado!.id}`, undefined, api)).text();
+    expect(detalhes).not.toContain(`type="button" data-copy=`);
+  });
+
+  it("recusa sem vídeo, vídeo curto, longo, de outro tipo ou que não abre, sem foto e roupa inventada", async () => {
+    const api = new FakeVideoApi();
+    const casos: [Record<string, string | File>, string][] = [
+      [{ imagem: foto() }, ERROS.videoOrigem],
+      [{ video: origem(1.2), imagem: foto() }, ERROS.videoDuracao(2, 15)],
+      [{ video: origem(20), imagem: foto() }, ERROS.videoDuracao(2, 15)],
+      [{ video: origem(8, "video/webm"), imagem: foto() }, ERROS.videoTipo],
+      [{ video: new File(["não é um mp4"], "cena.mp4", { type: "video/mp4" }), imagem: foto() }, ERROS.videoLeitura],
+      [{ video: origem() }, ERROS.foto],
+      [{ video: origem(), imagem: foto(), roupa: "fantasia" }, ERROS.roupa],
+    ];
+    for (const [fields, erro] of casos) {
+      const res = await post(api, fields, "seedance");
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(erro);
+    }
+    expect(api.submitted).toHaveLength(0);
+    expect(await new Db(env.DB).recentVideos()).toHaveLength(0);
+  });
+
+  it("conta comum não vê nem usa a troca de avatar", async () => {
+    const api = new FakeVideoApi();
+    const member = await memberCookie();
+    expect(await (await get("/", member)).text()).not.toContain("/modelo/seedance");
+    expect((await get("/modelo/seedance", member)).status).toBe(404);
+    const res = await call(postForm("/modelo/seedance", { video: origem(), imagem: foto() }, { cookie: member }), api);
+    expect(res.status).toBe(404);
+    expect(api.submitted).toHaveLength(0);
   });
 });
 
