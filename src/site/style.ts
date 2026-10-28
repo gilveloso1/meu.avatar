@@ -495,7 +495,7 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 
 /* Centro: o vídeo escolhido (ou a apresentação do modelo) e a caixa da fala embaixo. */
 .workspace__main { min-width: 0; width: 100%; justify-self: center; display: flex; flex-direction: column; gap: 16px; padding-top: 16px; }
-/* Os vídeos no centro: cards quadrados numa moldura grossa, sem texto. */
+/* Os vídeos no centro: cards quadrados só com a imagem, sem texto. */
 .library { display: flex; flex-direction: column; gap: 16px; }
 .library__title { font: var(--md-sys-typescale-title-large); display: flex; align-items: baseline; gap: 8px; padding: 0 4px; }
 .library__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -561,20 +561,18 @@ a.frame { display: block; }
   .vrows__head, .vrow { grid-template-columns: 48px minmax(0, 1fr) 112px 64px 96px; }
   .vrow__wide { display: none; }
 }
-/* Moldura de 12 px; cantos concêntricos: 28 px por fora (extra-large) e 16 px no vídeo (large). */
+/* Card de mídia: só a imagem, cantos de 16 px (large) e a sombra do elevated card (nível 1). */
 .frame {
-  --frame-pad: 12px; position: relative; aspect-ratio: 1; margin: 0; padding: 0; border: 0; overflow: hidden;
-  border-radius: var(--md-sys-shape-corner-extra-large);
-  background: var(--md-sys-color-surface-container-lowest); box-shadow: var(--md-sys-elevation-level1);
+  position: relative; aspect-ratio: 1; margin: 0; padding: 0; border: 0; overflow: hidden;
+  border-radius: var(--md-sys-shape-corner-large); box-shadow: var(--md-sys-elevation-level1);
 }
 .frame::before { z-index: 1; border-radius: inherit; }
-/* O vídeo fica num recorte de cantos de 16 px: a aproximação do hover não passa por cima da moldura.
-   Recorte preso às bordas: o Safari não aceita height:100% sobre a altura que vem do aspect-ratio. */
-.frame__media { position: absolute; inset: var(--frame-pad); display: block; overflow: hidden; border-radius: var(--md-sys-shape-corner-large); }
+/* Recorte preso às bordas: o Safari não aceita height:100% sobre a altura que vem do aspect-ratio. */
+.frame__media { position: absolute; inset: 0; display: block; overflow: hidden; border-radius: inherit; }
 .frame video, .frame__placeholder { width: 100%; height: 100%; }
 .frame video { display: block; object-fit: cover; pointer-events: none; background: var(--md-sys-color-surface-container-highest); }
 .frame__placeholder { display: grid; place-items: center; background: var(--md-sys-color-surface-container-highest); }
-/* Mouse sobre o card: o vídeo aproxima de leve dentro da moldura (só onde há hover; com movimento reduzido, não). */
+/* Mouse sobre o card: o vídeo aproxima de leve dentro do card (só onde há hover; com movimento reduzido, não). */
 .frame video { transition: transform var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard); }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .frame:hover video, .frame:focus-visible video { transform: scale(1.06); }
@@ -865,7 +863,6 @@ a.frame { display: block; }
   .pane--config .form-section, .pane--config .pane__footer { padding-left: 0; padding-right: 0; }
   /* A sobra embaixo do botão só serve no painel que rola por dentro (tela larga). */
   .pane__footer { padding-bottom: 8px; }
-  .frame { --frame-pad: 8px; border-radius: var(--md-sys-shape-corner-extra-large); }
   /* Celular: lista de duas linhas do M3, sem títulos de coluna; o status fica só no ícone à direita. */
   .library[data-view="d"] .vrows__head { display: none; }
   .vrow { grid-template-columns: 48px minmax(0, 1fr) 24px; min-height: 72px; }

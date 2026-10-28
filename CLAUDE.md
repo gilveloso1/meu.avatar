@@ -82,15 +82,16 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   e Custo estimado, linhas com ícone) e o "Gerar vídeo" na largura toda, sem
   fixar, com espaço sobrando embaixo. No centro, a lista de vídeos.
 - Lista de vídeos (`videoLibrary`, a mesma na página do modelo e em `/videos`):
-  cards quadrados sem texto numa moldura de 12 px (cantos de 28 px por fora e
-  16 px no vídeo), o vídeo preenchendo o quadrado; vistas em grupo de botões
+  cards quadrados sem texto, só a imagem (cantos de 16 px e a sombra de nível 1
+  do M3, sem moldura branca), o vídeo preenchendo o quadrado; vistas em grupo de botões
   conectados (cards pequenos, médios, grandes e Detalhes, uma linha por vídeo
   com colunas); chips de filtro por status, chip de ordem e chip "Agrupar por
   data" (desligado por padrão). Tudo no navegador, sem recarregar, e guardado
   no `localStorage` por lista (`lista-<modelo>`, `lista-videos`). Miniatura só
   baixa quando aparece na tela e enquadra o rosto (`videos.face`, achado pelo
   agendamento, um vídeo por minuto; sem rosto, o terço de cima). Com mouse, o
-  vídeo aproxima de leve (1,06, 300 ms) dentro da moldura. A busca pela fala de `/videos` fica no servidor.
+  vídeo aproxima de leve (1,06, 300 ms) dentro do card. No Safari, o recorte do
+  vídeo fica preso às bordas do card (`inset: 0`), não em `height: 100%`. A busca pela fala de `/videos` fica no servidor.
 - Página do vídeo (`/video/<id>`, aberta por qualquer lista; `?de=` diz para
   onde a seta e o X voltam, só caminho do site): ocupa a tela abaixo da barra
   superior. À esquerda, o vídeo no formato dele (sem faixas) sobre fundo

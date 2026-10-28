@@ -705,7 +705,7 @@ function dateGroup(iso: string, now = Date.now()): string {
 }
 
 /**
- * A área central: os vídeos do modelo agrupados por data, em cards quadrados numa moldura
+ * A área central: os vídeos do modelo agrupados por data, em cards quadrados só com a imagem
  * (três tamanhos) ou em detalhes (uma linha por vídeo, com as colunas). Filtro, ordem e
  * vista trocam no navegador, sem recarregar: o que está no formulário não se perde.
  */
