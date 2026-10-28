@@ -130,18 +130,20 @@ vídeo e a foto como referências. Está na estrutura do Seedance
 "Trocar avatar" do campo Uso, para o modelo servir a outros usos depois;
 visível só para o administrador. O vídeo vem do computador (MP4 ou MOV, de 2 a 15 s).
 
+**28/10/2026: o Seedance recusa vídeo com rosto realista** (regra da
+ByteDance; a estrutura fica como está, para outros usos). O teste seguiu pelo
+Runway Aleph 2, pelo terminal: aceitou e manteve o áudio original, mas com um
+quadro-chave só o rosto volta ao original. Detalhes, custos e próximos passos
+em [docs/modelos.md](modelos.md).
+
 Próximos passos:
 
-1. Com a autorização do dono, gerar uma troca com um vídeo do Wan e outra
-   foto. Conferir rosto igual ao da foto, boca sincronizada e cena igual.
-2. Ouvir: a voz é a do vídeo de origem? Se não for, pedir sem áudio e o
-   contêiner junta o áudio original ao vídeo novo.
-3. Conferir se o custo real bate com a estimativa (por tokens, contando o
-   vídeo enviado).
-4. Se valer a pena: botão "Trocar avatar" na página do vídeo, que abre o
-   formulário já com aquele vídeo. Outros candidatos, se o Seedance não
-   servir: `runway/aleph-2` (edição com quadro-chave) e
-   `black-forest-labs/flux-video-edit` (só por texto, mais barato).
+1. Aleph 2 com 5 quadros-chave trocados (≈ US$ 1,60, com autorização).
+2. Se servir: estrutura nova para o Aleph 2 (o Worker tira os quadros e troca
+   o rosto neles antes do pedido). Se não: Hailuo 3 ou o Genjutsu pela API do
+   Higgsfield (decisão do dono, por sair do OpenRouter).
+3. Botão "Trocar avatar" na página do vídeo, que abre o formulário já com
+   aquele vídeo.
 
 ## 3. Voz gerada à parte e avatar falante
 
