@@ -1151,8 +1151,9 @@ const SCRIPT = `(() => {
       for (const e of entries) if (e.isIntersecting) {
         const v = e.target;
         // Com o src posto depois, o navegador decodifica o quadro mas nem sempre o desenha: ir ao quadro garante.
+        // O #t=0.5 é para o iPhone, que com preload="metadata" não baixa quadro nenhum sem ele.
         v.addEventListener("loadeddata", () => { v.currentTime = 0.5; }, { once: true });
-        v.src = v.dataset.src; v.removeAttribute("data-src"); io.unobserve(v);
+        v.src = v.dataset.src + "#t=0.5"; v.removeAttribute("data-src"); io.unobserve(v);
       }
     }, { rootMargin: "200px" });
     thumbs.forEach((t) => io.observe(t));
