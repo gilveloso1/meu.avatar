@@ -129,6 +129,11 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   quem desenvolve (nada de nome de segredo ou de modelo técnico na tela; o
   detalhe vai para o log). Avisos de configuração não aparecem no computador
   (`AMBIENTE=local`).
+- Erros: toda frase de erro da tela vem de `src/erros.ts` (`ERROS.<chave>`), no
+  molde `erro("O que houve.", "O que fazer.")` ou, para campo do formulário,
+  `campo("O que fazer.")`; as regras estão no topo do arquivo. Erro novo é chave
+  nova lá; `test/erros.test.ts` recusa frase fora do molde ou escrita fora do
+  catálogo. O motivo técnico fica no banco e no log, nunca na tela.
 - Barra superior: a marca é o ícone de rosto (`face`, o mesmo da foto do
   avatar) e o nome, sem cara de botão (sem camada de estado no hover). Sair fica
   só no menu do perfil. Não há rodapé.

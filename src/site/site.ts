@@ -19,6 +19,7 @@
  */
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { Db, User, Video, VideoStatus } from "../db";
+import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
 import { canUse, type Defaults, estimate, type Field, type Option, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
@@ -225,7 +226,7 @@ export class Site {
   private async modelPage(user: User, structure: Structure, values?: Values, error?: string): Promise<Response> {
     const { model, error: modelError } = await this.tryModel(structure);
     // Sem a chave do OpenRouter: no computador, nenhum aviso; no ar, um aviso na língua de quem usa.
-    const banner = modelError ?? (this.studio.canGenerate || this.config.local ? null : "A criação de vídeos está pausada no momento. Seus vídeos continuam aqui para ver e baixar.");
+    const banner = modelError ?? (this.studio.canGenerate || this.config.local ? null : ERROS.criacaoPausadaAviso);
     const sections = structure.sections(model, this.config.defaults);
     const value = values ?? defaultValues(sections);
     const cost = model ? estimate(structure, model, value) : undefined;
@@ -343,7 +344,7 @@ ${error ? snackbar(error) : ""}`;
           quick ? `<div class="player__controls" data-qe-controls hidden><button class="icon-button interactive" type="button" data-qe-play aria-label="Tocar a prévia" title="Tocar a prévia"><span class="icon">play_arrow</span></button><span class="player__time" data-qe-time></span></div>` : ""
         }</div></div>`
       : status.kind === "error"
-        ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p>${v.error ? `<p class="stage__text">${esc(v.error)}</p>` : ""}</div>`
+        ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p><p class="stage__text">${esc(ERROS.videoFalhou)}</p></div>`
         : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">Leva alguns minutos. A página se atualiza sozinha.</p></div>`;
     // Campos de texto livre (movimento, instruções) ganham um bloco próprio, como o Texto; vazios não aparecem.
     const all = [{ term: "Modelo", description: structure.name }, ...structure.details(v)];
@@ -358,9 +359,9 @@ ${error ? snackbar(error) : ""}`;
     ];
     // Sem MP4, o motivo da falha já está no card do vídeo: na folha ficam só os do áudio e da edição.
     const errors = [
-      v.video_key ? v.error : null,
-      v.audio_status === "failed" ? `Áudio não tratado: ${v.audio_error ?? "erro desconhecido"}` : null,
-      v.edit_status === "failed" ? `Edição rápida falhou: ${v.edit_error ?? "erro desconhecido"}` : null,
+      // O motivo técnico fica no banco e no log; a tela mostra a frase do catálogo.
+      v.audio_status === "failed" ? (v.audio_error === ERROS.audioDemorou ? ERROS.audioDemorou : ERROS.audioFalhou) : null,
+      v.edit_status === "failed" ? (v.edit_error === ERROS.edicaoDemorou ? ERROS.edicaoDemorou : ERROS.edicaoFalhou) : null,
     ].filter((e): e is string => Boolean(e));
     const downloads: MenuItem[] = v.video_key
       ? [
@@ -447,7 +448,7 @@ ${error ? snackbar(error) : ""}`;
       return { model: await this.studio.model(structure.model), error: null };
     } catch (err) {
       console.error(`Não deu para ler o modelo ${structure.model}:`, err);
-      return { model: null, error: "Não foi possível carregar as opções deste modelo agora. Atualize a página em instantes." };
+      return { model: null, error: ERROS.opcoesIndisponiveis };
     }
   }
 
@@ -473,9 +474,9 @@ ${error ? snackbar(error) : ""}`;
     const result = await this.accounts.login(email, String(form.get("senha") ?? ""));
     if (result.ok) return redirect("/", sessionCookie(result.token));
     if (result.reason === "locked") {
-      return html(loginPage(`Muitas tentativas erradas. A conta fica bloqueada até ${formatDate(result.until)}.`, email), 400);
+      return html(loginPage(ERROS.contaBloqueada(formatDate(result.until)), email), 400);
     }
-    return html(loginPage("E-mail ou senha não conferem.", email), 400);
+    return html(loginPage(ERROS.loginIncorreto, email), 400);
   }
 
   private async signupPage(error?: string, values: { name?: string; email?: string } = {}): Promise<Response> {
@@ -488,7 +489,7 @@ ${error ? snackbar(error) : ""}`;
     const name = String(form.get("nome") ?? "");
     const email = String(form.get("email") ?? "");
     const password = String(form.get("senha") ?? "");
-    if (password !== String(form.get("confirmar") ?? "")) return this.signupPage("As senhas não são iguais.", { name, email });
+    if (password !== String(form.get("confirmar") ?? "")) return this.signupPage(ERROS.senhasDiferentes, { name, email });
     const result = await this.accounts.signupFirst(name, email, password);
     if ("error" in result) return this.signupPage(result.error, { name, email });
     return redirect("/", sessionCookie(result.token));
@@ -583,6 +584,7 @@ function quickEditPreview(v: Video, showOriginal = false): string {
   const config = {
     src: videoSrc(v),
     face: `/videos/${v.id}/rosto`,
+    previaIndisponivel: ERROS.previaIndisponivel,
     rules: RULES,
     pauses: Object.fromEntries(PAUSES.map((p) => [p.value, p.pause])),
     cameras: Object.fromEntries(CAMERAS.map((c) => [c.value, c.zooms])),
@@ -1545,7 +1547,7 @@ const PREVIEW_SCRIPT = `(() => {
         }
         feed();
       },
-      error: () => { summary.textContent = "Prévia indisponível. Toque em Gerar editado para criar o vídeo mesmo assim."; },
+      error: () => { summary.textContent = cfg.previaIndisponivel; },
     });
     decoder.configure({ codec: track.codec, description: track.description, codedWidth: track.width, codedHeight: track.height });
     feed();
@@ -1698,9 +1700,9 @@ const PREVIEW_SCRIPT = `(() => {
       build();
       setGenerate("check", "Prévia gerada", true);
       hint.hidden = !track;
-      if (!track) { const note = document.createElement("p"); note.className = "qe-result__note"; note.textContent = "Prévia indisponível. Toque em Gerar editado para criar o vídeo mesmo assim."; summary.append(note); }
+      if (!track) { const note = document.createElement("p"); note.className = "qe-result__note"; note.textContent = cfg.previaIndisponivel; summary.append(note); }
     } catch {
-      summary.textContent = "Prévia indisponível. Toque em Gerar editado para criar o vídeo mesmo assim.";
+      summary.textContent = cfg.previaIndisponivel;
       setGenerate("auto_awesome", "Gerar prévia", false);
     }
   });

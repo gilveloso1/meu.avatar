@@ -1,3 +1,5 @@
+import { ERROS } from "./erros";
+
 export type VideoStatus = "submitting" | "pending" | "in_progress" | "completed" | "failed" | "cancelled" | "expired";
 
 export interface Video {
@@ -200,10 +202,10 @@ export class Db {
   async failStaleAudio(beforeIso: string, nowIso: string): Promise<number> {
     const result = await this.d1
       .prepare(
-        `UPDATE videos SET audio_status = 'failed', audio_error = 'O tratamento do áudio não terminou a tempo.', updated_at = ?
+        `UPDATE videos SET audio_status = 'failed', audio_error = ?, updated_at = ?
          WHERE audio_status = 'processing' AND audio_started_at < ?`,
       )
-      .bind(nowIso, beforeIso)
+      .bind(ERROS.audioDemorou, nowIso, beforeIso)
       .run();
     return result.meta.changes;
   }
@@ -235,10 +237,10 @@ export class Db {
   async failStaleEdit(beforeIso: string, nowIso: string): Promise<number> {
     const result = await this.d1
       .prepare(
-        `UPDATE videos SET edit_status = 'failed', edit_error = 'A edição rápida não terminou a tempo.', updated_at = ?
+        `UPDATE videos SET edit_status = 'failed', edit_error = ?, updated_at = ?
          WHERE edit_status = 'processing' AND edit_started_at < ?`,
       )
-      .bind(nowIso, beforeIso)
+      .bind(ERROS.edicaoDemorou, nowIso, beforeIso)
       .run();
     return result.meta.changes;
   }

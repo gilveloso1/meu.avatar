@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
+import { ERROS } from "../src/erros";
 import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
 import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, SPEECH_LEAD, STYLES } from "../src/prompt";
@@ -68,7 +69,7 @@ describe("acesso", () => {
 
   it("sem chave do OpenRouter, avisa e desliga o botão", async () => {
     const page = await (await get("/modelo/wan", undefined, null)).text();
-    expect(page).toContain("A criação de vídeos está pausada no momento.");
+    expect(page).toContain(ERROS.criacaoPausadaAviso);
     expect(page).not.toContain("OPENROUTER_API_KEY");
     expect(page).toContain('type="submit" disabled');
   });
@@ -402,7 +403,9 @@ describe("acompanhar", () => {
     const page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: await cookie() } }), api)).text();
     expect(page).toContain('data-refresh=');
     const falhou = await (await call(new Request(`${SITE}/video/${byJob["job-2"]!.id}`, { headers: { cookie: await cookie() } }), api)).text();
-    expect(falhou).toContain("Content policy violation");
+    // O motivo do provedor fica no banco; a tela mostra a frase do catálogo.
+    expect(falhou).toContain(ERROS.videoFalhou);
+    expect(falhou).not.toContain("Content policy violation");
     expect(falhou).toContain("status-line--error");
 
     // Terminado, não consulta mais.
@@ -474,7 +477,8 @@ describe("tratamento do áudio", () => {
     const video = (await studio.treatNextAudio())!;
     expect(video).toMatchObject({ audio_status: "failed", processed_key: null, audio_error: "Tratamento do áudio falhou (HTTP 500): ffmpeg" });
     const page = await (await call(new Request(`${SITE}/video/${video.id}`, { headers: { cookie: await cookie() } }), api, audio)).text();
-    expect(page).toContain("Áudio não tratado: Tratamento do áudio falhou");
+    expect(page).toContain(ERROS.audioFalhou);
+    expect(page).not.toContain("Tratamento do áudio falhou");
     const mp4 = await call(new Request(`${SITE}/videos/${video.id}.mp4`, { headers: { cookie: await cookie() } }), api, audio);
     expect(await mp4.text()).toBe("mp4-falso");
   });
@@ -488,7 +492,7 @@ describe("tratamento do áudio", () => {
     await db.claimAudio(inicio.toISOString());
     expect(await db.claimAudio(inicio.toISOString())).toBeNull(); // ninguém pega o mesmo vídeo duas vezes
     await studio.treatNextAudio(new Date(inicio.getTime() + 21 * 60_000));
-    expect(await db.videoById(pendente!.id)).toMatchObject({ audio_status: "failed", audio_error: "O tratamento do áudio não terminou a tempo." });
+    expect(await db.videoById(pendente!.id)).toMatchObject({ audio_status: "failed", audio_error: ERROS.audioDemorou });
   });
 
   it("sem contêiner, o vídeo fica como veio, sem fila", async () => {
@@ -761,7 +765,8 @@ describe("edição rápida", () => {
     audio!.fail = "Edição rápida falhou (HTTP 500): ffmpeg";
     expect(await studio.editNext()).toMatchObject({ edit_status: "failed", edited_key: null });
     const page = await (await call(new Request(`${SITE}/video/${video.id}`, { headers: { cookie: await cookie() } }), api, audio)).text();
-    expect(page).toContain("Edição rápida falhou: Edição rápida falhou (HTTP 500)");
+    expect(page).toContain(ERROS.edicaoFalhou);
+    expect(page).not.toContain("HTTP 500");
     expect(page).toContain(BOTAO);
   });
 
@@ -773,7 +778,7 @@ describe("edição rápida", () => {
     await db.claimEdit(inicio.toISOString());
     expect(await db.claimEdit(inicio.toISOString())).toBeNull();
     await studio.editNext(new Date(inicio.getTime() + 21 * 60_000));
-    expect(await db.videoById(video.id)).toMatchObject({ edit_status: "failed", edit_error: "A edição rápida não terminou a tempo." });
+    expect(await db.videoById(video.id)).toMatchObject({ edit_status: "failed", edit_error: ERROS.edicaoDemorou });
   });
 
   it("o Wan não tem edição rápida: sem botão e recusada mesmo mandando direto", async () => {
