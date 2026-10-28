@@ -556,13 +556,14 @@ a.frame { display: block; }
 }
 /* Moldura de 12 px; cantos concêntricos: 28 px por fora (extra-large) e 16 px no vídeo (large). */
 .frame {
-  aspect-ratio: 1; margin: 0; padding: 12px; border: 0; overflow: hidden;
+  --frame-pad: 12px; position: relative; aspect-ratio: 1; margin: 0; padding: 0; border: 0; overflow: hidden;
   border-radius: var(--md-sys-shape-corner-extra-large);
   background: var(--md-sys-color-surface-container-lowest); box-shadow: var(--md-sys-elevation-level1);
 }
 .frame::before { z-index: 1; border-radius: inherit; }
-/* O vídeo fica num recorte de cantos de 16 px: a aproximação do hover não passa por cima da moldura. */
-.frame__media { display: block; width: 100%; height: 100%; overflow: hidden; border-radius: var(--md-sys-shape-corner-large); }
+/* O vídeo fica num recorte de cantos de 16 px: a aproximação do hover não passa por cima da moldura.
+   Recorte preso às bordas: o Safari não aceita height:100% sobre a altura que vem do aspect-ratio. */
+.frame__media { position: absolute; inset: var(--frame-pad); display: block; overflow: hidden; border-radius: var(--md-sys-shape-corner-large); }
 .frame video, .frame__placeholder { width: 100%; height: 100%; }
 .frame video { display: block; object-fit: cover; pointer-events: none; background: var(--md-sys-color-surface-container-highest); }
 .frame__placeholder { display: grid; place-items: center; background: var(--md-sys-color-surface-container-highest); }
@@ -857,7 +858,7 @@ a.frame { display: block; }
   .pane--config .form-section, .pane--config .pane__footer { padding-left: 0; padding-right: 0; }
   /* A sobra embaixo do botão só serve no painel que rola por dentro (tela larga). */
   .pane__footer { padding-bottom: 8px; }
-  .frame { padding: 8px; border-radius: var(--md-sys-shape-corner-extra-large); }
+  .frame { --frame-pad: 8px; border-radius: var(--md-sys-shape-corner-extra-large); }
   .vrows__head, .vrow { grid-template-columns: 48px minmax(0, 1fr) 88px; }
   .vrows__head > :nth-child(n + 4), .vrow > :nth-child(n + 4) { display: none; }
   /* O FAB do M3 no celular: preso no canto de baixo, por cima da lista. */
