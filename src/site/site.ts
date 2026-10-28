@@ -177,8 +177,8 @@ export class Site {
 <main class="page" id="conteudo">
   <div class="page__head">
     <div>
-      <h1 class="page__headline">Modelos</h1>
-      <p class="page__intro">Escolha um modelo para criar vídeos e ver os que ele já fez.</p>
+      <h1 class="page__headline">Modelos <span class="pane__count">${cards.length}</span></h1>
+      <p class="page__intro">Escolha um modelo para criar imagens ou vídeos.</p>
     </div>
   </div>
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : emptyState("search", "Nenhum modelo encontrado", `Nada com “${q}” no nome.`)}
@@ -203,6 +203,7 @@ export class Site {
     from,
     title: only && usable[0] ? `Vídeos · ${usable[0].name}` : "Vídeos",
     heading: "h1",
+    intro: only ? "Os vídeos que você gerou com este modelo." : "Todos os vídeos que você gerou.",
     action: `<a class="fab fab--extended interactive" href="/"><span class="icon">add</span>Novo vídeo</a>`,
     empty: q || only ? emptyState("search", "Nenhum vídeo encontrado", "Tente outra busca.") : emptyState("movie", "Nenhum vídeo ainda", "Escolha um modelo para gerar o primeiro."),
     structureOf: (v) => structureById(v.structure)!,
@@ -726,6 +727,8 @@ interface LibraryOptions {
   /** Título da lista e o nível dele (h1 na aba Vídeos, h2 na página do modelo). */
   title: string;
   heading?: "h1" | "h2";
+  /** Frase embaixo do título, no padrão das páginas (Modelos e Vídeos); sem ela, o título é o da lista. */
+  intro?: string;
   /** Ação ao lado do título (o "Novo vídeo" da aba Vídeos). */
   action?: string;
   /** O que mostrar sem vídeos. */
@@ -735,7 +738,10 @@ interface LibraryOptions {
 
 function videoLibrary(videos: Video[], o: LibraryOptions): string {
   const h = o.heading ?? "h2";
-  const head = (count: string) => `<${h} class="library__title">${esc(o.title)} <span class="pane__count"${count === "" ? "" : " data-library-count"}>${count || 0}</span></${h}>`;
+  const head = (count: string) => {
+    const title = `<${h} class="${o.intro ? "page__headline" : "library__title"}">${esc(o.title)} <span class="pane__count"${count === "" ? "" : " data-library-count"}>${count || 0}</span></${h}>`;
+    return o.intro ? `<div>${title}<p class="page__intro">${esc(o.intro)}</p></div>` : title;
+  };
   if (!videos.length) return `<div class="library"><div class="library__head">${head("")}${o.action ?? ""}</div>${o.empty}</div>`;
   const chips = FILTERS.map(
     (f, i) => `<button class="chip interactive" type="button" data-filter="${f.kind ?? ""}" aria-pressed="${i === 0}"><span class="icon chip__check">check</span>${esc(f.label)}</button>`,

@@ -500,6 +500,11 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 .library__title { font: var(--md-sys-typescale-title-large); display: flex; align-items: baseline; gap: 8px; padding: 0 4px; }
 .library__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .library__end { display: flex; align-items: center; gap: 16px; }
+/* Na linha do título, o "Novo vídeo" tem a altura das vistas (40 px) e não flutua; no celular volta a ser FAB. */
+@media (min-width: 600px) {
+  .library__end .fab { height: 40px; padding: 0 24px 0 16px; border-radius: 20px; box-shadow: none; }
+  .library__end .fab:hover { box-shadow: var(--md-sys-elevation-level1); }
+}
 .page .library__title { font: var(--md-sys-typescale-headline-small); }
 .library__tools { margin: 0; align-items: center; }
 .library__divider { width: 1px; height: 24px; margin: 0 4px; background: var(--md-sys-color-outline-variant); }
@@ -784,7 +789,8 @@ a.frame { display: block; }
 }
 .page__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 
-.page__headline { font: var(--md-sys-typescale-headline-small); }
+/* Título das páginas (Modelos e Vídeos): headline, a contagem ao lado e a frase embaixo. */
+.page__headline { display: flex; align-items: baseline; gap: 8px; font: var(--md-sys-typescale-headline-small); }
 .page__intro { margin-top: 4px; font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
 
 .empty {
