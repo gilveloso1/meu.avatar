@@ -106,10 +106,16 @@ português. A lista completa da HeyGen pede uma chave da própria HeyGen.
 **Áudio:** o vídeo pronto não passa pelo contêiner (`treatAudio: false`), porque
 a voz vem pronta do texto para fala. Se a medição mostrar problema, é só ligar.
 
-## Trocar avatar, Seedance 2.0 (src/structures/seedance.ts)
+## Seedance 2.0 (src/structures/seedance.ts)
 
-Estrutura em teste (só o administrador vê). Recebe um vídeo pronto e a foto de
-outra pessoa e devolve o mesmo vídeo com a pessoa da foto no lugar. O pedido
+Estrutura em teste (só o administrador vê). O campo **Uso**, no topo da
+configuração, escolhe o que fazer com o modelo (`USES`); um uso novo é uma
+opção nova, com os seus campos e o seu prompt. Hoje há um só:
+
+### Trocar avatar
+
+Recebe um vídeo pronto e a foto de outra pessoa e devolve o mesmo vídeo com a
+pessoa da foto no lugar. O pedido
 pelo OpenRouter (conferido em 28/10/2026, na referência de
 `POST /api/v1/videos`):
 

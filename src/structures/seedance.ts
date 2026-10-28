@@ -1,7 +1,9 @@
 /**
- * Seedance 2.0 (bytedance/seedance-2.0), troca de avatar: recebe um vídeo
- * pronto e a foto de outra pessoa e devolve o mesmo vídeo com a pessoa da
- * foto no lugar, mantendo cena, câmera, gestos e fala.
+ * Seedance 2.0 (bytedance/seedance-2.0). O campo "Uso" escolhe o que fazer com
+ * o modelo; hoje há um só, a troca de avatar: recebe um vídeo pronto e a foto
+ * de outra pessoa e devolve o mesmo vídeo com a pessoa da foto no lugar,
+ * mantendo cena, câmera, gestos e fala. Um uso novo é uma opção nova em USES,
+ * com os seus campos e o seu prompt.
  *
  * Pedido pelo OpenRouter (conferido em 28/10/2026): o vídeo e a foto vão em
  * `input_references` (`video_url` e `image_url`); só o Seedance 2 em diante
@@ -26,13 +28,16 @@ export const MAX_SWAP_EXTRA = 500;
 /** Duração aceita no vídeo de referência (segundos). */
 export const SOURCE_SECONDS = { min: 2, max: 15 };
 
+/** O que fazer com o modelo. */
+export const USES: Option[] = [{ value: "trocar-avatar", label: "Trocar avatar", description: "Troca a pessoa do vídeo pela da foto." }];
+
 /** De onde vem a roupa: do vídeo (só o rosto e o corpo mudam) ou da foto. */
 export const OUTFITS: Option[] = [
   { value: "video", label: "Do vídeo" },
   { value: "foto", label: "Da foto" },
 ];
 
-/** O prompt de sistema desta estrutura; as instruções extras entram depois. */
+/** O prompt de sistema da troca de avatar; as instruções extras entram depois. */
 export function swapPrompt(outfit: string, extra: string): string {
   const clothes = outfit === "foto" ? "Dress them in the clothes from image 1." : "Keep the clothes from video 1.";
   return [
@@ -46,11 +51,11 @@ export function swapPrompt(outfit: string, extra: string): string {
     .join(" ");
 }
 
-export const SEEDANCE_SWAP: Structure = {
+export const SEEDANCE: Structure = {
   id: "seedance",
-  name: "Trocar avatar",
+  name: "Seedance 2.0",
   model: "bytedance/seedance-2.0",
-  summary: "Troca a pessoa de um vídeo pela da foto, mantendo cena, gestos e fala.",
+  summary: "Vários usos a partir de vídeos e fotos de referência. Hoje: trocar o avatar de um vídeo.",
   icon: "switch_account",
   access: "admin",
   // Em teste: ouvir antes de decidir se a voz passa pelo contêiner.
@@ -63,6 +68,11 @@ export const SEEDANCE_SWAP: Structure = {
     const resolutions = model?.supported_resolutions ?? ["720p"];
     const ratios = model?.supported_aspect_ratios ?? [d.aspectRatio];
     return [
+      {
+        title: "Uso",
+        lead: true,
+        fields: [{ kind: "select", name: "uso", label: "Uso", options: USES, value: USES[0]!.value }],
+      },
       {
         title: "Origem",
         fields: [
@@ -110,6 +120,8 @@ export const SEEDANCE_SWAP: Structure = {
   },
 
   build(values, hasImage, model, video) {
+    const use = USES.find((u) => u.value === values("uso"));
+    if (!use) throw new InputError(ERROS.uso);
     if (!video) throw new InputError(ERROS.videoOrigem);
     if (video.seconds < SOURCE_SECONDS.min || video.seconds > SOURCE_SECONDS.max + 0.5) throw new InputError(ERROS.videoDuracao(SOURCE_SECONDS.min, SOURCE_SECONDS.max));
     if (!hasImage) throw new InputError(ERROS.foto);
@@ -136,7 +148,7 @@ export const SEEDANCE_SWAP: Structure = {
         style: null,
         language: null,
         extra: extra || null,
-        settings: { outfit: outfit.value, source_seconds: video.seconds.toFixed(1) },
+        settings: { use: use.value, outfit: outfit.value, source_seconds: video.seconds.toFixed(1) },
       },
     };
   },
@@ -149,6 +161,7 @@ export const SEEDANCE_SWAP: Structure = {
       // Configurações ilegíveis: mostra só o que der.
     }
     return [
+      { term: "Uso", description: USES.find((u) => u.value === settings.use)?.label ?? "—" },
       { term: "Vídeo de origem", description: settings.source_seconds ? `${settings.source_seconds.replace(".", ",")} s` : "—" },
       { term: "Roupa", description: OUTFITS.find((o) => o.value === settings.outfit)?.label ?? "—" },
       { term: "Instruções extras", description: video.extra ?? "—" },

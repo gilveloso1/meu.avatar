@@ -48,6 +48,8 @@ export type Field =
 export interface Section {
   title: string;
   fields: Field[];
+  /** Vem antes da foto e do vídeo, no topo da configuração (como o "Uso" do Seedance). */
+  lead?: boolean;
 }
 
 /** Padrões do formulário que vêm da configuração (wrangler.jsonc). */

@@ -241,11 +241,13 @@ export class Site {
     const videos = await this.db.videosByStructure(structure.id);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
 
-    // Os arquivos (vídeo de origem e foto) abrem o painel; o resto (a fala inclusive) segue as seções da estrutura.
+    // Os arquivos (vídeo de origem e foto) abrem o painel, depois das seções que vêm antes (o "Uso");
+    // o resto (a fala inclusive) segue as seções da estrutura.
     const fields = sections.flatMap((s) => s.fields);
     const isFile = (f: Field) => f.kind === "image" || f.kind === "video";
     const images = fields.filter(isFile);
-    const rest = sections.map((s) => ({ ...s, fields: s.fields.filter((f) => !isFile(f)) })).filter((s) => s.fields.length);
+    const leads = sections.filter((s) => s.lead);
+    const rest = sections.filter((s) => !s.lead).map((s) => ({ ...s, fields: s.fields.filter((f) => !isFile(f)) })).filter((s) => s.fields.length);
 
     const body = `
 <main class="workspace" id="conteudo">
@@ -253,6 +255,7 @@ export class Site {
     <section class="pane pane--config" aria-labelledby="configuracao">
       <div class="pane__head"><h2 class="pane__headline" id="configuracao">Configuração</h2></div>
       <div class="pane__body" id="configuracao-corpo">
+        ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
         ${images.map((f) => formField(f, value)).join("")}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
@@ -324,7 +327,7 @@ ${error ? snackbar(error) : ""}`;
     const from: Record<string, string | null | undefined> = {
       fala: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
       estilo: v.style, idioma: v.language, instrucoes: v.extra, movimento: settings.motion_prompt ?? v.extra,
-      voz: settings.voice_id, expressividade: settings.expressiveness, roupa: settings.outfit,
+      voz: settings.voice_id, expressividade: settings.expressiveness, roupa: settings.outfit, uso: settings.use,
     };
     return (name) => from[name] || base(name);
   }
@@ -681,7 +684,7 @@ const FREE_TEXT = new Set(["Movimento", "Instruções extras"]);
 /** Ícone de cada linha dos detalhes do vídeo (precisa estar em ICONS); o que faltar usa "info". */
 const DETAIL_ICONS: Record<string, string> = {
   Modelo: "movie", Voz: "record_voice_over", Expressividade: "face", Movimento: "gesture",
-  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", "Vídeo de origem": "videocam", Roupa: "checkroom",
+  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", "Vídeo de origem": "videocam", Roupa: "checkroom", Uso: "auto_awesome",
   Duração: "schedule", Resolução: "hd", Formato: "aspect_ratio", Custo: "payments", "Criado em": "calendar_today",
 };
 

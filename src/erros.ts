@@ -66,6 +66,7 @@ export const ERROS = {
   foto: campo("Escolha a foto do avatar."),
   fotoTipo: campo("Use uma foto JPG, PNG ou WebP."),
   fotoTamanho: campo("Use uma foto de até 10 MB."),
+  uso: campo("Escolha um uso da lista."),
   videoOrigem: campo("Escolha o vídeo de origem."),
   videoTipo: campo("Use um vídeo MP4 ou MOV."),
   videoTamanho: (max: number) => campo(`Use um vídeo de até ${max} MB.`),

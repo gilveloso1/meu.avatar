@@ -9,7 +9,7 @@ import { planParts, RULES } from "../src/quickedit";
 import { mp4Duration } from "../src/mp4";
 import { estimate } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
-import { outputSeconds, SEEDANCE_SWAP, swapPrompt } from "../src/structures/seedance";
+import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
 import { call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
@@ -584,7 +584,7 @@ describe("HeyGen Avatar IV", () => {
   });
 });
 
-describe("Trocar avatar (Seedance 2.0)", () => {
+describe("Seedance 2.0", () => {
   const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
   const origem = (seconds = 8.4, type = "video/mp4") => new File([fakeMp4(seconds)], "cena.mp4", { type });
 
@@ -604,15 +604,17 @@ describe("Trocar avatar (Seedance 2.0)", () => {
 
   it("o custo é por token, com o vídeo enviado contando junto", () => {
     const values = (name: string) => ({ resolucao: "720p", formato: "9:16" })[name] ?? "";
-    const perSecond = Number(SEEDANCE_SWAP.prices!(SEEDANCE)["720p_9:16"]);
+    const perSecond = Number(SEEDANCE_STRUCTURE.prices!(SEEDANCE)["720p_9:16"]);
     expect(perSecond).toBeCloseTo(((720 * 1280 * 24) / 1024) * 0.0000043 * 2);
-    expect(Number(SEEDANCE_SWAP.prices!(SEEDANCE)["1080p_16:9"])).toBeCloseTo(((1920 * 1080 * 24) / 1024) * 0.0000047 * 2);
+    expect(Number(SEEDANCE_STRUCTURE.prices!(SEEDANCE)["1080p_16:9"])).toBeCloseTo(((1920 * 1080 * 24) / 1024) * 0.0000047 * 2);
     // Antes de escolher o vídeo, a duração não se sabe no servidor: sem estimativa.
-    expect(estimate(SEEDANCE_SWAP, SEEDANCE, values)).toBeUndefined();
+    expect(estimate(SEEDANCE_STRUCTURE, SEEDANCE, values)).toBeUndefined();
   });
 
-  it("o formulário pede o vídeo de origem e a foto, sem fala", async () => {
+  it("o formulário abre com o uso (hoje, trocar avatar) e pede o vídeo de origem e a foto, sem fala", async () => {
     const page = await (await get("/modelo/seedance")).text();
+    expect(page).toMatch(/<select class="text-field__input" id="uso" name="uso"[^>]*><option value="trocar-avatar" selected/);
+    expect(page.indexOf('name="uso"')).toBeLessThan(page.indexOf('name="video"'));
     expect(page).toMatch(/<input type="file" name="video" accept="video\/mp4,video\/quicktime"[^>]* required/);
     expect(page).toMatch(/<input type="file" name="imagem"[^>]* required/);
     expect(page).toContain('name="roupa" value="video" checked');
@@ -645,10 +647,11 @@ describe("Trocar avatar (Seedance 2.0)", () => {
     const [criado] = await new Db(env.DB).recentVideos();
     expect(criado).toMatchObject({ structure: "seedance", duration: 8, prompt: "mantém os óculos", extra: "mantém os óculos", request_prompt: req!.prompt });
     const settings = JSON.parse(criado!.settings!);
-    expect(settings).toMatchObject({ outfit: "foto", source_seconds: "8.4" });
+    expect(settings).toMatchObject({ use: "trocar-avatar", outfit: "foto", source_seconds: "8.4" });
     expect(`${SITE}/midia/${settings.source_key}`).toBe(video.video_url.url);
 
     const detalhes = await (await get(`/video/${criado!.id}`, undefined, api)).text();
+    expect(detalhes).toContain('<dt class="qe-result__label">Uso</dt><dd class="qe-result__value">Trocar avatar</dd>');
     expect(detalhes).toContain('<dt class="qe-result__label">Vídeo de origem</dt><dd class="qe-result__value">8,4 s</dd>');
     expect(detalhes).toContain('<dt class="qe-result__label">Roupa</dt><dd class="qe-result__value">Da foto</dd>');
     expect(detalhes).toContain('<dt class="qe-result__label">Duração</dt><dd class="qe-result__value">8 s</dd>');
@@ -664,9 +667,10 @@ describe("Trocar avatar (Seedance 2.0)", () => {
     expect(detalhes).not.toContain(`type="button" data-copy=`);
   });
 
-  it("recusa sem vídeo, vídeo curto, longo, de outro tipo ou que não abre, sem foto e roupa inventada", async () => {
+  it("recusa uso fora da lista, sem vídeo, vídeo curto, longo, de outro tipo ou que não abre, sem foto e roupa inventada", async () => {
     const api = new FakeVideoApi();
     const casos: [Record<string, string | File>, string][] = [
+      [{ uso: "inventado", video: origem(), imagem: foto() }, ERROS.uso],
       [{ imagem: foto() }, ERROS.videoOrigem],
       [{ video: origem(1.2), imagem: foto() }, ERROS.videoDuracao(2, 15)],
       [{ video: origem(20), imagem: foto() }, ERROS.videoDuracao(2, 15)],
@@ -684,7 +688,7 @@ describe("Trocar avatar (Seedance 2.0)", () => {
     expect(await new Db(env.DB).recentVideos()).toHaveLength(0);
   });
 
-  it("conta comum não vê nem usa a troca de avatar", async () => {
+  it("conta comum não vê nem usa o Seedance", async () => {
     const api = new FakeVideoApi();
     const member = await memberCookie();
     expect(await (await get("/", member)).text()).not.toContain("/modelo/seedance");

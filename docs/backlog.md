@@ -8,8 +8,8 @@ que ficou para depois) no mesmo PR.
 
 1. **Testar outro modelo de vídeo com áudio próprio** (em andamento: HeyGen
    Avatar IV no ar para o administrador testar)
-2. **Trocar avatar** (em andamento: Seedance 2.0 no ar para o administrador
-   testar; ver abaixo)
+2. **Trocar avatar** (em andamento: Seedance 2.0, uso "Trocar avatar", pronto
+   para o administrador testar; ver abaixo)
 3. Voz gerada à parte e avatar falante (o HeyGen Avatar IV já faz isso numa
    chamada só; ver o item 1)
 4. Convites do administrador
@@ -33,7 +33,7 @@ No ar em <https://meuavatar.ia.br> (e no workers.dev). O que já funciona e
   por modelo, com a aba Vídeos ao lado (todos os vídeos, com filtro por
   status); a página do modelo tem três painéis: configuração, o vídeo
   escolhido com a caixa da fala, e os vídeos daquele modelo. Cada vídeo guarda a estrutura que o gerou. Hoje: Wan 3.0 (para todos), HeyGen Avatar
-  IV e Trocar avatar, pelo Seedance 2.0 (em teste, só o administrador).
+  IV e Seedance 2.0, com o uso "Trocar avatar" (em teste, só o administrador).
 
 O problema que motiva o item 1: pelo OpenRouter, o Wan 3.0 devolve a voz alta
 demais, cortada e com chiado. O mesmo modelo no Higgsfield sai limpo (os
@@ -125,9 +125,10 @@ caminho para mandar uma voz pronta e o modelo sincronizar a boca.
 
 Trocar só a pessoa de um vídeo pronto pela de uma foto, mantendo cena, câmera,
 gestos e fala. Escolhido o Seedance 2.0 (`bytedance/seedance-2.0`): recebe o
-vídeo e a foto como referências. Está como estrutura própria
-(`src/structures/seedance.ts`, explicada em `docs/prompt.md`), visível só
-para o administrador. O vídeo vem do computador (MP4 ou MOV, de 2 a 15 s).
+vídeo e a foto como referências. Está na estrutura do Seedance
+(`src/structures/seedance.ts`, explicada em `docs/prompt.md`) como a opção
+"Trocar avatar" do campo Uso, para o modelo servir a outros usos depois;
+visível só para o administrador. O vídeo vem do computador (MP4 ou MOV, de 2 a 15 s).
 
 Próximos passos:
 

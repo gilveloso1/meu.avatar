@@ -158,7 +158,7 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 ## Modelos: uma estrutura para cada
 
 - Cada modelo de vídeo é uma estrutura em `src/structures/` (hoje `wan.ts`,
-  `heygen.ts` e `seedance.ts`, a troca de avatar): campos do formulário, prompt de sistema, montagem do pedido,
+  `heygen.ts` e `seedance.ts`, com o campo Uso; hoje, a troca de avatar): campos do formulário, prompt de sistema, montagem do pedido,
   regra de custo, se o áudio passa pelo contêiner e se o vídeo pronto tem o
   botão "Edição rápida" (`quickEdit`, `container/editar.py`). A tela inicial tem um card
   por modelo e uma aba com os vídeos de todos (`/videos`). As telas estão em

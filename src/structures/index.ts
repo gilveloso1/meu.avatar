@@ -1,14 +1,14 @@
 import type { Role } from "../db";
 import type { VideoModel } from "../openrouter";
 import { HEYGEN_AVATAR, speechSeconds } from "./heygen";
-import { SEEDANCE_SWAP } from "./seedance";
+import { SEEDANCE } from "./seedance";
 import type { CostRule, Structure, Values } from "./types";
 import { WAN } from "./wan";
 
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, SEEDANCE_SWAP];
+export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, SEEDANCE];
 
 export function structureById(id: string | null | undefined): Structure | undefined {
   return STRUCTURES.find((s) => s.id === id);
