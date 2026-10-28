@@ -659,6 +659,8 @@ a.frame { display: block; }
 .qe-result__value { font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface); }
 .viewer .quick-edit__head { gap: 12px; }
 .viewer .quick-edit__preview { width: 100%; justify-content: center; }
+.quick-edit__hint { margin-top: -16px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); text-align: center; }
+.qe-busy .linear-progress { --progress-gap: var(--md-sys-color-surface-container-highest); }
 .viewer .quick-edit__fields { flex-direction: column; flex-wrap: nowrap; gap: 24px; }
 .viewer .quick-edit .segmented-field { flex: none; }
 .viewer .quick-edit .segmented-field__label { font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }

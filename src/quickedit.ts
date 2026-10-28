@@ -16,16 +16,16 @@ import { InputError, type Option } from "./structures/types";
  * e as que ficam em volta de falas curtas sobram mais longas.
  */
 export const PAUSES: (Option & { pause: number })[] = [
-  { value: "curta", label: "Curtas", pause: 0.1, description: "Ritmo rápido, de Reels e TikTok." },
-  { value: "media", label: "Médias", pause: 0.2, description: "Respiro curto entre as frases." },
-  { value: "longa", label: "Longas", pause: 0.35, description: "Só encurta as pausas grandes." },
+  { value: "curta", label: "Curtas", pause: 0.1, description: "Corta quase toda a pausa." },
+  { value: "media", label: "Médias", pause: 0.2, description: "Deixa um respiro curto." },
+  { value: "longa", label: "Longas", pause: 0.35, description: "Corta só as pausas longas." },
 ];
 
 /** Câmera: os enquadramentos, em ordem, um a cada corte (1 é o quadro todo; "Close" alterna zoom e close). */
 export const CAMERAS: (Option & { zooms: number[] })[] = [
-  { value: "parada", label: "Parada", zooms: [1], description: "Sem zoom, só tira as pausas." },
-  { value: "zoom", label: "Zoom", zooms: [1, 1.25], description: "Alterna o quadro, como troca de câmera." },
-  { value: "close", label: "Close", zooms: [1, 1.25, 1, 1.5], description: "Chega bem perto do rosto. O mais dinâmico." },
+  { value: "parada", label: "Parada", zooms: [1], description: "Quadro fixo, sem zoom." },
+  { value: "zoom", label: "Zoom", zooms: [1, 1.25], description: "Alterna com zoom médio." },
+  { value: "close", label: "Close", zooms: [1, 1.25, 1, 1.5], description: "Alterna com zoom perto." },
 ];
 
 export const DEFAULT_PAUSE = "media";
