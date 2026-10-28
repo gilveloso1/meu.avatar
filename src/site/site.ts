@@ -760,7 +760,7 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
         const status = cardStatus(v), structure = o.structureOf(v);
         return `<a class="vrow interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" role="row" data-video="${v.id}" data-kind="${status.kind}">
           <span class="vrow__thumb" role="cell">${thumb(v, status)}</span>
-          <span class="vrow__text" role="cell">${esc(v.prompt)}</span>
+          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(v.prompt)}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
           <span class="vrow__status vrow__status--${status.kind}" role="cell"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label.replace(/ · .*/, ""))}</span>
           <span role="cell">${esc(durationLabel(v, structure))}</span>
           <span class="vrow__wide" role="cell">${esc(`${v.aspect_ratio} · ${v.resolution}`)}</span>

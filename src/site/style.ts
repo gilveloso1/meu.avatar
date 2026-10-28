@@ -544,7 +544,14 @@ a.frame { display: block; }
 .vrow__thumb .frame__placeholder { width: 100%; height: 100%; display: grid; place-items: center; background: var(--md-sys-color-surface-container-highest); }
 .vrow__thumb .icon-tile { width: 32px; height: 32px; }
 .vrow__thumb .icon-tile .icon { font-size: 18px; }
-.vrow__text { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vrow__text { display: flex; flex-direction: column; min-width: 0; }
+.vrow__headline, .vrow__support { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vrow__headline { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface); }
+/* Linha de apoio (data, modelo e duração, ou o status): só no celular, onde não há as outras colunas. */
+.vrow__support { display: none; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.vrow[data-kind="error"] .vrow__support { color: var(--md-sys-color-error); }
+/* Sem vídeo para mostrar, os títulos das colunas somem junto. */
+.library:has([data-library-empty]:not([hidden])) .vrows__head { display: none; }
 .vrow__status { display: inline-flex; align-items: center; gap: 6px; }
 .vrow__status .icon { font-size: 18px; }
 .vrow__status--done .icon { color: var(--md-sys-color-primary); }
@@ -859,8 +866,13 @@ a.frame { display: block; }
   /* A sobra embaixo do botão só serve no painel que rola por dentro (tela larga). */
   .pane__footer { padding-bottom: 8px; }
   .frame { --frame-pad: 8px; border-radius: var(--md-sys-shape-corner-extra-large); }
-  .vrows__head, .vrow { grid-template-columns: 48px minmax(0, 1fr) 88px; }
-  .vrows__head > :nth-child(n + 4), .vrow > :nth-child(n + 4) { display: none; }
+  /* Celular: lista de duas linhas do M3, sem títulos de coluna; o status fica só no ícone à direita. */
+  .library[data-view="d"] .vrows__head { display: none; }
+  .vrow { grid-template-columns: 48px minmax(0, 1fr) 24px; min-height: 72px; }
+  .vrow > :nth-child(n + 4) { display: none; }
+  .vrow__support { display: block; }
+  .vrow__status { font-size: 0; }
+  .vrow__status .icon { font-size: 24px; }
   /* O FAB do M3 no celular: preso no canto de baixo, por cima da lista. */
   .library__end .fab { position: fixed; right: 16px; bottom: 16px; z-index: 5; box-shadow: var(--md-sys-elevation-level3, var(--md-sys-elevation-level2)); }
 }
