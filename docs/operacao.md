@@ -224,6 +224,17 @@ do Google (`mirror.gcr.io`), porque o Docker Hub limita downloads.
 No ambiente cloud, a rede precisa liberar `registry.cloudflare.com` (para onde
 o `wrangler deploy` manda a imagem), além de `api.cloudflare.com`.
 
+O script roda no Linux e no Mac (no Mac ele confere com `shasum`, porque o
+`sha256sum` de lá não tem `--quiet`). Sem Docker (o Mac do usuário não tem) e
+sem mudança em `container/`, publique só o Worker, que mantém a imagem que já
+está no ar (28/10/2026):
+
+```bash
+npx wrangler deploy --containers-rollout=none < /dev/null
+```
+
+Mudou algo em `container/`: aí precisa do `npm run deploy` com o Docker rodando.
+
 Teste local da imagem (25/10/2026), com os limites do tipo "basic"
 (`docker run --cpus 0.25 --memory 1g`): vídeo de 25 s em 720p tratado em
 87 s; resultado igual ao E2 aprovado (correlação 1,000), −13,9 LUFS, sem
