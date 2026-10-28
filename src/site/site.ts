@@ -56,6 +56,10 @@ const FILTERS = [
 
 const SURFACE_LIGHT = /--md-sys-color-surface: (#\w+)/.exec(LIGHT)![1];
 const SURFACE_DARK = /--md-sys-color-surface: (#\w+)/.exec(DARK)![1];
+const PRIMARY_LIGHT = /--md-sys-color-primary: (#\w+)/.exec(LIGHT)![1];
+
+/** Ícone da aba: o logo da barra (o símbolo "face" num quadrado primary de cantos medium), em SVG. */
+const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="12" fill="${PRIMARY_LIGHT}"/><svg x="8" y="8" width="24" height="24" viewBox="0 -960 960 960"><path fill="#fff" d="M324.5-404.5Q310-419 310-440t14.5-35.5Q339-490 360-490t35.5 14.5Q410-461 410-440t-14.5 35.5Q381-390 360-390t-35.5-14.5Zm240 0Q550-419 550-440t14.5-35.5Q579-490 600-490t35.5 14.5Q650-461 650-440t-14.5 35.5Q621-390 600-390t-35.5-14.5ZM480-160q134 0 227-93t93-227q0-24-3-46.5T786-570q-21 5-42 7.5t-44 2.5q-91 0-172-39T390-708q-32 78-91.5 135.5T160-486v6q0 134 93 227t227 93Zm0 80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm-54-715q42 70 114 112.5T700-640q14 0 27-1.5t27-3.5q-42-70-114-112.5T480-800q-14 0-27 1.5t-27 3.5ZM177-581q51-29 89-75t57-103q-51 29-89 75t-57 103Zm249-214Zm-103 36Z"/></svg></svg>`;
 
 const STATUS: Record<VideoStatus, { label: string; icon: string; kind: "busy" | "done" | "error" }> = {
   submitting: { label: "Enviando", icon: "send", kind: "busy" },
@@ -85,6 +89,11 @@ export class Site {
     // A foto do avatar é baixada pelo provedor de vídeo, sem login.
     if (!post && path.startsWith("/midia/avatares/")) {
       return this.object(request, path.slice("/midia/".length), "public, max-age=86400");
+    }
+
+    // Ícone da aba, sem login (o navegador também pede /favicon.ico por conta própria).
+    if (!post && (path === "/favicon.svg" || path === "/favicon.ico")) {
+      return new Response(FAVICON, { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" } });
     }
 
     // Formulário de outro site tentando agir em nome de quem está logado.
@@ -1024,6 +1033,7 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>${esc(title)}</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta name="theme-color" content="${SURFACE_LIGHT}" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="${SURFACE_DARK}" media="(prefers-color-scheme: dark)">
   <link rel="preconnect" href="https://fonts.googleapis.com">
