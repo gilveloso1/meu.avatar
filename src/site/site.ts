@@ -56,6 +56,10 @@ const FILTERS = [
 
 const SURFACE_LIGHT = /--md-sys-color-surface: (#\w+)/.exec(LIGHT)![1];
 const SURFACE_DARK = /--md-sys-color-surface: (#\w+)/.exec(DARK)![1];
+const PRIMARY_LIGHT = /--md-sys-color-primary: (#\w+)/.exec(LIGHT)![1];
+
+/** Ícone da aba: o logo da barra (o símbolo "face" num quadrado primary de cantos medium), em SVG. */
+const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="12" fill="${PRIMARY_LIGHT}"/><svg x="8" y="8" width="24" height="24" viewBox="0 -960 960 960"><path fill="#fff" d="M324.5-404.5Q310-419 310-440t14.5-35.5Q339-490 360-490t35.5 14.5Q410-461 410-440t-14.5 35.5Q381-390 360-390t-35.5-14.5Zm240 0Q550-419 550-440t14.5-35.5Q579-490 600-490t35.5 14.5Q650-461 650-440t-14.5 35.5Q621-390 600-390t-35.5-14.5ZM480-160q134 0 227-93t93-227q0-24-3-46.5T786-570q-21 5-42 7.5t-44 2.5q-91 0-172-39T390-708q-32 78-91.5 135.5T160-486v6q0 134 93 227t227 93Zm0 80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm-54-715q42 70 114 112.5T700-640q14 0 27-1.5t27-3.5q-42-70-114-112.5T480-800q-14 0-27 1.5t-27 3.5ZM177-581q51-29 89-75t57-103q-51 29-89 75t-57 103Zm249-214Zm-103 36Z"/></svg></svg>`;
 
 const STATUS: Record<VideoStatus, { label: string; icon: string; kind: "busy" | "done" | "error" }> = {
   submitting: { label: "Enviando", icon: "send", kind: "busy" },
@@ -85,6 +89,11 @@ export class Site {
     // A foto do avatar é baixada pelo provedor de vídeo, sem login.
     if (!post && path.startsWith("/midia/avatares/")) {
       return this.object(request, path.slice("/midia/".length), "public, max-age=86400");
+    }
+
+    // Ícone da aba, sem login (o navegador também pede /favicon.ico por conta própria).
+    if (!post && (path === "/favicon.svg" || path === "/favicon.ico")) {
+      return new Response(FAVICON, { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" } });
     }
 
     // Formulário de outro site tentando agir em nome de quem está logado.
@@ -168,8 +177,8 @@ export class Site {
 <main class="page" id="conteudo">
   <div class="page__head">
     <div>
-      <h1 class="page__headline">Modelos</h1>
-      <p class="page__intro">Escolha um modelo para criar vídeos e ver os que ele já fez.</p>
+      <h1 class="page__headline">Modelos <span class="pane__count">${cards.length}</span></h1>
+      <p class="page__intro">Escolha um modelo para criar imagens ou vídeos.</p>
     </div>
   </div>
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : emptyState("search", "Nenhum modelo encontrado", `Nada com “${q}” no nome.`)}
@@ -194,6 +203,7 @@ export class Site {
     from,
     title: only && usable[0] ? `Vídeos · ${usable[0].name}` : "Vídeos",
     heading: "h1",
+    intro: only ? "Os vídeos que você gerou com este modelo." : "Todos os vídeos que você gerou.",
     action: `<a class="fab fab--extended interactive" href="/"><span class="icon">add</span>Novo vídeo</a>`,
     empty: q || only ? emptyState("search", "Nenhum vídeo encontrado", "Tente outra busca.") : emptyState("movie", "Nenhum vídeo ainda", "Escolha um modelo para gerar o primeiro."),
     structureOf: (v) => structureById(v.structure)!,
@@ -705,7 +715,7 @@ function dateGroup(iso: string, now = Date.now()): string {
 }
 
 /**
- * A área central: os vídeos do modelo agrupados por data, em cards quadrados numa moldura
+ * A área central: os vídeos do modelo agrupados por data, em cards quadrados só com a imagem
  * (três tamanhos) ou em detalhes (uma linha por vídeo, com as colunas). Filtro, ordem e
  * vista trocam no navegador, sem recarregar: o que está no formulário não se perde.
  */
@@ -717,6 +727,8 @@ interface LibraryOptions {
   /** Título da lista e o nível dele (h1 na aba Vídeos, h2 na página do modelo). */
   title: string;
   heading?: "h1" | "h2";
+  /** Frase embaixo do título, no padrão das páginas (Modelos e Vídeos); sem ela, o título é o da lista. */
+  intro?: string;
   /** Ação ao lado do título (o "Novo vídeo" da aba Vídeos). */
   action?: string;
   /** O que mostrar sem vídeos. */
@@ -726,7 +738,10 @@ interface LibraryOptions {
 
 function videoLibrary(videos: Video[], o: LibraryOptions): string {
   const h = o.heading ?? "h2";
-  const head = (count: string) => `<${h} class="library__title">${esc(o.title)} <span class="pane__count"${count === "" ? "" : " data-library-count"}>${count || 0}</span></${h}>`;
+  const head = (count: string) => {
+    const title = `<${h} class="${o.intro ? "page__headline" : "library__title"}">${esc(o.title)} <span class="pane__count"${count === "" ? "" : " data-library-count"}>${count || 0}</span></${h}>`;
+    return o.intro ? `<div>${title}<p class="page__intro">${esc(o.intro)}</p></div>` : title;
+  };
   if (!videos.length) return `<div class="library"><div class="library__head">${head("")}${o.action ?? ""}</div>${o.empty}</div>`;
   const chips = FILTERS.map(
     (f, i) => `<button class="chip interactive" type="button" data-filter="${f.kind ?? ""}" aria-pressed="${i === 0}"><span class="icon chip__check">check</span>${esc(f.label)}</button>`,
@@ -1024,6 +1039,7 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>${esc(title)}</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta name="theme-color" content="${SURFACE_LIGHT}" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="${SURFACE_DARK}" media="(prefers-color-scheme: dark)">
   <link rel="preconnect" href="https://fonts.googleapis.com">
