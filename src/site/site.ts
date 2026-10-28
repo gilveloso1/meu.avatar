@@ -43,7 +43,7 @@ const ICONS = [
   "add", "apps", "auto_awesome", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "calendar_today", "check", "check_circle", "chevron_left", "chevron_right",
   "close", "content_copy", "content_cut", "crop_square", "download", "edit", "error", "face", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq",
   "grid_view", "hd", "hourglass_top", "info", "lock", "logout", "more_vert", "movie", "notes", "palette", "pause", "payments", "person_add", "play_arrow",
-  "record_voice_over", "refresh", "schedule", "search", "send", "swap_vert", "translate", "videocam", "view_list", "volume_off", "volume_up",
+  "record_voice_over", "refresh", "replay", "schedule", "search", "send", "swap_vert", "translate", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -334,6 +334,7 @@ ${error ? snackbar(error) : ""}`;
     const showOriginal = url.searchParams.has("original");
     const status = cardStatus(v);
     const quick = canQuickEdit(v, structure);
+    const editing = v.status === "completed" && (v.edit_status === "pending" || v.edit_status === "processing");
     const edited = Boolean(v.edited_key) && !showOriginal;
     const src = edited ? editedSrc(v) : videoSrc(v);
     const ratio = esc(v.aspect_ratio.replace(":", " / "));
@@ -373,6 +374,7 @@ ${error ? snackbar(error) : ""}`;
     const avatar = v.image_key?.startsWith("avatares/") ? `<img class="viewer__avatar" src="/midia/${esc(v.image_key)}" alt="Foto do avatar">` : "";
     const info = `
         <div class="viewer__panel" data-tab-panel="info">
+          ${editing ? `<section class="viewer__card qe-busy" role="status"><h2 class="qe-result__title">Editando o vídeo</h2><div class="linear-progress" aria-label="Editando o vídeo"></div><p class="qe-result__note">Fica pronto em 1 a 2 min.</p></section>` : ""}
           ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
           <section class="viewer__section">
             <div class="viewer__section-head"><h2 class="viewer__title">Texto</h2><button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button></div>
@@ -622,6 +624,7 @@ function quickEditPreview(v: Video, showOriginal = false): string {
             ${segmented("camera", "Câmera", CAMERAS, camera?.value ?? DEFAULT_CAMERA, "edicao-rapida")}
           </div>
           <button class="button button--tonal interactive quick-edit__preview" type="button" data-qe-preview><span class="icon">auto_awesome</span><span>Gerar prévia</span></button>
+          <p class="quick-edit__hint" data-qe-hint hidden>Tocando no player.</p>
           <input type="hidden" name="trechos" form="edicao-rapida" data-qe-parts>
           <div class="quick-edit__actions">
             <button class="button button--outlined interactive" type="button" data-qe-close>Cancelar</button>
@@ -1277,11 +1280,14 @@ const SCRIPT = `(() => {
       const setIcon = (b, icon, label) => { b.querySelector(".icon").textContent = icon; b.setAttribute("aria-label", label); b.title = label; };
       const sync = () => {
         if (previewing()) {
-          const on = qePlay && qePlay.querySelector(".icon").textContent === "pause";
-          setIcon(playBtn, on ? "pause" : "play_arrow", on ? "Pausar a prévia" : "Tocar a prévia");
+          const icon = qePlay ? qePlay.querySelector(".icon").textContent : "play_arrow";
+          setIcon(playBtn, icon, qePlay ? qePlay.getAttribute("aria-label") : "Tocar a prévia");
           // O tempo da prévia vem como "0,5 s / 6,0 s": vira o mesmo formato do vídeo (0:00 / 0:06).
           const n = qeTime ? (qeTime.textContent.match(/[\\d,]+/g) || []).map((x) => Number(x.replace(",", "."))) : [];
           time.textContent = n.length === 2 ? clock(n[0]) + " / " + clock(n[1]) : "";
+          // O slider não busca na prévia, mas mostra até onde ela foi.
+          const p = n.length === 2 && n[1] ? Math.min(1, n[0] / n[1]) : 0;
+          seek.value = String(Math.round(p * 1000)); seek.style.setProperty("--p", p * 100 + "%");
           seek.disabled = true; bar.classList.add("is-preview");
           return;
         }
@@ -1539,15 +1545,16 @@ const PREVIEW_SCRIPT = `(() => {
         }
         feed();
       },
-      error: () => { summary.textContent = "A prévia falhou neste navegador. O vídeo editado sai com as escolhas abaixo."; },
+      error: () => { summary.textContent = "Prévia indisponível. Toque em Gerar editado para criar o vídeo mesmo assim."; },
     });
     decoder.configure({ codec: track.codec, description: track.description, codedWidth: track.width, codedHeight: track.height });
     feed();
   };
 
-  const setPlaying = (on) => {
-    play.querySelector(".icon").textContent = on ? "pause" : "play_arrow";
-    play.setAttribute("aria-label", on ? "Pausar a prévia" : "Tocar a prévia");
+  // No fim, o tocar vira "ver de novo": a prévia não parece travada.
+  const setPlaying = (on, ended) => {
+    play.querySelector(".icon").textContent = on ? "pause" : ended ? "replay" : "play_arrow";
+    play.setAttribute("aria-label", on ? "Pausar a prévia" : ended ? "Ver a prévia de novo" : "Tocar a prévia");
     play.title = play.getAttribute("aria-label");
   };
   const help = () => {
@@ -1587,7 +1594,7 @@ const PREVIEW_SCRIPT = `(() => {
         row("videocam", "Trocas de câmera", shots ? String(shots) : "Nenhuma"),
         row("schedule", "Duração", fmt(total) + (saved >= 0.05 ? " · " + fmt(saved) + " a menos" : " · sem mudança")),
       );
-    } else summary.textContent = "Não encontramos fala no áudio deste vídeo, então não há pausas para cortar.";
+    } else summary.textContent = "Sem pausas para cortar.";
     play.disabled = !parts.length || !track;
     clock.textContent = fmt(0) + " / " + fmt(total);
     help();
@@ -1613,7 +1620,7 @@ const PREVIEW_SCRIPT = `(() => {
   const tick = () => {
     if (!run || run.paused) return;
     const t = actx.currentTime - run.t0;
-    if (t >= total) { stop(); restart(); clock.textContent = fmt(0) + " / " + fmt(total); return; }
+    if (t >= total) { stop(); restart(); setPlaying(false, true); clock.textContent = fmt(total) + " / " + fmt(total); return; }
     if (t >= 0) {
       let k = 0;
       while (k + 1 < parts.length && t >= starts[k + 1]) k++;
@@ -1643,7 +1650,10 @@ const PREVIEW_SCRIPT = `(() => {
   // pronta, toca pela barra do player (o botão não vira um segundo tocar).
   const generate = qe.querySelector("[data-qe-preview]");
   const setGenerate = (icon, label, disabled) => { generate.firstElementChild.textContent = icon; generate.lastElementChild.textContent = label; generate.disabled = disabled; };
-  const intro = () => { summary.textContent = "Escolha as pausas e a câmera e toque em Gerar prévia para ver o resultado."; };
+  const hint = qe.querySelector("[data-qe-hint]");
+  const HINT = hint.textContent;
+  let stale = false;
+  const intro = () => { summary.textContent = "Escolha os ajustes e gere a prévia."; };
   opener.addEventListener("click", () => {
     qe.hidden = false; opener.hidden = true;
     help(); intro();
@@ -1657,7 +1667,7 @@ const PREVIEW_SCRIPT = `(() => {
     try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
     main.pause();
     if (canvas) canvas.hidden = false;
-    if (silences) { build(); return setGenerate("check", "Prévia gerada", true); }
+    if (silences) { build(); stale = false; hint.textContent = HINT; hint.hidden = !track; return setGenerate("check", "Prévia gerada", true); }
     summary.textContent = "Analisando o vídeo…";
     play.disabled = true;
     try {
@@ -1687,9 +1697,10 @@ const PREVIEW_SCRIPT = `(() => {
       } catch {}
       build();
       setGenerate("check", "Prévia gerada", true);
-      if (!track) { const note = document.createElement("p"); note.className = "qe-result__note"; note.textContent = "Este navegador não mostra a prévia, mas o vídeo editado sai com as escolhas abaixo."; summary.append(note); }
+      hint.hidden = !track;
+      if (!track) { const note = document.createElement("p"); note.className = "qe-result__note"; note.textContent = "Prévia indisponível. Toque em Gerar editado para criar o vídeo mesmo assim."; summary.append(note); }
     } catch {
-      summary.textContent = "Não deu para analisar o vídeo neste navegador. O vídeo editado sai com as escolhas abaixo, sem prévia.";
+      summary.textContent = "Prévia indisponível. Toque em Gerar editado para criar o vídeo mesmo assim.";
       setGenerate("auto_awesome", "Gerar prévia", false);
     }
   });
@@ -1699,12 +1710,27 @@ const PREVIEW_SCRIPT = `(() => {
     for (const f of frames) f.frame.close();
     frames = []; drawn = false; decoder = null;
     if (canvas) canvas.hidden = true;
-    qe.hidden = true; opener.hidden = false; controls.hidden = true;
+    qe.hidden = true; opener.hidden = false; controls.hidden = true; hint.hidden = true;
     player.classList.remove("is-previewing");
   });
   // Trocar as escolhas com a prévia gerada refaz a prévia na hora.
-  qe.addEventListener("change", () => { help(); if (silences && player.classList.contains("is-previewing")) build(); });
-  form.addEventListener("submit", () => { qe.querySelector("[type=submit]").disabled = true; });
+  // Trocar uma escolha com a prévia pronta não mexe nela: o "Gerar prévia" volta a valer
+  // e refaz na hora com a análise já feita.
+  qe.addEventListener("change", () => {
+    help();
+    if (!silences || !player.classList.contains("is-previewing")) return;
+    stale = true;
+    hint.textContent = "Ajustes mudaram. Gere de novo.";
+    setGenerate("auto_awesome", "Gerar prévia", false);
+  });
+  form.addEventListener("submit", () => {
+    // Sem nova prévia, o editado sai com as escolhas marcadas, não com as da prévia antiga.
+    if (stale) {
+      const p = planParts(silences, buf.duration, cfg.pauses[form.elements.pausa.value], cfg.cameras[form.elements.camera.value], R);
+      input.value = p.length ? JSON.stringify(p) : "";
+    }
+    qe.querySelector("[type=submit]").disabled = true;
+  });
 })();`;
 
 function formatDate(iso: string): string {

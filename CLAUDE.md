@@ -109,9 +109,13 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   tratado, "Sem tratamento de áudio"). Na Edição rápida, o card
   "Resultado da edição", Pausas, Câmera, "Gerar prévia" e, presos embaixo,
   Cancelar e Gerar editado. Abrir a aba não analisa nada: a prévia só é feita no
-  "Gerar prévia" e, pronta, começa a tocar (e recomeça a cada troca de escolha);
-  o botão vira "Prévia gerada", desligado, e nunca é um segundo tocar (quem toca e
-  pausa é a barra do player).
+  "Gerar prévia" e, pronta, começa a tocar; o botão vira "Prévia gerada",
+  desligado, e nunca é um segundo tocar (quem toca e pausa é a barra do player,
+  cujo slider mostra o andamento da prévia; no fim, o tocar vira "ver de novo").
+  Trocar uma escolha não mexe na prévia: o botão volta a "Gerar prévia" ("Ajustes
+  mudaram. Gere de novo.") e refaz na hora, sem analisar o vídeo de novo; o
+  editado sai sempre com as escolhas marcadas. Durante a edição, a Informações
+  mostra o card "Editando o vídeo" com o progresso.
   Vídeo já editado: a aba mostra só Original | Editado (troca o vídeo do player;
   a Informações não repete isso), o card "Este vídeo já foi editado" (linhas com
   ícone: Editado em, Pausas, Câmera, de `edited_at`/`edited_plan`, gravados só

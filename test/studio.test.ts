@@ -607,8 +607,8 @@ describe("edição rápida", () => {
     expect(page).toContain("Gerar editado");
     expect(page).toContain("data-qe-preview");
     // A ajuda da opção escolhida aparece embaixo de cada ajuste, curta.
-    expect(page).toContain('data-help-for="pausa">Respiro curto entre as frases.</p>');
-    expect(page).toContain('data-help-for="camera">Chega bem perto do rosto. O mais dinâmico.</p>');
+    expect(page).toContain('data-help-for="pausa">Deixa um respiro curto.</p>');
+    expect(page).toContain('data-help-for="camera">Alterna com zoom perto.</p>');
 
     const trechos = [[0.42, 7.417, 1], [7.928, 10.91, 1.25]];
     const res = await pedir(video.id, api, audio, session, { pausa: "longa", camera: "zoom", trechos: JSON.stringify(trechos) });
