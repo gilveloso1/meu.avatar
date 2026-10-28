@@ -1,5 +1,6 @@
 import type { AudioApi, Face } from "./audio";
 import { Db, OPEN_STATUSES, type Role, type Video } from "./db";
+import { ERROS } from "./erros";
 import { validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import { canUse, InputError, structureById, type Structure, type Values } from "./structures";
@@ -63,13 +64,13 @@ export class Studio {
   /** Confere o acesso, valida pela estrutura, guarda a foto, registra o vídeo e envia o pedido. */
   async create(input: NewVideoInput): Promise<Video> {
     const { structure } = input;
-    if (!canUse(structure, input.user.role)) throw new ForbiddenError(`Sem acesso a ${structure.name}.`);
+    if (!canUse(structure, input.user.role)) throw new ForbiddenError(ERROS.semAcessoModelo);
     const api = this.requireApi();
 
     const image = input.image && input.image.size > 0 ? input.image : null;
     const ext = image ? IMAGE_TYPES[image.type] : undefined;
-    if (image && !ext) throw new InputError("A foto precisa ser JPG, PNG ou WebP.");
-    if (image && image.size > MAX_IMAGE_BYTES) throw new InputError("A foto passa de 10 MB.");
+    if (image && !ext) throw new InputError(ERROS.fotoTipo);
+    if (image && image.size > MAX_IMAGE_BYTES) throw new InputError(ERROS.fotoTamanho);
 
     const model = await this.model(structure.model);
     const built = structure.build(input.values, image !== null, model);
@@ -78,7 +79,10 @@ export class Studio {
     if (built.image === "first_frame") request.frame_images = [{ ...placeholder, frame_type: "first_frame" }];
     if (built.image === "reference") request.input_references = [placeholder];
     const errors = validate(model, request);
-    if (errors.length) throw new InputError(`Não suportado por ${structure.model}: ${errors.join("; ")}.`);
+    if (errors.length) {
+      console.error(`Não suportado por ${structure.model}: ${errors.join("; ")}`);
+      throw new InputError(ERROS.ajustesNaoAceitos);
+    }
 
     const id = crypto.randomUUID();
     let imageKey: string | null = null;
@@ -182,13 +186,13 @@ export class Studio {
    */
   async requestQuickEdit(video: Video, user: { role: Role }, plan: EditPlan, now = new Date()): Promise<Video> {
     const structure = structureById(video.structure);
-    if (!structure || !canUse(structure, user.role)) throw new ForbiddenError("Sem acesso a este vídeo.");
-    if (!structure.quickEdit) throw new InputError(`${structure.name} não tem edição rápida.`);
-    if (!this.audio) throw new InputError("A edição rápida precisa do contêiner, que não está ligado aqui.");
-    if (video.status !== "completed" || !video.video_key) throw new InputError("O vídeo ainda não está pronto.");
-    if (video.audio_status === "pending" || video.audio_status === "processing") throw new InputError("Espere o tratamento do áudio terminar.");
+    if (!structure || !canUse(structure, user.role)) throw new ForbiddenError(ERROS.semAcessoVideo);
+    if (!structure.quickEdit) throw new InputError(ERROS.semEdicaoRapida);
+    if (!this.audio) throw new InputError(ERROS.edicaoIndisponivel);
+    if (video.status !== "completed" || !video.video_key) throw new InputError(ERROS.videoNaoPronto);
+    if (video.audio_status === "pending" || video.audio_status === "processing") throw new InputError(ERROS.audioEmTratamento);
     const queued = await this.db.queueEdit(video.id, JSON.stringify(plan), now.toISOString());
-    if (!queued) throw new InputError("A edição rápida deste vídeo já está em andamento.");
+    if (!queued) throw new InputError(ERROS.edicaoEmAndamento);
     return queued;
   }
 
@@ -199,8 +203,8 @@ export class Studio {
    */
   async face(video: Video, user: { role: Role }): Promise<Face | null> {
     const structure = structureById(video.structure);
-    if (!structure || !canUse(structure, user.role)) throw new ForbiddenError("Sem acesso a este vídeo.");
-    if (!structure.quickEdit) throw new InputError(`${structure.name} não tem edição rápida.`);
+    if (!structure || !canUse(structure, user.role)) throw new ForbiddenError(ERROS.semAcessoVideo);
+    if (!structure.quickEdit) throw new InputError(ERROS.semEdicaoRapida);
     if (video.face) {
       try {
         return JSON.parse(video.face) as Face;
@@ -283,7 +287,7 @@ export class Studio {
   }
 
   private requireApi(): VideoApi {
-    if (!this.api) throw new InputError("A criação de vídeos está pausada no momento. Tente de novo mais tarde.");
+    if (!this.api) throw new InputError(ERROS.criacaoPausada);
     return this.api;
   }
 }

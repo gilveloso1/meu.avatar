@@ -13,6 +13,7 @@
  */
 import bcrypt from "bcryptjs";
 import type { Db, User } from "./db";
+import { ERROS } from "./erros";
 
 export const SESSION_DAYS = 30;
 export const MAX_FAILED_LOGINS = 5;
@@ -50,12 +51,12 @@ export class Accounts {
   async signupFirst(rawName: string, rawEmail: string, password: string): Promise<{ user: User; token: string } | { error: string }> {
     const email = normalizeEmail(rawEmail);
     const name = cleanName(rawName);
-    if (!name) return { error: "Escreva o nome." };
-    if (!isEmail(email)) return { error: "Confira o e-mail." };
+    if (!name) return { error: ERROS.nome };
+    if (!isEmail(email)) return { error: ERROS.email };
     const problem = this.passwordProblem(password);
     if (problem) return { error: problem };
     const user = await this.db.addFirstAdmin(email, name, await bcrypt.hash(password, this.bcryptCost), this.now().toISOString());
-    if (!user) return { error: "O cadastro está fechado: o estúdio já tem administrador." };
+    if (!user) return { error: ERROS.cadastroFechado };
     return { user, token: await this.openSession(user.id) };
   }
 
@@ -94,9 +95,9 @@ export class Accounts {
 
   /** O que há de errado com a senha, ou null se ela serve. */
   passwordProblem(password: string): string | null {
-    if (password.length < PASSWORD_MIN) return `A senha precisa ter pelo menos ${PASSWORD_MIN} caracteres.`;
+    if (password.length < PASSWORD_MIN) return ERROS.senha(PASSWORD_MIN, PASSWORD_MAX);
     if (password.length > PASSWORD_MAX || new TextEncoder().encode(password).length > 72) {
-      return `A senha pode ter até ${PASSWORD_MAX} caracteres.`;
+      return ERROS.senha(PASSWORD_MIN, PASSWORD_MAX);
     }
     return null;
   }

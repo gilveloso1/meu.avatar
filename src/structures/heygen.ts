@@ -11,6 +11,7 @@
  * multilíngues falam português.
  */
 import type { VideoModel } from "../openrouter";
+import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Option, type Structure } from "./types";
 import { options } from "./wan";
@@ -101,15 +102,15 @@ export const HEYGEN_AVATAR: Structure = {
 
   build(values, hasImage) {
     const script = values("fala").replace(/\s+/g, " ").trim();
-    if (!script) throw new InputError("Escreva a fala do vídeo.");
-    if (script.length > MAX_SCRIPT) throw new InputError(`A fala passa de ${MAX_SCRIPT} caracteres.`);
-    if (!hasImage) throw new InputError("Escolha a foto do avatar.");
+    if (!script) throw new InputError(ERROS.fala);
+    if (script.length > MAX_SCRIPT) throw new InputError(ERROS.falaLonga(MAX_SCRIPT));
+    if (!hasImage) throw new InputError(ERROS.foto);
     const voice = VOICES.find((v) => v.value === values("voz"));
-    if (!voice) throw new InputError("Escolha uma voz da lista.");
+    if (!voice) throw new InputError(ERROS.voz);
     const expressiveness = EXPRESSIVENESS.find((e) => e.value === values("expressividade"));
-    if (!expressiveness) throw new InputError("Escolha a expressividade.");
+    if (!expressiveness) throw new InputError(ERROS.expressividade);
     const extra = values("movimento").replace(/\s+/g, " ").trim();
-    if (extra.length > MAX_MOTION) throw new InputError(`O movimento passa de ${MAX_MOTION} caracteres.`);
+    if (extra.length > MAX_MOTION) throw new InputError(ERROS.movimentoLongo(MAX_MOTION));
 
     const motion = [MOTION_GUIDE, extra].filter(Boolean).join(" ");
     const resolution = values("resolucao");

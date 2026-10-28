@@ -5,6 +5,7 @@
  * passa pelo contêiner (docs/prompt.md e docs/operacao.md).
  */
 import type { VideoModel } from "../openrouter";
+import { ERROS } from "../erros";
 import { buildPrompt, cleanSpeech, LANGUAGES, languageById, MAX_EXTRA, MAX_SPEECH, STYLES, styleById, WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
 
@@ -82,14 +83,14 @@ export const WAN: Structure = {
 
   build(values, hasImage) {
     const style = styleById(values("estilo"));
-    if (!style) throw new InputError("Escolha um estilo da lista.");
+    if (!style) throw new InputError(ERROS.estilo);
     const language = languageById(values("idioma"));
-    if (!language) throw new InputError("Escolha um idioma da lista.");
+    if (!language) throw new InputError(ERROS.idioma);
     const speech = cleanSpeech(values("fala"));
-    if (!speech) throw new InputError("Escreva a fala do vídeo.");
-    if (speech.length > MAX_SPEECH) throw new InputError(`A fala passa de ${MAX_SPEECH} caracteres.`);
+    if (!speech) throw new InputError(ERROS.fala);
+    if (speech.length > MAX_SPEECH) throw new InputError(ERROS.falaLonga(MAX_SPEECH));
     const extra = values("instrucoes").replace(/\s+/g, " ").trim();
-    if (extra.length > MAX_EXTRA) throw new InputError(`As instruções passam de ${MAX_EXTRA} caracteres.`);
+    if (extra.length > MAX_EXTRA) throw new InputError(ERROS.instrucoesLongas(MAX_EXTRA));
 
     const duration = Number(values("duracao"));
     const resolution = values("resolucao");

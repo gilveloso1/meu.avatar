@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { Accounts, LOCK_MINUTES } from "../src/auth";
 import { Db } from "../src/db";
+import { ERROS } from "../src/erros";
 import { ADMIN, call, cookie, postForm, sessionPair, SITE } from "./helpers";
 
 const cadastro = (fields: Partial<Record<"nome" | "email" | "senha" | "confirmar", string>> = {}) =>
@@ -49,10 +50,10 @@ describe("primeiro cadastro", () => {
 
   it("confere nome, e-mail, tamanho da senha e a repetição", async () => {
     for (const [fields, message] of [
-      [{ nome: " " }, "Escreva o nome."],
-      [{ email: "gil@" }, "Confira o e-mail."],
-      [{ senha: "curta", confirmar: "curta" }, "pelo menos 10 caracteres"],
-      [{ confirmar: "outra-senha-123" }, "As senhas não são iguais."],
+      [{ nome: " " }, ERROS.nome],
+      [{ email: "gil@" }, ERROS.email],
+      [{ senha: "curta", confirmar: "curta" }, "Use uma senha de 10 a"],
+      [{ confirmar: "outra-senha-123" }, ERROS.senhasDiferentes],
     ] as const) {
       const res = await cadastro(fields);
       expect(res.status).toBe(400);
@@ -69,7 +70,7 @@ describe("entrar e sair", () => {
       const res = await call(postForm("/entrar", fields));
       expect(res.status).toBe(400);
       expect(res.headers.get("set-cookie")).toBeNull();
-      expect(await res.text()).toContain("E-mail ou senha não conferem.");
+      expect(await res.text()).toContain(ERROS.loginIncorreto);
     }
     const ok = await call(postForm("/entrar", { email: " GIL@Exemplo.com ", senha: ADMIN.senha }));
     expect(ok.status).toBe(303);

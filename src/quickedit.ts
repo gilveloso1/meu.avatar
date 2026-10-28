@@ -8,6 +8,7 @@
  * As regras de silêncio e de enquadramento estão aqui e no editar.py; mudou
  * uma, mude a outra.
  */
+import { ERROS } from "./erros";
 import { InputError, type Option } from "./structures/types";
 
 /**
@@ -136,16 +137,16 @@ const ZOOMS = new Set(CAMERAS.flatMap((c) => c.zooms));
 
 /** Lê e confere o plano que veio do formulário; lança InputError. */
 export function parsePlan(pause: string, camera: string, parts: string): EditPlan {
-  if (!PAUSES.some((p) => p.value === pause)) throw new InputError("Escolha o tamanho das pausas.");
-  if (!CAMERAS.some((c) => c.value === camera)) throw new InputError("Escolha a câmera.");
+  if (!PAUSES.some((p) => p.value === pause)) throw new InputError(ERROS.pausas);
+  if (!CAMERAS.some((c) => c.value === camera)) throw new InputError(ERROS.camera);
   if (!parts.trim()) return { pause, camera, parts: null };
   let list: unknown;
   try {
     list = JSON.parse(parts);
   } catch {
-    throw new InputError("Os cortes da prévia vieram ilegíveis.");
+    throw new InputError(ERROS.ajustesIlegiveis);
   }
-  if (!Array.isArray(list) || list.length === 0 || list.length > MAX_PARTS) throw new InputError("Os cortes da prévia vieram ilegíveis.");
+  if (!Array.isArray(list) || list.length === 0 || list.length > MAX_PARTS) throw new InputError(ERROS.ajustesIlegiveis);
   let end = 0;
   for (const p of list) {
     const ok =
@@ -156,7 +157,7 @@ export function parsePlan(pause: string, camera: string, parts: string): EditPla
       p[1] > p[0] &&
       p[1] <= 3600 &&
       ZOOMS.has(p[2]);
-    if (!ok) throw new InputError("Os cortes da prévia vieram ilegíveis.");
+    if (!ok) throw new InputError(ERROS.ajustesIlegiveis);
     end = p[1];
   }
   return { pause, camera, parts: list as Part[] };
