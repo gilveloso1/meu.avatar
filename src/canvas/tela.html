@@ -158,7 +158,8 @@ body { min-height: 0; overflow: hidden; }
 .sheet-body[data-tab="previa"] { overflow: hidden; padding: 12px; }
 .preview { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .preview__stage { flex: 1; min-height: 0; width: 100%; display: grid; place-items: center; container-type: size; }
-.preview .player__frame { height: auto; width: min(100cqw, 100cqh * 9 / 16); max-width: none; aspect-ratio: 9 / 16; box-shadow: var(--md-sys-elevation-level1); }
+/* --ar: o formato do Final (largura / altura), posto pelo script. */
+.preview .player__frame { height: auto; width: min(100cqw, 100cqh * var(--ar, 0.5625)); max-width: none; aspect-ratio: var(--ar, 0.5625); box-shadow: var(--md-sys-elevation-level1); }
 /* Cada trecho é um vídeo ou imagem empilhado no quadro; só o da vez aparece. */
 .pv-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
 .pv-media[data-layer="1"] { z-index: 1; }
@@ -184,6 +185,7 @@ body { min-height: 0; overflow: hidden; }
 .fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 /* Botões conectados na largura da folha (o tamanho do vídeo no Final). */
 .sheet-segmented { display: grid; align-self: stretch; }
+.viewer__section .segmented-field { gap: 8px; }
 .editor .viewer__sheet { --field-surface: var(--md-sys-color-surface-container-low); }
 .editor .viewer__body { gap: 24px; }
 #side { display: flex; flex-direction: column; gap: 24px; }

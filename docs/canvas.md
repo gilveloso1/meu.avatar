@@ -111,8 +111,12 @@ menos custo.
 - **Do computador**: o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
   `project_files`), com os limites do site (imagem 10 MB, vídeo e áudio 50 MB), e o
   bloco usa o endereço de lá; não some ao recarregar.
-- **Tamanho do vídeo**: nos Ajustes do Final, 720 × 1280 ou 1080 × 1920 (vertical);
-  vai no plano do Exportar.
+- **Vídeo exportado**: nos Ajustes do Final, os mesmos campos dos modelos:
+  Resolução (480p, 720p, 1080p, em botões conectados) e Formato (9:16, 16:9, 1:1,
+  4:3, 3:4, no campo de seleção do site, com a explicação e o tamanho em pixels
+  embaixo). O lado menor é o da resolução (720p em 16:9 = 1280 × 720). O quadro da
+  Prévia segue o formato do Final. Vai no plano do Exportar. O campo de seleção do
+  site ficou em `window.mdSelect` para servir também a campos postos depois.
 - Cada projeto é só de quem o criou: de outra pessoa, nada abre, salva, recebe
   arquivo ou apaga (testes em `test/canvas.test.ts`).
 - Tabelas `projects` e `project_files` (migration 0010). Os vídeos exportados não

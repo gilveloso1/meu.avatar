@@ -145,6 +145,13 @@ function playNow(p) {
   render({ side: false });
 }
 
+/** O quadro da prévia tem o formato do Final (o escolhido, ou o primeiro). */
+function frameRatio() {
+  const f = (sel.type === "final" && project.finals.find((f) => f.id === sel.id)) || project.finals[0];
+  const out = M.output(f);
+  $("#pv-stage").style.setProperty("--ar", String(out.width / out.height));
+}
+
 /* ---------- abas da folha ---------- */
 
 const sheetBody = $(".sheet-body");
@@ -346,6 +353,7 @@ function render({ side = true } = {}) {
   wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d=""/>`;
 
   if (side) renderSide(gs);
+  frameRatio();
   loadPreview();
   $("#undo").disabled = !undo.length;
   $("#redo").disabled = !redo.length;
@@ -364,6 +372,7 @@ const field = (id, label, value, attrs = "") =>
   `<div class="text-field"><input class="text-field__input" id="${id}" value="${esc(value)}" placeholder=" " ${attrs}><label class="text-field__label" for="${id}">${label}</label></div>`;
 const row = (icon, label, value) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${icon}</span><span class="qe-result__label">${label}</span><span class="qe-result__value">${value}</span></div>`;
 
+const selectUndos = [];
 function renderSide(gs) {
   let title = "Projeto";
   let h = "";
@@ -375,11 +384,16 @@ function renderSide(gs) {
     h += `<div class="xlist">${vs
       .map((v, i) => `<button class="xlist__item interactive" type="button" data-version="${i}" aria-current="${i === versionIdx && !preview}"><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(M.versionName(v))}</span><span class="xlist__trail">${fmt(M.timeline(v).duration)}</span></button>`)
       .join("")}</div></section>`;
-    const f = project.finals.find((f) => f.id === sel.id);
-    const size = f?.size ?? M.SIZES[0].value;
-    h += `<section class="viewer__section"><h3 class="viewer__title">Tamanho do vídeo</h3><div class="segmented-button sheet-segmented" role="radiogroup" aria-label="Tamanho do vídeo">${M.SIZES.map(
-      (o) => `<label class="segmented-button__segment interactive"><input type="radio" name="f-size" value="${o.value}"${o.value === size ? " checked" : ""}><span>${o.label}</span></label>`,
-    ).join("")}</div><p class="sheet-hint">Vertical, 9:16. As versões saem neste tamanho.</p></section>`;
+    const out = M.output(project.finals.find((f) => f.id === sel.id));
+    // Os mesmos campos dos modelos: Resolução em botões conectados, Formato no campo de seleção.
+    h += `<section class="viewer__section"><h3 class="viewer__title">Vídeo exportado</h3>
+      <div class="segmented-field"><span class="segmented-field__label">Resolução</span><div class="segmented-button sheet-segmented" role="radiogroup" aria-label="Resolução">${M.RESOLUTIONS.map(
+        (r) => `<label class="segmented-button__segment interactive"><input type="radio" name="f-resolution" value="${r}"${r === out.resolution ? " checked" : ""}><span class="icon segmented-button__check" aria-hidden="true">check</span><span>${r}</span></label>`,
+      ).join("")}</div></div>
+      <div class="text-field text-field--select"><select class="text-field__input" id="f-format" aria-describedby="f-format-ajuda">${M.FORMATS.map(
+        (o) => `<option value="${o.value}"${o.value === out.format ? " selected" : ""}>${o.value}</option>`,
+      ).join("")}</select><label class="text-field__label" for="f-format">Formato</label><span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
+        <p class="text-field__supporting" id="f-format-ajuda"><span>${M.FORMATS.find((o) => o.value === out.format).description}</span><span>${out.width} × ${out.height}</span></p></div></section>`;
     if (vs.length) actions = btn("outlined", 'data-export="one"', "download", "Exportar esta") + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
@@ -412,7 +426,10 @@ function renderSide(gs) {
     }
     h += `<p class="sheet-hint">Escolha um bloco, um grupo ou o Final para ver os ajustes dele.</p>`;
   }
+  for (const undo of selectUndos.splice(0)) undo();
   side.innerHTML = `<h2 class="sheet-title">${title}</h2>` + h;
+  // No site, o campo de seleção vira o menu do M3 (window.mdSelect, do script do site).
+  if (window.mdSelect) for (const s of side.querySelectorAll(".text-field--select select")) selectUndos.push(window.mdSelect(s));
   sideActions.innerHTML = actions;
   showActions();
 }
@@ -439,9 +456,8 @@ side.onclickAction = (e) => {
   if (ex) {
     const vs = M.versions(project, sel.id);
     const list = ex.dataset.export === "all" ? vs : [vs[versionIdx]];
-    const f = project.finals.find((f) => f.id === sel.id);
-    const size = f?.size ?? M.SIZES[0].value;
-    $("#dlg-body").textContent = JSON.stringify(list.map((v) => ({ tamanho: size, ...M.exportPlan(v) })), null, 2);
+    const out = M.output(project.finals.find((f) => f.id === sel.id));
+    $("#dlg-body").textContent = JSON.stringify(list.map((v) => ({ resolucao: out.resolution, formato: out.format, largura: out.width, altura: out.height, ...M.exportPlan(v) })), null, 2);
     $("#dlg-title").textContent = list.length === 1 ? "Exportar 1 versão" : `Exportar ${list.length} versões`;
     $("#dlg").showModal();
   }
@@ -475,8 +491,10 @@ side.onclickAction = (e) => {
   }
 };
 side.addEventListener("click", side.onclickAction);
-side.addEventListener("input", (e) => {
-  const t0 = e.target;
+// O campo de seleção (o menu do site) avisa com "change"; o resto, com "input".
+side.addEventListener("change", (e) => e.target.id === "f-format" && onSideInput(e.target));
+side.addEventListener("input", (e) => e.target.id !== "f-format" && onSideInput(e.target));
+function onSideInput(t0) {
   // Nome do projeto: muda o título da barra e da aba, e vai junto no próximo salvamento.
   if (t0.id === "f-project") {
     const name = t0.value.trim();
@@ -488,18 +506,26 @@ side.addEventListener("input", (e) => {
     document.title = document.title.replace(/^.*?( · [^·]+)$/, `${name}$1`);
     return scheduleSave();
   }
-  if (t0.name === "f-size" && sel.type === "final") {
+  if ((t0.name === "f-resolution" || t0.id === "f-format") && sel.type === "final") {
     const before = project;
     project = structuredClone(project);
-    project.finals.find((f) => f.id === sel.id).size = t0.value;
+    const f = project.finals.find((f) => f.id === sel.id);
+    if (t0.name === "f-resolution") f.resolution = t0.value;
+    else f.format = t0.value;
+    delete f.size;
     commit(before);
+    // O texto de apoio e o quadro da prévia seguem a escolha.
+    const out = M.output(f);
+    const help = $("#f-format-ajuda");
+    if (help) help.innerHTML = `<span>${M.FORMATS.find((o) => o.value === out.format).description}</span><span>${out.width} × ${out.height}</span>`;
+    frameRatio();
     return;
   }
   if (sel.type !== "block") return;
   const before = project;
   project = structuredClone(project);
   const b = project.blocks.find((b) => b.id === sel.id);
-  const t = e.target;
+  const t = t0;
   if (t.id === "f-name") b.name = t.value;
   if (t.id === "f-mute") b.mute = t.checked;
   if (t.id === "f-vol") b.vol = +t.value;
@@ -512,7 +538,7 @@ side.addEventListener("input", (e) => {
   }
   // Não redesenha o painel enquanto digita ou arrasta (perderia o foco), só o resto.
   render({ side: t.id === "f-mute" });
-});
+}
 $("#dlg-close").onclick = () => $("#dlg").close();
 
 /* ---------- ações ---------- */

@@ -1308,9 +1308,11 @@ const SCRIPT = `(() => {
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
   // Campos de seleção: o select fica escondido (é ele que vai no formulário) e um
-  // botão abre um menu do M3 com as opções, igual em todos os navegadores.
+  // botão abre um menu do M3 com as opções, igual em todos os navegadores. Também
+  // em window.mdSelect(select), para campos postos depois (o painel do canvas);
+  // devolve a função que desfaz (tira o menu e os ouvintes da janela).
   let selectN = 0;
-  for (const sel of document.querySelectorAll(".text-field--select select")) {
+  const enhanceSelect = (sel) => {
     const n = ++selectN, label = sel.parentElement.querySelector(".text-field__label"), arrow = sel.parentElement.querySelector(".text-field__trailing");
     const btn = document.createElement("button");
     btn.type = "button"; btn.className = "text-field__input"; btn.id = "selecao-" + n;
@@ -1367,11 +1369,16 @@ const SCRIPT = `(() => {
       if (arrow) arrow.textContent = isOpen ? "arrow_drop_up" : "arrow_drop_down";
     });
     // Rolar a página ou o painel com o menu aberto: fecha, para ele não ficar solto.
-    addEventListener("scroll", (e) => { if (list.matches(":popover-open") && !list.contains(e.target)) list.hidePopover(); }, true);
-    addEventListener("resize", () => { if (list.matches(":popover-open")) list.hidePopover(); });
+    const onScroll = (e) => { if (list.matches(":popover-open") && !list.contains(e.target)) list.hidePopover(); };
+    const onResize = () => { if (list.matches(":popover-open")) list.hidePopover(); };
+    addEventListener("scroll", onScroll, true);
+    addEventListener("resize", onResize);
     sel.addEventListener("change", sync);
     sync();
-  }
+    return () => { list.remove(); removeEventListener("scroll", onScroll, true); removeEventListener("resize", onResize); };
+  };
+  window.mdSelect = enhanceSelect;
+  document.querySelectorAll(".text-field--select select").forEach(enhanceSelect);
 
   // Campos de texto que crescem com o texto (a fala, o movimento): a altura acompanha o conteúdo.
   for (const t of document.querySelectorAll("textarea.text-field__input")) {
