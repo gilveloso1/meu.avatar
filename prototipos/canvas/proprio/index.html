@@ -84,6 +84,17 @@ body { min-height: 0; overflow: hidden; }
 .gtab .icon { font-size: 18px; color: var(--md-sys-color-primary); }
 .gtab.is-sel { border-color: transparent; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .gtab.is-sel .icon { color: inherit; }
+/* Área do grupo: retângulo tracejado (contorno outline, cantos grandes), em primary quando escolhido. */
+.gframe { position: absolute; border: 2px dashed var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-large); pointer-events: none; }
+.gframe.is-sel { border-color: var(--md-sys-color-primary); }
+.gtab__play { width: 24px; height: 24px; margin: 0 -8px 0 0; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: none; color: var(--md-sys-color-primary); }
+.gtab__play .icon { font-size: 18px; }
+.gtab.is-sel .gtab__play { color: inherit; }
+/* Tocar o bloco escolhido: botão de ícone cheio do M3 (40 px, primary), por cima da imagem. */
+.blk-play { position: absolute; z-index: 4; width: 40px; height: 40px; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); box-shadow: var(--md-sys-elevation-level2); }
+.blk-play .icon { font-size: 24px; }
+/* Linha de reprodução: 2 px em primary sobre o que a prévia toca. */
+.playhead { position: absolute; z-index: 5; width: 2px; border-radius: 1px; background: var(--md-sys-color-primary); pointer-events: none; box-shadow: 0 0 0 1px var(--md-sys-color-surface-container-lowest); }
 /* Portas: saída em primary (puxa a ligação), entrada no contorno. */
 .port {
   position: absolute; width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full); z-index: 3;

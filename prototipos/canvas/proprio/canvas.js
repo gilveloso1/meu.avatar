@@ -21,7 +21,8 @@ let project = M.sample((f) => `midia/${f}`);
 let view = { x: 80, y: 120, z: 0.8 };
 let sel = { type: "final", id: "final" };
 let versionIdx = 0;
-let previewGroup = null;
+// O que a prévia toca: null (a versão escolhida no Final), um grupo ou um bloco.
+let preview = null;
 const undo = [];
 const redo = [];
 
@@ -40,8 +41,12 @@ const player = new Player(pv.canvas, {
     pv.slider.max = d;
     pv.slider.value = t;
     pv.slider.style.setProperty("--p", `${d ? (t / d) * 100 : 0}%`);
+    playhead(t);
   },
-  onEnd: () => setPlayIcon(),
+  onEnd: () => {
+    setPlayIcon();
+    render({ side: false });
+  },
 });
 const setPlayIcon = () => {
   const ended = !player.playing && player.duration && player.t >= player.duration - 0.02;
@@ -51,6 +56,7 @@ const setPlayIcon = () => {
 pv.play.onclick = () => {
   player.playing ? player.pause() : player.play();
   setPlayIcon();
+  render({ side: false });
 };
 pv.slider.oninput = () => player.seek(+pv.slider.value);
 let loadedKey = "";
@@ -58,11 +64,20 @@ function loadPreview() {
   const gs = M.groups(project);
   let v = null;
   let title = "Nada para tocar";
-  if (previewGroup) {
-    const g = gs.find((g) => g.id === previewGroup);
+  let tl = null;
+  if (preview?.type === "group") {
+    const g = gs.find((g) => g.id === preview.id);
     if (g) (v = [g]), (title = `Grupo: ${g.name}`);
   }
-  if (!v) {
+  if (preview?.type === "block") {
+    const b = project.blocks.find((b) => b.id === preview.id);
+    if (b) {
+      // Só o bloco, do corte dele: sem o que está por cima nem o som somado.
+      tl = { duration: M.len(b), items: [{ block: b, layer: b.kind === "audio" ? "audio" : 0, start: 0, len: M.len(b), tin: b.tin }] };
+      title = `Bloco: ${b.name}`;
+    }
+  }
+  if (!v && !tl) {
     const f = project.finals[0] && (sel.type === "final" ? project.finals.find((f) => f.id === sel.id) : project.finals[0]);
     const vs = f ? M.versions(project, f.id, gs) : [];
     if (vs.length) {
@@ -71,13 +86,41 @@ function loadPreview() {
       title = `Versão ${versionIdx + 1}: ${M.versionName(v)}`;
     }
   }
-  const tl = v ? M.timeline(v) : { duration: 0, items: [] };
-  const key = JSON.stringify(M.exportPlan(v ?? []));
+  tl ??= v ? M.timeline(v) : { duration: 0, items: [] };
+  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.start, i.len, i.tin, i.block.mute, i.block.vol]));
   pv.title.textContent = title;
-  if (key === loadedKey) return;
+  if (key === loadedKey) return playhead(player.t);
   loadedKey = key;
   player.load(tl);
   setPlayIcon();
+}
+
+/** Linha de reprodução sobre o bloco ou o grupo que a prévia toca (na versão, não aparece). */
+const head = document.createElement("div");
+head.className = "playhead";
+function playhead(t) {
+  let box = null;
+  if (preview?.type === "block") {
+    const b = project.blocks.find((b) => b.id === preview.id);
+    if (b) box = { x: b.x, y: b.y, h: M.height(b) };
+  } else if (preview?.type === "group") {
+    const g = M.groups(project).find((g) => g.id === preview.id);
+    if (g) {
+      const top = Math.min(g.y, ...g.covers.map((c) => c.y));
+      const bottom = g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) + (g.audios.length && !g.soloAudio ? M.AUD_H : 0);
+      box = { x: g.x, y: top, h: bottom - top };
+    }
+  }
+  head.hidden = !box || (!player.playing && t <= 0);
+  if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - 1}px`, top: `${box.y - 4}px`, height: `${box.h + 8}px` });
+}
+function playNow(p) {
+  preview = p;
+  render();
+  player.seek(0);
+  player.play();
+  setPlayIcon();
+  render({ side: false });
 }
 
 /* ---------- histórico ---------- */
@@ -153,10 +196,22 @@ function render({ side = true } = {}) {
     const top = Math.min(g.y, ...g.covers.map((c) => c.y));
     const rowH = g.soloAudio ? M.AUD_H : M.VIS_H;
     const isSel = sel.type === "group" && sel.id === g.id;
-    if (g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio))
-      html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x}px;top:${top - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}</div>`;
+    if (g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio)) {
+      // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
+      const bottom = g.y + rowH + (g.audios.length && !g.soloAudio ? M.AUD_H : 0);
+      html += `<div class="gframe ${isSel ? "is-sel" : ""}" style="left:${g.x - 8}px;top:${top - 8}px;width:${g.w + 16}px;height:${bottom - top + 16}px"></div>`;
+      html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x - 8}px;top:${top - 48}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="Tocar o grupo" title="Tocar o grupo"><span class="icon">play_arrow</span></button></div>`;
+    }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
+  }
+  // Bloco escolhido: o botão de tocar só ele, no meio da imagem.
+  const sb = sel.type === "block" && project.blocks.find((b) => b.id === sel.id);
+  if (sb) {
+    const w = M.width(sb);
+    const cy = sb.kind === "audio" ? sb.y + M.AUD_H / 2 : sb.y + 28 + (M.VIS_H - 32) / 2;
+    const playing = player.playing && preview?.type === "block" && preview.id === sb.id;
+    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2 - 20}px;top:${cy - 20}px" aria-label="${playing ? "Pausar" : "Tocar o bloco"}" title="${playing ? "Pausar" : "Tocar o bloco"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
   }
   for (const f of project.finals) {
     const n = M.versions(project, f.id, gs).length;
@@ -165,6 +220,7 @@ function render({ side = true } = {}) {
     html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
   chrome.innerHTML = html;
+  world.append(head);
 
   // Linhas.
   let svg = "";
@@ -207,7 +263,7 @@ function renderSide(gs) {
     title = "Final";
     h += `<section class="viewer__section"><h3 class="viewer__title">Versões</h3><p class="sheet-hint">${vs.length ? `${vs.length} ${vs.length === 1 ? "versão sai" : "versões saem"} das linhas que chegam aqui.` : "Ligue um grupo ao Final para ter versões."}</p>`;
     h += `<div class="xlist">${vs
-      .map((v, i) => `<button class="xlist__item interactive" type="button" data-version="${i}" aria-current="${i === versionIdx && !previewGroup}"><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(M.versionName(v))}</span><span class="xlist__trail">${fmt(M.timeline(v).duration)}</span></button>`)
+      .map((v, i) => `<button class="xlist__item interactive" type="button" data-version="${i}" aria-current="${i === versionIdx && !preview}"><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(M.versionName(v))}</span><span class="xlist__trail">${fmt(M.timeline(v).duration)}</span></button>`)
       .join("")}</div></section>`;
     if (vs.length) actions = btn("outlined", 'data-export="one"', "download", "Exportar esta") + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
   } else if (sel.type === "block") {
@@ -246,7 +302,7 @@ side.onclickAction = (e) => {
   const v = e.target.closest("[data-version]");
   if (v) {
     versionIdx = +v.dataset.version;
-    previewGroup = null;
+    preview = null;
     render();
     player.play();
     setPlayIcon();
@@ -362,7 +418,7 @@ $("#reset").onclick = () => {
   const before = project;
   project = M.sample((f) => `midia/${f}`);
   sel = { type: "final", id: "final" };
-  previewGroup = null;
+  preview = null;
   commit(before);
   fit();
   render();
@@ -387,7 +443,7 @@ function zoomAt(k, cx, cy) {
 function fit() {
   const xs = [];
   const ys = [];
-  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - 40, b.y + M.height(b));
+  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - 56, b.y + M.height(b) + 8);
   for (const f of project.finals) xs.push(f.x, f.x + 180), ys.push(f.y, f.y + 80);
   if (!xs.length) return;
   const r = vp.getBoundingClientRect();
@@ -437,6 +493,15 @@ vp.addEventListener("pointerdown", (e) => {
   let onMove;
   let onUp = () => {};
 
+  const playEl = t.closest("[data-play-block], [data-play-group]");
+  if (playEl) {
+    const p = playEl.dataset.playBlock ? { type: "block", id: playEl.dataset.playBlock } : { type: "group", id: playEl.dataset.playGroup };
+    if (p.type === "group") sel = { type: "group", id: p.id };
+    const same = preview?.type === p.type && preview.id === p.id;
+    if (same && player.playing) player.pause(), setPlayIcon(), render();
+    else playNow(p);
+    return;
+  }
   const trimEl = t.closest("[data-trim]");
   const outPort = t.closest(".port--out");
   const tab = t.closest(".gtab");
@@ -452,7 +517,7 @@ vp.addEventListener("pointerdown", (e) => {
       applyView();
     };
     onUp = () => {
-      if (!moved && sel.type) (sel = { type: null }), (previewGroup = null), render();
+      if (!moved && sel.type) (sel = { type: null }), (preview = null), render();
     };
     vp.classList.add("is-panning");
   } else if (trimEl) {
@@ -491,7 +556,7 @@ vp.addEventListener("pointerdown", (e) => {
   } else if (tab) {
     const gid = tab.dataset.group;
     sel = { type: "group", id: gid };
-    previewGroup = gid;
+    preview = { type: "group", id: gid };
     render();
     onMove = (ev) => {
       const d = dW(ev);
@@ -502,7 +567,7 @@ vp.addEventListener("pointerdown", (e) => {
     const id = blk.dataset.id;
     const b0 = base.blocks.find((b) => b.id === id);
     sel = { type: "block", id };
-    previewGroup = M.groupIndex(M.groups(project)).get(id)?.id ?? null;
+    preview = { type: "block", id };
     render();
     onMove = (ev) => {
       const d = dW(ev);
@@ -521,7 +586,7 @@ vp.addEventListener("pointerdown", (e) => {
     const f0 = base.finals.find((f) => f.id === id);
     if (sel.id !== id) versionIdx = 0;
     sel = { type: "final", id };
-    previewGroup = null;
+    preview = null;
     render();
     onMove = (ev) => {
       const d = dW(ev);
