@@ -169,7 +169,7 @@ function render({ side = true } = {}) {
     if (!el) {
       el = document.createElement("div");
       el.dataset.id = b.id;
-      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
+      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div>`;
       world.append(el);
       blockEls.set(b.id, el);
       thumb(b).then((u) => {
@@ -281,7 +281,7 @@ function renderSide(gs) {
     h += field("f-name", "Nome", b.name);
     if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.IMAGE_MAX}"`);
     else
-      h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
+      h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}.</p></div>`;
     if (b.kind !== "image")
       h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3><label class="switch-row" for="f-mute">Sem som<span class="switch"><input type="checkbox" role="switch" id="f-mute" ${b.mute ? "checked" : ""}><span class="switch__track"></span><span class="switch__handle"></span></span></label>
         <div class="slider-field"><span class="slider-field__label"><span>Volume</span><span id="f-vol-n">${Math.round(b.vol * 100)}%</span></span><input class="vbar__seek" type="range" id="f-vol" min="0" max="1" step="0.05" value="${b.vol}" style="--p:${b.vol * 100}%" aria-label="Volume" ${b.mute ? "disabled" : ""}></div></section>`;
@@ -530,14 +530,13 @@ vp.addEventListener("pointerdown", (e) => {
     else playNow(p);
     return;
   }
-  const trimEl = t.closest("[data-trim]");
   const outPort = t.closest(".port--out");
   const tab = t.closest(".gtab");
   const blk = t.closest(".blk");
   const fin = t.closest(".fin");
   const hit = t.closest(".wire-hit");
 
-  if (e.button === 1 || (!trimEl && !outPort && !tab && !blk && !fin && !hit && !t.closest(".port"))) {
+  if (e.button === 1 || (!outPort && !tab && !blk && !fin && !hit && !t.closest(".port"))) {
     const v0 = { ...view };
     onMove = (ev) => {
       view.x = v0.x + ev.clientX - start.x;
@@ -548,13 +547,6 @@ vp.addEventListener("pointerdown", (e) => {
       if (!moved && sel.type) (sel = { type: null }), (preview = null), render();
     };
     vp.classList.add("is-panning");
-  } else if (trimEl) {
-    const id = trimEl.closest(".blk").dataset.id;
-    sel = { type: "block", id };
-    onMove = (ev) => {
-      project = M.trim(base, id, trimEl.dataset.trim, dW(ev).x / M.PX);
-      render();
-    };
   } else if (outPort) {
     const gid = outPort.dataset.group;
     const temp = $("#wire-temp");

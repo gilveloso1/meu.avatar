@@ -63,8 +63,8 @@ menos custo.
   bloco escolhido tem o botão de tocar no meio; o chip do grupo também. A prévia
   toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo; a
   linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
-- **Corte**: as alças ficam por fora do bloco, a 2 px da borda, em primary, e só
-  aparecem no bloco escolhido (a borda de seleção vai por dentro).
+- **Corte**: pelos campos "Começa em" e "Termina em" da folha do bloco escolhido
+  (sem alças nas pontas do bloco; a borda de seleção vai por dentro).
 
 ## Em aberto
 
