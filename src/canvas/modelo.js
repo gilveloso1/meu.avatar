@@ -9,7 +9,7 @@
  *            só no vídeo: "linked" (o som dele numa faixa presa embaixo, na cor
  *            do vídeo), "unlinked" (desvinculado: virou um bloco de áudio) ou
  *            "none" (o arquivo não tem som))
- *   final: { id, x, y }
+ *   final: { id, x, y, resolution, format }   (o que ele exporta; ver output())
  *   linha: { id, from, to }      (from: um bloco do grupo de saída;
  *                                 to: um bloco do grupo de entrada ou um final)
  *
@@ -34,7 +34,31 @@ export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
 export const MAX_VERSOES = 200;
 export const TONES = 6;
-const EPS = 1;
+/** Resolução e formato do vídeo exportado (nos Ajustes do Final), os mesmos dos modelos. */
+export const RESOLUTIONS = ["480p", "720p", "1080p"];
+export const FORMATS = [
+  { value: "9:16", description: "Vertical: Reels, TikTok e Shorts." },
+  { value: "16:9", description: "Horizontal: YouTube e telas largas." },
+  { value: "1:1", description: "Quadrado: feed." },
+  { value: "4:3", description: "Horizontal baixo: feed e apresentações." },
+  { value: "3:4", description: "Vertical baixo: feed." },
+];
+
+/**
+ * O que um Final exporta: resolução, formato e o tamanho em pixels (o lado menor
+ * é o da resolução; sempre par, como o ffmpeg pede). Projetos de antes guardavam
+ * size ("720x1280" ou "1080x1920"): vira 720p ou 1080p em 9:16.
+ */
+export function output(final) {
+  const legacy = final?.size ? (final.size.startsWith("1080") ? "1080p" : "720p") : null;
+  const resolution = RESOLUTIONS.includes(final?.resolution) ? final.resolution : legacy ?? "720p";
+  const format = FORMATS.some((f) => f.value === final?.format) ? final.format : "9:16";
+  const short = parseInt(resolution, 10);
+  const [a, b] = format.split(":").map(Number);
+  const even = (n) => Math.round(n / 2) * 2;
+  const [width, height] = a >= b ? [even((short * a) / b), short] : [short, even((short * b) / a)];
+  return { resolution, format, width, height };
+}const EPS = 1;
 
 export const len = (b) => b.tout - b.tin;
 export const width = (b) => len(b) * PX;

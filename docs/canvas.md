@@ -99,15 +99,32 @@ menos custo.
 
 ## No site (em teste)
 
-- `/canvas`, só o administrador (para os outros, 404), com um card "Canvas de
-  edição" (Em teste) na tela inicial. A barra tem Bloco final, Do computador e
-  Seus vídeos (os vídeos prontos dos modelos que a pessoa usa).
-- Começa vazio, com o aviso "Comece pelos seus vídeos" e o Final à direita.
-- Nada fica salvo ainda: ao recarregar, volta vazio. O Exportar mostra o plano.
+- **Projetos** (`/projetos`), na barra superior depois de Modelos e Vídeos, só para
+  o administrador (para os outros, 404): os projetos da pessoa em cards (o editado
+  por último primeiro), com busca pelo nome, "Novo projeto" e, no menu de cada um,
+  Abrir e Apagar (com uma página de confirmação; leva o projeto e os arquivos
+  enviados para ele, os vídeos não).
+- **Canvas de um projeto** (`/canvas/<id>`; `/canvas` sozinho leva à lista): a barra
+  tem o nome do projeto, Bloco final, Do computador e Seus vídeos. Salva sozinho
+  pouco depois de cada mudança (`POST /projetos/<id>/salvar`, o canvas em JSON, até
+  1 MB); se falhar, um aviso. O nome muda nos Ajustes, sem nada escolhido.
+- **Do computador**: o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
+  `project_files`), com os limites do site (imagem 10 MB, vídeo e áudio 50 MB), e o
+  bloco usa o endereço de lá; não some ao recarregar.
+- **Vídeo exportado**: nos Ajustes do Final, os mesmos campos dos modelos:
+  Resolução (480p, 720p, 1080p, em botões conectados) e Formato (9:16, 16:9, 1:1,
+  4:3, 3:4, no campo de seleção do site, com a explicação e o tamanho em pixels
+  embaixo). O lado menor é o da resolução (720p em 16:9 = 1280 × 720). O quadro da
+  Prévia segue o formato do Final. Vai no plano do Exportar. O campo de seleção do
+  site ficou em `window.mdSelect` para servir também a campos postos depois.
+- Cada projeto é só de quem o criou: de outra pessoa, nada abre, salva, recebe
+  arquivo ou apaga (testes em `test/canvas.test.ts`).
+- Tabelas `projects` e `project_files` (migration 0010). Os vídeos exportados não
+  ficam no banco: são baixados (próxima etapa).
 - Código em `src/canvas/` (tela.html, canvas.js, modelo.js, player.js,
   miniaturas.js); `npm run canvas` gera `src/site/canvas.ts`, que o Worker usa. A
-  página libera `data:` nas imagens e `blob:` no fetch (miniaturas e a onda do
-  som); as outras páginas não. As frases de erro vêm de `src/erros.ts` pelo config.
+  página do canvas libera `data:` nas imagens e `blob:` no fetch (miniaturas e a
+  onda do som); as outras páginas não. As frases de erro vêm de `src/erros.ts` pelo config.
 - O protótipo (`prototipos/canvas/`) usa a mesma tela, com o exemplo de 6 versões.
 
 ## Em aberto
@@ -115,6 +132,6 @@ menos custo.
 - **Timeline embaixo do canvas, com zoom**, para o vídeo ou o áudio escolhido:
   cortar vendo a onda e os quadros de perto (a próxima etapa da edição fina).
 
-- Salvar projetos (tabela no D1), arquivos do computador no R2 e o Exportar de
-  verdade (ffmpeg no contêiner).
+- **Exportar de verdade**: o contêiner monta cada versão com ffmpeg, no tamanho
+  escolhido, e a pessoa baixa; o vídeo não fica salvo.
 - Esboço da tela no canvas de design, para aprovar.

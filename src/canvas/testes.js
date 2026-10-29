@@ -101,3 +101,11 @@ test("a faixa que fica vazia fecha e a música continua no grupo", () => {
   assert.deepEqual(g.audios.map((b) => b.id), ["musica"]);
   assert.equal(r.blocks.find((b) => b.id === "musica").y, g.y + g.h);
 });
+
+test("o Final exporta na resolução e no formato escolhidos (e lê o tamanho de antes)", () => {
+  assert.deepEqual(M.output({}), { resolution: "720p", format: "9:16", width: 720, height: 1280 });
+  assert.deepEqual(M.output({ resolution: "1080p", format: "16:9" }), { resolution: "1080p", format: "16:9", width: 1920, height: 1080 });
+  assert.deepEqual(M.output({ resolution: "480p", format: "4:3" }), { resolution: "480p", format: "4:3", width: 640, height: 480 });
+  assert.deepEqual(M.output({ resolution: "480p", format: "9:16" }), { resolution: "480p", format: "9:16", width: 480, height: 854 });
+  assert.deepEqual(M.output({ size: "1080x1920" }), { resolution: "1080p", format: "9:16", width: 1080, height: 1920 });
+});
