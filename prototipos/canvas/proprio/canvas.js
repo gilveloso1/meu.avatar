@@ -525,6 +525,8 @@ vp.addEventListener("pointerdown", (e) => {
     if (p.type === "group") sel = { type: "group", id: p.id };
     const same = preview?.type === p.type && preview.id === p.id;
     if (same && player.playing) player.pause(), setPlayIcon(), render();
+    // A mesma prévia continua de onde parou (ou de onde a linha foi arrastada).
+    else if (same) player.play(), setPlayIcon(), render({ side: false });
     else playNow(p);
     return;
   }
