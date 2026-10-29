@@ -11,8 +11,9 @@
  *                  escolhido (?video=<id>) com a caixa da fala, e os vídeos
  *                  dele; o POST gera o vídeo
  *
- * Tudo pede sessão, menos /midia/avatares/..., que o provedor de vídeo precisa
- * baixar. Segurança como no painel do estuda.mais: cookie __Host- (HttpOnly,
+ * Tudo pede sessão, menos /midia/avatares/..., /midia/origens/... e
+ * /midia/quadros/... (a foto, o vídeo de origem e os quadros-chave do Aleph 2),
+ * que o provedor de vídeo precisa baixar. Segurança como no painel do estuda.mais: cookie __Host- (HttpOnly,
  * Secure, SameSite=Strict), todo POST precisa vir do próprio site (cabeçalho
  * Origin), páginas sem cache e sem abrir dentro de outros sites, e o script
  * da página só roda com o nonce da CSP.
@@ -22,8 +23,8 @@ import type { Db, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, type Field, type Option, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
-import { ForbiddenError, InputError, MAX_IMAGE_BYTES, type Studio } from "../studio";
+import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
+import { ForbiddenError, InputError, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
 
@@ -41,10 +42,10 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "apps", "auto_awesome", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "calendar_today", "check", "check_circle", "chevron_left", "chevron_right",
+  "add", "apps", "auto_awesome", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "calendar_today", "check", "check_circle", "checkroom", "chevron_left", "chevron_right",
   "close", "content_copy", "content_cut", "crop_square", "download", "edit", "error", "face", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq",
-  "grid_view", "hd", "hourglass_top", "info", "lock", "logout", "more_vert", "movie", "notes", "palette", "pause", "payments", "person_add", "play_arrow",
-  "record_voice_over", "refresh", "replay", "schedule", "search", "send", "swap_vert", "translate", "videocam", "view_list", "volume_off", "volume_up",
+  "grid_view", "hd", "hourglass_top", "info", "lock", "logout", "more_vert", "movie", "notes", "palette", "pause", "payments", "person_add", "photo_library", "play_arrow",
+  "record_voice_over", "refresh", "replay", "schedule", "search", "send", "swap_vert", "switch_account", "translate", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -87,8 +88,8 @@ export class Site {
     const post = request.method === "POST";
     if (!post && request.method !== "GET" && request.method !== "HEAD") return new Response("método não permitido", { status: 405 });
 
-    // A foto do avatar é baixada pelo provedor de vídeo, sem login.
-    if (!post && path.startsWith("/midia/avatares/")) {
+    // A foto do avatar, o vídeo de origem e os quadros-chave são baixados pelo provedor de vídeo, sem login.
+    if (!post && (path.startsWith("/midia/avatares/") || path.startsWith("/midia/origens/") || path.startsWith("/midia/quadros/"))) {
       return this.object(request, path.slice("/midia/".length), "public, max-age=86400");
     }
 
@@ -231,20 +232,24 @@ export class Site {
     const value = values ?? defaultValues(sections);
     const cost = model ? estimate(structure, model, value) : undefined;
     const config = {
-      prices: model?.pricing_skus ?? {},
+      prices: model ? prices(structure, model) : {},
       sku: structure.cost.sku,
       seconds: structure.cost.seconds,
       rate: structure.wordsPerSecond,
+      durations: model?.supported_durations ?? null,
+      extra: structure.cost.extra ?? 0,
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const videos = await this.db.videosByStructure(structure.id);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
 
-    // A foto abre o painel; o resto (a fala inclusive) segue as seções da estrutura.
+    // Os arquivos (vídeo de origem e foto) abrem o painel, depois das seções que vêm antes (o "Uso");
+    // o resto (a fala inclusive) segue as seções da estrutura.
     const fields = sections.flatMap((s) => s.fields);
-    const speech = fields.some((f) => f.kind === "textarea");
-    const images = fields.filter((f) => f.kind === "image");
-    const rest = sections.map((s) => ({ ...s, fields: s.fields.filter((f) => f.kind !== "image") })).filter((s) => s.fields.length);
+    const isFile = (f: Field) => f.kind === "image" || f.kind === "video";
+    const images = fields.filter(isFile);
+    const leads = sections.filter((s) => s.lead);
+    const rest = sections.filter((s) => !s.lead).map((s) => ({ ...s, fields: s.fields.filter((f) => !isFile(f)) })).filter((s) => s.fields.length);
 
     const body = `
 <main class="workspace" id="conteudo">
@@ -252,10 +257,11 @@ export class Site {
     <section class="pane pane--config" aria-labelledby="configuracao">
       <div class="pane__head"><h2 class="pane__headline" id="configuracao">Configuração</h2></div>
       <div class="pane__body" id="configuracao-corpo">
+        ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
         ${images.map((f) => formField(f, value)).join("")}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
-      ${speech ? generateBar(seconds, cost, Boolean(model) && (this.studio.canGenerate || Boolean(this.config.local))) : ""}
+      ${generateBar(seconds, cost, Boolean(model) && (this.studio.canGenerate || Boolean(this.config.local)))}
     </section>
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
@@ -263,7 +269,11 @@ export class Site {
         key: structure.id,
         from: `/modelo/${structure.id}`,
         title: "Vídeos",
-        empty: emptyState("videocam", "Os vídeos gerados aparecem aqui.", "Escolha a foto e os ajustes, escreva a fala e toque em Gerar vídeo."),
+        empty: emptyState(
+          "videocam",
+          "Os vídeos gerados aparecem aqui.",
+          fields.some((f) => f.kind === "video") ? "Escolha o vídeo, a foto e os ajustes e toque em Gerar vídeo." : "Escolha a foto e os ajustes, escreva a fala e toque em Gerar vídeo.",
+        ),
         structureOf: () => structure,
       })}
     </div>
@@ -319,7 +329,7 @@ ${error ? snackbar(error) : ""}`;
     const from: Record<string, string | null | undefined> = {
       fala: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
       estilo: v.style, idioma: v.language, instrucoes: v.extra, movimento: settings.motion_prompt ?? v.extra,
-      voz: settings.voice_id, expressividade: settings.expressiveness,
+      voz: settings.voice_id, expressividade: settings.expressiveness, roupa: settings.outfit, uso: settings.use,
     };
     return (name) => from[name] || base(name);
   }
@@ -378,8 +388,8 @@ ${error ? snackbar(error) : ""}`;
           ${editing ? `<section class="viewer__card qe-busy" role="status"><h2 class="qe-result__title">Editando o vídeo</h2><div class="linear-progress" aria-label="Editando o vídeo"></div><p class="qe-result__note">Fica pronto em 1 a 2 min.</p></section>` : ""}
           ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
           <section class="viewer__section">
-            <div class="viewer__section-head"><h2 class="viewer__title">Texto</h2><button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button></div>
-            <div class="viewer__card">${avatar}<p class="viewer__text">${esc(v.prompt)}</p></div>
+            <div class="viewer__section-head"><h2 class="viewer__title">Texto</h2>${v.prompt ? `<button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button>` : ""}</div>
+            <div class="viewer__card">${avatar}${v.prompt ? `<p class="viewer__text">${esc(v.prompt)}</p>` : ""}</div>
           </section>
           ${notes
             .map((d) => `<section class="viewer__section"><h2 class="viewer__title">${esc(d.term)}</h2><div class="viewer__card"><p class="viewer__text">${esc(d.description)}</p></div></section>`)
@@ -455,11 +465,12 @@ ${error ? snackbar(error) : ""}`;
   private async createVideo(request: Request, user: User, structure: Structure): Promise<Response> {
     const form = await request.formData();
     const image = form.get("imagem");
+    const source = form.get("video");
     const { model } = await this.tryModel(structure);
     const values = formValues(form, structure.sections(model, this.config.defaults));
     let video: Video;
     try {
-      video = await this.studio.create({ structure, values, image: image instanceof File ? image : null, user });
+      video = await this.studio.create({ structure, values, image: image instanceof File ? image : null, video: source instanceof File ? source : null, user });
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
@@ -524,6 +535,14 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
   if (v.status === "completed" && (v.edit_status === "pending" || v.edit_status === "processing")) {
     const since = minutes(v.edit_status === "processing" ? v.edit_started_at : v.updated_at);
     return { label: `Editando o vídeo · ${since} min`, icon: "content_cut", kind: "busy" };
+  }
+  if (v.prep_status === "compose" || v.prep_status === "composing") {
+    // Voltou do Aleph: o contêiner junta a cabeça e o cabelo trocados com o resto do original.
+    return { label: `Finalizando · ${minutes(v.created_at)} min`, icon: "auto_awesome", kind: "busy" };
+  }
+  if (v.status === "submitting" && (v.prep_status === "pending" || v.prep_status === "processing")) {
+    // A troca de avatar pelo Aleph 2 prepara o vídeo e os quadros-chave antes do envio.
+    return { label: `Preparando · ${minutes(v.created_at)} min`, icon: "auto_awesome", kind: "busy" };
   }
   const status = STATUS[v.status];
   // Na fila: quanto tempo já passou, para não parecer travado (720p leva uns 10 min).
@@ -675,7 +694,7 @@ const FREE_TEXT = new Set(["Movimento", "Instruções extras"]);
 /** Ícone de cada linha dos detalhes do vídeo (precisa estar em ICONS); o que faltar usa "info". */
 const DETAIL_ICONS: Record<string, string> = {
   Modelo: "movie", Voz: "record_voice_over", Expressividade: "face", Movimento: "gesture",
-  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes",
+  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", "Vídeo de origem": "videocam", Roupa: "checkroom", Uso: "auto_awesome", "Quadros-chave": "photo_library",
   Duração: "schedule", Resolução: "hd", Formato: "aspect_ratio", Custo: "payments", "Criado em": "calendar_today",
 };
 
@@ -843,7 +862,7 @@ function videoSrc(v: Video): string {
 
 /** A duração do HeyGen segue a fala: até o vídeo ficar pronto, é uma estimativa. */
 function durationLabel(v: Video, structure: Structure): string {
-  return "field" in structure.cost.seconds ? `${v.duration} s` : `≈ ${v.duration} s`;
+  return "speech" in structure.cost.seconds ? `≈ ${v.duration} s` : `${v.duration} s`;
 }
 
 /** Uma seção do formulário: título e campos. */
@@ -892,6 +911,16 @@ function formField(f: Field, value: Values): string {
             <span class="file-picker__hint" data-image-hint data-empty="${esc(f.supporting)}">${esc(f.supporting)}</span>
           </span>
           <span class="icon file-picker__trailing" data-image-trailing hidden>edit</span>
+        </label>`;
+    case "video":
+      return `<label class="file-picker interactive" title="MP4 ou MOV, até ${MAX_VIDEO_BYTES / 1024 / 1024} MB">
+          <input type="file" name="${f.name}" accept="video/mp4,video/quicktime" aria-label="${esc(f.label)}" required data-source>
+          <span class="file-picker__preview" data-source-preview><span class="icon">videocam</span></span>
+          <span class="file-picker__text">
+            <span class="file-picker__name" data-source-name data-empty="Adicionar ${esc(f.label.toLowerCase())}">Adicionar ${esc(f.label.toLowerCase())}</span>
+            <span class="file-picker__hint" data-source-hint data-empty="${esc(f.supporting)}">${esc(f.supporting)}</span>
+          </span>
+          <span class="icon file-picker__trailing" data-source-trailing hidden>edit</span>
         </label>`;
   }
 }
@@ -1348,14 +1377,23 @@ const SCRIPT = `(() => {
     const speech = f.querySelector("[data-speech]");
     const words = f.querySelector("[data-words]"), count = f.querySelector("[data-count]");
     const rate = cfg.rate, mid = (rate.min + rate.max) / 2;
+    // Duração do vídeo enviado, lida no navegador; o vídeo gerado fica com a duração aceita mais perto.
+    let sourceSeconds = 0;
+    const fromSource = () => {
+      if (!sourceSeconds) return 0;
+      const r = Math.round(sourceSeconds);
+      return (cfg.durations || [r]).reduce((best, d) => (Math.abs(d - r) < Math.abs(best - r) ? d : best));
+    };
     const update = () => {
-      const n = speech.value.split(/\\s+/).filter(Boolean).length;
-      const fixed = cfg.seconds.field ? Number(val(cfg.seconds.field)) : 0;
+      const n = speech ? speech.value.split(/\\s+/).filter(Boolean).length : 0;
+      const fixed = cfg.seconds.field ? Number(val(cfg.seconds.field)) : cfg.seconds.video ? fromSource() : 0;
       const s = fixed || (n ? Math.max(1, Math.round(n / mid)) : 0);
       const price = Number(cfg.prices[cfg.sku.replace(/\\{(\\w+)\\}/g, (_, k) => val(k))]);
       for (const e of f.querySelectorAll("[data-seconds]")) e.textContent = s ? (fixed ? "" : "≈ ") + s + " s" : "—";
-      for (const e of f.querySelectorAll("[data-cost]")) e.textContent = price && s ? "US$ " + (price * s).toFixed(2) : "—";
-      if (fixed) {
+      for (const e of f.querySelectorAll("[data-cost]")) e.textContent = price && s ? "US$ " + (price * s + cfg.extra).toFixed(2) : "—";
+      if (!speech) {
+        // Sem fala escrita (troca de avatar): nada de contador.
+      } else if (fixed) {
         // Duração escolhida: a faixa de palavras que cabe nela.
         const min = Math.round(fixed * rate.min), max = Math.round(fixed * rate.max);
         words.textContent = n
@@ -1365,7 +1403,7 @@ const SCRIPT = `(() => {
       } else {
         words.textContent = n ? n + " palavras · ≈ " + s + " s de vídeo" : words.dataset.default;
       }
-      count.textContent = speech.value.length + "/" + speech.maxLength;
+      if (speech) count.textContent = speech.value.length + "/" + speech.maxLength;
       for (const d of f.querySelectorAll("[data-description-for]")) {
         const option = f.elements[d.dataset.descriptionFor].selectedOptions[0];
         d.textContent = (option && option.dataset.description) || "";
@@ -1383,6 +1421,26 @@ const SCRIPT = `(() => {
       f.querySelector("[data-image-trailing]").hidden = !file;
       preview.innerHTML = file ? '<img alt="">' : '<span class="icon">face</span>';
       if (file) preview.firstChild.src = URL.createObjectURL(file);
+    });
+
+    const source = f.querySelector("[data-source]");
+    if (source) source.addEventListener("change", () => {
+      const file = source.files[0], box = f.querySelector("[data-source-preview]");
+      const sourceName = f.querySelector("[data-source-name]"), sourceHint = f.querySelector("[data-source-hint]");
+      sourceName.textContent = file ? file.name : sourceName.dataset.empty;
+      sourceHint.textContent = file ? "Trocar vídeo" : sourceHint.dataset.empty;
+      f.querySelector("[data-source-trailing]").hidden = !file;
+      box.innerHTML = file ? '<video muted playsinline preload="metadata"></video>' : '<span class="icon">videocam</span>';
+      sourceSeconds = 0;
+      update();
+      if (!file) return;
+      const v = box.firstChild;
+      v.addEventListener("loadedmetadata", () => {
+        sourceSeconds = Number.isFinite(v.duration) ? v.duration : 0;
+        if (sourceSeconds) sourceHint.textContent = sourceSeconds.toFixed(1).replace(".", ",") + " s · Trocar vídeo";
+        update();
+      });
+      v.src = URL.createObjectURL(file);
     });
 
     f.addEventListener("submit", () => { f.querySelector("[type=submit]").disabled = true; });
@@ -1769,7 +1827,7 @@ const SECURITY_HEADERS = {
   "referrer-policy": "same-origin",
 };
 
-/** Só o script da própria página (com o nonce); fotos de prévia vêm de blob:. */
+/** Só o script da própria página (com o nonce); a foto e o vídeo de origem escolhidos aparecem de blob:. */
 function csp(nonce: string): string {
   return [
     "default-src 'none'",
@@ -1777,7 +1835,7 @@ function csp(nonce: string): string {
     "style-src 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
     "img-src 'self' blob:",
-    "media-src 'self'",
+    "media-src 'self' blob:",
     // A prévia da edição rápida baixa o vídeo para achar os silêncios.
     "connect-src 'self'",
     "form-action 'self'",

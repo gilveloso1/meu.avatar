@@ -1,13 +1,15 @@
 import type { Role } from "../db";
+import { ALEPH } from "./aleph";
 import type { VideoModel } from "../openrouter";
 import { HEYGEN_AVATAR, speechSeconds } from "./heygen";
+import { SEEDANCE } from "./seedance";
 import type { CostRule, Structure, Values } from "./types";
 import { WAN } from "./wan";
 
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR];
+export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, SEEDANCE, ALEPH];
 
 export function structureById(id: string | null | undefined): Structure | undefined {
   return STRUCTURES.find((s) => s.id === id);
@@ -18,12 +20,21 @@ export function canUse(structure: Structure, role: Role): boolean {
   return structure.access === "all" || role === "admin";
 }
 
-/** Custo estimado em US$ pela regra da estrutura; undefined se o modelo não tem o preço. */
+/** Preço por segundo de cada SKU da estrutura. */
+export function prices(structure: Structure, model: VideoModel): Record<string, string> {
+  return structure.prices?.(model) ?? model.pricing_skus ?? {};
+}
+
+/**
+ * Custo estimado em US$ pela regra da estrutura; undefined se o modelo não tem
+ * o preço ou se os segundos só se sabem no navegador (duração do vídeo enviado).
+ */
 export function estimate(structure: Structure, model: VideoModel, values: Values): number | undefined {
   const rule: CostRule = structure.cost;
-  const price = Number(model.pricing_skus?.[rule.sku.replace(/\{(\w+)\}/g, (_, name: string) => values(name))]);
-  const seconds = "field" in rule.seconds ? Number(values(rule.seconds.field)) : speechSeconds(values(rule.seconds.speech), structure.wordsPerSecond);
-  return price && seconds ? price * seconds : undefined;
+  const price = Number(prices(structure, model)[rule.sku.replace(/\{(\w+)\}/g, (_, name: string) => values(name))]);
+  const seconds =
+    "field" in rule.seconds ? Number(values(rule.seconds.field)) : "speech" in rule.seconds ? speechSeconds(values(rule.seconds.speech), structure.wordsPerSecond) : 0;
+  return price && seconds ? price * seconds + (rule.extra ?? 0) : undefined;
 }
 
 /** O menor preço por segundo do modelo, para o cartão de escolha. */

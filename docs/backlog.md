@@ -8,10 +8,12 @@ que ficou para depois) no mesmo PR.
 
 1. **Testar outro modelo de vídeo com áudio próprio** (em andamento: HeyGen
    Avatar IV no ar para o administrador testar)
-2. Voz gerada à parte e avatar falante (o HeyGen Avatar IV já faz isso numa
+2. **Trocar avatar** (em andamento: Seedance 2.0, uso "Trocar avatar", pronto
+   para o administrador testar; ver abaixo)
+3. Voz gerada à parte e avatar falante (o HeyGen Avatar IV já faz isso numa
    chamada só; ver o item 1)
-3. Convites do administrador
-4. Esqueci a senha
+4. Convites do administrador
+5. Esqueci a senha
 
 ## Onde estamos (25/10/2026)
 
@@ -30,8 +32,8 @@ No ar em <https://meuavatar.ia.br> (e no workers.dev). O que já funciona e
 - **Uma estrutura por modelo** (`src/structures/`): a tela inicial tem um card
   por modelo, com a aba Vídeos ao lado (todos os vídeos, com filtro por
   status); a página do modelo tem três painéis: configuração, o vídeo
-  escolhido com a caixa da fala, e os vídeos daquele modelo. Cada vídeo guarda a estrutura que o gerou. Hoje: Wan 3.0 (para todos) e HeyGen Avatar
-  IV (em teste, só o administrador).
+  escolhido com a caixa da fala, e os vídeos daquele modelo. Cada vídeo guarda a estrutura que o gerou. Hoje: Wan 3.0 (para todos), HeyGen Avatar
+  IV e Seedance 2.0, com o uso "Trocar avatar" (em teste, só o administrador).
 
 O problema que motiva o item 1: pelo OpenRouter, o Wan 3.0 devolve a voz alta
 demais, cortada e com chiado. O mesmo modelo no Higgsfield sai limpo (os
@@ -119,7 +121,39 @@ caminho para mandar uma voz pronta e o modelo sincronizar a boca.
   segundo.
 - Testes para cada comportamento novo (`test/`, com a API falsa).
 
-## 2. Voz gerada à parte e avatar falante
+## 2. Trocar avatar
+
+Trocar só a pessoa de um vídeo pronto pela de uma foto, mantendo cena, câmera,
+gestos e fala. Escolhido o Seedance 2.0 (`bytedance/seedance-2.0`): recebe o
+vídeo e a foto como referências. Está na estrutura do Seedance
+(`src/structures/seedance.ts`, explicada em `docs/prompt.md`) como a opção
+"Trocar avatar" do campo Uso, para o modelo servir a outros usos depois;
+visível só para o administrador. O vídeo vem do computador (MP4 ou MOV, de 2 a 15 s).
+
+**28/10/2026: o Seedance recusa vídeo com rosto realista** (regra da
+ByteDance; a estrutura fica como está, para outros usos). O teste seguiu pelo
+Runway Aleph 2, pelo terminal: mantém o áudio original e, no terceiro teste
+(vídeo vertical ampliado e 5 quadros-chave com o rosto grande e nítido), trocou
+o avatar. Receita, custos e testes em [docs/modelos/runway-aleph-2.md](modelos/runway-aleph-2.md).
+
+Próximos passos:
+
+1. Testar com um vídeo de origem nítido, em 1080p de verdade (o teto de
+   qualidade hoje é o vídeo de origem; quadros-chave em 2K não melhoraram e um
+   deles criou um erro no fundo; vale a receita do terceiro teste).
+2. Estrutura do Aleph 2 no ar desde 29/10/2026 (`src/structures/aleph.ts`, só o
+   administrador; migration 0009 e o contêiner novo publicados): falta gerar o
+   primeiro vídeo pelo site e confirmar a cobrança (US$ 1,40 por pedido nos
+   testes) antes de ajustar a estimativa do formulário. Primeiro vídeo feito
+   (US$ 1,62); quadros-chave em cadeia e composição com o original entraram
+   depois. O dono ainda não está satisfeito: o próximo passo, se for preciso,
+   é testar um modelo de substituição de personagem (Wan 2.2 Animate, Kling O3)
+   fora do OpenRouter. O Seedance fica como
+   está, para outros usos.
+3. Botão "Trocar avatar" na página do vídeo, que abre o formulário já com
+   aquele vídeo.
+
+## 3. Voz gerada à parte e avatar falante
 
 Só se nenhum modelo do item 1 entregar voz limpa. Gerar a voz num modelo de
 voz (TTS do OpenRouter, `/api/v1/audio/speech`) e animar a foto com um modelo
@@ -128,7 +162,7 @@ que sincroniza a boca com o áudio: `heygen/avatar-iv` no OpenRouter
 referência. É o que o Higgsfield faz no explainer narrado (voz à parte, juntada
 depois). Muda mais o fluxo: duas chamadas e duas esperas por vídeo.
 
-## 3. Convites do administrador
+## 4. Convites do administrador
 
 Hoje o primeiro cadastro vira admin e o cadastro fecha. O admin precisa
 convidar outras pessoas. Portar do estuda.mais (`src/auth.ts` e o painel
@@ -137,11 +171,11 @@ convidar outras pessoas. Portar do estuda.mais (`src/auth.ts` e o painel
 `users` já tem `role` (`admin`/`member`) e aceita `password_hash` nulo
 (convite não aceito).
 
-## 4. Esqueci a senha
+## 5. Esqueci a senha
 
 No estuda.mais é o mesmo link de convite, gerado de novo pelo admin. Para o
 próprio admin, hoje o caminho é apagar a conta no D1 e cadastrar de novo
-(`docs/operacao.md`). Fazer junto com o item 3.
+(`docs/operacao.md`). Fazer junto com o item 4.
 
 ## Pendências pequenas
 

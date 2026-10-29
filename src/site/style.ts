@@ -400,7 +400,7 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
   border-radius: var(--md-sys-shape-corner-medium);
   background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
 }
-.file-picker__preview img { width: 100%; height: 100%; object-fit: cover; }
+.file-picker__preview img, .file-picker__preview video { width: 100%; height: 100%; object-fit: cover; }
 .file-picker__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .file-picker__name { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-picker__hint { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }

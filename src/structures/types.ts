@@ -41,11 +41,15 @@ export type Field =
   | { kind: "text"; name: string; label: string; maxLength: number; placeholder: string; supporting: string }
   | { kind: "select"; name: string; label: string; options: Option[]; value: string; supporting?: string }
   | { kind: "segmented"; name: string; label: string; options: Option[]; value: string }
-  | { kind: "image"; name: string; label: string; required: boolean; supporting: string };
+  | { kind: "image"; name: string; label: string; required: boolean; supporting: string }
+  /** Vídeo enviado do computador (MP4 ou MOV); a duração é lida do arquivo. */
+  | { kind: "video"; name: string; label: string; supporting: string };
 
 export interface Section {
   title: string;
   fields: Field[];
+  /** Vem antes da foto e do vídeo, no topo da configuração (como o "Uso" do Seedance). */
+  lead?: boolean;
 }
 
 /** Padrões do formulário que vêm da configuração (wrangler.jsonc). */
@@ -57,12 +61,19 @@ export interface Defaults {
 
 /**
  * Custo estimado: o preço por segundo (o SKU pode citar campos, como
- * "duration_seconds_{resolucao}") vezes os segundos, que vêm de um campo ou
- * da quantidade de palavras da fala.
+ * "duration_seconds_{resolucao}") vezes os segundos, que vêm de um campo, da
+ * quantidade de palavras da fala ou da duração do vídeo enviado.
  */
 export interface CostRule {
   sku: string;
-  seconds: { field: string } | { speech: string };
+  seconds: { field: string } | { speech: string } | { video: string };
+  /** US$ fixos por vídeo, além do preço por segundo (as imagens dos quadros-chave do Aleph 2). */
+  extra?: number;
+}
+
+/** O vídeo enviado, já lido: quantos segundos tem. */
+export interface SourceVideo {
+  seconds: number;
 }
 
 /** O que o formulário mandou, já sem a foto. */
@@ -73,6 +84,13 @@ export interface Built {
   request: Omit<VideoRequest, "model" | "callback_url" | "frame_images" | "input_references">;
   /** Como a foto vai para o modelo: primeiro quadro ou referência. */
   image: "first_frame" | "reference" | null;
+  /** O vídeo enviado vai como referência (só o Seedance 2 em diante aceita). */
+  video?: boolean;
+  /**
+   * O pedido não sai na hora: o vídeo entra na fila de preparo (Studio.prepareNext),
+   * que monta as referências e envia. A foto e o vídeo ficam guardados no R2.
+   */
+  prepare?: boolean;
   /** O que fica guardado no banco. */
   record: {
     /** A fala. */
@@ -106,12 +124,22 @@ export interface Structure {
   treatAudio: boolean;
   /** O vídeo pronto tem o botão "Edição rápida" (container/editar.py). */
   quickEdit: boolean;
+  /**
+   * O vídeo pronto passa pela composição no contêiner antes de aparecer (o
+   * Aleph 2: o original com só a cabeça e o cabelo do Aleph por cima).
+   */
+  compose?: boolean;
   /** Palavras por segundo da fala, para o contador e o custo. */
   wordsPerSecond: { min: number; max: number };
   cost: CostRule;
   sections(model: VideoModel | null, defaults: Defaults): Section[];
-  /** Valida o formulário e monta o pedido; lança InputError. */
-  build(values: Values, hasImage: boolean, model: VideoModel): Built;
+  /**
+   * Preço por segundo, por SKU (os nomes que `cost.sku` cita). Sem isto, os
+   * SKUs do próprio modelo; o Seedance cobra por tokens e converte aqui.
+   */
+  prices?(model: VideoModel): Record<string, string>;
+  /** Valida o formulário e monta o pedido; lança InputError. `video`: o vídeo enviado, se houver. */
+  build(values: Values, hasImage: boolean, model: VideoModel, video: SourceVideo | null): Built;
   /** As configurações próprias de um vídeo, para o cartão de detalhes. */
   details(video: Video): Detail[];
 }

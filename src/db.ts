@@ -46,11 +46,22 @@ export interface Video {
   edit_plan: string | null;
   /** Onde está o rosto (container/rosto.py), em JSON; null enquanto ninguém pediu. */
   face: string | null;
+  /** Preparo antes do envio e composição depois (troca de avatar pelo Aleph 2); null nos outros modelos. */
+  prep_status: PrepStatus | null;
+  prep_error: string | null;
+  prep_started_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export type AudioStatus = "pending" | "processing" | "done" | "failed";
+
+/**
+ * Preparo (Aleph 2): 'pending' → 'processing' → enviado ('done') ou 'failed';
+ * pronto no Aleph, 'compose' → 'composing' → 'done' (ou 'failed', e fica a
+ * saída pura do Aleph).
+ */
+export type PrepStatus = AudioStatus | "compose" | "composing";
 
 export type Role = "admin" | "member";
 
@@ -93,7 +104,18 @@ export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "res
 export type VideoChanges = Partial<
   Pick<
     Video,
-    "job_id" | "status" | "video_key" | "cost" | "error" | "audio_status" | "processed_key" | "audio_error" | "audio_started_at" | "edit_status" | "edited_key" | "edited_at" | "edited_plan" | "edit_error" | "face"
+    | "job_id"
+    | "status"
+    | "duration"
+    | "resolution"
+    | "aspect_ratio"
+    | "settings"
+    | "prep_status"
+    | "prep_error"
+    | "video_key"
+    | "cost"
+    | "error"
+    | "audio_status" | "processed_key" | "audio_error" | "audio_started_at" | "edit_status" | "edited_key" | "edited_at" | "edited_plan" | "edit_error" | "face"
   >
 >;
 
@@ -231,6 +253,47 @@ export class Db {
       )
       .bind(nowIso, nowIso)
       .first<Video>();
+  }
+
+  /** Como claimAudio, para o preparo antes do envio (troca de avatar pelo Aleph 2). */
+  claimPrep(nowIso: string): Promise<Video | null> {
+    return this.d1
+      .prepare(
+        `UPDATE videos SET prep_status = 'processing', prep_started_at = ?, updated_at = ?
+         WHERE id = (SELECT id FROM videos WHERE prep_status = 'pending' ORDER BY created_at LIMIT 1)
+         RETURNING *`,
+      )
+      .bind(nowIso, nowIso)
+      .first<Video>();
+  }
+
+  /** Como claimPrep, para a composição depois do Aleph ('compose' → 'composing'). */
+  claimCompose(nowIso: string): Promise<Video | null> {
+    return this.d1
+      .prepare(
+        `UPDATE videos SET prep_status = 'composing', prep_started_at = ?, updated_at = ?
+         WHERE id = (SELECT id FROM videos WHERE prep_status = 'compose' ORDER BY updated_at LIMIT 1)
+         RETURNING *`,
+      )
+      .bind(nowIso, nowIso)
+      .first<Video>();
+  }
+
+  /** Composições que começaram antes de `beforeIso` e não terminaram. */
+  async staleCompositions(beforeIso: string): Promise<Video[]> {
+    return (await this.d1.prepare("SELECT * FROM videos WHERE prep_status = 'composing' AND prep_started_at < ?").bind(beforeIso).all<Video>()).results;
+  }
+
+  /** Preparos que começaram antes de `beforeIso` e não terminaram: o vídeo vira falha. */
+  async failStalePrep(beforeIso: string, nowIso: string): Promise<number> {
+    const result = await this.d1
+      .prepare(
+        `UPDATE videos SET prep_status = 'failed', prep_error = 'O preparo demorou demais.', status = 'failed', updated_at = ?
+         WHERE prep_status = 'processing' AND prep_started_at < ?`,
+      )
+      .bind(nowIso, beforeIso)
+      .run();
+    return result.meta.changes;
   }
 
   /** Edições que começaram antes de `beforeIso` e não terminaram: viram falha. */

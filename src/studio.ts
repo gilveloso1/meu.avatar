@@ -1,9 +1,24 @@
 import type { AudioApi, Face } from "./audio";
 import { Db, OPEN_STATUSES, type Role, type Video } from "./db";
 import { ERROS } from "./erros";
-import { validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
+import { mp4Duration, mp4Size } from "./mp4";
+import { type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import { canUse, InputError, structureById, type Structure, type Values } from "./structures";
+import {
+  aspectLabel,
+  chainPrompt,
+  CHECK_MODEL,
+  CHECK_PROMPT,
+  FACE_MODEL,
+  FACE_TRIES,
+  facePrompt,
+  HAIR_PROMPT,
+  keyframeTimes,
+  MAX_PREPARED_BYTES,
+  parseCheck,
+  parseHair,
+} from "./structures/aleph";
 
 export { InputError } from "./structures";
 
@@ -19,6 +34,8 @@ export interface NewVideoInput {
   values: Values;
   /** Foto do avatar. */
   image?: File | null;
+  /** Vídeo de origem (estruturas que recebem um vídeo, como a troca de avatar). */
+  video?: File | null;
   /** Quem está pedindo. */
   user: { id: number; role: Role };
 }
@@ -29,6 +46,10 @@ export const AUDIO_TIMEOUT_MS = 20 * 60_000;
 
 /** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+const VIDEO_TYPES: Record<string, string> = { "video/mp4": "mp4", "video/quicktime": "mov" };
+/** Limite do vídeo de origem: o do Seedance para vídeo de referência. */
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
 /** A estrutura existe, mas quem pediu não tem acesso a ela. */
 export class ForbiddenError extends Error {}
@@ -72,12 +93,26 @@ export class Studio {
     if (image && !ext) throw new InputError(ERROS.fotoTipo);
     if (image && image.size > MAX_IMAGE_BYTES) throw new InputError(ERROS.fotoTamanho);
 
+    const upload = input.video && input.video.size > 0 ? input.video : null;
+    const videoExt = upload ? VIDEO_TYPES[upload.type] : undefined;
+    if (upload && !videoExt) throw new InputError(ERROS.videoTipo);
+    if (upload && upload.size > MAX_VIDEO_BYTES) throw new InputError(ERROS.videoTamanho(MAX_VIDEO_BYTES / 1024 / 1024));
+    const videoBytes = upload ? await upload.arrayBuffer() : null;
+    const seconds = videoBytes ? mp4Duration(videoBytes) : null;
+    if (videoBytes && seconds === null) throw new InputError(ERROS.videoLeitura);
+
     const model = await this.model(structure.model);
-    const built = structure.build(input.values, image !== null, model);
+    const built = structure.build(input.values, image !== null, model, seconds !== null ? { seconds } : null);
+    // O preparo (Aleph 2) roda no contêiner: sem ele, não dá para começar.
+    if (built.prepare && !this.audio) throw new InputError(ERROS.trocaIndisponivel);
     const request: VideoRequest = { model: structure.model, ...built.request };
     const placeholder = { type: "image_url" as const, image_url: { url: "" } };
+    const source = { type: "video_url" as const, video_url: { url: "" } };
+    const references: InputReference[] = [];
+    if (built.video) references.push(source);
     if (built.image === "first_frame") request.frame_images = [{ ...placeholder, frame_type: "first_frame" }];
-    if (built.image === "reference") request.input_references = [placeholder];
+    if (built.image === "reference") references.push(placeholder);
+    if (references.length) request.input_references = references;
     const errors = validate(model, request);
     if (errors.length) {
       console.error(`Não suportado por ${structure.model}: ${errors.join("; ")}`);
@@ -91,7 +126,14 @@ export class Studio {
       imageKey = `avatares/${crypto.randomUUID()}.${ext}`;
       const bytes = await image.arrayBuffer();
       await this.media.put(imageKey, bytes, { httpMetadata: { contentType: image.type } });
-      placeholder.image_url.url = await this.imageUrl(imageKey, image.type, bytes);
+      if (!built.prepare) placeholder.image_url.url = await this.imageUrl(imageKey, image.type, bytes);
+    }
+    let sourceKey: string | null = null;
+    if (upload && videoBytes && built.video) {
+      // Como a foto: nome impossível de adivinhar, público só para o provedor baixar.
+      sourceKey = `origens/${crypto.randomUUID()}.${videoExt}`;
+      await this.media.put(sourceKey, videoBytes, { httpMetadata: { contentType: upload.type } });
+      if (!built.prepare) source.video_url.url = await this.imageUrl(sourceKey, upload.type, videoBytes);
     }
     if (this.config.siteUrl.startsWith("https://")) request.callback_url = `${this.config.siteUrl}/openrouter/webhook`;
 
@@ -103,8 +145,11 @@ export class Studio {
       image_key: imageKey,
       user_id: input.user.id,
       structure: structure.id,
-      settings: settings ? JSON.stringify(settings) : null,
+      settings: settings || sourceKey ? JSON.stringify({ ...settings, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
     });
+
+    // O pedido sai depois, da fila de preparo (prepareNext).
+    if (built.prepare) return (await this.db.updateVideo(id, { prep_status: "pending" }))!;
 
     try {
       const job = await api.submit(request);
@@ -117,6 +162,8 @@ export class Studio {
   /** Confere o job no OpenRouter e, se terminou, guarda o MP4 no R2. */
   async sync(video: Video): Promise<Video> {
     if (!video.job_id || !OPEN_STATUSES.includes(video.status)) return video;
+    // Já voltou do Aleph e espera a composição (prepareNext): nada a consultar.
+    if (video.prep_status === "compose" || video.prep_status === "composing") return video;
     const api = this.requireApi();
     let job: VideoJob;
     try {
@@ -126,19 +173,30 @@ export class Studio {
       return video;
     }
 
+    // O que o preparo já gastou (as imagens dos quadros-chave do Aleph 2) entra no custo.
+    const prepCost = Number(parseSettings(video.settings).prep_cost) || 0;
+    const cost = job.usage?.cost != null ? job.usage.cost + prepCost : null;
+    const structure = structureById(video.structure);
+    if (job.status === "completed" && structure?.compose && this.audio) {
+      // A saída do Aleph fica guardada; o vídeo aparece depois da composição.
+      const raw = `videos/${video.id}.aleph.mp4`;
+      await this.media.put(raw, await api.download(job), { httpMetadata: { contentType: "video/mp4" } });
+      const settings = JSON.stringify({ ...parseSettings(video.settings), aleph_key: raw });
+      return (await this.db.updateVideo(video.id, { status: "in_progress", prep_status: "compose", cost, settings }))!;
+    }
     if (job.status === "completed") {
       const key = `videos/${video.id}.mp4`;
       await this.media.put(key, await api.download(job), { httpMetadata: { contentType: "video/mp4" } });
       return (await this.db.updateVideo(video.id, {
         status: "completed",
         video_key: key,
-        cost: job.usage?.cost ?? null,
+        cost,
         // O áudio entra na fila do contêiner, se a estrutura pede; o agendamento trata um por vez.
-        audio_status: this.audio && (structureById(video.structure)?.treatAudio ?? true) ? "pending" : null,
+        audio_status: this.audio && (structure?.treatAudio ?? true) ? "pending" : null,
       }))!;
     }
     if (job.status === "failed" || job.status === "cancelled" || job.status === "expired") {
-      return (await this.db.updateVideo(video.id, { status: job.status, error: job.error ?? null, cost: job.usage?.cost ?? null }))!;
+      return (await this.db.updateVideo(video.id, { status: job.status, error: job.error ?? null, cost }))!;
     }
     if (job.status !== video.status) return (await this.db.updateVideo(video.id, { status: job.status }))!;
     return video;
@@ -150,6 +208,160 @@ export class Studio {
     if (typeof jobId !== "string") return null;
     const video = await this.db.videoByJob(jobId);
     return video ? this.sync(video) : null;
+  }
+
+  /**
+   * Agendamento: prepara o próximo vídeo da fila de preparo (troca de avatar
+   * pelo Aleph 2, src/structures/aleph.ts) e envia ao OpenRouter. Um por
+   * rodada (uns 2 min: o contêiner e as imagens dos quadros-chave).
+   */
+  async prepareNext(now = new Date()): Promise<Video | null> {
+    if (!this.audio || !this.api) return null;
+    const before = new Date(now.getTime() - AUDIO_TIMEOUT_MS).toISOString();
+    await this.db.failStalePrep(before, now.toISOString());
+    // Composição que não terminou: fica a saída pura do Aleph.
+    for (const stale of await this.db.staleCompositions(before)) await this.finishWithoutComposition(stale, "A composição demorou demais.");
+    // Primeiro a composição de um vídeo que já voltou do Aleph (falta pouco para ficar pronto).
+    const ready = await this.db.claimCompose(now.toISOString());
+    if (ready) {
+      try {
+        return await this.compose(ready, this.audio);
+      } catch (err) {
+        console.error("Falha na composição", ready.id, err);
+        return this.finishWithoutComposition(ready, errorMessage(err));
+      }
+    }
+    const video = await this.db.claimPrep(now.toISOString());
+    if (!video) return null;
+    try {
+      return await this.prepare(video, this.api, this.audio);
+    } catch (err) {
+      console.error("Falha no preparo", video.id, err);
+      return (await this.db.updateVideo(video.id, { prep_status: "failed", prep_error: errorMessage(err), status: "failed", error: errorMessage(err) }))!;
+    }
+  }
+
+  private async prepare(video: Video, api: VideoApi, audio: AudioApi): Promise<Video> {
+    const settings = parseSettings(video.settings);
+    if (!settings.source_key || !video.image_key) throw new Error("Faltam o vídeo de origem ou a foto no registro.");
+
+    // 1. O vídeo sem faixas pretas e ampliado até 1080p.
+    const preparedKey = `origens/${video.id}.preparado.mp4`;
+    await this.runInContainer(settings.source_key, preparedKey, (body, size) => audio.prepare(body, size));
+    const prepared = await (await this.media.get(preparedKey))!.arrayBuffer();
+    const seconds = mp4Duration(prepared);
+    const size = mp4Size(prepared);
+    if (!seconds || !size) throw new Error("O vídeo preparado não tem duração ou tamanho legíveis.");
+    if (prepared.byteLength > MAX_PREPARED_BYTES) throw new Error(`O vídeo preparado tem ${prepared.byteLength} bytes; o Aleph aceita até ${MAX_PREPARED_BYTES}.`);
+
+    // 2. Os quadros, a foto e o recorte do rosto dela.
+    const times = keyframeTimes(seconds);
+    const frames = await audio.frames(prepared, times);
+    const photoObject = await this.media.get(video.image_key);
+    if (!photoObject) throw new Error("A foto do avatar não está no R2.");
+    const photo = await photoObject.arrayBuffer();
+    const photoUrl = `data:${photoObject.httpMetadata?.contentType ?? "image/jpeg"};base64,${base64(photo)}`;
+    const crop = await audio.faceCrop(photo);
+
+    // 3. O rosto trocado nos quadros, em cadeia: o primeiro sai da foto e vira a referência de rosto e
+    //    cabelo dos outros. Cada um é conferido (fundo igual ao original; cabelo igual ao da referência)
+    //    e o reprovado é refeito uma vez.
+    let prepCost = 0;
+    const image = (url: string) => ({ type: "image_url" as const, image_url: { url } });
+    const jpeg = (b64: string) => `data:image/jpeg;base64,${b64}`;
+    const swap = async (text: string, images: string[], at: number): Promise<string | null> => {
+      const edit = await api.chat({ model: FACE_MODEL, modalities: ["image", "text"], messages: [{ role: "user", content: [{ type: "text", text }, ...images.map(image)] }] });
+      prepCost += edit.cost;
+      const edited = edit.images[0]?.replace(/^data:[^,]*,/, "");
+      if (!edited) {
+        console.error("Troca do rosto sem imagem", video.id, at, edit.text.slice(0, 300));
+        return null;
+      }
+      return audio.resize(edited, size.width, size.height);
+    };
+    const ask = async (text: string, a: string, b: string): Promise<string> => {
+      const answer = await api.chat({ model: CHECK_MODEL, temperature: 0, messages: [{ role: "user", content: [{ type: "text", text }, image(jpeg(a)), image(jpeg(b))] }] });
+      prepCost += answer.cost;
+      return answer.text;
+    };
+    const cropUrl = crop ? jpeg(crop) : null;
+    // A referência: o primeiro quadro (na ordem do vídeo) que, trocado a partir da foto, mantém o fundo.
+    let reference: { index: number; image: string } | null = null;
+    for (let i = 0; i < frames.length && !reference; i++) {
+      for (let attempt = 1; attempt <= FACE_TRIES && !reference; attempt++) {
+        const swapped = await swap(facePrompt(crop !== null), [jpeg(frames[i]!), photoUrl, ...(cropUrl ? [cropUrl] : [])], times[i]!);
+        if (!swapped) continue;
+        const check = await ask(CHECK_PROMPT, frames[i]!, swapped);
+        const verdict = parseCheck(check);
+        if (verdict && !verdict.fundo) reference = { index: i, image: swapped };
+        else console.error("Quadro-chave reprovado na conferência do fundo", video.id, times[i], attempt, check.slice(0, 300));
+      }
+    }
+    if (!reference) throw new Error("Nenhum quadro-chave passou na conferência do fundo.");
+    const ref = reference;
+    const chained = async (frame: string, at: number): Promise<{ at: number; image: string } | null> => {
+      for (let attempt = 1; attempt <= FACE_TRIES; attempt++) {
+        const swapped = await swap(chainPrompt(crop !== null), [jpeg(frame), jpeg(ref.image), ...(cropUrl ? [cropUrl] : [])], at);
+        if (!swapped) continue;
+        const [background, hair] = await Promise.all([ask(CHECK_PROMPT, frame, swapped), ask(HAIR_PROMPT, ref.image, swapped)]);
+        const verdict = parseCheck(background);
+        if (verdict && !verdict.fundo && parseHair(hair) === true) return { at, image: swapped };
+        console.error("Quadro-chave reprovado na conferência", video.id, at, attempt, background.slice(0, 200), hair.slice(0, 200));
+      }
+      return null;
+    };
+    const rest = await Promise.all(frames.slice(ref.index + 1).map((frame, i) => chained(frame, times[ref.index + 1 + i]!)));
+    const accepted = [{ at: times[ref.index]!, image: ref.image }, ...rest.filter((k): k is { at: number; image: string } => k !== null)];
+
+    // 4. Os quadros-chave no R2 (o provedor baixa de lá) e o pedido ao Aleph.
+    const keyframes = await Promise.all(
+      accepted.map(async ({ at, image }, i) => {
+        const key = `quadros/${video.id}/${i}.jpg`;
+        const bytes = fromBase64(image);
+        await this.media.put(key, bytes, { httpMetadata: { contentType: "image/jpeg" } });
+        return { seconds: at, uri: await this.imageUrl(key, "image/jpeg", bytes) };
+      }),
+    );
+    const request: VideoRequest = {
+      model: video.model,
+      prompt: video.request_prompt ?? "",
+      input_references: [{ type: "video_url", video_url: { url: await this.imageUrl(preparedKey, "video/mp4", prepared) } }],
+      provider: { options: { runway: { keyframes } } },
+    };
+    if (this.config.siteUrl.startsWith("https://")) request.callback_url = `${this.config.siteUrl}/openrouter/webhook`;
+    const record = {
+      duration: Math.round(seconds),
+      resolution: `${Math.min(size.width, size.height)}p`,
+      aspect_ratio: aspectLabel(size.width, size.height),
+      settings: JSON.stringify({ ...settings, prepared_key: preparedKey, keyframes: String(accepted.length), prep_cost: prepCost.toFixed(4) }),
+    };
+    const job = await api.submit(request);
+    return (await this.db.updateVideo(video.id, { ...record, job_id: job.id, status: job.status ?? "pending", prep_status: "done", prep_error: null }))!;
+  }
+
+  /** Compõe o vídeo preparado com a saída do Aleph (container/aleph.py) e o vídeo fica pronto. */
+  private async compose(video: Video, audio: AudioApi): Promise<Video> {
+    const settings = parseSettings(video.settings);
+    const prepared = settings.prepared_key ? await this.media.get(settings.prepared_key) : null;
+    const raw = settings.aleph_key ? await this.media.get(settings.aleph_key) : null;
+    if (!prepared || !raw) throw new Error("O vídeo preparado ou a saída do Aleph não estão no R2.");
+    // Os dois emendados num corpo só, sem carregar na memória do Worker.
+    const { readable, writable } = new FixedLengthStream(prepared.size + raw.size);
+    const piping = prepared.body.pipeTo(writable, { preventClose: true }).then(() => raw.body.pipeTo(writable));
+    // Se o contêiner falhar, o erro que vale é o dele (o da emenda vem junto e é ignorado).
+    piping.catch(() => {});
+    const res = await audio.compose(readable, prepared.size + raw.size, prepared.size);
+    await piping;
+    const key = `videos/${video.id}.mp4`;
+    const out = new FixedLengthStream(Number(res.headers.get("content-length")));
+    await Promise.all([res.body!.pipeTo(out.writable), this.media.put(key, out.readable, { httpMetadata: { contentType: "video/mp4" } })]);
+    return (await this.db.updateVideo(video.id, { status: "completed", video_key: key, prep_status: "done", prep_error: null }))!;
+  }
+
+  /** Sem composição, o vídeo fica pronto com a saída pura do Aleph; o motivo fica no banco e no log. */
+  private async finishWithoutComposition(video: Video, reason: string): Promise<Video> {
+    const raw = parseSettings(video.settings).aleph_key ?? null;
+    return (await this.db.updateVideo(video.id, { status: raw ? "completed" : "failed", video_key: raw, prep_status: "failed", prep_error: reason, error: raw ? null : reason }))!;
   }
 
   /** Agendamento: confere os vídeos ainda abertos. */
@@ -275,21 +487,42 @@ export class Studio {
   }
 
   /**
-   * O provedor baixa a foto pela URL pública do Worker. Em desenvolvimento
-   * (localhost), essa URL não é alcançável de fora: vai a foto em base64.
+   * O provedor baixa a foto (ou o vídeo de origem) pela URL pública do Worker.
+   * Em desenvolvimento (localhost), essa URL não é alcançável de fora: vai o
+   * arquivo em base64.
    */
-  private async imageUrl(key: string, type: string, bytes: ArrayBuffer): Promise<string> {
+  private async imageUrl(key: string, type: string, bytes: ArrayBuffer | Uint8Array<ArrayBuffer>): Promise<string> {
     if (this.config.siteUrl.startsWith("https://")) return `${this.config.siteUrl}/midia/${key}`;
-    let binary = "";
-    const view = new Uint8Array(bytes);
-    for (let i = 0; i < view.length; i += 0x8000) binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
-    return `data:${type};base64,${btoa(binary)}`;
+    return `data:${type};base64,${base64(bytes)}`;
   }
 
   private requireApi(): VideoApi {
     if (!this.api) throw new InputError(ERROS.criacaoPausada);
     return this.api;
   }
+}
+
+/** As configurações da estrutura guardadas no vídeo (JSON); ilegíveis, vazias. */
+function parseSettings(json: string | null): Record<string, string> {
+  try {
+    return json ? (JSON.parse(json) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function base64(bytes: ArrayBuffer | Uint8Array<ArrayBuffer>): string {
+  let binary = "";
+  const view = new Uint8Array(bytes);
+  for (let i = 0; i < view.length; i += 0x8000) binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+function fromBase64(text: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(text);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
 }
 
 /** O plano guardado no banco; sem ele, os padrões. */

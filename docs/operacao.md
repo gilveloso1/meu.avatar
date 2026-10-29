@@ -160,7 +160,46 @@ Medido em 27/10/2026 no último vídeo do HeyGen (40 s, 720p, 9:16): 40,2 s →
 site:
 `python3 container/editar.py entrada.mp4 saida.mp4` (precisa de ffmpeg).
 
-A foto do avatar fica pública em `/midia/avatares/<uuid>.jpg` (nome impossível
+## Troca de avatar pelo Aleph 2
+
+A estrutura `aleph` (`src/structures/aleph.ts`, receita e testes em
+[docs/modelos/runway-aleph-2.md](modelos/runway-aleph-2.md)) não envia o pedido
+na hora: o vídeo fica "Preparando" (`prep_status = 'pending'`, migration
+`0009_prepare.sql`) e o agendamento prepara um por rodada
+(`Studio.prepareNext`):
+
+1. o contêiner corta as faixas pretas e amplia o vídeo até 1080p
+   (`POST /preparar`, `container/aleph.py`) → R2 `origens/<id>.preparado.mp4`;
+2. tira 5 quadros (`POST /quadros`, instantes no cabeçalho `x-instantes`) e
+   recorta o rosto da foto (`POST /recorte`);
+3. o Worker troca o rosto nos quadros (`google/gemini-nano-banana-2.1`, pelo
+   chat), em cadeia: o primeiro que passa sai da foto e vira a referência de
+   rosto e cabelo dos outros. O contêiner põe cada quadro no tamanho do vídeo
+   (`POST /ajustar`) e um modelo de visão (`anthropic/claude-haiku-5.5`) confere
+   se o fundo ficou igual ao do original e, na cadeia, se o cabelo é o da
+   referência. Reprovado, refaz uma vez; de novo, o quadro fica de fora → R2
+   `quadros/<id>/<n>.jpg`;
+4. pede ao Aleph 2 com o vídeo preparado e os quadros-chave;
+5. quando o Aleph devolve, a saída fica em `videos/<id>.aleph.mp4` e o vídeo
+   aparece como "Finalizando" (`prep_status = 'compose'`). Na rodada seguinte, o
+   contêiner compõe (`POST /compor`, os dois vídeos emendados no corpo, o tamanho
+   do primeiro em `x-primeiro`): o preparado com só a cabeça e o cabelo do Aleph
+   por cima → `videos/<id>.mp4`. Se a composição falhar ou passar de 20 minutos,
+   o vídeo fica pronto com a saída pura do Aleph.
+
+A composição vai um quadro por vez (a memória não cresce com a duração: uns
+240 MB) e gastou 35 s de CPU para 5,5 s de vídeo: no contêiner "basic" (1/4 de
+vCPU), uns 2,5 min; 30 s levariam uns 13 min.
+
+O que o preparo gasta (≈ US$ 0,21 por vídeo nas imagens e conferências) fica
+em `settings.prep_cost` e entra no custo do vídeo quando ele fica pronto. Um
+preparo que passa de 20 minutos vira falha. Sem contêiner, a troca é recusada
+no formulário. Para testar o contêiner sem o site: `YUNET=container/yunet.onnx
+python3 container/aleph.py preparar entrada.mp4 saida.mp4` (precisa de ffmpeg,
+OpenCV e numpy).
+
+A foto do avatar, o vídeo de origem e os quadros-chave ficam públicos em
+`/midia/avatares/`, `/midia/origens/` e `/midia/quadros/` (nomes impossíveis
 de adivinhar), porque o provedor do vídeo baixa de lá. O resto pede login.
 
 ## Contas
