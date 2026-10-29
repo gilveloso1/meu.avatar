@@ -226,3 +226,18 @@ primeiro (`cabelo_igual`).
 - Mudança de um quadro para o seguinte nas laterais da cabeça, acima da do
   vídeo original (o que a troca acrescenta): 56,9 nos independentes, 39,8 na
   cadeia (uns 30% menos). A medida é ruidosa: as mãos passam por ali.
+
+O dono gostou bastante da cadeia; o defeito que sobrou foi a imagem
+"gelatinosa". **Causa medida:** o Aleph redesenha o quadro inteiro, e o que
+devia ficar parado treme e se deforma. A variação de um quadro para o seguinte
+na parede parada foi de 0,21 no original para 0,41; nos rótulos dos produtos,
+de 0,40 para 1,55, com as letras pequenas embaralhadas. A nitidez do rosto não
+caiu (laplaciano de 704 para 800).
+
+**Composição** (protótipo pelo terminal, sem custo de API): o vídeo original
+com só a cabeça e o cabelo do Aleph por cima. A máscara é uma elipse em volta
+do rosto, até os ombros, que segue o YuNet quadro a quadro (posição suavizada
+em 15 quadros), com a borda desfocada. Os quadros do Aleph batem com os do
+original (os mesmos 165, sem deslocamento). O tremor caiu para 0,29 na parede
+e 0,74 nos rótulos, e os produtos, a legenda, a roupa e as mãos ficam com os
+pixels do original. Levou 1 min no computador para 5,5 s.
