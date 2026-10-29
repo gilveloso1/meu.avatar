@@ -9,7 +9,8 @@ que ficou para depois) no mesmo PR.
 Gere aqui, edite aqui, publique aqui. Os vídeos vêm de APIs prontas (sem
 construir a engenharia do zero), sempre buscando o menor custo; o trabalho de
 construção vai para a UI/UX. Quem usa quer o resultado final, mesmo que mais
-simples, e paga por ele. Ver "Direção" no `CLAUDE.md`. A ordem abaixo ainda é
+simples, e paga por ele: ganha dinheiro com os vídeos, criando audiência
+ou fazendo anúncios (UGC, DTC). Ver "Direção" no `CLAUDE.md`. A ordem abaixo ainda é
 a anterior e será revista com o dono por essa direção.
 
 ## Ordem

@@ -20,6 +20,10 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
 - **O esforço de construção vai para a UI/UX**: telas amigáveis, fáceis de
   trabalhar e de criar. Quem usa quer o resultado final, mesmo que mais
   simples, e paga por ele.
+- **Quem paga ganha dinheiro com os vídeos**: cria audiência (perfis, canais)
+  ou faz anúncios (UGC, DTC). Cada tela deve ajudar a sair com mais vídeos que
+  dão retorno: rápido de fazer, em quantidade, no formato das redes e dos
+  anúncios, e pronto para publicar.
 
 ## Site leve
 
