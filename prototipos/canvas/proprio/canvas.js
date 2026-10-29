@@ -98,6 +98,8 @@ function loadPreview() {
 /** Linha de reprodução sobre o bloco ou o grupo que a prévia toca (na versão, não aparece). */
 const head = document.createElement("div");
 head.className = "playhead";
+head.innerHTML = `<span class="playhead__knob"></span>`;
+let headBox = null;
 function playhead(t) {
   let box = null;
   if (preview?.type === "block") {
@@ -111,7 +113,9 @@ function playhead(t) {
       box = { x: g.x, y: top, h: bottom - top };
     }
   }
-  head.hidden = !box || (!player.playing && t <= 0);
+  headBox = box;
+  // Aparece sempre que a prévia toca um bloco ou um grupo, para poder arrastar.
+  head.hidden = !box;
   if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - 1}px`, top: `${box.y - 4}px`, height: `${box.h + 8}px` });
 }
 function playNow(p) {
@@ -199,10 +203,11 @@ function render({ side = true } = {}) {
     const rowH = g.soloAudio ? M.AUD_H : M.VIS_H;
     const isSel = sel.type === "group" && sel.id === g.id;
     if (g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio)) {
+      const gPlaying = player.playing && preview?.type === "group" && preview.id === g.id;
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
       const bottom = g.y + rowH + (g.audios.length && !g.soloAudio ? M.AUD_H : 0);
       html += `<div class="gframe ${isSel ? "is-sel" : ""}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
-      html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="Tocar o grupo" title="Tocar o grupo"><span class="icon">play_arrow</span></button></div>`;
+      html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o grupo"}" title="${gPlaying ? "Pausar" : "Tocar o grupo"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
     }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
@@ -495,6 +500,23 @@ vp.addEventListener("pointerdown", (e) => {
   let onMove;
   let onUp = () => {};
 
+  if (t.closest(".playhead") && headBox) {
+    // Arrastar a linha de reprodução: anda pela prévia (tocando ou parada).
+    const box = headBox;
+    const seekTo = (ev) => player.seek(Math.min(Math.max((toWorld(ev.clientX, ev.clientY).x - box.x) / M.PX, 0), player.duration));
+    head.classList.add("is-drag");
+    const mv = (ev) => seekTo(ev);
+    const end = () => {
+      head.classList.remove("is-drag");
+      window.removeEventListener("pointermove", mv);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+    window.addEventListener("pointermove", mv);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    return;
+  }
   const playEl = t.closest("[data-play-block], [data-play-group]");
   if (playEl) {
     const p = playEl.dataset.playBlock ? { type: "block", id: playEl.dataset.playBlock } : { type: "group", id: playEl.dataset.playGroup };

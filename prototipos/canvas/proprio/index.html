@@ -94,7 +94,11 @@ body { min-height: 0; overflow: hidden; }
 .blk-play { position: absolute; z-index: 4; width: 40px; height: 40px; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); box-shadow: var(--md-sys-elevation-level2); }
 .blk-play .icon { font-size: 24px; }
 /* Linha de reprodução: 2 px em primary sobre o que a prévia toca. */
-.playhead { position: absolute; z-index: 5; width: 2px; border-radius: 1px; background: var(--md-sys-color-primary); pointer-events: none; box-shadow: 0 0 0 1px var(--md-sys-color-surface-container-lowest); }
+.playhead { position: absolute; z-index: 5; width: 2px; border-radius: 1px; background: var(--md-sys-color-primary); box-shadow: 0 0 0 1px var(--md-sys-color-surface-container-lowest); cursor: ew-resize; }
+/* Área de toque mais larga que a linha, e a alça em cima (como a do slider do M3: 4 × 24 px). */
+.playhead::before { content: ""; position: absolute; top: -16px; bottom: 0; left: -8px; right: -8px; }
+.playhead__knob { position: absolute; left: 50%; top: -20px; width: 12px; height: 20px; transform: translateX(-50%); border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); box-shadow: 0 0 0 2px var(--md-sys-color-surface-container-lowest); }
+.playhead:hover .playhead__knob, .playhead.is-drag .playhead__knob { width: 16px; }
 /* Portas: saída em primary (puxa a ligação), entrada no contorno. */
 .port {
   position: absolute; width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full); z-index: 3;

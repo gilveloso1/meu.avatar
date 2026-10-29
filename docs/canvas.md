@@ -61,7 +61,8 @@ menos custo.
 - **Área e prévia**: o grupo ganha um retângulo tracejado em volta de tudo o
   que entra nele (sequência, coberturas e som), com o chip do nome em cima. O
   bloco escolhido tem o botão de tocar no meio; o chip do grupo também. A prévia
-  toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo.
+  toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo; a
+  linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
 
 ## Em aberto
 
