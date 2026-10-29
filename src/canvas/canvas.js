@@ -176,6 +176,14 @@ function step(from, to) {
 
 // Espaço entre os blocos e o tracejado da área do grupo.
 const FRAME_PAD = 20;
+/** O grupo cuja área (o tracejado) tem este ponto do canvas. */
+function groupAt(pt) {
+  return M.groups(project).find((g) => {
+    if (!(g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio))) return false;
+    const top = Math.min(g.y, ...g.covers.map((c) => c.y)) - FRAME_PAD;
+    return pt.x >= g.x - FRAME_PAD && pt.x <= g.x + g.w + FRAME_PAD && pt.y >= top && pt.y <= groupBottom(g) + FRAME_PAD;
+  });
+}
 const groupBottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AUD_H));
 // As portas ficam um pouco fora do grupo, para não cobrir as alças de corte.
 const PORT_OUT = 14;
@@ -699,8 +707,20 @@ vp.addEventListener("pointerdown", (e) => {
       view.y = v0.y + ev.clientY - start.y;
       applyView();
     };
-    onUp = () => {
-      if (!moved && sel.type) (sel = { type: null }), (preview = null), render();
+    onUp = (ev) => {
+      if (moved) return;
+      // Clique no vazio dentro da área de um grupo: a prévia vai para aquele ponto do grupo.
+      const at = toWorld(ev.clientX, ev.clientY);
+      const g = groupAt(at);
+      if (g) {
+        sel = { type: "group", id: g.id };
+        preview = { type: "group", id: g.id };
+        render();
+        player.seek(Math.min(Math.max((at.x - g.x) / M.PX, 0), g.dur));
+        setPlayIcon();
+        return;
+      }
+      if (sel.type) (sel = { type: null }), (preview = null), render();
     };
     vp.classList.add("is-panning");
   } else if (trimEl) {

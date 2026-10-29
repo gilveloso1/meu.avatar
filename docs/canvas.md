@@ -62,6 +62,8 @@ menos custo.
   bloco escolhido tem o botão de tocar no meio; o chip do grupo também. A prévia
   toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo; a
   linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
+  Clicar num ponto vazio dentro da área de um grupo escolhe o grupo e leva a linha
+  de reprodução até ali; o tocar (ou o Espaço) toca dali.
 - **Áudio do vídeo**: todo vídeo com som mostra o próprio áudio numa faixa presa
   logo embaixo da imagem, na mesma cor e tom do vídeo (corta e anda junto).
   - "Desvincular o áudio" cria uma **cópia** do som como bloco de áudio comum
