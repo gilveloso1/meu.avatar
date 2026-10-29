@@ -1,62 +1,4 @@
-# Modelos: o que está sendo testado
-
-Registro de todo modelo que o meu.avatar usa ou já testou: para que serve, o
-estado, o que se viu e quanto custou. **Antes de escolher ou montar um modelo,
-leia aqui.** Depois de cada teste (bom ou ruim), atualize no mesmo PR.
-
-Estados:
-
-- **No ar**: liberado para todos (`access: "all"`).
-- **Em teste**: estrutura no ar só para o administrador (`access: "admin"`), ou
-  teste feito pelo terminal, sem estrutura.
-- **Bloqueado**: o provedor recusa o uso pretendido. A estrutura fica como
-  está (pode servir a outro uso); o motivo e a prova ficam aqui.
-- **Descartado**: testado e não serve; a estrutura sai.
-
-Como registrar um teste: data, o que foi pedido (vídeo, foto, ajustes), o
-resultado (com a mensagem do provedor, se falhou), o custo real e o próximo
-passo. Vídeos de teste não vão para o repositório; diga onde estão (id no D1 ou
-caminho no R2).
-
-## Resumo
-
-| Modelo (id no OpenRouter) | Uso | Estado | Estrutura |
-|---|---|---|---|
-| `alibaba/wan-3.0` | Avatar falando, a partir da foto e da fala | No ar | `wan.ts` |
-| `heygen/avatar-iv` | Avatar falando, voz pronta da HeyGen | Em teste | `heygen.ts` |
-| `bytedance/seedance-2.0` | Trocar avatar (vídeo + foto) | **Bloqueado** para vídeo com rosto realista | `seedance.ts` |
-| `runway/aleph-2` | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | Em teste, pelo terminal: troca o avatar quando o rosto está grande e nítido (vídeo ampliado); mantém o áudio. ≈ US$ 1,70 por 5,5 s | — |
-| `google/gemini-nano-banana-2.1` | Trocar o rosto no primeiro quadro (ajuda o Aleph 2) | Em teste, pelo terminal | — |
-
-## Wan 3.0 (`alibaba/wan-3.0`)
-
-No ar desde o começo. A voz sai alta e com chiado pelo OpenRouter; o contêiner
-trata o áudio. Medições em `docs/prompt.md` e `docs/backlog.md`.
-
-## HeyGen Avatar IV (`heygen/avatar-iv`)
-
-Em teste desde 25/10/2026: voz de texto para fala, sem o chiado do Wan.
-Próximos passos no item 1 de `docs/backlog.md`.
-
-## Seedance 2.0 (`bytedance/seedance-2.0`): bloqueado para trocar avatar
-
-- **28/10/2026, Trocar avatar:** vídeo de 5,5 s (1280×720, uma pessoa real
-  filmada) e uma foto de avatar realista, 480p. O OpenRouter respondeu HTTP 400
-  na hora do envio, sem criar job (sem custo):
-  `InputVideoSensitiveContentDetected.PrivacyInformation` ("the input video may
-  contain real person"). Vídeo `b46cf527-948f-41b3-8a5e-ed7da5354211` no D1.
-- **Por quê:** desde fev/2026 a ByteDance recusa no Seedance 2.0 e 2.5 fotos e
-  vídeos de referência com rosto que pareça real, inclusive rosto sintético
-  realista. Mandar de novo dá o mesmo erro. A exceção é o rosto autorizado na
-  própria BytePlus (convite, verificação de identidade, um id de "ativo"), que
-  o OpenRouter não repassa: das opções da BytePlus, só `watermark` e `req_key`.
-- **Não contornar** o filtro (cortar, borrar, disfarçar o rosto): é regra do
-  provedor.
-- **A estrutura fica como está**, com o campo Uso: o Seedance pode servir a
-  outros usos sem rosto realista na entrada (cenário, objeto, personagem
-  estilizado). Um uso novo é uma opção nova em `USES`.
-
-## Runway Aleph 2 (`runway/aleph-2`): em teste para trocar avatar (promissor)
+# Runway Aleph 2 (`runway/aleph-2`): em teste para trocar avatar
 
 Pedido pelo OpenRouter (conferido em 28/10/2026, pelas recusas, que não
 custam nada, e pelos tipos do SDK oficial, `@runwayml/sdk`):
@@ -164,20 +106,8 @@ Custo de 5,5 s: uns US$ 1,65 no total.
 quadros-chave. Passar de 5 para 3 quadros economiza só uns US$ 0,08 de imagens
 por vídeo; o que pesa é a duração (US$ 0,28/s).
 
-**Modelo de imagem para os quadros-chave** (29/10/2026, o mesmo quadro de
-2,7 s, as mesmas referências e o mesmo prompt, em 2K e 9:16, pela API de
-imagens do OpenRouter, `POST /api/v1/images` com `resolution` e
-`aspect_ratio`; pelo chat, o banana devolvia só 768 px de largura):
-
-| Modelo | Saída | Custo | Tempo | Resultado |
-|---|---|---|---|---|
-| `google/gemini-nano-banana-2.1` | 1536×2752 | US$ 0,06 | 21 s | **O melhor:** rosto do avatar, nítido, e o resto do quadro igual |
-| `google/gemini-3-pro-image` | 768×1376 (ignorou o 2K) | US$ 0,14 | 31 s | Rosto bom, mas sem ganho de resolução e mais caro |
-| `black-forest-labs/flux-3-image` | 1536×2736 | US$ 0,10 | 90 s | Nítido, mas o rosto foge do avatar |
-| `qwen/qwen-image-3-pro` | 1152×2048 | US$ 0,08 | 134 s | Mudou a mão, o enquadramento, o cabelo e a luz: não serve como quadro-chave |
-
-Escolhido: **`gemini-nano-banana-2.1` em 2K pela API de imagens** (5 quadros ≈
-US$ 0,30).
+A escolha do modelo de imagem para os quadros-chave está em
+[gemini-nano-banana-2.1.md](gemini-nano-banana-2.1.md).
 
 Quarto teste, 29/10/2026 (job pronto às 00:20): o mesmo do terceiro, com os
 quadros-chave em 2K (ampliados de 1536×2752 e reduzidos a 1080×1920).
@@ -189,25 +119,18 @@ quadros-chave em 2K (ampliados de 1536×2752 e reduzidos a 1080×1920).
   terceiro teste. **Conferir cada quadro contra o original é parte da receita.**
 - **Custo real: US$ 1,40** mais US$ 0,42 de imagens (7 gerações).
 - Áudio original intacto (0,9999).
-- **Resultado: quase igual ao terceiro teste.** Lado a lado, o rosto é o mesmo;
-  a nitidez medida no rosto subiu pouco (variância do laplaciano de 13–16 para
-  16–18 no meio do vídeo). Nos sorrisos ainda puxa um pouco para o original.
+- **Resultado: pior que o terceiro teste.** O rosto ficou quase igual (a
+  nitidez medida subiu pouco: variância do laplaciano de 13–16 para 16–18 no
+  meio do vídeo) e **apareceu um erro no fundo**, visto pelo dono: uma
+  prateleira da parede anda para a esquerda. Causa: o quadro-chave de 4,05 s,
+  refeito em 2K, inventou uma prateleira na parede onde o original não tem; o
+  Aleph seguiu o quadro. A diferença do fundo desse quadro para o original era
+  a maior de todas (22,6 de média, contra 16,0 no terceiro teste).
 
-**Conclusão:** acima de uns 768 px, a resolução dos quadros-chave quase não
-muda o resultado. O teto agora é o vídeo de origem: a parte com o rosto tinha
-só 406×720 e foi ampliada; um vídeo de origem nítido, em 1080p de verdade,
-deve render mais que qualquer ajuste nos quadros. Para a estrutura: banana em
-2K (mesmo preço por qualidade) ou em 1K pelo chat (mais barato), com conferência
-de cada quadro.
-
-## Fora do OpenRouter: Higgsfield Genjutsu (não testado)
-
-Pesquisado em 28/10/2026, sem teste. É o que o dono usou no Higgsfield para
-trocar o avatar com sucesso. Motion Transfer (troca personagem ou cenário
-mantendo o movimento) e Object Swap; vídeo de 4 a 30 s e até 30 fotos de
-referência; aceita vídeo filmado. O modelo por trás não é público. API paga por
-uso em open.higgsfield.ai: de US$ 0,318/s (480p) a US$ 1,632/s (1080p), com
-50% de desconto anunciado em outubro (conferir). Pela assinatura do site, um
-clipe de 15 s em 720p sai uns 104 créditos (≈ US$ 5,20), metade do preço
-cheio da API. Usar exigiria uma chave do Higgsfield e sair da regra de que os
-vídeos vêm do OpenRouter: decisão do dono.
+**Conclusão: a versão que vale é a do terceiro teste** (banana pelo chat, 768
+px, ampliado). Acima disso, a resolução dos quadros-chave quase não muda o
+rosto, e cada geração a mais é uma chance de o modelo de imagem redesenhar o
+fundo. O teto de qualidade agora é o vídeo de origem: a parte com o rosto tinha
+só 406×720 e foi ampliada; um vídeo nítido, em 1080p de verdade, deve render
+mais que qualquer ajuste nos quadros. **Conferir cada quadro-chave contra o
+original — pose, mãos, objetos, olhos e o fundo — antes de mandar ao Aleph.**

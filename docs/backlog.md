@@ -134,12 +134,13 @@ visível só para o administrador. O vídeo vem do computador (MP4 ou MOV, de 2 
 ByteDance; a estrutura fica como está, para outros usos). O teste seguiu pelo
 Runway Aleph 2, pelo terminal: mantém o áudio original e, no terceiro teste
 (vídeo vertical ampliado e 5 quadros-chave com o rosto grande e nítido), trocou
-o avatar. Receita, custos e testes em [docs/modelos.md](modelos.md).
+o avatar. Receita, custos e testes em [docs/modelos/runway-aleph-2.md](modelos/runway-aleph-2.md).
 
 Próximos passos:
 
 1. Testar com um vídeo de origem nítido, em 1080p de verdade (o teto de
-   qualidade hoje é o vídeo de origem; quadros-chave em 2K quase não mudaram).
+   qualidade hoje é o vídeo de origem; quadros-chave em 2K não melhoraram e um
+   deles criou um erro no fundo; vale a receita do terceiro teste).
 2. Estrutura nova para o Aleph 2 com a receita (o contêiner corta e amplia o
    vídeo e tira os quadros; o Worker troca o rosto neles e faz o pedido). O
    Seedance fica como está, para outros usos.

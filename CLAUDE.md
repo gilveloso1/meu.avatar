@@ -174,10 +174,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   chamada real ao `POST /api/v1/videos` só com autorização do usuário.
 - Os valores aceitos (duração, resolução, formato, preço) vêm de
   `GET https://openrouter.ai/api/v1/videos/models`; não fixe listas no código.
-- O que está sendo testado fica em [docs/modelos.md](docs/modelos.md): cada
-  modelo com uso, estado (no ar, em teste, bloqueado, descartado), o que se viu
-  e o custo real. Leia antes de escolher um modelo e atualize depois de cada
-  teste, bom ou ruim, no mesmo PR. Modelo que o provedor bloqueia para um uso
+- O que está sendo testado fica em [docs/modelos/](docs/modelos/README.md): um
+  arquivo por modelo, com uso, estado (no ar, em teste, bloqueado, descartado),
+  o que se viu e o custo real, e o resumo no README. Leia antes de escolher um
+  modelo e atualize depois de cada teste, bom ou ruim, no mesmo PR. Modelo que o provedor bloqueia para um uso
   não é contornado nem apagado: a estrutura fica e ganha a nota lá.
 
 ## Migrations e deploy
