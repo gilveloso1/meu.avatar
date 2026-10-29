@@ -25,7 +25,7 @@ caminho no R2).
 | `alibaba/wan-3.0` | Avatar falando, a partir da foto e da fala | No ar | `wan.ts` |
 | `heygen/avatar-iv` | Avatar falando, voz pronta da HeyGen | Em teste | `heygen.ts` |
 | `bytedance/seedance-2.0` | Trocar avatar (vídeo + foto) | **Bloqueado** para vídeo com rosto realista | `seedance.ts` |
-| `runway/aleph-2` | Trocar avatar (vídeo + quadros trocados) | Testado pelo terminal: troca cabelo e cena e mantém o áudio, mas não a identidade do rosto | — |
+| `runway/aleph-2` | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | Em teste, pelo terminal: troca o avatar quando o rosto está grande e nítido; mantém o áudio | — |
 | `google/gemini-nano-banana-2.1` | Trocar o rosto no primeiro quadro (ajuda o Aleph 2) | Em teste, pelo terminal | — |
 
 ## Wan 3.0 (`alibaba/wan-3.0`)
@@ -56,7 +56,7 @@ Próximos passos no item 1 de `docs/backlog.md`.
   outros usos sem rosto realista na entrada (cenário, objeto, personagem
   estilizado). Um uso novo é uma opção nova em `USES`.
 
-## Runway Aleph 2 (`runway/aleph-2`): em teste para trocar avatar
+## Runway Aleph 2 (`runway/aleph-2`): em teste para trocar avatar (promissor)
 
 Pedido pelo OpenRouter (conferido em 28/10/2026, pelas recusas, que não
 custam nada, e pelos tipos do SDK oficial, `@runwayml/sdk`):
@@ -73,6 +73,23 @@ custam nada, e pelos tipos do SDK oficial, `@runwayml/sdk`):
 - Preço: US$ 0,28 por segundo, mínimo de US$ 0,56.
 - Cuidado ao sondar o formato: um pedido válido já gera e cobra; nas sondagens,
   mande valores que com certeza são recusados.
+
+Da documentação oficial da Runway (docs.dev.runwayml.com, lida em 28/10/2026;
+`/llms.txt` aponta o `/api.md`, a referência de cada campo por modelo):
+
+- O Aleph 2 **mantém a resolução do vídeo de entrada, até 1080p**; o vídeo tem
+  de 2 a 30 s e no máximo 30 quadros por segundo.
+- `promptText` até 1000 caracteres. O guia pede prompt curto: um verbo de ação
+  e a mudança e, no fim, o que fica igual.
+- `keyframes`: de 1 a 5, cada um com `seconds` (de 0 a 30) ou `at` (fração);
+  opcionalmente `range` (`start_seconds`, `end_seconds`) para editar só um
+  trecho. A ideia do modelo: um quadro editado leva a mudança ao resto do vídeo.
+- `contentModeration.publicFigureThreshold` (`auto` ou `low`) só afrouxa o
+  filtro de figuras públicas.
+- Na Runway direto (fora do OpenRouter) há outros modelos de vídeo para vídeo
+  que aceitam **foto de referência**: Kling O3 (até 4 fotos, mantém o áudio
+  original, vídeo de até 10 s e de 720 a 3840 px) e Kling 4.0 (até 10 fotos).
+  Nenhum dos dois está no OpenRouter hoje.
 
 Como foi montado o teste:
 
@@ -110,11 +127,40 @@ quadros-chave** com o rosto trocado, o máximo que o Aleph 2 aceita (0; 1,35;
   ondulado, com mechas) do começo ao fim, mas o rosto ficou uma mistura das
   duas, mais perto da pessoa original. Não passa por outra pessoa.
 
-**Conclusão: o Aleph 2 não troca a pessoa inteira.** Ele mantém o áudio e a
-cena muito bem e serve para mudar cabelo, roupa, objetos e cenário, mas não a
-identidade do rosto. Para trocar o avatar, os próximos candidatos são o
-Hailuo 3 (`minimax/hailuo-3`, foto como referência) ou o Genjutsu pela API do
-Higgsfield (fora do OpenRouter; ver abaixo).
+Terceiro teste, 29/10/2026 (job pronto às 00:00), com a ideia do dono de
+caprichar no rosto dos quadros-chave:
+
+- **Vídeo vertical e maior:** as faixas pretas cortadas e a parte com conteúdo
+  (406×720) aumentada para 1080×1920 (ffmpeg, `lanczos`), subida ao R2 em
+  `origens/a7472747-478e-4146-bcf1-9a0b695f4c99.mp4`. O rosto passou de uns
+  110 px para uns 290 px de largura.
+- **Quadros-chave feitos sobre esse quadro vertical**, com a foto inteira e um
+  recorte do rosto em boa resolução como referência, e um prompt que descreve
+  os traços (olhos, sobrancelhas, nariz, lábios, queixo, cabelo) e manda manter
+  pose, mão e boca. O modelo de imagem devolve 768 px de largura; ampliados para
+  1080×1920. Um quadro que mudou o frasco de lugar foi refeito: quadro-chave que
+  não bate com o movimento do vídeo pode criar defeito.
+- **Prompt do Aleph curto**, como pede o guia da Runway.
+- **Custo real: US$ 1,40**, mais US$ 0,26 pelos 6 quadros de imagem.
+- Saiu em 1080×1920, com o áudio original intacto (correlação 0,9999).
+- **Resultado: bem melhor.** Sobrancelhas grossas, olhos, nariz e o cabelo do
+  avatar; passa por outra pessoa em quase todo o vídeo. Em alguns instantes,
+  sorrindo, o rosto ainda puxa um pouco para o original.
+
+**Conclusão: com o rosto bem definido nos quadros-chave, o Aleph 2 troca o
+avatar.** O que pesa é a resolução do rosto, tanto no vídeo quanto nos
+quadros-chave. A receita, para virar estrutura:
+
+1. Cortar faixas pretas e levar a parte com conteúdo ao maior tamanho aceito
+   (até 1080p), no formato dela.
+2. Tirar 5 quadros (o último no máximo na duração inteira, em segundos
+   inteiros) e trocar o rosto em cada um com a foto inteira e o recorte do
+   rosto, conferindo que pose, mãos e objetos não mudaram.
+3. Aleph 2 com o vídeo, os 5 quadros-chave e um prompt curto.
+
+Custo de 5,5 s: uns US$ 1,65 no total. Fica para conferir se 3 quadros-chave
+bastam (mais barato e mais rápido) e se um modelo de imagem de saída maior que
+768 px melhora o rosto.
 
 ## Fora do OpenRouter: Higgsfield Genjutsu (não testado)
 
