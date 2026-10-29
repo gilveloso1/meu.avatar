@@ -158,9 +158,27 @@ quadros-chave. A receita, para virar estrutura:
    rosto, conferindo que pose, mãos e objetos não mudaram.
 3. Aleph 2 com o vídeo, os 5 quadros-chave e um prompt curto.
 
-Custo de 5,5 s: uns US$ 1,65 no total. Fica para conferir se 3 quadros-chave
-bastam (mais barato e mais rápido) e se um modelo de imagem de saída maior que
-768 px melhora o rosto.
+Custo de 5,5 s: uns US$ 1,65 no total.
+
+**Custo:** o Aleph cobra por segundo de vídeo, qualquer que seja o número de
+quadros-chave. Passar de 5 para 3 quadros economiza só uns US$ 0,08 de imagens
+por vídeo; o que pesa é a duração (US$ 0,28/s).
+
+**Modelo de imagem para os quadros-chave** (29/10/2026, o mesmo quadro de
+2,7 s, as mesmas referências e o mesmo prompt, em 2K e 9:16, pela API de
+imagens do OpenRouter, `POST /api/v1/images` com `resolution` e
+`aspect_ratio`; pelo chat, o banana devolvia só 768 px de largura):
+
+| Modelo | Saída | Custo | Tempo | Resultado |
+|---|---|---|---|---|
+| `google/gemini-nano-banana-2.1` | 1536×2752 | US$ 0,06 | 21 s | **O melhor:** rosto do avatar, nítido, e o resto do quadro igual |
+| `google/gemini-3-pro-image` | 768×1376 (ignorou o 2K) | US$ 0,14 | 31 s | Rosto bom, mas sem ganho de resolução e mais caro |
+| `black-forest-labs/flux-3-image` | 1536×2736 | US$ 0,10 | 90 s | Nítido, mas o rosto foge do avatar |
+| `qwen/qwen-image-3-pro` | 1152×2048 | US$ 0,08 | 134 s | Mudou a mão, o enquadramento, o cabelo e a luz: não serve como quadro-chave |
+
+Escolhido: **`gemini-nano-banana-2.1` em 2K pela API de imagens** (5 quadros ≈
+US$ 0,30). Falta um teste do Aleph com esses quadros para ver se o rosto fica
+ainda mais firme.
 
 ## Fora do OpenRouter: Higgsfield Genjutsu (não testado)
 
