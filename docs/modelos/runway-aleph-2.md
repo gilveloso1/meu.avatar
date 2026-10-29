@@ -165,3 +165,38 @@ Para não repetir a prateleira do quarto teste, cada quadro com o rosto trocado
 A estimativa do formulário arredonda a duração para cima (5,5 s → 6 s); nos
 testes, o Aleph cobrou 5 s por 5,5 s (US$ 1,40). O custo real vem do
 OpenRouter.
+
+## Vídeos maiores: inteiro ou em trechos (29/10/2026)
+
+Quinto teste, com uma versão de 20,5 s do mesmo vídeo (1280×720, a parte com
+conteúdo em 404×720), pelas funções da estrutura (`src/structures/aleph.ts`) e
+o `container/aleph.py`, fora do site:
+
+- **A. Inteiro:** 20,4 s num pedido só, com 5 quadros-chave (0, 5, 10, 15 e
+  20 s).
+- **B. Em dois trechos** cortados numa pausa da fala (9,94 s), cada um com 5
+  quadros-chave (um a cada 2,25 a 2,5 s), juntados depois com o áudio original
+  por cima.
+
+Resultado:
+
+- **Custo: US$ 1,40 por pedido, qualquer que fosse a duração** (5,5 s, 9,9 s,
+  10,5 s e 20,4 s custaram o mesmo), apesar de a lista do OpenRouter dizer
+  `cents_per_second_output: 28`. O vídeo inteiro saiu pela metade do preço dos
+  trechos. A cobrança pode mudar: conferir em cada teste.
+- Todos os 15 quadros passaram na conferência do fundo de primeira (US$ 0,22
+  de imagens por pedido).
+- Áudio original intacto nos dois (correlação 1,0).
+- **Rosto:** troca parcial nos dois, parecidos entre si: cabelo e sobrancelhas
+  do avatar, o rosto ainda puxa para a pessoa original. É forte perto dos
+  quadros-chave e mais fraco entre eles.
+- **A emenda dos trechos aparece:** no fim do trecho 1 o rosto está mais perto
+  do original; no começo do trecho 2, colado num quadro-chave, é o avatar. O
+  rosto pula no corte. A junção também encurtou o vídeo em 0,1 s (cada trecho
+  volta um pouco mais curto).
+
+**Conclusão:** até 30 s, o vídeo inteiro num pedido só: sem emenda e mais
+barato. Trechos só acima de 30 s (o limite do Aleph), e então com o corte numa
+troca de cena e um quadro-chave nos dois lados do corte, para o rosto não
+pular. Quadros-chave mais próximos firmam o rosto perto deles, mas não
+resolvem o meio.
