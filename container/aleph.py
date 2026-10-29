@@ -22,6 +22,14 @@ na receita testada em 29/10/2026 (docs/modelos/runway-aleph-2.md):
   recorte  (imagem na entrada)
       O rosto da foto do avatar, recortado com folga, em JPEG base64, para o
       modelo de imagem copiar os traços: {"imagem": b64}, ou {} sem rosto.
+
+  compor original.mp4 troca.mp4 saida.mp4
+      O vídeo preparado com só a cabeça e o cabelo do Aleph por cima. O Aleph
+      redesenha o quadro inteiro e o que devia ficar parado treme e se deforma
+      (letras dos rótulos, parede); assim o resto fica com os pixels do
+      original. A máscara é uma elipse em volta do rosto, até os ombros, que
+      segue o rosto achado no vídeo trocado (posição suavizada no tempo), com
+      a borda desfocada. Um quadro por vez: 30 s em 1080p não cabem na memória.
 """
 import base64
 import json
@@ -110,6 +118,64 @@ def rosto(imagem):
     return x, y, fw, fh
 
 
+def quadros_brutos(video, w, h):
+    """Os quadros do vídeo, um por vez (BGR)."""
+    proc = subprocess.Popen(["ffmpeg", "-nostdin", "-v", "error", "-i", video, "-f", "rawvideo", "-pix_fmt", "bgr24", "-"], stdout=subprocess.PIPE)
+    tamanho = w * h * 3
+    while len(bruto := proc.stdout.read(tamanho)) == tamanho:
+        yield np.frombuffer(bruto, np.uint8).reshape(h, w, 3)
+    proc.stdout.close()
+    proc.wait()
+
+
+# A cada quantos quadros procurar o rosto (entre um e outro, a posição é interpolada).
+PASSO_ROSTO = 3
+# Média móvel da posição do rosto, em quadros de cada lado: a máscara não treme.
+SUAVE = 7
+
+
+def compor(original, troca, saida):
+    w, h, fps, _ = info(original)
+    tw, th, _, _ = info(troca)
+    # 1. Onde está o rosto no vídeo trocado (a cada PASSO_ROSTO quadros).
+    achados = {}
+    total = 0
+    for i, quadro in enumerate(quadros_brutos(troca, tw, th)):
+        total = i + 1
+        if i % PASSO_ROSTO == 0:
+            r = rosto(quadro if (tw, th) == (w, h) else cv2.resize(quadro, (w, h)))
+            if r:
+                achados[i] = r
+    if not achados:
+        raise ValueError("nenhum rosto no vídeo trocado")
+    chaves = sorted(achados)
+    caixas = np.array([[np.interp(i, chaves, [achados[k][j] for k in chaves]) for j in range(4)] for i in range(total)])
+    caixas = np.array([caixas[max(0, i - SUAVE):i + SUAVE + 1].mean(axis=0) for i in range(total)])
+    # 2. Original com a cabeça do trocado por cima, quadro a quadro.
+    proc = subprocess.Popen(
+        ["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", str(fps), "-i", "-",
+         # veryfast: o contêiner tem 1/4 de vCPU; a diferença de tamanho no arquivo é pequena.
+         "-i", original, "-map", "0:v", "-map", "1:a?", "-c:v", "libx264", "-crf", "17", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+         "-c:a", "copy", "-movflags", "+faststart", saida],
+        stdin=subprocess.PIPE,
+    )
+    for i, (o, t) in enumerate(zip(quadros_brutos(original, w, h), quadros_brutos(troca, tw, th))):
+        if i >= total:
+            break
+        if (tw, th) != (w, h):
+            t = cv2.resize(t, (w, h))
+        # A máscara é desenhada e desfocada em 1/4 da resolução (o desfoque no tamanho cheio era o mais caro).
+        x, y, fw, fh = caixas[i] / 4
+        mascara = np.zeros((h // 4, w // 4), np.float32)
+        cv2.ellipse(mascara, (int(x + fw / 2), int(y + fh / 2 + 0.35 * fh)), (int(1.35 * fw), int(1.55 * fh)), 0, 0, 360, 1, -1)
+        mascara = cv2.resize(cv2.GaussianBlur(mascara, (0, 0), max(1.0, 0.12 * fw)), (w, h), interpolation=cv2.INTER_LINEAR)[..., None]
+        mistura = cv2.convertScaleAbs(t * mascara + o * (1 - mascara))
+        proc.stdin.write(mistura.tobytes())
+    proc.stdin.close()
+    if proc.wait() != 0:
+        raise RuntimeError("ffmpeg falhou ao gravar o vídeo composto")
+
+
 def ajustar(imagem_b64, largura, altura):
     imagem = cv2.resize(ler(imagem_b64), (largura, altura), interpolation=cv2.INTER_AREA)
     return {"imagem": jpg(imagem)}
@@ -138,5 +204,7 @@ if __name__ == "__main__":
         print(json.dumps(ajustar(pedido["imagem"], int(pedido["largura"]), int(pedido["altura"]))))
     elif acao == "recorte":
         print(json.dumps(recorte(sys.stdin.buffer.read())))
+    elif acao == "compor":
+        compor(sys.argv[2], sys.argv[3], sys.argv[4])
     else:
         sys.exit(f"ação desconhecida: {acao}")

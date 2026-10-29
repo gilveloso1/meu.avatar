@@ -5,7 +5,9 @@ POST /rosto devolve, em JSON, onde está o rosto (rosto.py). Para a troca de
 avatar pelo Aleph 2 (aleph.py): POST /preparar devolve o vídeo sem faixas
 pretas e ampliado; POST /quadros devolve, em JSON, os quadros dos instantes do
 cabeçalho x-instantes; POST /ajustar e POST /recorte recebem uma imagem e
-respondem JSON. GET /saude responde ok. Um vídeo por vez em /tratar, /editar e
+respondem JSON; POST /compor recebe o vídeo preparado e o do Aleph emendados
+no corpo (o cabeçalho x-primeiro diz quantos bytes são do primeiro) e devolve
+o composto. GET /saude responde ok. Um vídeo por vez em /tratar, /editar e
 /preparar; os outros são leves e têm a sua própria vez, para a prévia não
 esperar uma edição de minutos."""
 import os, subprocess, tempfile, threading
@@ -14,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 LIMITE = 300 * 1024 * 1024  # 300 MB
 ALEPH = ["python3", "/app/aleph.py"]
 # Os que devolvem um MP4 (entrada e saída em arquivo; um por vez).
-VIDEO = {"/tratar": ["/app/tratar.sh"], "/editar": ["python3", "/app/editar.py"], "/preparar": [*ALEPH, "preparar"]}
+VIDEO = {"/tratar": ["/app/tratar.sh"], "/editar": ["python3", "/app/editar.py"], "/preparar": [*ALEPH, "preparar"], "/compor": [*ALEPH, "compor"]}
 # Os que respondem JSON: o MP4 vai como arquivo (/rosto, /quadros) ou o corpo pela entrada padrão.
 JSON = {"/rosto": ["python3", "/app/rosto.py"], "/quadros": [*ALEPH, "quadros"]}
 ENTRADA = {"/ajustar": [*ALEPH, "ajustar"], "/recorte": [*ALEPH, "recorte"]}
@@ -59,9 +61,21 @@ class Handler(BaseHTTPRequestHandler):
                 if r.returncode != 0:
                     return self.responder(500, (r.stderr or b"falhou")[-2000:], "text/plain")
                 return self.responder(200, r.stdout.strip(), "application/json")
-            plano = self.headers.get("x-plano")
-            extra = [plano] if plano and self.path == "/editar" else []
-            r = subprocess.run([*comando, entrada, saida, *extra], capture_output=True, timeout=600)
+            if self.path == "/compor":
+                # Dois vídeos num corpo só: separa o primeiro (o preparado) do segundo (o do Aleph).
+                primeiro = int(self.headers.get("x-primeiro") or 0)
+                if not 0 < primeiro < tamanho:
+                    return self.responder(400, b"x-primeiro invalido", "text/plain")
+                segundo = os.path.join(d, "troca.mp4")
+                with open(entrada, "rb") as f, open(os.path.join(d, "original.mp4"), "wb") as a, open(segundo, "wb") as b:
+                    a.write(f.read(primeiro))
+                    while bloco := f.read(1 << 20):
+                        b.write(bloco)
+                r = subprocess.run([*comando, os.path.join(d, "original.mp4"), segundo, saida], capture_output=True, timeout=900)
+            else:
+                plano = self.headers.get("x-plano")
+                extra = [plano] if plano and self.path == "/editar" else []
+                r = subprocess.run([*comando, entrada, saida, *extra], capture_output=True, timeout=600)
             if r.returncode != 0:
                 return self.responder(500, (r.stderr or b"falhou")[-2000:], "text/plain")
             self.send_response(200)

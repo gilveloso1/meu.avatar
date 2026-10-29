@@ -6,14 +6,21 @@
  *
  *   1. corta as faixas pretas e amplia o vídeo até 1080p no contêiner
  *      (container/aleph.py): quanto maior o rosto, mais firme a troca;
- *   2. tira 5 quadros e troca o rosto em cada um com um modelo de imagem
- *      (FACE_MODEL), com a foto inteira e o recorte do rosto como referência;
+ *   2. tira 5 quadros e troca o rosto neles com um modelo de imagem
+ *      (FACE_MODEL), em cadeia: o primeiro sai da foto (inteira e o recorte do
+ *      rosto) e vira a referência de rosto e cabelo dos outros. Gerados cada um
+ *      a partir da foto, os quadros vinham com cabelos diferentes, e o Aleph
+ *      fazia o cabelo saltar de um para o outro;
  *   3. confere com um modelo de visão (CHECK_MODEL) se o fundo do quadro ficou
- *      igual ao original: o modelo de imagem às vezes redesenha a parede, e o
- *      Aleph faz o objeto inventado andar. Reprovado, refaz uma vez; de novo
- *      reprovado, o quadro fica de fora;
+ *      igual ao original (o modelo de imagem às vezes redesenha a parede, e o
+ *      Aleph faz o objeto inventado andar) e se o cabelo é o da referência.
+ *      Reprovado, refaz uma vez; de novo reprovado, o quadro fica de fora;
  *   4. pede ao Aleph 2 com o vídeo preparado e os quadros que passaram como
- *      quadros-chave (provider.options.runway.keyframes).
+ *      quadros-chave (provider.options.runway.keyframes);
+ *   5. quando o Aleph devolve, o contêiner compõe: o vídeo preparado com só a
+ *      cabeça e o cabelo do Aleph por cima. O Aleph redesenha o quadro inteiro,
+ *      e o que devia ficar parado (letras, parede) tremia; se a composição
+ *      falhar, fica a saída do Aleph.
  *
  * O Aleph cobra por segundo (US$ 0,28) e mantém o áudio do vídeo. Não aceita
  * foto de referência solta nem `aspect_ratio` (que expande o quadro).
@@ -59,6 +66,30 @@ export function facePrompt(withCrop: boolean): string {
     `Replace the person in image 1 with this person. The face must be identical to ${withCrop ? "images 2 and 3" : "image 2"}, sharp and detailed: the same eye shape and color, eyebrows, nose, lips, jawline, skin tone and hair.`,
     "Keep everything else in image 1 exactly the same: head angle, pose, hand position, expression, mouth opening, clothing, objects (anything in front of the face stays in front of it), caption text, background, lighting, framing and format.",
   ].join(" ");
+}
+
+/** Os quadros depois do primeiro: a referência é o primeiro quadro já trocado. */
+export function chainPrompt(withCrop: boolean): string {
+  return [
+    `Image 1 is a frame from a video. Image 2 is another frame of the same video in which the person was already replaced: it is the reference.${withCrop ? " Image 3 is a close-up of the same person's face." : ""}`,
+    "Replace the person in image 1 so they look exactly like the person in image 2: the same face, the same hair style (same parting, length, volume, color and how it falls over the shoulders), the same skin tone and makeup. The hair only moves as the head moves.",
+    "Keep everything else in image 1 exactly the same: head angle, pose, hand position, expression, mouth opening, clothing, objects (anything in front of the face stays in front of it), caption text, background, lighting, framing and format.",
+  ].join(" ");
+}
+
+/** Confere se o cabelo do quadro é o da referência (o primeiro quadro trocado). */
+export const HAIR_PROMPT = `Image 1 and image 2 should show the same person in two frames of one video. Compare only the hair: parting, length, volume, color, waves, and how it falls over the shoulders (ignore movement caused by a different head angle). Answer only JSON: {"cabelo_igual": true|false, "detalhes": "..."}.`;
+
+/** A resposta da conferência do cabelo; null se não veio o JSON esperado. */
+export function parseHair(text: string): boolean | null {
+  const json = /\{[\s\S]*\}/.exec(text)?.[0];
+  if (!json) return null;
+  try {
+    const r = JSON.parse(json) as Record<string, unknown>;
+    return typeof r.cabelo_igual === "boolean" ? r.cabelo_igual : null;
+  } catch {
+    return null;
+  }
 }
 
 /** O pedido ao modelo de visão; só "fundo" reprova (nos testes, mãos e objetos davam alarme falso). */
@@ -111,6 +142,7 @@ export const ALEPH: Structure = {
   access: "admin",
   // O Aleph devolve o áudio do vídeo de origem, sem mudança.
   treatAudio: false,
+  compose: true,
   quickEdit: true,
   wordsPerSecond: WORDS_PER_SECOND,
   cost: { sku: "segundo", seconds: { video: "video" }, extra: KEYFRAMES * FACE_COST },

@@ -9,7 +9,8 @@
  *
  * A troca de avatar pelo Aleph 2 (container/aleph.py) prepara o vídeo (sem
  * faixas pretas, ampliado até 1080p), tira os quadros-chave, recorta o rosto
- * da foto e põe o quadro com o rosto trocado no tamanho do vídeo.
+ * da foto, põe o quadro com o rosto trocado no tamanho do vídeo e, no fim,
+ * compõe o original com a cabeça do Aleph por cima.
  *
  * O contêiner não tem acesso à internet: recebe o MP4 e devolve o MP4 tratado.
  * Fica ligado alguns minutos depois de cada vídeo e depois dorme sozinho.
@@ -44,6 +45,11 @@ export interface AudioApi {
   faceCrop(image: ArrayBuffer): Promise<string | null>;
   /** A imagem (base64) no tamanho exato do vídeo, em JPEG base64. */
   resize(image: string, width: number, height: number): Promise<string>;
+  /**
+   * O vídeo preparado com a cabeça e o cabelo do Aleph por cima. Os dois vão
+   * emendados em `body`; `firstSize` é quantos bytes são do preparado.
+   */
+  compose(body: ReadableStream, size: number, firstSize: number): Promise<Response>;
 }
 
 /**
@@ -88,6 +94,10 @@ export class ContainerAudio implements AudioApi {
 
   prepare(mp4: ReadableStream, size: number): Promise<Response> {
     return this.post("/preparar", "Preparo do vídeo", mp4, size);
+  }
+
+  compose(body: ReadableStream, size: number, firstSize: number): Promise<Response> {
+    return this.post("/compor", "Composição", body, size, { "x-primeiro": String(firstSize) });
   }
 
   async frames(mp4: ArrayBuffer, seconds: number[]): Promise<string[]> {

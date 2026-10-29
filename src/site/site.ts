@@ -536,6 +536,10 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
     const since = minutes(v.edit_status === "processing" ? v.edit_started_at : v.updated_at);
     return { label: `Editando o vídeo · ${since} min`, icon: "content_cut", kind: "busy" };
   }
+  if (v.prep_status === "compose" || v.prep_status === "composing") {
+    // Voltou do Aleph: o contêiner junta a cabeça e o cabelo trocados com o resto do original.
+    return { label: `Finalizando · ${minutes(v.created_at)} min`, icon: "auto_awesome", kind: "busy" };
+  }
   if (v.status === "submitting" && (v.prep_status === "pending" || v.prep_status === "processing")) {
     // A troca de avatar pelo Aleph 2 prepara o vídeo e os quadros-chave antes do envio.
     return { label: `Preparando · ${minutes(v.created_at)} min`, icon: "auto_awesome", kind: "busy" };

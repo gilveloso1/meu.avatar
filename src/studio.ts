@@ -5,7 +5,20 @@ import { mp4Duration, mp4Size } from "./mp4";
 import { type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import { canUse, InputError, structureById, type Structure, type Values } from "./structures";
-import { aspectLabel, CHECK_MODEL, CHECK_PROMPT, FACE_MODEL, FACE_TRIES, facePrompt, keyframeTimes, MAX_PREPARED_BYTES, parseCheck } from "./structures/aleph";
+import {
+  aspectLabel,
+  chainPrompt,
+  CHECK_MODEL,
+  CHECK_PROMPT,
+  FACE_MODEL,
+  FACE_TRIES,
+  facePrompt,
+  HAIR_PROMPT,
+  keyframeTimes,
+  MAX_PREPARED_BYTES,
+  parseCheck,
+  parseHair,
+} from "./structures/aleph";
 
 export { InputError } from "./structures";
 
@@ -149,6 +162,8 @@ export class Studio {
   /** Confere o job no OpenRouter e, se terminou, guarda o MP4 no R2. */
   async sync(video: Video): Promise<Video> {
     if (!video.job_id || !OPEN_STATUSES.includes(video.status)) return video;
+    // Já voltou do Aleph e espera a composição (prepareNext): nada a consultar.
+    if (video.prep_status === "compose" || video.prep_status === "composing") return video;
     const api = this.requireApi();
     let job: VideoJob;
     try {
@@ -161,6 +176,14 @@ export class Studio {
     // O que o preparo já gastou (as imagens dos quadros-chave do Aleph 2) entra no custo.
     const prepCost = Number(parseSettings(video.settings).prep_cost) || 0;
     const cost = job.usage?.cost != null ? job.usage.cost + prepCost : null;
+    const structure = structureById(video.structure);
+    if (job.status === "completed" && structure?.compose && this.audio) {
+      // A saída do Aleph fica guardada; o vídeo aparece depois da composição.
+      const raw = `videos/${video.id}.aleph.mp4`;
+      await this.media.put(raw, await api.download(job), { httpMetadata: { contentType: "video/mp4" } });
+      const settings = JSON.stringify({ ...parseSettings(video.settings), aleph_key: raw });
+      return (await this.db.updateVideo(video.id, { status: "in_progress", prep_status: "compose", cost, settings }))!;
+    }
     if (job.status === "completed") {
       const key = `videos/${video.id}.mp4`;
       await this.media.put(key, await api.download(job), { httpMetadata: { contentType: "video/mp4" } });
@@ -169,7 +192,7 @@ export class Studio {
         video_key: key,
         cost,
         // O áudio entra na fila do contêiner, se a estrutura pede; o agendamento trata um por vez.
-        audio_status: this.audio && (structureById(video.structure)?.treatAudio ?? true) ? "pending" : null,
+        audio_status: this.audio && (structure?.treatAudio ?? true) ? "pending" : null,
       }))!;
     }
     if (job.status === "failed" || job.status === "cancelled" || job.status === "expired") {
@@ -194,7 +217,20 @@ export class Studio {
    */
   async prepareNext(now = new Date()): Promise<Video | null> {
     if (!this.audio || !this.api) return null;
-    await this.db.failStalePrep(new Date(now.getTime() - AUDIO_TIMEOUT_MS).toISOString(), now.toISOString());
+    const before = new Date(now.getTime() - AUDIO_TIMEOUT_MS).toISOString();
+    await this.db.failStalePrep(before, now.toISOString());
+    // Composição que não terminou: fica a saída pura do Aleph.
+    for (const stale of await this.db.staleCompositions(before)) await this.finishWithoutComposition(stale, "A composição demorou demais.");
+    // Primeiro a composição de um vídeo que já voltou do Aleph (falta pouco para ficar pronto).
+    const ready = await this.db.claimCompose(now.toISOString());
+    if (ready) {
+      try {
+        return await this.compose(ready, this.audio);
+      } catch (err) {
+        console.error("Falha na composição", ready.id, err);
+        return this.finishWithoutComposition(ready, errorMessage(err));
+      }
+    }
     const video = await this.db.claimPrep(now.toISOString());
     if (!video) return null;
     try {
@@ -227,56 +263,55 @@ export class Studio {
     const photoUrl = `data:${photoObject.httpMetadata?.contentType ?? "image/jpeg"};base64,${base64(photo)}`;
     const crop = await audio.faceCrop(photo);
 
-    // 3. O rosto trocado em cada quadro, conferido contra o original; o reprovado é refeito uma vez.
+    // 3. O rosto trocado nos quadros, em cadeia: o primeiro sai da foto e vira a referência de rosto e
+    //    cabelo dos outros. Cada um é conferido (fundo igual ao original; cabelo igual ao da referência)
+    //    e o reprovado é refeito uma vez.
     let prepCost = 0;
-    const keyframe = async (frame: string, at: number): Promise<{ at: number; image: string } | null> => {
-      const original = `data:image/jpeg;base64,${frame}`;
+    const image = (url: string) => ({ type: "image_url" as const, image_url: { url } });
+    const jpeg = (b64: string) => `data:image/jpeg;base64,${b64}`;
+    const swap = async (text: string, images: string[], at: number): Promise<string | null> => {
+      const edit = await api.chat({ model: FACE_MODEL, modalities: ["image", "text"], messages: [{ role: "user", content: [{ type: "text", text }, ...images.map(image)] }] });
+      prepCost += edit.cost;
+      const edited = edit.images[0]?.replace(/^data:[^,]*,/, "");
+      if (!edited) {
+        console.error("Troca do rosto sem imagem", video.id, at, edit.text.slice(0, 300));
+        return null;
+      }
+      return audio.resize(edited, size.width, size.height);
+    };
+    const ask = async (text: string, a: string, b: string): Promise<string> => {
+      const answer = await api.chat({ model: CHECK_MODEL, temperature: 0, messages: [{ role: "user", content: [{ type: "text", text }, image(jpeg(a)), image(jpeg(b))] }] });
+      prepCost += answer.cost;
+      return answer.text;
+    };
+    const cropUrl = crop ? jpeg(crop) : null;
+    // A referência: o primeiro quadro (na ordem do vídeo) que, trocado a partir da foto, mantém o fundo.
+    let reference: { index: number; image: string } | null = null;
+    for (let i = 0; i < frames.length && !reference; i++) {
+      for (let attempt = 1; attempt <= FACE_TRIES && !reference; attempt++) {
+        const swapped = await swap(facePrompt(crop !== null), [jpeg(frames[i]!), photoUrl, ...(cropUrl ? [cropUrl] : [])], times[i]!);
+        if (!swapped) continue;
+        const check = await ask(CHECK_PROMPT, frames[i]!, swapped);
+        const verdict = parseCheck(check);
+        if (verdict && !verdict.fundo) reference = { index: i, image: swapped };
+        else console.error("Quadro-chave reprovado na conferência do fundo", video.id, times[i], attempt, check.slice(0, 300));
+      }
+    }
+    if (!reference) throw new Error("Nenhum quadro-chave passou na conferência do fundo.");
+    const ref = reference;
+    const chained = async (frame: string, at: number): Promise<{ at: number; image: string } | null> => {
       for (let attempt = 1; attempt <= FACE_TRIES; attempt++) {
-        const edit = await api.chat({
-          model: FACE_MODEL,
-          modalities: ["image", "text"],
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: facePrompt(crop !== null) },
-                { type: "image_url", image_url: { url: original } },
-                { type: "image_url", image_url: { url: photoUrl } },
-                ...(crop ? [{ type: "image_url" as const, image_url: { url: `data:image/jpeg;base64,${crop}` } }] : []),
-              ],
-            },
-          ],
-        });
-        prepCost += edit.cost;
-        const edited = edit.images[0]?.replace(/^data:[^,]*,/, "");
-        if (!edited) {
-          console.error("Troca do rosto sem imagem", video.id, at, edit.text.slice(0, 300));
-          continue;
-        }
-        const image = await audio.resize(edited, size.width, size.height);
-        const check = await api.chat({
-          model: CHECK_MODEL,
-          temperature: 0,
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: CHECK_PROMPT },
-                { type: "image_url", image_url: { url: original } },
-                { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } },
-              ],
-            },
-          ],
-        });
-        prepCost += check.cost;
-        const verdict = parseCheck(check.text);
-        if (verdict && !verdict.fundo) return { at, image };
-        console.error("Quadro-chave reprovado na conferência do fundo", video.id, at, attempt, check.text.slice(0, 300));
+        const swapped = await swap(chainPrompt(crop !== null), [jpeg(frame), jpeg(ref.image), ...(cropUrl ? [cropUrl] : [])], at);
+        if (!swapped) continue;
+        const [background, hair] = await Promise.all([ask(CHECK_PROMPT, frame, swapped), ask(HAIR_PROMPT, ref.image, swapped)]);
+        const verdict = parseCheck(background);
+        if (verdict && !verdict.fundo && parseHair(hair) === true) return { at, image: swapped };
+        console.error("Quadro-chave reprovado na conferência", video.id, at, attempt, background.slice(0, 200), hair.slice(0, 200));
       }
       return null;
     };
-    const accepted = (await Promise.all(frames.map((frame, i) => keyframe(frame, times[i]!)))).filter((k): k is { at: number; image: string } => k !== null);
-    if (!accepted.length) throw new Error("Nenhum quadro-chave passou na conferência do fundo.");
+    const rest = await Promise.all(frames.slice(ref.index + 1).map((frame, i) => chained(frame, times[ref.index + 1 + i]!)));
+    const accepted = [{ at: times[ref.index]!, image: ref.image }, ...rest.filter((k): k is { at: number; image: string } => k !== null)];
 
     // 4. Os quadros-chave no R2 (o provedor baixa de lá) e o pedido ao Aleph.
     const keyframes = await Promise.all(
@@ -302,6 +337,31 @@ export class Studio {
     };
     const job = await api.submit(request);
     return (await this.db.updateVideo(video.id, { ...record, job_id: job.id, status: job.status ?? "pending", prep_status: "done", prep_error: null }))!;
+  }
+
+  /** Compõe o vídeo preparado com a saída do Aleph (container/aleph.py) e o vídeo fica pronto. */
+  private async compose(video: Video, audio: AudioApi): Promise<Video> {
+    const settings = parseSettings(video.settings);
+    const prepared = settings.prepared_key ? await this.media.get(settings.prepared_key) : null;
+    const raw = settings.aleph_key ? await this.media.get(settings.aleph_key) : null;
+    if (!prepared || !raw) throw new Error("O vídeo preparado ou a saída do Aleph não estão no R2.");
+    // Os dois emendados num corpo só, sem carregar na memória do Worker.
+    const { readable, writable } = new FixedLengthStream(prepared.size + raw.size);
+    const piping = prepared.body.pipeTo(writable, { preventClose: true }).then(() => raw.body.pipeTo(writable));
+    // Se o contêiner falhar, o erro que vale é o dele (o da emenda vem junto e é ignorado).
+    piping.catch(() => {});
+    const res = await audio.compose(readable, prepared.size + raw.size, prepared.size);
+    await piping;
+    const key = `videos/${video.id}.mp4`;
+    const out = new FixedLengthStream(Number(res.headers.get("content-length")));
+    await Promise.all([res.body!.pipeTo(out.writable), this.media.put(key, out.readable, { httpMetadata: { contentType: "video/mp4" } })]);
+    return (await this.db.updateVideo(video.id, { status: "completed", video_key: key, prep_status: "done", prep_error: null }))!;
+  }
+
+  /** Sem composição, o vídeo fica pronto com a saída pura do Aleph; o motivo fica no banco e no log. */
+  private async finishWithoutComposition(video: Video, reason: string): Promise<Video> {
+    const raw = parseSettings(video.settings).aleph_key ?? null;
+    return (await this.db.updateVideo(video.id, { status: raw ? "completed" : "failed", video_key: raw, prep_status: "failed", prep_error: reason, error: raw ? null : reason }))!;
   }
 
   /** Agendamento: confere os vídeos ainda abertos. */

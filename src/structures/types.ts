@@ -124,6 +124,11 @@ export interface Structure {
   treatAudio: boolean;
   /** O vídeo pronto tem o botão "Edição rápida" (container/editar.py). */
   quickEdit: boolean;
+  /**
+   * O vídeo pronto passa pela composição no contêiner antes de aparecer (o
+   * Aleph 2: o original com só a cabeça e o cabelo do Aleph por cima).
+   */
+  compose?: boolean;
   /** Palavras por segundo da fala, para o contador e o custo. */
   wordsPerSecond: { min: number; max: number };
   cost: CostRule;

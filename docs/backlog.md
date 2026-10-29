@@ -144,7 +144,11 @@ Próximos passos:
 2. Estrutura do Aleph 2 no ar desde 29/10/2026 (`src/structures/aleph.ts`, só o
    administrador; migration 0009 e o contêiner novo publicados): falta gerar o
    primeiro vídeo pelo site e confirmar a cobrança (US$ 1,40 por pedido nos
-   testes) antes de ajustar a estimativa do formulário. O Seedance fica como
+   testes) antes de ajustar a estimativa do formulário. Primeiro vídeo feito
+   (US$ 1,62); quadros-chave em cadeia e composição com o original entraram
+   depois. O dono ainda não está satisfeito: o próximo passo, se for preciso,
+   é testar um modelo de substituição de personagem (Wan 2.2 Animate, Kling O3)
+   fora do OpenRouter. O Seedance fica como
    está, para outros usos.
 3. Botão "Trocar avatar" na página do vídeo, que abre o formulário já com
    aquele vídeo.

@@ -129,6 +129,8 @@ export class FakeVideoApi implements VideoApi {
   chats: ChatRequest[] = [];
   /** Quadros (pelo conteúdo, ex.: "quadro-2.5") cujo fundo a conferência sempre reprova. */
   rejectFrames: string[] = [];
+  /** Quadros cujo cabelo a conferência sempre acha diferente do da referência. */
+  rejectHair: string[] = [];
   /** Quantas trocas de rosto voltam sem imagem (as primeiras). */
   facesWithoutImage = 0;
   async chat(body: ChatRequest): Promise<ChatResult> {
@@ -140,6 +142,11 @@ export class FakeVideoApi implements VideoApi {
         return { text: "não consegui", images: [], cost: 0.04 };
       }
       return { text: "", images: [`data:image/jpeg;base64,${btoa(`${images[0]}+rosto`)}`], cost: 0.04 };
+    }
+    if (body.messages[0]!.content.some((p) => p.type === "text" && p.text.includes("cabelo_igual"))) {
+      // Conferência do cabelo: a referência e o quadro trocado ("quadro-2.5+rosto-...").
+      const igual = !this.rejectHair.some((q) => images[1]!.startsWith(`${q}+`));
+      return { text: `{"cabelo_igual": ${igual}, "detalhes": ""}`, images: [], cost: 0.001 };
     }
     const fundo = this.rejectFrames.includes(images[0]!);
     return { text: `\`\`\`json\n{"fundo": ${fundo}, "objetos": false, "maos": false, "detalhes": ""}\n\`\`\``, images: [], cost: 0.001 };
@@ -225,6 +232,18 @@ export class FakeAudioApi implements AudioApi {
   }
   async resize(image: string, width: number, height: number) {
     return btoa(`${atob(image)}-${width}x${height}`);
+  }
+  composed = 0;
+  failCompose: string | null = null;
+  /** Confere que o preparado e a saída do Aleph chegaram emendados e devolve "composto(<tamanho do preparado>)". */
+  async compose(body: ReadableStream, size: number, firstSize: number) {
+    this.composed++;
+    const all = new Uint8Array(await new Response(body).arrayBuffer());
+    if (all.length !== size) throw new Error(`tamanho errado: ${all.length} != ${size}`);
+    if (this.failCompose) throw new Error(this.failCompose);
+    const second = new TextDecoder().decode(all.subarray(firstSize));
+    const out = new TextEncoder().encode(`composto(${firstSize}, ${second})`);
+    return new Response(out, { headers: { "content-length": String(out.length), "content-type": "video/mp4" } });
   }
   private async answer(mp4: ReadableStream, size: number, suffix: string) {
     const original = new Uint8Array(await new Response(mp4).arrayBuffer());

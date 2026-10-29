@@ -773,13 +773,16 @@ describe("Aleph 2", () => {
     expect(audio.prepared).toBe(1);
     expect(audio.frameTimes).toEqual([[0, 1.25, 2.5, 3.75, 5]]);
 
-    // Troca do rosto com o quadro, a foto e o recorte do rosto; conferência com o quadro original e o trocado.
+    // Em cadeia: o primeiro quadro sai da foto (quadro, foto e recorte do rosto); os outros, da referência
+    // (quadro, primeiro quadro já trocado e recorte). Cada um confere o fundo; os da cadeia, também o cabelo.
     const faces = api.chats.filter((c) => c.model === FACE_MODEL);
     const checks = api.chats.filter((c) => c.model === CHECK_MODEL);
     expect(faces).toHaveLength(5);
-    expect(checks).toHaveLength(5);
-    expect(faces[0]!.messages[0]!.content.filter((p) => p.type === "image_url")).toHaveLength(3);
-    expect(checks[0]!.messages[0]!.content.filter((p) => p.type === "image_url")).toHaveLength(2);
+    expect(checks).toHaveLength(9);
+    const imagens = (c: (typeof faces)[number]) => c.messages[0]!.content.flatMap((p) => (p.type === "image_url" ? [atob(p.image_url.url.split(",")[1]!)] : []));
+    expect(imagens(faces[0]!)).toEqual(["quadro-0", "\u0001\u0002\u0003", "rosto"]);
+    expect(imagens(faces[1]!)).toEqual(["quadro-1.25", "quadro-0+rosto-1078x1920", "rosto"]);
+    expect(checks.filter((c) => c.messages[0]!.content.some((p) => p.type === "text" && p.text.includes("cabelo_igual")))).toHaveLength(4);
 
     const [req] = api.submitted;
     expect(req).toMatchObject({ model: "runway/aleph-2", prompt: alephPrompt("") });
@@ -801,16 +804,69 @@ describe("Aleph 2", () => {
     expect(preparado.status).toBe(200);
 
     const settings = JSON.parse(pronto!.settings!);
-    expect(settings).toMatchObject({ keyframes: "5", prep_cost: "0.2050", prepared_key: `origens/${pronto!.id}.preparado.mp4` });
+    expect(settings).toMatchObject({ keyframes: "5", prep_cost: "0.2090", prepared_key: `origens/${pronto!.id}.preparado.mp4` });
     const detalhes = await (await get(`/video/${pronto!.id}`, undefined, api)).text();
     expect(detalhes).toContain('<dt class="qe-result__label">Quadros-chave</dt><dd class="qe-result__value">5 de 5</dd>');
 
-    // Pronto, o custo soma o do Aleph e o das imagens; o áudio não passa pelo contêiner.
+    // Pronto no Aleph: a saída fica guardada e o vídeo vai para a composição ("Finalizando").
     api.finish("job-1", { status: "completed", usage: { cost: 1.4 } });
     await studio(api, audio).syncOpen();
-    const [video] = await new Db(env.DB).recentVideos();
-    expect(video!.cost).toBeCloseTo(1.605);
-    expect(video!.audio_status).toBeNull();
+    let [video] = await new Db(env.DB).recentVideos();
+    expect(video).toMatchObject({ status: "in_progress", prep_status: "compose", video_key: null });
+    expect(video!.cost).toBeCloseTo(1.609);
+    expect(JSON.parse(video!.settings!).aleph_key).toBe(`videos/${video!.id}.aleph.mp4`);
+    expect(await (await get(`/modelo/aleph`, undefined, api)).text()).toContain("Finalizando · 0 min");
+    // Enquanto espera, o agendamento não consulta o job de novo.
+    await studio(api, audio).syncOpen();
+    expect(api.downloads).toBe(1);
+
+    // A composição recebe o preparado e a saída do Aleph emendados; o vídeo fica pronto com o composto.
+    await studio(api, audio).prepareNext();
+    [video] = await new Db(env.DB).recentVideos();
+    expect(audio.composed).toBe(1);
+    expect(video).toMatchObject({ status: "completed", prep_status: "done", video_key: `videos/${video!.id}.mp4`, audio_status: null });
+    expect(await (await env.MIDIA.get(video!.video_key!))!.text()).toBe(`composto(${audio.preparedMp4.length}, mp4-falso)`);
+    expect(video!.cost).toBeCloseTo(1.609);
+  });
+
+  it("se a composição falhar ou demorar, o vídeo fica pronto com a saída pura do Aleph", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await pedido(api, audio);
+    await studio(api, audio).prepareNext();
+    api.finish("job-1", { status: "completed", usage: { cost: 1.4 } });
+    await studio(api, audio).syncOpen();
+    audio.failCompose = "ffmpeg quebrou";
+    const pronto = await studio(api, audio).prepareNext();
+    expect(pronto).toMatchObject({ status: "completed", prep_status: "failed", video_key: `videos/${pronto!.id}.aleph.mp4` });
+    expect(pronto!.prep_error).toContain("ffmpeg quebrou");
+
+    // Composição que não termina em 20 minutos: o mesmo.
+    const audio2 = new FakeAudioApi();
+    await pedido(api, audio2);
+    await studio(api, audio2).prepareNext();
+    api.finish("job-2", { status: "completed", usage: { cost: 1.4 } });
+    await studio(api, audio2).syncOpen();
+    const db = new Db(env.DB);
+    const inicio = new Date();
+    const travado = await db.claimCompose(inicio.toISOString());
+    await studio(api, audio2).prepareNext(new Date(inicio.getTime() + 21 * 60_000));
+    expect(await db.videoById(travado!.id)).toMatchObject({ status: "completed", prep_status: "failed", video_key: `videos/${travado!.id}.aleph.mp4` });
+  });
+
+  it("primeiro quadro reprovado: a referência passa a ser o seguinte; cabelo diferente do da referência fica de fora", async () => {
+    const api = new FakeVideoApi();
+    api.rejectFrames = ["quadro-0"];
+    api.rejectHair = ["quadro-3.75"];
+    const audio = new FakeAudioApi();
+    await pedido(api, audio);
+    await studio(api, audio).prepareNext();
+    const keyframes = (api.submitted[0]!.provider!.options.runway as { keyframes: { seconds: number }[] }).keyframes;
+    expect(keyframes.map((k) => k.seconds)).toEqual([1.25, 2.5, 5]);
+    // Os da cadeia usam o quadro de 1,25 s trocado como referência.
+    const faces = api.chats.filter((c) => c.model === FACE_MODEL);
+    const ultimo = faces.at(-1)!.messages[0]!.content.flatMap((p) => (p.type === "image_url" ? [atob(p.image_url.url.split(",")[1]!)] : []));
+    expect(ultimo[1]).toBe("quadro-1.25+rosto-1078x1920");
   });
 
   it("quadro reprovado no fundo é refeito uma vez e, reprovado de novo, fica de fora", async () => {

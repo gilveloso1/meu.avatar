@@ -241,3 +241,10 @@ em 15 quadros), com a borda desfocada. Os quadros do Aleph batem com os do
 original (os mesmos 165, sem deslocamento). O tremor caiu para 0,29 na parede
 e 0,74 nos rótulos, e os produtos, a legenda, a roupa e as mãos ficam com os
 pixels do original. Levou 1 min no computador para 5,5 s.
+
+**No site desde 29/10/2026** (a pedido do dono, que gostou bastante da cadeia
+mas **ainda não está satisfeito** com o resultado; fica assim por enquanto):
+os quadros-chave em cadeia, com a conferência do fundo e do cabelo, e a
+composição depois do Aleph. A composição no contêiner vai um quadro por vez,
+com a máscara desfocada em 1/4 da resolução e o x264 em `veryfast`: 35 s de
+CPU e 240 MB para 5,5 s de vídeo (o protótipo gastava 140 s e 562 MB).
