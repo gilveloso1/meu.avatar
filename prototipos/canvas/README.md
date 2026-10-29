@@ -9,7 +9,7 @@ mesmo exemplo (3 ganchos → corpo com b-roll, produto e música → 2 CTAs → 
 - `tldraw/`: com o tldraw 5.5 (React). Blocos são uma forma própria, ligações
   são as setas dele.
 - `comum/modelo.js`: grupos, coberturas, versões e a linha do tempo, tirados só
-  da posição dos blocos (testes em `comum/modelo.test.js`).
+  da posição dos blocos (testes em `comum/testes.js`, fora do vitest do site).
 - `comum/player.js`: a prévia de uma versão no navegador, sem montar arquivo.
 
 ## Rodar

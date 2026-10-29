@@ -5,7 +5,7 @@
   "scripts": {
     "midia": "sh gerar-midia.sh",
     "build": "node build.mjs",
-    "teste": "node --test comum/*.test.js"
+    "teste": "node --test comum/testes.js"
   },
   "devDependencies": {
     "@tldraw/assets": "^5.5.0",
