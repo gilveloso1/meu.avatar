@@ -66,15 +66,16 @@ body { min-height: 0; overflow: hidden; }
 .blk--cover { border-radius: var(--md-sys-shape-corner-medium) var(--md-sys-shape-corner-medium) var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-extra-small); }
 .blk--under { border-radius: var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-small) var(--md-sys-shape-corner-small); }
 /* Alças de corte por fora do bloco, a 2 px da borda: barra de 4 px em primary (sobre o fundo do
-   canvas); a área de pegar tem 10 px. O bloco com o mouse ou escolhido fica por cima do vizinho. */
-.trim { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; z-index: 2; }
+   canvas); a área de pegar tem 10 px. Só no bloco escolhido, que fica por cima do vizinho. */
+.trim { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; z-index: 2; display: none; }
 .trim--l { left: -10px; }
 .trim--r { right: -10px; }
 .trim::after { content: ""; position: absolute; top: 20%; bottom: 20%; width: 4px; border-radius: 2px; background: var(--md-sys-color-primary); opacity: 0; transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
 .trim--l::after { right: 2px; }
 .trim--r::after { left: 2px; }
-.blk:hover .trim::after, .blk.is-sel .trim::after { opacity: 1; }
-.blk:hover, .blk.is-sel { z-index: 2; }
+.blk.is-sel .trim { display: block; }
+.blk.is-sel .trim::after { opacity: 1; }
+.blk.is-sel { z-index: 2; }
 
 /* Aba do grupo: chip de assistência do M3 (32 px, cantos de 8 px, contorno, ícone de 18 px). */
 #chrome { position: absolute; left: 0; top: 0; }
