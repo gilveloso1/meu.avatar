@@ -125,7 +125,9 @@ function playhead(t) {
   headBox = box;
   // Aparece sempre que a prévia toca um bloco ou um grupo, para poder arrastar.
   head.hidden = !box;
-  if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - 1}px`, top: `${box.y - 4}px`, height: `${box.h + 8}px` });
+  // Passa 4 px (na tela) acima e abaixo do que toca, com qualquer zoom.
+  const pad = 4 / Math.max(1, view.z);
+  if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - pad / 4}px`, top: `${box.y - pad}px`, height: `${box.h + 2 * pad}px` });
 }
 function playNow(p) {
   // Tocar algo mostra a Prévia.
@@ -181,6 +183,8 @@ const blockEls = new Map();
 
 function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  world.style.setProperty("--zi", String(1 / Math.max(1, view.z)));
+  playhead(player.t);
   vp.style.backgroundSize = `${24 * view.z}px ${24 * view.z}px`;
   vp.style.backgroundPosition = `${view.x}px ${view.y}px`;
   $("#zoom").textContent = `${Math.round(view.z * 100)}%`;
@@ -262,7 +266,7 @@ function render({ side = true } = {}) {
     const w = M.width(sb);
     const cy = sb.kind === "audio" ? sb.y + M.AUD_H / 2 : sb.y + 28 + (M.VIS_H - 32) / 2;
     const playing = player.playing && preview?.type === "block" && preview.id === sb.id;
-    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2 - 20}px;top:${cy - 20}px" aria-label="${playing ? "Pausar" : "Tocar o bloco"}" title="${playing ? "Pausar" : "Tocar o bloco"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
+    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2}px;top:${cy}px" aria-label="${playing ? "Pausar" : "Tocar o bloco"}" title="${playing ? "Pausar" : "Tocar o bloco"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
   }
   for (const f of project.finals) {
     const n = M.versions(project, f.id, gs).length;

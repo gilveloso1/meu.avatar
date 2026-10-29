@@ -84,7 +84,9 @@ menos custo.
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).
   O zoom vai até 2000% e a onda é desenhada com 200 px por segundo, para ficar
-  nítida de perto. "Ver tudo" volta.
+  nítida de perto. "Ver tudo" volta. Com zoom, sombras, contornos, linhas, a linha
+  de reprodução e o botão de tocar mantêm o tamanho da tela; a onda fica dentro dos
+  cantos do bloco.
 - **Onda do som**: sem ícone, de borda a borda do bloco, no corte de agora (o x da
   onda é o mesmo tempo do vídeo), para cortar vendo onde a fala começa e termina.
 - **Prévia sem tela preta**: cada trecho é um vídeo empilhado no quadro (o

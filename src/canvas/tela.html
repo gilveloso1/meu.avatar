@@ -21,8 +21,15 @@ body { min-height: 0; overflow: hidden; }
 }
 #vp.is-panning { cursor: grabbing; }
 #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+/* Com zoom (--zi = 1 / zoom, a partir de 100%), sombras, contornos e linhas mantêm a
+   espessura da tela, sem engrossar e sem passar das bordas dos blocos. */
+#world {
+  --el1: 0 calc(1px * var(--zi, 1)) calc(2px * var(--zi, 1)) 0 rgb(0 0 0 / 0.3), 0 calc(1px * var(--zi, 1)) calc(3px * var(--zi, 1)) calc(1px * var(--zi, 1)) rgb(0 0 0 / 0.15);
+  --el3: 0 calc(1px * var(--zi, 1)) calc(3px * var(--zi, 1)) 0 rgb(0 0 0 / 0.3), 0 calc(4px * var(--zi, 1)) calc(8px * var(--zi, 1)) calc(3px * var(--zi, 1)) rgb(0 0 0 / 0.15);
+  --line: calc(2px * var(--zi, 1));
+}
 #wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
-.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: 2; }
+.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .wire.is-sel { stroke: var(--md-sys-color-primary); stroke-width: 3; }
 .wire--temp { stroke: var(--md-sys-color-primary); stroke-dasharray: 6 4; }
 .wire-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
@@ -32,13 +39,13 @@ body { min-height: 0; overflow: hidden; }
 .blk {
   position: absolute; cursor: grab; isolation: isolate;
   border-radius: var(--md-sys-shape-corner-medium); background: var(--c); color: var(--on);
-  box-shadow: var(--md-sys-elevation-level1);
+  box-shadow: var(--el1);
   transition: box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
 }
 .blk::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; pointer-events: none; transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
 .blk:hover::after { opacity: var(--md-sys-state-hover-state-layer-opacity); }
-.blk.is-drag { cursor: grabbing; box-shadow: var(--md-sys-elevation-level3); z-index: 1; }
-.blk.is-sel { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+.blk.is-drag { cursor: grabbing; box-shadow: var(--el3); z-index: 1; }
+.blk.is-sel { outline: var(--line) solid var(--md-sys-color-primary); outline-offset: calc(-1 * var(--line)); }
 .blk__label {
   position: absolute; left: 0; right: 0; top: 0; height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 8px;
   font: var(--md-sys-typescale-label-medium); letter-spacing: 0.031rem; white-space: nowrap; pointer-events: none; overflow: hidden;
@@ -58,14 +65,15 @@ body { min-height: 0; overflow: hidden; }
 .blk.is-mute .blk__media { opacity: 0.38; }
 /* Áudio vinculado: faixa de 40 px embaixo da imagem, na cor e no tom do vídeo, com a onda dele. */
 /* A onda vai de borda a borda do bloco: o x dela é o mesmo tempo do vídeo (o corte de agora). */
-.blk__link { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 40px; border-radius: 0 0 var(--md-sys-shape-corner-medium) var(--md-sys-shape-corner-medium); background: color-mix(in srgb, var(--on) 10%, transparent); pointer-events: none; }
+/* A faixa recorta a onda nos cantos de baixo do bloco (os mesmos cantos dele). */
+.blk__link { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 40px; overflow: hidden; border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; background: color-mix(in srgb, var(--on) 10%, transparent); pointer-events: none; }
 .blk__wave { position: absolute; inset: 4px 0; background: var(--on); opacity: 0.55; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .blk.is-linked .blk__link { display: block; }
 .blk.is-linked .blk__media { bottom: 40px; }
 .blk.is-linked.is-mute .blk__wave { opacity: 0.2; }
 .blk--audio { border-radius: var(--md-sys-shape-corner-small); }
 .blk--audio .blk__label { height: 20px; }
-.blk--audio .blk__media { left: 0; right: 0; top: 18px; bottom: 2px; border-radius: 0; background: var(--on); opacity: 0.45; mix-blend-mode: normal; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.blk--audio .blk__media { left: 0; right: 0; top: 18px; bottom: 2px; border-radius: 0 0 6px 6px; background: var(--on); opacity: 0.45; mix-blend-mode: normal; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .blk--cover { border-radius: var(--md-sys-shape-corner-medium) var(--md-sys-shape-corner-medium) var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-extra-small); }
 .blk--under { border-radius: var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-small) var(--md-sys-shape-corner-small); }
 /* Corte: sem desenho; no bloco escolhido, a borda da esquerda e a da direita (10 px, metade para
@@ -88,20 +96,20 @@ body { min-height: 0; overflow: hidden; }
 .gtab.is-sel { border-color: transparent; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .gtab.is-sel .icon { color: inherit; }
 /* Área do grupo: retângulo tracejado (contorno outline, cantos grandes), em primary quando escolhido. */
-.gframe { position: absolute; border: 2px dashed var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-large); pointer-events: none; }
+.gframe { position: absolute; border: var(--line) dashed var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-large); pointer-events: none; }
 .gframe.is-sel { border-color: var(--md-sys-color-primary); }
 .gtab__play { width: 24px; height: 24px; margin: 0 -8px 0 0; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: none; color: var(--md-sys-color-primary); }
 .gtab__play .icon { font-size: 18px; }
 .gtab.is-sel .gtab__play { color: inherit; }
 /* Tocar o bloco escolhido: botão de ícone cheio do M3 (40 px, primary), por cima da imagem. */
-.blk-play { position: absolute; z-index: 4; width: 40px; height: 40px; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); box-shadow: var(--md-sys-elevation-level2); }
-.blk-play .icon { font-size: 24px; }
+.blk-play { position: absolute; z-index: 4; width: calc(40px * var(--zi, 1)); height: calc(40px * var(--zi, 1)); transform: translate(-50%, -50%); padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); box-shadow: var(--el1); }
+.blk-play .icon { font-size: calc(24px * var(--zi, 1)); }
 /* Linha de reprodução: 2 px em primary sobre o que a prévia toca. */
-.playhead { position: absolute; z-index: 5; width: 2px; border-radius: 1px; background: var(--md-sys-color-primary); box-shadow: 0 0 0 1px var(--md-sys-color-surface-container-lowest); cursor: ew-resize; }
+.playhead { position: absolute; z-index: 5; width: var(--line); border-radius: 1px; background: var(--md-sys-color-primary); box-shadow: 0 0 0 calc(1px * var(--zi, 1)) var(--md-sys-color-surface-container-lowest); cursor: ew-resize; }
 /* Área de toque mais larga que a linha, e a alça em cima (como a do slider do M3: 4 × 24 px). */
-.playhead::before { content: ""; position: absolute; top: -16px; bottom: 0; left: -8px; right: -8px; }
-.playhead__knob { position: absolute; left: 50%; top: -20px; width: 12px; height: 20px; transform: translateX(-50%); border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); box-shadow: 0 0 0 2px var(--md-sys-color-surface-container-lowest); }
-.playhead:hover .playhead__knob, .playhead.is-drag .playhead__knob { width: 16px; }
+.playhead::before { content: ""; position: absolute; top: calc(-16px * var(--zi, 1)); bottom: 0; left: calc(-8px * var(--zi, 1)); right: calc(-8px * var(--zi, 1)); }
+.playhead__knob { position: absolute; left: 50%; top: calc(-20px * var(--zi, 1)); width: calc(12px * var(--zi, 1)); height: calc(20px * var(--zi, 1)); transform: translateX(-50%); border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); box-shadow: 0 0 0 calc(2px * var(--zi, 1)) var(--md-sys-color-surface-container-lowest); }
+.playhead:hover .playhead__knob, .playhead.is-drag .playhead__knob { width: calc(16px * var(--zi, 1)); }
 /* Portas: saída em primary (puxa a ligação), entrada no contorno. */
 .port {
   position: absolute; width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full); z-index: 3;
@@ -113,12 +121,12 @@ body { min-height: 0; overflow: hidden; }
 .fin {
   position: absolute; width: 180px; height: 80px; display: flex; align-items: center; gap: 16px; padding: 0 16px; cursor: grab;
   border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary);
-  box-shadow: var(--md-sys-elevation-level1);
+  box-shadow: var(--el1);
 }
 .fin > span:last-child { display: flex; flex-direction: column; }
 .fin b { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
 .fin small { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
-.fin.is-sel { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+.fin.is-sel { outline: var(--line) solid var(--md-sys-color-primary); outline-offset: var(--line); }
 
 /* Barra de ferramentas flutuante do M3 Expressive: 64 px, cantos inteiros, surface-container,
    8 px nas pontas, 4 px entre itens, 16 px da borda. */
