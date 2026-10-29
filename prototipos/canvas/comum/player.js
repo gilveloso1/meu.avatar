@@ -3,6 +3,8 @@
  * por trecho da linha do tempo, desenhados num <canvas> 9:16 (a cobertura por
  * cima da base) e com o som de cada um no volume escolhido.
  */
+import { sounds } from "./modelo.js";
+
 export class Player {
   constructor(canvas, { onTick = () => {}, onEnd = () => {} } = {}) {
     this.canvas = canvas;
@@ -30,7 +32,8 @@ export class Player {
       if (k !== "image") {
         el.preload = "auto";
         el.playsInline = true;
-        el.muted = i.block.mute;
+        // Vídeo com o áudio desvinculado toca mudo: o som dele está no bloco de áudio.
+        el.muted = !sounds(i.block);
         el.volume = Math.min(1, Math.max(0, i.block.vol));
       }
       this.box.append(el);

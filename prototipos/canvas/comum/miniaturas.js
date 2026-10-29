@@ -2,7 +2,7 @@
 const cache = new Map();
 
 export function thumb(block) {
-  const key = block.src;
+  const key = `${block.kind}:${block.src}`;
   if (!cache.has(key)) cache.set(key, make(block).catch(() => ""));
   return cache.get(key);
 }
@@ -45,12 +45,18 @@ async function wave(src, dur) {
   const ctx = c.getContext("2d");
   ctx.fillStyle = "#000";
   const step = Math.floor(data.length / c.width);
+  const peaks = [];
   for (let x = 0; x < c.width; x++) {
     let peak = 0;
     for (let i = x * step; i < (x + 1) * step; i += 16) peak = Math.max(peak, Math.abs(data[i] || 0));
-    const h = Math.max(2, peak * 36);
-    ctx.fillRect(x, (40 - h) / 2, 1, h);
+    peaks.push(peak);
   }
+  // A onda ocupa a altura toda: o pico mais alto do arquivo vai até a borda.
+  const top = Math.max(...peaks) || 1;
+  peaks.forEach((peak, x) => {
+    const h = Math.max(2, (peak / top) * 36);
+    ctx.fillRect(x, (40 - h) / 2, 1, h);
+  });
   return c.toDataURL();
 }
 

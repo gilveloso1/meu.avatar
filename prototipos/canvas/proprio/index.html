@@ -2,7 +2,7 @@
 <title>Canvas Próprio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&icon_names=add,arrow_back,content_copy,delete,download,drag_indicator,fit_screen,flag,image,layers,movie,music_note,pause,play_arrow,redo,remove,replay,restart_alt,schedule,undo,upload,volume_off&display=block">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&icon_names=add,arrow_back,content_copy,delete,download,drag_indicator,fit_screen,flag,graphic_eq,image,layers,link_off,movie,music_note,pause,play_arrow,redo,remove,replay,restart_alt,schedule,undo,upload,volume_off&display=block">
 <style>
 /*SITE*/
 /*THEME*/
@@ -60,6 +60,14 @@ body { min-height: 0; overflow: hidden; }
 }
 .blk:hover .blk__media, .blk.is-sel .blk__media { mix-blend-mode: normal; }
 .blk.is-mute .blk__media { opacity: 0.38; }
+/* Áudio vinculado: faixa de 40 px embaixo da imagem, na cor e no tom do vídeo, com a onda dele. */
+.blk__link { display: none; position: absolute; left: 4px; right: 4px; bottom: 4px; height: 32px; align-items: center; gap: 4px; padding: 0 4px; border-radius: var(--md-sys-shape-corner-small); background: color-mix(in srgb, var(--on) 10%, transparent); pointer-events: none; }
+.blk__link .icon { font-size: 16px; flex: none; }
+.blk__wave { flex: 1; align-self: stretch; margin: 4px 0; background: var(--on); opacity: 0.55; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.blk.is-linked .blk__link { display: flex; }
+.blk.is-linked .blk__media { bottom: 40px; }
+.blk.is-linked .blk__label .blk__mute { display: none; }
+.blk.is-linked.is-mute .blk__wave { opacity: 0.2; }
 .blk--audio { border-radius: var(--md-sys-shape-corner-small); }
 .blk--audio .blk__label { height: 20px; }
 .blk--audio .blk__media { left: 0; right: 0; top: 18px; bottom: 2px; border-radius: 0; background: var(--on); opacity: 0.45; mix-blend-mode: normal; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }

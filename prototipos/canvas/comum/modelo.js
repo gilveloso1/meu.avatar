@@ -4,8 +4,11 @@
  *
  * Projeto: { blocks, finals, edges }
  *   bloco: { id, kind: "video" | "image" | "audio", name, src, dur, tin, tout,
- *            x, y, mute, vol, tone }   (dur: duração do arquivo; tin/tout: o
- *            corte; tone: 1 a TONES, o tom da cor do tipo)
+ *            x, y, mute, vol, tone, audio }   (dur: duração do arquivo;
+ *            tin/tout: o corte; tone: 1 a TONES, o tom da cor do tipo; audio,
+ *            só no vídeo: "linked" (o som dele numa faixa presa embaixo, na cor
+ *            do vídeo), "unlinked" (desvinculado: virou um bloco de áudio) ou
+ *            "none" (o arquivo não tem som))
  *   final: { id, x, y }
  *   linha: { id, from, to }      (from: um bloco do grupo de saída;
  *                                 to: um bloco do grupo de entrada ou um final)
@@ -16,13 +19,16 @@
  *     sequência (um grupo);
  *   - um bloco de imagem ou vídeo encostado em cima de um grupo cobre a imagem
  *     dele naquele trecho (b-roll); o x diz o momento;
- *   - um bloco de áudio encostado embaixo de um grupo soma o som dele;
+ *   - um bloco de áudio encostado embaixo de um grupo soma o som dele (o vídeo
+ *     com áudio vinculado é mais alto: a faixa do som dele faz parte do bloco);
  *   - linhas ligam grupos; cada caminho até um bloco final é uma versão.
  */
 
 export const PX = 40;
 export const VIS_H = 96;
 export const AUD_H = 40;
+// Faixa do áudio vinculado, embaixo da imagem do vídeo.
+export const LINK_H = 40;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
 export const MAX_VERSOES = 200;
@@ -31,7 +37,10 @@ const EPS = 1;
 
 export const len = (b) => b.tout - b.tin;
 export const width = (b) => len(b) * PX;
-export const height = (b) => (b.kind === "audio" ? AUD_H : VIS_H);
+export const linked = (b) => b.kind === "video" && (b.audio ?? "linked") === "linked";
+export const height = (b) => (b.kind === "audio" ? AUD_H : VIS_H + (linked(b) ? LINK_H : 0));
+/** O som que o bloco toca: o próprio áudio, ou o do vídeo enquanto vinculado. */
+export const sounds = (b) => !b.mute && (b.kind === "audio" || linked(b));
 const visual = (b) => b.kind !== "audio";
 const near = (a, b) => Math.abs(a - b) < EPS;
 const overlapX = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0) > EPS;
@@ -42,7 +51,7 @@ export function groups(project) {
   const vis = blocks.filter(visual);
   // Visual encostado no topo de outro visual é cobertura, não base.
   const isCover = (b) =>
-    vis.some((o) => o !== b && near(b.y + VIS_H, o.y) && overlapX(b.x, b.x + width(b), o.x, o.x + width(o)));
+    vis.some((o) => o !== b && near(b.y + height(b), o.y) && overlapX(b.x, b.x + width(b), o.x, o.x + width(o)));
   const covers = vis.filter(isCover);
   const bases = vis.filter((b) => !covers.includes(b));
 
@@ -69,17 +78,24 @@ export function groups(project) {
         }
   }
 
-  const rowOf = (b, dy) => out.find((g) => near(g.y, b.y + dy) && overlapX(b.x, b.x + width(b), g.x, g.x + g.w));
+  for (const g of out) g.h = Math.max(...g.blocks.map(height));
+  const overlaps = (b, g) => overlapX(b.x, b.x + width(b), g.x, g.x + g.w);
   for (const c of covers) {
-    const g = rowOf(c, VIS_H);
+    const g = out.find((g) => near(g.y, c.y + height(c)) && overlaps(c, g));
     if (g) g.covers.push(c);
     else out.push({ id: c.id, blocks: [c], x: c.x, y: c.y, w: width(c), covers: [], audios: [] });
   }
-  for (const a of blocks.filter((b) => !visual(b))) {
-    const g = rowOf(a, -VIS_H);
-    if (g) g.audios.push(a);
-    else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), covers: [], audios: [a], soloAudio: true });
+  // Som somado: em faixas embaixo do grupo (a primeira encosta no grupo; cada
+  // outra encosta na de cima).
+  const loose = blocks.filter((b) => !visual(b));
+  for (let found = true; found; ) {
+    found = false;
+    for (const a of [...loose]) {
+      const g = out.find((g) => g.blocks.length && overlaps(a, g) && (near(a.y, g.y + g.h) || g.audios.some((o) => near(a.y, o.y + AUD_H))));
+      if (g) g.audios.push(a), loose.splice(loose.indexOf(a), 1), (found = true);
+    }
   }
+  for (const a of loose) out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   for (const g of out) {
     g.dur = g.w / PX;
     g.first = g.blocks[0] ?? g.audios[0];
@@ -168,7 +184,7 @@ export function exportPlan(version) {
       entra: +i.start.toFixed(2),
       dura: +i.len.toFixed(2),
       corte_inicio: +i.tin.toFixed(2),
-      volume: i.block.mute ? 0 : i.block.vol,
+      volume: sounds(i.block) ? i.block.vol : 0,
     })),
   };
 }
@@ -197,14 +213,16 @@ export function snap(project, id, x, y, tol) {
       if (!g.blocks.length) continue;
       const cx = x + w / 2;
       const overRow = y + VIS_H > g.y + VIS_H * 0.2 && y < g.y + VIS_H * 0.6;
-      if (overRow && cx > g.x && cx < g.x + g.w) return { x: Math.max(g.x, x), y: g.y - VIS_H, mode: "cover", target: g.id, group: g };
+      if (overRow && cx > g.x && cx < g.x + g.w) return { x: Math.max(g.x, x), y: g.y - height(b), mode: "cover", target: g.id, group: g };
     }
   } else {
     for (const g of gs) {
       if (!g.blocks.length) continue;
       const cx = x + w / 2;
-      const overRow = y + AUD_H > g.y + VIS_H * 0.4 && y < g.y + VIS_H + AUD_H * 0.8;
-      if (overRow && cx > g.x && cx < g.x + g.w) return { x: Math.max(g.x, x), y: g.y + VIS_H, mode: "audio", target: g.id, group: g };
+      const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
+      const overRow = y + AUD_H > g.y + g.h * 0.4 && y < g.y + g.h + AUD_H * (lanes + 0.8);
+      const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
+      if (overRow && cx > g.x && cx < g.x + g.w) return { x: Math.max(g.x, x), y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
     }
   }
   return { x, y, mode: null };
@@ -263,6 +281,34 @@ export function trim(project, id, side, seconds) {
   return p;
 }
 
+/**
+ * Desvincula o áudio de um vídeo: o som vira um bloco de áudio comum, logo
+ * embaixo, com o mesmo corte; o vídeo fica só com a imagem. Devolve
+ * { project, audioId }.
+ */
+export function unlinkAudio(project, id) {
+  const p = clone(project);
+  const v = p.blocks.find((b) => b.id === id);
+  if (!v || !linked(v)) return { project: p, audioId: null };
+  const g = groups(p).find((g) => g.blocks.some((b) => b.id === id));
+  const below = g ? g.audios.map((a) => p.blocks.find((b) => b.id === a.id)) : [];
+  v.audio = "unlinked";
+  const a = {
+    id: newId("a"), kind: "audio", name: `Áudio de ${v.name}`, src: v.src, dur: v.dur, tin: v.tin, tout: v.tout,
+    x: v.x, y: 0, mute: v.mute, vol: v.vol, tone: nextTone(p, "audio", v.src),
+  };
+  v.mute = false;
+  v.vol = 1;
+  // O áudio fica logo embaixo do vídeo, na primeira faixa de som do grupo; as
+  // faixas que já havia descem uma (e acompanham se o grupo ficou mais baixo).
+  const h = Math.max(...(g ? g.blocks : [v]).map(height));
+  a.y = (g ? g.y : v.y) + h;
+  const shift = h - (g ? g.h : 0) + AUD_H;
+  for (const o of below) o.y += shift;
+  p.blocks.push(a);
+  return { project: p, audioId: a.id };
+}
+
 export function removeItems(project, ids) {
   const p = clone(project);
   const s = new Set(ids);
@@ -298,8 +344,8 @@ export function sample(media) {
     v("g3", "Gancho 3", "gancho-3.mp4", 4, 0, 384, 3),
     v("corpo", "Corpo", "corpo.mp4", 8, 400, 192, 5),
     { id: "produto", kind: "image", tone: 3, name: "Produto", src: media("produto.jpg"), dur: IMAGE_MAX, tin: 0, tout: 2, x: 720, y: 192, mute: false, vol: 1 },
-    v("broll", "B-roll", "broll.mp4", 4, 480, 96, 2, { tout: 3, mute: true }),
-    { id: "musica", kind: "audio", tone: 4, name: "Música", src: media("musica.mp3"), dur: 16, tin: 0, tout: 10, x: 400, y: 288, mute: false, vol: 0.35 },
+    v("broll", "B-roll", "broll.mp4", 4, 480, 56, 2, { tout: 3, mute: true }),
+    { id: "musica", kind: "audio", tone: 4, name: "Música", src: media("musica.mp3"), dur: 16, tin: 0, tout: 10, x: 400, y: 328, mute: false, vol: 0.35 },
     v("ctaa", "CTA A", "cta-a.mp4", 3, 960, 64, 4),
     v("ctab", "CTA B", "cta-b.mp4", 3, 960, 320, 6),
   ];

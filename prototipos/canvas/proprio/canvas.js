@@ -109,7 +109,7 @@ function playhead(t) {
     const g = M.groups(project).find((g) => g.id === preview.id);
     if (g) {
       const top = Math.min(g.y, ...g.covers.map((c) => c.y));
-      const bottom = g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) + (g.audios.length && !g.soloAudio ? M.AUD_H : 0);
+      const bottom = groupBottom(g);
       box = { x: g.x, y: top, h: bottom - top };
     }
   }
@@ -146,6 +146,7 @@ function step(from, to) {
 
 // Espaço entre os blocos e o tracejado da área do grupo.
 const FRAME_PAD = 20;
+const groupBottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AUD_H));
 // As portas ficam um pouco fora do grupo, para não cobrir as alças de corte.
 const PORT_OUT = 14;
 const blockEls = new Map();
@@ -169,7 +170,7 @@ function render({ side = true } = {}) {
     if (!el) {
       el = document.createElement("div");
       el.dataset.id = b.id;
-      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
+      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><div class="blk__link"><span class="icon">graphic_eq</span><span class="blk__wave"></span><span class="icon blk__mute">volume_off</span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
       world.append(el);
       blockEls.set(b.id, el);
       thumb(b).then((u) => {
@@ -179,15 +180,26 @@ function render({ side = true } = {}) {
         if (b.kind === "audio") m.style.maskImage = m.style.webkitMaskImage = `url("${u}")`;
         else m.style.backgroundImage = `url("${u}")`;
       });
+      // O vídeo mostra o próprio som numa faixa embaixo, na cor dele.
+      if (b.kind === "video")
+        thumb({ kind: "audio", src: b.src, dur: b.dur }).then((u) => {
+          const w = $(".blk__wave", el);
+          if (u) w.style.maskImage = w.style.webkitMaskImage = `url("${u}")`;
+        });
     }
     const g = idx.get(b.id);
     const role = g?.covers.includes(b) ? "cover" : g?.audios.includes(b) && !g.soloAudio ? "under" : "";
-    el.className = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""}`;
+    el.className = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""}`;
     Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${M.width(b)}px`, height: `${M.height(b)}px` });
     const tipo = { video: "video", image: "imagem", audio: "audio" }[b.kind];
     el.style.setProperty("--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
     el.style.setProperty("--on", `var(--bloco-${tipo}-on)`);
     const media = $(".blk__media", el);
+    if (M.linked(b)) {
+      const w = $(".blk__wave", el);
+      w.style.maskSize = w.style.webkitMaskSize = `${b.dur * M.PX}px 100%`;
+      w.style.maskPosition = w.style.webkitMaskPosition = `${-b.tin * M.PX}px 0`;
+    }
     if (b.kind === "audio") {
       media.style.maskSize = media.style.webkitMaskSize = `${b.dur * M.PX}px 100%`;
       media.style.maskPosition = media.style.webkitMaskPosition = `${-b.tin * M.PX}px 0`;
@@ -207,7 +219,7 @@ function render({ side = true } = {}) {
     if (g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio)) {
       const gPlaying = player.playing && preview?.type === "group" && preview.id === g.id;
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
-      const bottom = g.y + rowH + (g.audios.length && !g.soloAudio ? M.AUD_H : 0);
+      const bottom = groupBottom(g);
       html += `<div class="gframe ${isSel ? "is-sel" : ""}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
       html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o grupo"}" title="${gPlaying ? "Pausar" : "Tocar o grupo"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
     }
@@ -282,9 +294,11 @@ function renderSide(gs) {
     if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.IMAGE_MAX}"`);
     else
       h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
-    if (b.kind !== "image")
+    if (b.kind === "video" && !M.linked(b))
+      h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3><p class="sheet-hint">${b.audio === "none" ? "Este vídeo não tem som." : "O som deste vídeo foi desvinculado e virou um bloco de áudio."}</p></section>`;
+    else if (b.kind !== "image")
       h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3><label class="switch-row" for="f-mute">Sem som<span class="switch"><input type="checkbox" role="switch" id="f-mute" ${b.mute ? "checked" : ""}><span class="switch__track"></span><span class="switch__handle"></span></span></label>
-        <div class="slider-field"><span class="slider-field__label"><span>Volume</span><span id="f-vol-n">${Math.round(b.vol * 100)}%</span></span><input class="vbar__seek" type="range" id="f-vol" min="0" max="1" step="0.05" value="${b.vol}" style="--p:${b.vol * 100}%" aria-label="Volume" ${b.mute ? "disabled" : ""}></div></section>`;
+        <div class="slider-field"><span class="slider-field__label"><span>Volume</span><span id="f-vol-n">${Math.round(b.vol * 100)}%</span></span><input class="vbar__seek" type="range" id="f-vol" min="0" max="1" step="0.05" value="${b.vol}" style="--p:${b.vol * 100}%" aria-label="Volume" ${b.mute ? "disabled" : ""}></div>${b.kind === "video" ? `<button class="button button--outlined interactive" type="button" data-act="unlink"><span class="icon">link_off</span>Desvincular o áudio</button>` : ""}</section>`;
     actions = btn("outlined", 'data-act="dup"', "content_copy", "Duplicar") + btn("text", 'data-act="del"', "delete", "Excluir");
   } else if (sel.type === "group") {
     const g = gs.find((g) => g.id === sel.id);
@@ -327,6 +341,15 @@ side.onclickAction = (e) => {
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "del") removeSelection();
   if (act === "dup") duplicate();
+  if (act === "unlink") {
+    const before = project;
+    const r = M.unlinkAudio(project, sel.id);
+    project = r.project;
+    if (r.audioId) sel = { type: "block", id: r.audioId }, (preview = { type: "block", id: r.audioId });
+    commit(before);
+    render();
+    toast("Áudio desvinculado. Agora ele é um bloco próprio.");
+  }
 };
 side.addEventListener("click", side.onclickAction);
 side.addEventListener("input", (e) => {
