@@ -36,7 +36,13 @@
 .blk__media {
   position: absolute; left: 4px; right: 4px; top: 28px; bottom: 4px; border-radius: 8px;
   background-repeat: repeat-x; background-size: auto 100%; background-color: color-mix(in srgb, var(--on) 12%, transparent);
+  /* Os quadros levam a cor do bloco (só a luz deles fica); com o mouse em cima
+     ou escolhido, aparecem nas cores de verdade. */
+  mix-blend-mode: luminosity; transition: mix-blend-mode 0.15s;
 }
+.blk { isolation: isolate; }
+.blk:hover .blk__media, .blk.is-sel .blk__media { mix-blend-mode: normal; }
+.blk--audio .blk__media, .blk--audio:hover .blk__media { mix-blend-mode: normal; }
 .blk--audio { border-radius: 8px; }
 .blk--audio .blk__label { height: 20px; }
 .blk--audio .blk__media {

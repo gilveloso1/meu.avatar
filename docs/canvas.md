@@ -49,6 +49,8 @@ menos custo.
   terciária, 6 tons cada (`--bloco-<tipo>-<1 a 6>` e `--bloco-<tipo>-on`,
   gerados por `npm run tema`). O mesmo arquivo repete o tom; arquivo novo pega
   o tom menos usado do tipo. O bloco final vai em primary.
+  Os quadros do vídeo e a imagem aparecem na cor do bloco (só a luz deles fica);
+  com o mouse em cima ou escolhido, nas cores de verdade.
 
 ## Em aberto
 
