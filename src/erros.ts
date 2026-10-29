@@ -95,4 +95,8 @@ export const ERROS = {
   previaIndisponivel: erro("Prévia indisponível.", "Toque em Gerar editado para criar o vídeo mesmo assim."),
   pausas: campo("Escolha o tamanho das pausas."),
   camera: campo("Escolha a câmera."),
+
+  // Canvas de edição (no navegador, pelo config da página)
+  canvasArquivo: erro("Não foi possível abrir o arquivo.", "Use MP4, MOV, JPG, PNG, MP3 ou M4A."),
+  canvasVideo: erro("Não foi possível abrir este vídeo.", "Tente de novo em instantes."),
 };

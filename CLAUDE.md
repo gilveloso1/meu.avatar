@@ -36,6 +36,11 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
   Fonts, só com os ícones listados em `ICONS`.
 - Nada de biblioteca de componentes ou de CSS (nem de CDN) sem combinar antes
   com o usuário.
+- Exceção combinada: o canvas de edição (`/canvas`, só o administrador) tem um
+  script de verdade, em módulos sem biblioteca em `src/canvas/` (tela, modelo,
+  prévia). `npm run canvas` junta tudo em `src/site/canvas.ts` (gerado; não edite
+  à mão) e `npm run teste:canvas` roda os testes do modelo. Como funciona e o que
+  foi decidido: [docs/canvas.md](docs/canvas.md).
 
 ## Esboço e M3
 

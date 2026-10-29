@@ -25,6 +25,7 @@ import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
 import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
 import { ForbiddenError, InputError, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
+import { CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
 
@@ -42,10 +43,12 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "apps", "auto_awesome", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "calendar_today", "check", "check_circle", "checkroom", "chevron_left", "chevron_right",
-  "close", "content_copy", "content_cut", "crop_square", "download", "edit", "error", "face", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq",
-  "grid_view", "hd", "hourglass_top", "info", "lock", "logout", "more_vert", "movie", "notes", "palette", "pause", "payments", "person_add", "photo_library", "play_arrow",
-  "record_voice_over", "refresh", "replay", "schedule", "search", "send", "swap_vert", "switch_account", "translate", "videocam", "view_list", "volume_off", "volume_up",
+  "add", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "calendar_today", "check", "check_circle",
+  "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
+  "edit", "error", "face", "fit_screen", "flag", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
+  "image", "info", "layers", "link", "link_off", "lock", "logout", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
+  "person_add", "photo_library", "play_arrow", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search", "send", "swap_vert",
+  "switch_account", "translate", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -136,6 +139,9 @@ export class Site {
     const watch = /^\/video\/([0-9a-f-]{36})$/.exec(path);
     if (!post && watch) return this.videoPage(user, watch[1]!, url);
 
+    // Canvas de edição: em teste, só o administrador (para os outros, a página nem existe).
+    if (!post && path === "/canvas") return user.role === "admin" ? this.canvasPage(user) : new Response("não encontrado", { status: 404 });
+
     const quickEdit = /^\/videos\/([0-9a-f-]{36})\/edicao-rapida$/.exec(path);
     if (post && quickEdit) return this.quickEdit(request, user, quickEdit[1]!);
     const face = /^\/videos\/([0-9a-f-]{36})\/rosto$/.exec(path);
@@ -175,6 +181,18 @@ export class Site {
         ],
       });
     });
+    // O canvas de edição, em teste: um card a mais, só para o administrador.
+    if (user.role === "admin" && "canvas de edição".includes(q.toLowerCase()))
+      cards.push(
+        tileCard({
+          href: "/canvas",
+          tile: `<span class="icon-tile icon-tile--large icon-tile--primary" aria-hidden="true"><span class="icon">video_library</span></span>`,
+          badge: { label: "Em teste", title: "Em teste: só o administrador vê" },
+          headline: "Canvas de edição",
+          supporting: "Monte várias versões com seus vídeos",
+          menu: [{ label: "Abrir", icon: "video_library", href: "/canvas" }],
+        }),
+      );
     const body = `
 <main class="page" id="conteudo">
   <div class="page__head">
@@ -186,6 +204,32 @@ export class Site {
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : emptyState("search", "Nenhum modelo encontrado", `Nada com “${q}” no nome.`)}
 </main>`;
     return html(page(SITE_NAME, body, { bar: { user, tab: "modelos", search: { action: "/", label: "Pesquisar modelos", q } } }));
+  }
+
+  /**
+   * Canvas de edição (src/canvas/, gerado em canvas.ts): monta versões com os
+   * vídeos prontos de quem usa. Nada fica salvo ainda; o Exportar mostra o plano.
+   */
+  private async canvasPage(user: User): Promise<Response> {
+    const usable = STRUCTURES.filter((s) => canUse(s, user.role));
+    const videos = (await this.db.videosByStructures(usable.map((s) => s.id)))
+      .filter((v) => v.status === "completed" && v.video_key)
+      .map((v) => ({
+        id: v.id,
+        name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo",
+        src: `/videos/${v.id}.mp4`,
+        when: formatDate(v.created_at),
+      }));
+    const config = { videos, erros: { arquivo: ERROS.canvasArquivo, video: ERROS.canvasVideo } };
+    const actions = `<button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
+    <button class="button button--tonal interactive" type="button" data-open-file><span class="icon">upload</span>Do computador</button>
+    <button class="button button--filled interactive" type="button" data-open-library><span class="icon">video_library</span>Seus vídeos</button>`;
+    // O JSON vai num bloco de dados (não executa); "<" escapado para não fechar a tag.
+    const body = `${CANVAS_STYLE}
+${CANVAS_BODY}
+<script type="application/json" id="canvas-config">${JSON.stringify(config).replace(/</g, "\\u003c")}</script>
+<script type="module" nonce="${NONCE}">${CANVAS_SCRIPT}</script>`;
+    return html(page(`Canvas de edição · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Canvas de edição", actions } }), 200, CANVAS_CSP);
   }
 
   /** Os vídeos de todos os modelos que a pessoa pode usar, com filtro por status, busca pela fala e grade ou lista. */
@@ -1015,7 +1059,7 @@ function snackbar(text: string): string {
  * a marca (que volta para Modelos), o nome do modelo, o botão de sair e a conta.
  */
 type Search = { action: string; label: string; q: string; keep?: Record<string, string> };
-type Bar = false | { user: User; tab: "modelos" | "videos"; search: Search } | { user: User; back: string; title: string };
+type Bar = false | { user: User; tab: "modelos" | "videos"; search: Search } | { user: User; back: string; title: string; actions?: string };
 
 function accountActions(user: User): string {
   const initial = esc((user.name.trim()[0] ?? "?").toUpperCase());
@@ -1043,7 +1087,7 @@ function topAppBar(bar: Exclude<Bar, false>): string {
     return `<header class="top-app-bar" data-app-bar>
   <a class="icon-button interactive" href="${bar.back}" aria-label="Voltar para Modelos" title="Voltar para Modelos"><span class="icon">arrow_back</span></a>
   <h1 class="top-app-bar__title top-app-bar__title--page">${esc(bar.title)}</h1>
-  <div class="top-app-bar__actions">${accountActions(bar.user)}</div>
+  <div class="top-app-bar__actions">${bar.actions ?? ""}${accountActions(bar.user)}</div>
 </header>`;
   }
   const { search } = bar;
@@ -1804,11 +1848,11 @@ export function esc(s: string): string {
 /** Marca no lugar do nonce do script; html() troca por um valor novo a cada resposta. */
 const NONCE = "{{nonce}}";
 
-function html(body: string, status = 200): Response {
+function html(body: string, status = 200, extra: CspExtra = {}): Response {
   const nonce = randomNonce();
   return new Response(body.replaceAll(`nonce="${NONCE}"`, `nonce="${nonce}"`), {
     status,
-    headers: { "content-type": "text/html; charset=utf-8", ...SECURITY_HEADERS, "content-security-policy": csp(nonce) },
+    headers: { "content-type": "text/html; charset=utf-8", ...SECURITY_HEADERS, "content-security-policy": csp(nonce, extra) },
   });
 }
 
@@ -1828,16 +1872,21 @@ const SECURITY_HEADERS = {
 };
 
 /** Só o script da própria página (com o nonce); a foto e o vídeo de origem escolhidos aparecem de blob:. */
-function csp(nonce: string): string {
+type CspExtra = { img?: string; connect?: string };
+
+/** O canvas desenha as miniaturas e a onda do som em data: e lê a onda de um arquivo escolhido (blob:). */
+const CANVAS_CSP: CspExtra = { img: "data:", connect: "blob:" };
+
+function csp(nonce: string, extra: CspExtra = {}): string {
   return [
     "default-src 'none'",
     `script-src 'nonce-${nonce}'`,
     "style-src 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
-    "img-src 'self' blob:",
+    `img-src 'self' blob:${extra.img ? ` ${extra.img}` : ""}`,
     "media-src 'self' blob:",
     // A prévia da edição rápida baixa o vídeo para achar os silêncios.
-    "connect-src 'self'",
+    `connect-src 'self'${extra.connect ? ` ${extra.connect}` : ""}`,
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",

@@ -1,11 +1,15 @@
 /**
  * Canvas de edição com código próprio: DOM e SVG dentro de um "mundo" com
  * translate/scale. O significado (grupos, coberturas, versões) vem do
- * comum/modelo.js; aqui só desenho e gestos.
+ * modelo.js; aqui só desenho e gestos. Quem monta a página passa a
+ * configuração em <script type="application/json" id="canvas-config">:
+ * { amostra: true } (o protótipo, com o exemplo) ou { videos: [...] } (o site,
+ * com os vídeos prontos de quem usa: id, name, src, when), e as frases de erro em
+ * erros (arquivo, video), que vêm do catálogo src/erros.ts.
  */
-import * as M from "../comum/modelo.js";
-import { Player, clock } from "../comum/player.js";
-import { thumb, probe } from "../comum/miniaturas.js";
+import * as M from "./modelo.js";
+import { Player, clock } from "./player.js";
+import { thumb, probe } from "./miniaturas.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const vp = $("#vp");
@@ -17,7 +21,12 @@ const SNAP = { after: "Juntar na sequência", before: "Juntar na sequência", co
 const fmt = (s) => `${s.toFixed(1).replace(".", ",")} s`;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-let project = M.sample((f) => `midia/${f}`);
+let CONFIG = {};
+try {
+  CONFIG = JSON.parse($("#canvas-config")?.textContent || "{}");
+} catch {}
+const emptyProject = () => ({ blocks: [], finals: [{ id: "final", x: 720, y: 200 }], edges: [] });
+let project = CONFIG.amostra ? M.sample((f) => `midia/${f}`) : emptyProject();
 let view = { x: 80, y: 120, z: 0.8 };
 let sel = { type: "final", id: "final" };
 let versionIdx = 0;
@@ -209,6 +218,8 @@ function render({ side = true } = {}) {
     $(".blk__dur", el).textContent = fmt(M.len(b));
   }
   for (const [id, el] of blockEls) if (!seen.has(id)) el.remove(), blockEls.delete(id);
+  const empty = $("#canvas-empty");
+  if (empty) empty.hidden = project.blocks.length > 0;
 
   // Abas dos grupos, portas e blocos finais.
   let html = "";
@@ -426,7 +437,7 @@ async function importFiles(files, at) {
       sel = { type: "block", id: b.id };
       y += M.height(b) + 48;
     } catch {
-      toast(`Não deu para abrir ${file.name}. Use MP4, MOV, JPG, PNG, MP3 ou M4A.`);
+      toast(CONFIG.erros?.arquivo ?? "");
     }
   }
   commit(before);
@@ -438,7 +449,62 @@ const toWorld = (cx, cy) => {
   return { x: (cx - r.left - view.x) / view.z, y: (cy - r.top - view.y) / view.z };
 };
 
-$("#import").onclick = () => $("#file").click();
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-open-file]")) $("#file").click();
+  if (e.target.closest("[data-open-library]")) openLibrary();
+});
+
+/* ---------- seus vídeos ---------- */
+
+const lib = $("#lib-dlg");
+function openLibrary() {
+  const videos = CONFIG.videos ?? [];
+  $("#lib-list").innerHTML = videos.length
+    ? videos
+        .map((v, i) => `<button class="xlist__item interactive" type="button" data-lib="${i}"><span class="xlist__thumb"><video src="${esc(v.src)}#t=0.5" preload="metadata" muted playsinline></video></span><span class="xlist__text">${esc(v.name)}</span><span class="xlist__trail">${esc(v.when ?? "")}</span><span class="icon" hidden>check</span></button>`)
+        .join("")
+    : `<p class="sheet-hint">Você ainda não tem vídeos prontos.</p>`;
+  lib.showModal();
+}
+$("#lib-close")?.addEventListener("click", () => lib.close());
+$("#lib-list")?.addEventListener("click", async (e) => {
+  const item = e.target.closest("[data-lib]");
+  if (!item || item.dataset.adding) return;
+  item.dataset.adding = "1";
+  const v = CONFIG.videos[+item.dataset.lib];
+  try {
+    const dur = await probeUrl(v.src);
+    const r = vp.getBoundingClientRect();
+    const at = toWorld(r.left + 80, r.top + 120);
+    const before = project;
+    project = structuredClone(project);
+    // Um embaixo do outro, para não cair em cima do que já está no canvas.
+    const y = Math.max(at.y, ...project.blocks.map((b) => b.y + M.height(b) + 48));
+    const b = { id: M.newId("b"), tone: M.nextTone(project, "video", v.src), kind: "video", name: v.name, src: v.src, dur, tin: 0, tout: dur, x: at.x, y, mute: false, vol: 1 };
+    project.blocks.push(b);
+    sel = { type: "block", id: b.id };
+    preview = { type: "block", id: b.id };
+    commit(before);
+    render();
+    item.querySelector(".icon").hidden = false;
+    toast(`${v.name} entrou no canvas.`);
+  } catch {
+    toast(CONFIG.erros?.video ?? "");
+  }
+  delete item.dataset.adding;
+});
+
+function probeUrl(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement("video");
+    el.preload = "metadata";
+    el.onloadedmetadata = () => resolve(el.duration);
+    el.onerror = reject;
+    el.src = src;
+  });
+}
+
+$("#import")?.addEventListener("click", () => $("#file").click());
 $("#file").onchange = (e) => {
   const r = vp.getBoundingClientRect();
   importFiles([...e.target.files], toWorld(r.left + r.width / 3, r.top + r.height / 3));
@@ -449,7 +515,7 @@ vp.addEventListener("drop", (e) => {
   e.preventDefault();
   if (e.dataTransfer.files.length) importFiles([...e.dataTransfer.files], toWorld(e.clientX, e.clientY));
 });
-$("#add-final").onclick = () => {
+$("#add-final")?.addEventListener("click", () => {
   const before = project;
   const r = vp.getBoundingClientRect();
   const at = toWorld(r.left + r.width / 2, r.top + r.height / 2);
@@ -459,10 +525,10 @@ $("#add-final").onclick = () => {
   sel = { type: "final", id: f.id };
   commit(before);
   render();
-};
+});
 $("#undo").onclick = () => step(undo, redo);
 $("#redo").onclick = () => step(redo, undo);
-$("#reset").onclick = () => {
+$("#reset")?.addEventListener("click", () => {
   const before = project;
   project = M.sample((f) => `midia/${f}`);
   sel = { type: "final", id: "final" };
@@ -470,7 +536,7 @@ $("#reset").onclick = () => {
   commit(before);
   fit();
   render();
-};
+});
 $("#zoom-in").onclick = () => zoomAt(1.2);
 $("#zoom-out").onclick = () => zoomAt(1 / 1.2);
 $("#fit").onclick = () => fit();
@@ -492,9 +558,15 @@ function fit() {
   const xs = [];
   const ys = [];
   for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - FRAME_PAD - 40, b.y + M.height(b) + FRAME_PAD);
+  const r = vp.getBoundingClientRect();
+  // Canvas vazio: o aviso do começo fica no meio; o Final, à direita dele.
+  if (!project.blocks.length && project.finals.length) {
+    const f = project.finals[0];
+    view = { x: r.width * 0.8 - 90 - f.x, y: r.height / 2 - 40 - f.y, z: 1 };
+    return applyView();
+  }
   for (const f of project.finals) xs.push(f.x, f.x + 180), ys.push(f.y, f.y + 80);
   if (!xs.length) return;
-  const r = vp.getBoundingClientRect();
   const x0 = Math.min(...xs);
   const y0 = Math.min(...ys);
   const w = Math.max(...xs) - x0;

@@ -1,11 +1,7 @@
-<meta charset="utf-8">
-<title>Canvas Próprio</title>
-<meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&icon_names=add,arrow_back,content_copy,delete,download,drag_indicator,fit_screen,flag,graphic_eq,image,layers,link,link_off,movie,music_note,pause,play_arrow,redo,remove,replay,restart_alt,schedule,undo,upload,volume_off&display=block">
+<!-- Tela do canvas de edição: o estilo próprio dela e o corpo. A barra superior e
+     os botões de cima ficam com quem monta a página (o site ou o protótipo);
+     tools/canvas.mjs junta isto com o script. -->
 <style>
-/*SITE*/
-/*THEME*/
 /* Editor: a barra superior do site, o canvas no meio e a folha lateral de 400 px
    (side sheet do M3, como a da página do vídeo). Componentes do src/site/style.ts;
    o que é só do canvas segue os tokens do M3 (forma, elevação, tipografia, estados). */
@@ -215,18 +211,23 @@ body { min-height: 0; overflow: hidden; }
   .editor .viewer__sheet { border-left: 0; border-top: 1px solid var(--md-sys-color-outline-variant); }
   .top-app-bar__title { display: none; }
 }
+/* Canvas vazio: o estado vazio do site (ícone, título e frase), no meio do canvas. */
+.canvas-empty { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+/* Nesta página, hidden sempre esconde (alguns componentes do site têm display próprio). */
+[hidden] { display: none !important; }
+.canvas-empty .empty { pointer-events: auto; max-width: 360px; }
+.canvas-empty .empty .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+/* O ícone grande do estado vazio do site não vale para os ícones dos botões. */
+.canvas-empty .empty .button .icon { font-size: 18px; color: inherit; }
+/* Seus vídeos: diálogo com a lista expressiva; cada item com a miniatura do vídeo. */
+.library-dialog { width: min(480px, calc(100% - 48px)); }
+.library-dialog .xlist { overflow-y: auto; max-height: 60vh; }
+.xlist__thumb { width: 40px; height: 40px; flex: none; overflow: hidden; border-radius: var(--md-sys-shape-corner-small); background: var(--md-sys-color-surface-container-highest); }
+.xlist__thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.xlist__item .icon { color: var(--md-sys-color-primary); }
 </style>
 
-<header class="top-app-bar">
-  <button class="icon-button interactive" type="button" aria-label="Voltar" title="Voltar"><span class="icon">arrow_back</span></button>
-  <h1 class="top-app-bar__title top-app-bar__title--page">Canvas de edição</h1>
-  <div class="top-app-bar__actions">
-    <button class="button button--text interactive" type="button" id="reset"><span class="icon">restart_alt</span>Exemplo</button>
-    <button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
-    <button class="button button--filled interactive" type="button" id="import"><span class="icon">upload</span>Importar</button>
-    <input type="file" id="file" accept="video/*,image/*,audio/*" multiple hidden>
-  </div>
-</header>
+
 <main class="editor">
   <div class="canvas">
     <div id="vp">
@@ -237,6 +238,17 @@ body { min-height: 0; overflow: hidden; }
     </div>
     <div class="hints"><span><b>Arraste</b> para mover</span><span><b>Encoste</b> do lado para juntar</span><span><b>Solte em cima</b> para cobrir</span><span><b>Puxe o ponto</b> da direita para ligar</span><span><b>Ctrl + roda</b> para zoom</span><span><b>Alt</b> solta sem encaixar</span></div>
     <div class="tooltip" id="snapinfo" role="status"></div>
+    <div class="canvas-empty" id="canvas-empty" hidden>
+      <div class="empty">
+        <span class="icon" aria-hidden="true">movie</span>
+        <p class="empty__title">Comece pelos seus vídeos</p>
+        <p>Traga os ganchos, o corpo e os CTAs, encaixe e ligue ao Final.</p>
+        <div class="row">
+          <button class="button button--filled interactive" type="button" data-open-library><span class="icon">video_library</span>Seus vídeos</button>
+          <button class="button button--outlined interactive" type="button" data-open-file><span class="icon">upload</span>Do computador</button>
+        </div>
+      </div>
+    </div>
     <div class="float-bar" role="toolbar" aria-label="Canvas">
       <button class="icon-button interactive" type="button" id="undo" aria-label="Desfazer" title="Desfazer (Ctrl+Z)"><span class="icon">undo</span></button>
       <button class="icon-button interactive" type="button" id="redo" aria-label="Refazer" title="Refazer (Ctrl+Shift+Z)"><span class="icon">redo</span></button>
@@ -266,9 +278,15 @@ body { min-height: 0; overflow: hidden; }
 </main>
 <dialog class="dialog" id="dlg" aria-labelledby="dlg-title">
   <h3 id="dlg-title">Exportar</h3>
-  <p>No site, o contêiner monta cada versão com ffmpeg a partir deste plano. Não chama modelo de vídeo.</p>
+  <p>Por enquanto, mostra o plano que o contêiner vai montar com ffmpeg, sem chamar modelo de vídeo.</p>
   <pre id="dlg-body"></pre>
   <div class="dialog__actions"><button class="button button--text interactive" type="button" id="dlg-close">Fechar</button></div>
 </dialog>
+<dialog class="dialog library-dialog" id="lib-dlg" aria-labelledby="lib-title">
+  <h3 id="lib-title">Seus vídeos</h3>
+  <p>Escolha os vídeos prontos que entram no canvas.</p>
+  <div class="xlist" id="lib-list"></div>
+  <div class="dialog__actions"><button class="button button--text interactive" type="button" id="lib-close">Fechar</button></div>
+</dialog>
+<input type="file" id="file" accept="video/*,image/*,audio/*" multiple hidden>
 <div class="snackbar" id="toast" role="status" hidden><span class="snackbar__text" id="toast-text"></span></div>
-<script type="module">/*SCRIPT*/</script>

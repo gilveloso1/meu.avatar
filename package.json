@@ -7,19 +7,22 @@
   "scripts": {
     "gerar": "tsx tools/gerar-video.ts",
     "tema": "tsx tools/tema.ts",
+    "canvas": "node tools/canvas.mjs",
     "dev": "wrangler dev",
     "deploy": "sh container/baixar-binarios.sh && wrangler deploy",
     "db:migrar": "wrangler d1 migrations apply DB --remote",
     "db:migrar:local": "wrangler d1 migrations apply DB --local",
     "exemplos": "python3 tools/exemplos.py",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "teste:canvas": "node --test src/canvas/testes.js"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.0",
     "@cloudflare/workers-types": "^5.20261008.1",
     "@material/material-color-utilities": "^0.4.0",
     "@types/node": "^26.6.4",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11",

@@ -4,10 +4,6 @@
   "type": "module",
   "scripts": {
     "midia": "sh gerar-midia.sh",
-    "build": "node build.mjs",
-    "teste": "node --test comum/testes.js"
-  },
-  "devDependencies": {
-    "esbuild": "0.28.2"
+    "build": "node build.mjs"
   }
 }

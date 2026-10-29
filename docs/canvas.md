@@ -1,7 +1,6 @@
-# Canvas de edição (proposto, 29/10/2026)
+# Canvas de edição
 
-O que o dono descreveu, para virar esboço e depois PRs. Ainda sem tela
-aprovada nem código.
+O que o dono descreveu (29/10/2026) e o que já está no site.
 
 ## Ideia
 
@@ -77,8 +76,21 @@ menos custo.
 - **Corte**: no bloco escolhido, puxar a borda da esquerda ou da direita (sem
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.
 
+## No site (em teste)
+
+- `/canvas`, só o administrador (para os outros, 404), com um card "Canvas de
+  edição" (Em teste) na tela inicial. A barra tem Bloco final, Do computador e
+  Seus vídeos (os vídeos prontos dos modelos que a pessoa usa).
+- Começa vazio, com o aviso "Comece pelos seus vídeos" e o Final à direita.
+- Nada fica salvo ainda: ao recarregar, volta vazio. O Exportar mostra o plano.
+- Código em `src/canvas/` (tela.html, canvas.js, modelo.js, player.js,
+  miniaturas.js); `npm run canvas` gera `src/site/canvas.ts`, que o Worker usa. A
+  página libera `data:` nas imagens e `blob:` no fetch (miniaturas e a onda do
+  som); as outras páginas não. As frases de erro vêm de `src/erros.ts` pelo config.
+- O protótipo (`prototipos/canvas/`) usa a mesma tela, com o exemplo de 6 versões.
+
 ## Em aberto
 
-- Prévia no navegador: funciona nos protótipos (um elemento de mídia por
-  trecho, desenhados num canvas 9:16).
+- Salvar projetos (tabela no D1), arquivos do computador no R2 e o Exportar de
+  verdade (ffmpeg no contêiner).
 - Esboço da tela no canvas de design, para aprovar.
