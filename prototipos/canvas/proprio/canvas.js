@@ -140,6 +140,8 @@ function step(from, to) {
 
 /* ---------- desenho ---------- */
 
+// Espaço entre os blocos e o tracejado da área do grupo.
+const FRAME_PAD = 20;
 const blockEls = new Map();
 
 function applyView() {
@@ -199,8 +201,8 @@ function render({ side = true } = {}) {
     if (g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio)) {
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
       const bottom = g.y + rowH + (g.audios.length && !g.soloAudio ? M.AUD_H : 0);
-      html += `<div class="gframe ${isSel ? "is-sel" : ""}" style="left:${g.x - 8}px;top:${top - 8}px;width:${g.w + 16}px;height:${bottom - top + 16}px"></div>`;
-      html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x - 8}px;top:${top - 48}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="Tocar o grupo" title="Tocar o grupo"><span class="icon">play_arrow</span></button></div>`;
+      html += `<div class="gframe ${isSel ? "is-sel" : ""}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
+      html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="Tocar o grupo" title="Tocar o grupo"><span class="icon">play_arrow</span></button></div>`;
     }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
@@ -443,7 +445,7 @@ function zoomAt(k, cx, cy) {
 function fit() {
   const xs = [];
   const ys = [];
-  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - 56, b.y + M.height(b) + 8);
+  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - FRAME_PAD - 40, b.y + M.height(b) + FRAME_PAD);
   for (const f of project.finals) xs.push(f.x, f.x + 180), ys.push(f.y, f.y + 80);
   if (!xs.length) return;
   const r = vp.getBoundingClientRect();
