@@ -285,7 +285,7 @@ export function sample(media) {
     v("corpo", "Corpo", "corpo.mp4", 8, 400, 192),
     { id: "produto", kind: "image", name: "Produto", src: media("produto.jpg"), dur: IMAGE_MAX, tin: 0, tout: 2, x: 720, y: 192, mute: false, vol: 1 },
     v("broll", "B-roll", "broll.mp4", 4, 480, 96, { tout: 3, mute: true }),
-    { id: "musica", kind: "audio", name: "Música", src: media("musica.m4a"), dur: 16, tin: 0, tout: 10, x: 400, y: 288, mute: false, vol: 0.35 },
+    { id: "musica", kind: "audio", name: "Música", src: media("musica.mp3"), dur: 16, tin: 0, tout: 10, x: 400, y: 288, mute: false, vol: 0.35 },
     v("ctaa", "CTA A", "cta-a.mp4", 3, 960, 64),
     v("ctab", "CTA B", "cta-b.mp4", 3, 960, 320),
   ];

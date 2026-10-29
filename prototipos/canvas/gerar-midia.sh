@@ -23,5 +23,5 @@ ffmpeg -loglevel error -y -f lavfi -i "testsrc2=s=360x640:r=24:d=4" -f lavfi -i 
 ffmpeg -loglevel error -y -f lavfi -i "color=c=0xf2e6d0:s=720x1280" -frames:v 1 \
   -vf "drawbox=x=210:y=420:w=300:h=440:color=0xb5542c:t=fill,drawtext=fontfile=$F:text='Produto':fontcolor=0x3a2a1a:fontsize=64:x=(w-tw)/2:y=940" midia/produto.jpg
 ffmpeg -loglevel error -y -f lavfi -i "sine=f=196:d=16" -f lavfi -i "sine=f=247:d=16" -f lavfi -i "sine=f=294:d=16" \
-  -filter_complex "[0][1][2]amix=inputs=3,volume=0.5,afade=t=in:d=1,afade=t=out:st=15:d=1,tremolo=f=2:d=0.4" -c:a aac -b:a 48k midia/musica.m4a
+  -filter_complex "[0][1][2]amix=inputs=3,volume=0.5,afade=t=in:d=1,afade=t=out:st=15:d=1,tremolo=f=2:d=0.4" -c:a libmp3lame -b:a 64k midia/musica.mp3
 ls -la midia
