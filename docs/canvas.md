@@ -41,8 +41,9 @@ menos custo.
 
 ## Em aberto
 
-- Construção: código próprio ou biblioteca (tldraw, React Flow). Decidir
-  depois de um protótipo das partes difíceis.
-- Prévia no navegador de uma versão montada (tocar a sequência com cortes,
-  sobreposições e volumes) antes de exportar.
+- Construção: código próprio ou biblioteca. Os dois protótipos estão em
+  [prototipos/canvas/](../prototipos/canvas/README.md), com o que se viu;
+  falta o dono escolher.
+- Prévia no navegador: funciona nos protótipos (um elemento de mídia por
+  trecho, desenhados num canvas 9:16).
 - Esboço da tela no canvas de design, para aprovar.

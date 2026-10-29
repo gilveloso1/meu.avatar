@@ -1,0 +1,17 @@
+{
+  "name": "prototipo-canvas",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "midia": "sh gerar-midia.sh",
+    "build": "node build.mjs",
+    "teste": "node --test comum/*.test.js"
+  },
+  "devDependencies": {
+    "@tldraw/assets": "^5.5.0",
+    "esbuild": "0.28.2",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "tldraw": "5.5.0"
+  }
+}

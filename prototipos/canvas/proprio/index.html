@@ -1,0 +1,142 @@
+<meta charset="utf-8">
+<title>Canvas Próprio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..24,400,0..1,0&icon_names=add,content_copy,delete,download,drag_indicator,fit_screen,flag,image,layers,movie,music_note,pause,play_arrow,redo,remove,restart_alt,undo,upload,video_library,volume_off&display=block">
+<style>
+/*THEME*/
+/*ESTILO*/
+/* Canvas: fundo de pontos que acompanha o zoom; blocos com a largura da duração. */
+.stage { position: relative; min-width: 0; min-height: 0; }
+#vp {
+  position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: default; user-select: none;
+  background-color: var(--md-sys-color-surface-container);
+  background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.2px);
+}
+#vp.is-panning { cursor: grabbing; }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
+.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: 2; }
+.wire.is-sel { stroke: var(--md-sys-color-primary); stroke-width: 3; }
+.wire--temp { stroke: var(--md-sys-color-primary); stroke-dasharray: 6 4; }
+.wire-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
+
+.blk {
+  position: absolute; box-sizing: border-box; border-radius: 12px; overflow: hidden; cursor: grab;
+  background: var(--md-sys-color-surface-container-highest);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+}
+.blk:active { cursor: grabbing; }
+.blk__media { position: absolute; inset: 0; background-repeat: repeat-x; background-size: auto 100%; }
+.blk--audio { background: var(--md-sys-color-tertiary-container); border-radius: 8px; }
+.blk--audio .blk__media { background-repeat: no-repeat; opacity: 0.7; }
+.blk--cover { border-radius: 12px 12px 4px 4px; }
+.blk--under { border-radius: 4px 4px 8px 8px; }
+.blk.is-sel { outline: 3px solid var(--md-sys-color-primary); outline-offset: 1px; }
+.blk.is-mute .blk__media { filter: grayscale(0.6); }
+.blk__label {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 4px;
+  padding: 4px 8px; font: 500 12px/16px var(--font); color: #fff;
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.65)); pointer-events: none; white-space: nowrap;
+}
+.blk--audio .blk__label { top: 0; bottom: auto; background: none; color: var(--md-sys-color-on-tertiary-container); }
+.blk__kind { font-size: 16px; }
+.blk__name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.blk__dur { margin-left: auto; font-variant-numeric: tabular-nums; opacity: 0.85; }
+.blk__mute { font-size: 16px; display: none; }
+.blk.is-mute .blk__mute { display: inline-block; }
+.trim { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; z-index: 2; }
+.trim--l { left: 0; }
+.trim--r { right: 0; }
+.trim::after { content: ""; position: absolute; top: 30%; bottom: 30%; width: 4px; border-radius: 2px; background: #fff; opacity: 0; transition: opacity 0.15s; box-shadow: 0 0 2px rgb(0 0 0 / 0.6); }
+.trim--l::after { left: 3px; }
+.trim--r::after { right: 3px; }
+.blk:hover .trim::after, .blk.is-sel .trim::after { opacity: 0.9; }
+
+#chrome { position: absolute; left: 0; top: 0; }
+.gtab {
+  position: absolute; height: 24px; display: flex; align-items: center; gap: 2px; padding: 0 10px 0 4px;
+  border-radius: 8px; background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface-variant);
+  font: 500 12px/16px var(--font); white-space: nowrap; cursor: grab; box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+}
+.gtab .ms { font-size: 18px; }
+.gtab.is-sel { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.port {
+  position: absolute; width: 18px; height: 18px; box-sizing: border-box; border-radius: 50%; z-index: 3;
+  background: var(--md-sys-color-surface); border: 3px solid var(--md-sys-color-primary);
+}
+.port--out { cursor: crosshair; }
+.port--out:hover { background: var(--md-sys-color-primary); }
+.port--in { border-color: var(--md-sys-color-outline); pointer-events: auto; }
+.fin {
+  position: absolute; width: 180px; height: 80px; box-sizing: border-box; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-content: center; column-gap: 12px;
+  padding: 0 16px; border-radius: 16px; cursor: grab;
+  background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+}
+.fin .ms { grid-row: span 2; font-size: 28px; align-self: center; }
+.fin b { font: 500 16px/24px var(--font); }
+.fin span:last-child { font: 400 14px/20px var(--font); }
+.fin.is-sel { outline: 3px solid var(--md-sys-color-primary); outline-offset: 2px; }
+
+.tip {
+  position: absolute; left: 16px; bottom: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 4px 16px;
+  pointer-events: none; font: 400 12px/16px var(--font); color: var(--md-sys-color-on-surface-variant);
+}
+.tip b { font-weight: 500; color: var(--md-sys-color-on-surface); }
+.snapinfo { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); pointer-events: none; padding: 6px 12px; border-radius: 8px; background: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); font: 500 12px/16px var(--font); }
+.snapinfo:empty { display: none; }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand"><span class="ms">video_library</span>Canvas de edição <small>código próprio</small></div>
+    <button class="btn btn--tonal" id="import"><span class="ms">upload</span>Importar</button>
+    <input type="file" id="file" accept="video/*,image/*,audio/*" multiple hidden>
+    <button class="btn btn--text" id="add-final"><span class="ms">flag</span>Bloco final</button>
+    <span class="sep"></span>
+    <button class="btn btn--icon" id="undo" title="Desfazer (Ctrl+Z)" aria-label="Desfazer"><span class="ms">undo</span></button>
+    <button class="btn btn--icon" id="redo" title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer"><span class="ms">redo</span></button>
+    <span class="grow"></span>
+    <button class="btn btn--icon" id="zoom-out" aria-label="Diminuir zoom"><span class="ms">remove</span></button>
+    <span class="zoom" id="zoom">100%</span>
+    <button class="btn btn--icon" id="zoom-in" aria-label="Aumentar zoom"><span class="ms">add</span></button>
+    <button class="btn btn--icon" id="fit" title="Ver tudo" aria-label="Ver tudo"><span class="ms">fit_screen</span></button>
+    <button class="btn btn--text" id="reset"><span class="ms">restart_alt</span>Exemplo</button>
+  </header>
+  <div class="main">
+    <div class="stage">
+      <div id="vp">
+        <div id="world">
+          <svg id="wires"></svg>
+          <div id="chrome"></div>
+        </div>
+      </div>
+      <div class="snapinfo"></div>
+      <div class="tip"><span><b>Arraste</b> para mover</span><span><b>Encoste</b> do lado para juntar</span><span><b>Solte em cima</b> para cobrir</span><span><b>Puxe o ponto</b> da direita para ligar</span><span><b>Ctrl + roda</b> para zoom</span><span><b>Alt</b> solta sem encaixar</span></div>
+    </div>
+    <aside class="sheet">
+      <div class="pv">
+        <div class="pv__screen"><canvas id="pv-canvas" width="360" height="640"></canvas></div>
+        <div class="pv__title" id="pv-title"></div>
+        <div class="pv__bar">
+          <button class="btn btn--icon" id="pv-play" aria-label="Tocar"><span class="ms">play_arrow</span></button>
+          <input type="range" id="pv-slider" min="0" max="1" step="0.01" value="0" aria-label="Andamento">
+          <span class="pv__time" id="pv-time">0:00.0 / 0:00.0</span>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div id="side"></div>
+    </aside>
+  </div>
+</div>
+<div class="scrim" id="dlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+    <h3 id="dlg-title">Exportar</h3>
+    <p class="hint">No site, o contêiner monta cada versão com ffmpeg a partir deste plano. Não chama modelo de vídeo.</p>
+    <pre id="dlg-body"></pre>
+    <div class="row"><button class="btn btn--filled" id="dlg-close">Fechar</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script type="module">/*SCRIPT*/</script>
