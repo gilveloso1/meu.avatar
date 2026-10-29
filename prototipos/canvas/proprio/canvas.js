@@ -146,6 +146,8 @@ function step(from, to) {
 
 // Espaço entre os blocos e o tracejado da área do grupo.
 const FRAME_PAD = 20;
+// As portas ficam um pouco fora do grupo, para não cobrir as alças de corte.
+const PORT_OUT = 14;
 const blockEls = new Map();
 
 function applyView() {
@@ -209,8 +211,8 @@ function render({ side = true } = {}) {
       html += `<div class="gframe ${isSel ? "is-sel" : ""}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
       html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o grupo"}" title="${gPlaying ? "Pausar" : "Tocar o grupo"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
     }
-    html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
-    html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
+    html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
+    html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
   }
   // Bloco escolhido: o botão de tocar só ele, no meio da imagem.
   const sb = sel.type === "block" && project.blocks.find((b) => b.id === sel.id);
@@ -232,9 +234,9 @@ function render({ side = true } = {}) {
   // Linhas.
   let svg = "";
   for (const l of M.links(project, gs)) {
-    const a = { x: l.from.x + l.from.w, y: l.from.y + (l.from.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
+    const a = { x: l.from.x + l.from.w + PORT_OUT, y: l.from.y + (l.from.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
     const f = typeof l.to === "string" ? project.finals.find((f) => f.id === l.to) : null;
-    const b = f ? { x: f.x, y: f.y + 40 } : { x: l.to.x, y: l.to.y + (l.to.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
+    const b = f ? { x: f.x, y: f.y + 40 } : { x: l.to.x - PORT_OUT, y: l.to.y + (l.to.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
     const d = curve(a, b);
     const on = sel.type === "edge" && sel.id === l.edge.id;
     svg += `<path class="wire ${on ? "is-sel" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
@@ -555,7 +557,7 @@ vp.addEventListener("pointerdown", (e) => {
     const gid = outPort.dataset.group;
     const temp = $("#wire-temp");
     const g = M.groups(project).find((g) => g.id === gid);
-    const a = { x: g.x + g.w, y: g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
+    const a = { x: g.x + g.w + PORT_OUT, y: g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
     onMove = (ev) => temp.setAttribute("d", curve(a, toWorld(ev.clientX, ev.clientY)));
     onUp = (ev) => {
       temp.setAttribute("d", "");
