@@ -44,6 +44,12 @@ menos custo.
 - **Código próprio**, sem biblioteca (DOM e SVG, como o resto do site), escolhido
   pelo dono depois de comparar com o tldraw. O protótipo está em
   [prototipos/canvas/](../prototipos/canvas/README.md).
+- **A interface segue o M3 onde for possível**: os componentes são os do site
+  (`src/site/style.ts`: barra superior, botões, campos contornados, barra do
+  player, folha lateral de 400 px, snackbar) e os que faltavam seguem as specs
+  do M3 Expressive (switch, diálogo básico, tooltip simples, barra de
+  ferramentas flutuante, lista expressiva). O que é só do canvas (blocos,
+  portas, linhas) usa os tokens do M3: forma, elevação, tipografia e estados.
 - **Visual e cores do M3.** Blocos do mesmo tipo têm a mesma cor e variam no tom
   para diferenciar: vídeo na paleta primária, imagem na secundária, áudio na
   terciária, 6 tons cada (`--bloco-<tipo>-<1 a 6>` e `--bloco-<tipo>-on`,

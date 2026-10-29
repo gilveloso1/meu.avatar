@@ -39,10 +39,15 @@ const player = new Player(pv.canvas, {
     pv.time.textContent = `${clock(t)} / ${clock(d)}`;
     pv.slider.max = d;
     pv.slider.value = t;
+    pv.slider.style.setProperty("--p", `${d ? (t / d) * 100 : 0}%`);
   },
   onEnd: () => setPlayIcon(),
 });
-const setPlayIcon = () => (pv.play.querySelector(".ms").textContent = player.playing ? "pause" : "play_arrow");
+const setPlayIcon = () => {
+  const ended = !player.playing && player.duration && player.t >= player.duration - 0.02;
+  pv.play.querySelector(".icon").textContent = player.playing ? "pause" : ended ? "replay" : "play_arrow";
+  pv.play.ariaLabel = pv.play.title = player.playing ? "Pausar" : ended ? "Ver de novo" : "Tocar";
+};
 pv.play.onclick = () => {
   player.playing ? player.pause() : player.play();
   setPlayIcon();
@@ -113,7 +118,7 @@ function render({ side = true } = {}) {
     if (!el) {
       el = document.createElement("div");
       el.dataset.id = b.id;
-      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="ms blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="ms blk__mute">volume_off</span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
+      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
       world.append(el);
       blockEls.set(b.id, el);
       thumb(b).then((u) => {
@@ -149,14 +154,14 @@ function render({ side = true } = {}) {
     const rowH = g.soloAudio ? M.AUD_H : M.VIS_H;
     const isSel = sel.type === "group" && sel.id === g.id;
     if (g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio))
-      html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x}px;top:${top - 30}px"><span class="ms">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}</div>`;
+      html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x}px;top:${top - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}</div>`;
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
   }
   for (const f of project.finals) {
     const n = M.versions(project, f.id, gs).length;
     const isSel = sel.type === "final" && sel.id === f.id;
-    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><span class="ms">flag</span><b>Final</b><span>${n} ${n === 1 ? "versão" : "versões"}</span></div>`;
+    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "versão" : "versões"}</small></span></div>`;
     html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
   chrome.innerHTML = html;
@@ -186,45 +191,58 @@ const curve = (a, b) => {
 
 /* ---------- painel ---------- */
 
+const sideTitle = $("#side-title");
+const sideActions = $("#side-actions");
+const btn = (kind, act, icon, text) => `<button class="button button--${kind} interactive" type="button" ${act}><span class="icon">${icon}</span>${text}</button>`;
+const field = (id, label, value, attrs = "") =>
+  `<div class="text-field"><input class="text-field__input" id="${id}" value="${esc(value)}" placeholder=" " ${attrs}><label class="text-field__label" for="${id}">${label}</label></div>`;
+const row = (icon, label, value) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${icon}</span><span class="qe-result__label">${label}</span><span class="qe-result__value">${value}</span></div>`;
+
 function renderSide(gs) {
+  let title = "Projeto";
   let h = "";
+  let actions = "";
   if (sel.type === "final") {
     const vs = M.versions(project, sel.id, gs);
-    h += `<h2>Final</h2><p class="hint">${vs.length ? `${vs.length} ${vs.length === 1 ? "versão sai" : "versões saem"} das linhas que chegam aqui.` : "Ligue um grupo a este bloco para ter versões."}</p>`;
-    h += `<div class="list">${vs
-      .map((v, i) => {
-        const d = M.timeline(v).duration;
-        return `<button class="item ${i === versionIdx && !previewGroup ? "is-on" : ""}" data-version="${i}"><span class="item__n">${i + 1}</span><span class="item__t">${esc(M.versionName(v))}</span><span class="item__d">${fmt(d)}</span></button>`;
-      })
-      .join("")}</div>`;
-    if (vs.length)
-      h += `<div class="row"><button class="btn btn--tonal" data-export="one"><span class="ms">download</span>Exportar esta</button><button class="btn btn--filled" data-export="all"><span class="ms">download</span>Exportar todas (${vs.length})</button></div>`;
+    title = "Final";
+    h += `<section class="viewer__section"><h3 class="viewer__title">Versões</h3><p class="sheet-hint">${vs.length ? `${vs.length} ${vs.length === 1 ? "versão sai" : "versões saem"} das linhas que chegam aqui.` : "Ligue um grupo ao Final para ter versões."}</p>`;
+    h += `<div class="xlist">${vs
+      .map((v, i) => `<button class="xlist__item interactive" type="button" data-version="${i}" aria-current="${i === versionIdx && !previewGroup}"><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(M.versionName(v))}</span><span class="xlist__trail">${fmt(M.timeline(v).duration)}</span></button>`)
+      .join("")}</div></section>`;
+    if (vs.length) actions = btn("outlined", 'data-export="one"', "download", "Exportar esta") + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
-    const label = { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
-    h += `<h2>${label}</h2>`;
-    h += `<label class="field"><span>Nome</span><input id="f-name" value="${esc(b.name)}"></label>`;
-    if (b.kind === "image") h += `<label class="field"><span>Duração (s)</span><input id="f-tout" type="number" step="0.1" min="${M.MIN_LEN}" max="${M.IMAGE_MAX}" value="${b.tout.toFixed(1)}"></label>`;
+    title = { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
+    h += field("f-name", "Nome", b.name);
+    if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.IMAGE_MAX}"`);
     else
-      h += `<div class="row"><label class="field"><span>Começa em (s)</span><input id="f-tin" type="number" step="0.1" min="0" value="${b.tin.toFixed(1)}"></label><label class="field"><span>Termina em (s)</span><input id="f-tout" type="number" step="0.1" max="${b.dur.toFixed(1)}" value="${b.tout.toFixed(1)}"></label></div><p class="hint">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p>`;
+      h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
     if (b.kind !== "image")
-      h += `<label class="switch"><input id="f-mute" type="checkbox" ${b.mute ? "checked" : ""}><span>Sem som</span></label><label class="field"><span>Volume: ${Math.round(b.vol * 100)}%</span><input id="f-vol" type="range" min="0" max="1" step="0.05" value="${b.vol}" ${b.mute ? "disabled" : ""}></label>`;
-    h += `<div class="row"><button class="btn btn--tonal" data-act="dup"><span class="ms">content_copy</span>Duplicar</button><button class="btn btn--text" data-act="del"><span class="ms">delete</span>Excluir</button></div>`;
+      h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3><label class="switch-row" for="f-mute">Sem som<span class="switch"><input type="checkbox" role="switch" id="f-mute" ${b.mute ? "checked" : ""}><span class="switch__track"></span><span class="switch__handle"></span></span></label>
+        <div class="slider-field"><span class="slider-field__label"><span>Volume</span><span id="f-vol-n">${Math.round(b.vol * 100)}%</span></span><input class="vbar__seek" type="range" id="f-vol" min="0" max="1" step="0.05" value="${b.vol}" style="--p:${b.vol * 100}%" aria-label="Volume" ${b.mute ? "disabled" : ""}></div></section>`;
+    actions = btn("outlined", 'data-act="dup"', "content_copy", "Duplicar") + btn("text", 'data-act="del"', "delete", "Excluir");
   } else if (sel.type === "group") {
     const g = gs.find((g) => g.id === sel.id);
     if (g) {
-      h += `<h2>Grupo</h2><p class="hint">${esc(g.name)} · ${fmt(g.dur)}</p><ul class="facts"><li><span class="ms">movie</span>${g.blocks.length} em sequência</li><li><span class="ms">layers</span>${g.covers.length} por cima</li><li><span class="ms">music_note</span>${g.audios.length} de som</li></ul>`;
-      h += `<div class="row"><button class="btn btn--text" data-act="del"><span class="ms">delete</span>Excluir grupo</button></div>`;
+      title = "Grupo";
+      h += `<div class="viewer__card"><p class="qe-result__title">${esc(g.name)}</p><div>${row("schedule", "Duração", fmt(g.dur))}${row("movie", "Em sequência", g.blocks.length)}${row("layers", "Por cima", g.covers.length)}${row("music_note", "Som somado", g.audios.length)}</div></div>`;
+      actions = btn("text", 'data-act="del"', "delete", "Excluir grupo");
     }
   } else if (sel.type === "edge") {
-    h += `<h2>Linha</h2><p class="hint">Liga um grupo ao seguinte.</p><div class="row"><button class="btn btn--text" data-act="del"><span class="ms">delete</span>Excluir linha</button></div>`;
+    title = "Linha";
+    h += `<p class="sheet-hint">Liga um grupo ao seguinte. Cada caminho até o Final é uma versão.</p>`;
+    actions = btn("text", 'data-act="del"', "delete", "Excluir linha");
   } else {
-    h += `<h2>Projeto</h2><p class="hint">Escolha um bloco ou o Final.</p>`;
+    h += `<p class="sheet-hint">Escolha um bloco, um grupo ou o Final.</p>`;
   }
+  sideTitle.textContent = title;
   side.innerHTML = h;
+  sideActions.innerHTML = actions;
+  sideActions.hidden = !actions;
 }
 
-side.addEventListener("click", (e) => {
+sideActions.addEventListener("click", (e) => side.onclickAction(e));
+side.onclickAction = (e) => {
   const v = e.target.closest("[data-version]");
   if (v) {
     versionIdx = +v.dataset.version;
@@ -239,12 +257,13 @@ side.addEventListener("click", (e) => {
     const list = ex.dataset.export === "all" ? vs : [vs[versionIdx]];
     $("#dlg-body").textContent = JSON.stringify(list.map(M.exportPlan), null, 2);
     $("#dlg-title").textContent = list.length === 1 ? "Exportar 1 versão" : `Exportar ${list.length} versões`;
-    $("#dlg").hidden = false;
+    $("#dlg").showModal();
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "del") removeSelection();
   if (act === "dup") duplicate();
-});
+};
+side.addEventListener("click", side.onclickAction);
 side.addEventListener("input", (e) => {
   if (sel.type !== "block") return;
   const before = project;
@@ -257,10 +276,14 @@ side.addEventListener("input", (e) => {
   if (t.id === "f-tin" && t.value !== "") project = M.trim(project, b.id, "l", +t.value - b.tin);
   if (t.id === "f-tout" && t.value !== "") project = M.trim(project, b.id, "r", +t.value - b.tout);
   commit(before);
-  // Não redesenha o painel enquanto digita (perderia o foco), só o resto.
-  render({ side: !(t.id === "f-name" || t.type === "number") });
+  if (t.id === "f-vol") {
+    t.style.setProperty("--p", `${b.vol * 100}%`);
+    $("#f-vol-n").textContent = `${Math.round(b.vol * 100)}%`;
+  }
+  // Não redesenha o painel enquanto digita ou arrasta (perderia o foco), só o resto.
+  render({ side: t.id === "f-mute" });
 });
-$("#dlg-close").onclick = () => ($("#dlg").hidden = true);
+$("#dlg-close").onclick = () => $("#dlg").close();
 
 /* ---------- ações ---------- */
 
@@ -364,7 +387,7 @@ function zoomAt(k, cx, cy) {
 function fit() {
   const xs = [];
   const ys = [];
-  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - 30, b.y + M.height(b));
+  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - 40, b.y + M.height(b));
   for (const f of project.finals) xs.push(f.x, f.x + 180), ys.push(f.y, f.y + 80);
   if (!xs.length) return;
   const r = vp.getBoundingClientRect();
@@ -380,7 +403,7 @@ function fit() {
 
 function toast(msg) {
   const t = $("#toast");
-  t.textContent = msg;
+  $("#toast-text").textContent = msg;
   t.hidden = false;
   clearTimeout(toast.t);
   toast.t = setTimeout(() => (t.hidden = true), 4000);
@@ -485,10 +508,14 @@ vp.addEventListener("pointerdown", (e) => {
       const d = dW(ev);
       const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + d.y, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + d.y, 16 / view.z);
       project = M.dropBlock(base, id, s);
-      $(".snapinfo").textContent = SNAP[s.mode] ?? "";
+      $("#snapinfo").textContent = SNAP[s.mode] ?? "";
+      blockEls.get(id)?.classList.add("is-drag");
       render();
     };
-    onUp = () => ($(".snapinfo").textContent = "");
+    onUp = () => {
+      $("#snapinfo").textContent = "";
+      blockEls.get(id)?.classList.remove("is-drag");
+    };
   } else if (fin) {
     const id = fin.dataset.final;
     const f0 = base.finals.find((f) => f.id === id);
