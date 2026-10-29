@@ -64,10 +64,16 @@ menos custo.
   toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo; a
   linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
 - **Áudio do vídeo**: todo vídeo com som mostra o próprio áudio numa faixa presa
-  logo embaixo da imagem, na mesma cor e tom do vídeo (corta e anda junto). Na
-  folha, "Desvincular o áudio" tira o som do vídeo e cria um bloco de áudio comum
-  (terciária), logo embaixo e com o mesmo corte; o vídeo fica só com a imagem e
-  as faixas de som que já havia descem uma. O som somado pode ter várias faixas.
+  logo embaixo da imagem, na mesma cor e tom do vídeo (corta e anda junto).
+  - "Desvincular o áudio" cria uma **cópia** do som como bloco de áudio comum
+    (terciária), logo embaixo e com o mesmo corte, sem ligação com o vídeo; o vídeo
+    só deixa de mostrar e tocar o próprio som. As faixas que já havia descem uma.
+  - No vídeo, "Vincular ao áudio" volta a mostrar e tocar o som dele; a cópia não
+    muda (se as duas tocam no mesmo grupo, um aviso diz que o som está duas vezes).
+  - No áudio que veio de um vídeo, "Vincular ao vídeo" volta a mostrar o vídeo do
+    mesmo arquivo, com o corte e o volume dele, logo abaixo do grupo; o vídeo de
+    onde veio não muda. A faixa que fica vazia fecha.
+  - Apagar um não afeta o outro. O som somado tem até 8 faixas embaixo do grupo.
 - **Corte**: no bloco escolhido, puxar a borda da esquerda ou da direita (sem
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.
 

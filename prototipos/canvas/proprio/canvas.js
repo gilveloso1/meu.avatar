@@ -295,10 +295,10 @@ function renderSide(gs) {
     else
       h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
     if (b.kind === "video" && !M.linked(b))
-      h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3><p class="sheet-hint">${b.audio === "none" ? "Este vídeo não tem som." : "O som deste vídeo foi desvinculado e virou um bloco de áudio."}</p></section>`;
+      h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3>${b.audio === "none" ? `<p class="sheet-hint">Este vídeo não tem som.</p>` : `<p class="sheet-hint">O som deste vídeo está desvinculado.</p><button class="button button--outlined interactive" type="button" data-act="relink"><span class="icon">link</span>Vincular ao áudio</button>`}</section>`;
     else if (b.kind !== "image")
       h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3><label class="switch-row" for="f-mute">Sem som<span class="switch"><input type="checkbox" role="switch" id="f-mute" ${b.mute ? "checked" : ""}><span class="switch__track"></span><span class="switch__handle"></span></span></label>
-        <div class="slider-field"><span class="slider-field__label"><span>Volume</span><span id="f-vol-n">${Math.round(b.vol * 100)}%</span></span><input class="vbar__seek" type="range" id="f-vol" min="0" max="1" step="0.05" value="${b.vol}" style="--p:${b.vol * 100}%" aria-label="Volume" ${b.mute ? "disabled" : ""}></div>${b.kind === "video" ? `<button class="button button--outlined interactive" type="button" data-act="unlink"><span class="icon">link_off</span>Desvincular o áudio</button>` : ""}</section>`;
+        <div class="slider-field"><span class="slider-field__label"><span>Volume</span><span id="f-vol-n">${Math.round(b.vol * 100)}%</span></span><input class="vbar__seek" type="range" id="f-vol" min="0" max="1" step="0.05" value="${b.vol}" style="--p:${b.vol * 100}%" aria-label="Volume" ${b.mute ? "disabled" : ""}></div>${b.kind === "video" ? `<button class="button button--outlined interactive" type="button" data-act="unlink"><span class="icon">link_off</span>Desvincular o áudio</button>` : ""}${b.origin === "video" ? `<button class="button button--outlined interactive" type="button" data-act="tovideo"><span class="icon">link</span>Vincular ao vídeo</button>` : ""}</section>`;
     actions = btn("outlined", 'data-act="dup"', "content_copy", "Duplicar") + btn("text", 'data-act="del"', "delete", "Excluir");
   } else if (sel.type === "group") {
     const g = gs.find((g) => g.id === sel.id);
@@ -348,7 +348,23 @@ side.onclickAction = (e) => {
     if (r.audioId) sel = { type: "block", id: r.audioId }, (preview = { type: "block", id: r.audioId });
     commit(before);
     render();
-    toast("Áudio desvinculado. Agora ele é um bloco próprio.");
+    toast("Áudio desvinculado. A cópia dele é um bloco próprio.");
+  }
+  if (act === "relink") {
+    const before = project;
+    project = M.relinkVideo(project, sel.id);
+    commit(before);
+    render();
+    toast(M.doubledSound(project) ? "Este grupo tem o som duas vezes: o do vídeo e o da cópia." : "O vídeo voltou a tocar o próprio som.");
+  }
+  if (act === "tovideo") {
+    const before = project;
+    const r = M.audioToVideo(project, sel.id);
+    project = r.project;
+    if (r.videoId) sel = { type: "block", id: r.videoId }, (preview = { type: "block", id: r.videoId });
+    commit(before);
+    render();
+    toast("O áudio voltou a mostrar o vídeo.");
   }
 };
 side.addEventListener("click", side.onclickAction);

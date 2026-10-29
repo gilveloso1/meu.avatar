@@ -29,6 +29,7 @@ export const VIS_H = 96;
 export const AUD_H = 40;
 // Faixa do áudio vinculado, embaixo da imagem do vídeo.
 export const LINK_H = 40;
+export const MAX_FAIXAS = 8;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
 export const MAX_VERSOES = 200;
@@ -85,17 +86,14 @@ export function groups(project) {
     if (g) g.covers.push(c);
     else out.push({ id: c.id, blocks: [c], x: c.x, y: c.y, w: width(c), covers: [], audios: [] });
   }
-  // Som somado: em faixas embaixo do grupo (a primeira encosta no grupo; cada
-  // outra encosta na de cima).
-  const loose = blocks.filter((b) => !visual(b));
-  for (let found = true; found; ) {
-    found = false;
-    for (const a of [...loose]) {
-      const g = out.find((g) => g.blocks.length && overlaps(a, g) && (near(a.y, g.y + g.h) || g.audios.some((o) => near(a.y, o.y + AUD_H))));
-      if (g) g.audios.push(a), loose.splice(loose.indexOf(a), 1), (found = true);
-    }
+  // Som somado: em faixas de AUD_H embaixo do grupo, até MAX_FAIXAS (a primeira
+  // encosta no grupo; uma faixa que fica vazia não solta as de baixo).
+  const lane = (a, g) => (a.y - g.y - g.h) / AUD_H;
+  for (const a of blocks.filter((b) => !visual(b))) {
+    const g = out.find((g) => g.blocks.length && overlaps(a, g) && lane(a, g) > -0.01 && lane(a, g) < MAX_FAIXAS && near(Math.round(lane(a, g)) * AUD_H, a.y - g.y - g.h));
+    if (g) g.audios.push(a);
+    else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   }
-  for (const a of loose) out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   for (const g of out) {
     g.dur = g.w / PX;
     g.first = g.blocks[0] ?? g.audios[0];
@@ -282,9 +280,10 @@ export function trim(project, id, side, seconds) {
 }
 
 /**
- * Desvincula o áudio de um vídeo: o som vira um bloco de áudio comum, logo
- * embaixo, com o mesmo corte; o vídeo fica só com a imagem. Devolve
- * { project, audioId }.
+ * Desvincula o áudio de um vídeo: cria uma cópia do som como bloco de áudio
+ * comum, logo embaixo e com o mesmo corte, sem ligação nenhuma com o vídeo. O
+ * vídeo só deixa de mostrar e tocar o próprio som (que continua no arquivo
+ * dele). Devolve { project, audioId }.
  */
 export function unlinkAudio(project, id) {
   const p = clone(project);
@@ -295,10 +294,8 @@ export function unlinkAudio(project, id) {
   v.audio = "unlinked";
   const a = {
     id: newId("a"), kind: "audio", name: `Áudio de ${v.name}`, src: v.src, dur: v.dur, tin: v.tin, tout: v.tout,
-    x: v.x, y: 0, mute: v.mute, vol: v.vol, tone: nextTone(p, "audio", v.src),
+    x: v.x, y: 0, mute: v.mute, vol: v.vol, tone: nextTone(p, "audio", v.src), origin: "video",
   };
-  v.mute = false;
-  v.vol = 1;
   // O áudio fica logo embaixo do vídeo, na primeira faixa de som do grupo; as
   // faixas que já havia descem uma (e acompanham se o grupo ficou mais baixo).
   const h = Math.max(...(g ? g.blocks : [v]).map(height));
@@ -307,6 +304,50 @@ export function unlinkAudio(project, id) {
   for (const o of below) o.y += shift;
   p.blocks.push(a);
   return { project: p, audioId: a.id };
+}
+
+/**
+ * "Vincular ao áudio": o vídeo volta a mostrar e tocar o próprio som. Uma cópia
+ * de áudio feita antes não muda. Se o grupo ficou mais alto, o som somado desce.
+ */
+export function relinkVideo(project, id) {
+  const p = clone(project);
+  const v = p.blocks.find((b) => b.id === id);
+  if (!v || v.kind !== "video" || linked(v)) return p;
+  const g = groups(p).find((g) => g.blocks.some((b) => b.id === id));
+  v.audio = "linked";
+  if (g) {
+    const shift = Math.max(...g.blocks.map((b) => height(b.id === id ? v : b))) - g.h;
+    for (const a of g.audios) p.blocks.find((b) => b.id === a.id).y += shift;
+  }
+  return p;
+}
+
+/**
+ * "Vincular ao vídeo": um áudio que veio de um vídeo volta a mostrar o vídeo do
+ * mesmo arquivo, com o som preso embaixo, mantendo corte, volume e posição na
+ * linha do tempo. Sai das faixas de som e vai para logo abaixo do grupo. O vídeo
+ * de onde veio não muda. Devolve { project, videoId }.
+ */
+export function audioToVideo(project, id) {
+  const p = clone(project);
+  const a = p.blocks.find((b) => b.id === id);
+  if (!a || a.kind !== "audio" || a.origin !== "video") return { project: p, videoId: null };
+  const g = groups(p).find((g) => g.audios.some((b) => b.id === id));
+  const bottom = g ? Math.max(g.y + g.h, ...g.audios.map((o) => o.y + AUD_H)) : a.y;
+  const others = p.blocks.filter((b) => b !== a);
+  const v = { ...a, kind: "video", audio: "linked", name: a.name.replace(/^Áudio de /, ""), tone: nextTone({ blocks: others }, "video", a.src), y: bottom + 48 };
+  delete v.origin;
+  p.blocks[p.blocks.indexOf(a)] = v;
+  // A faixa que ele deixou, se ficou vazia, fecha: as de baixo sobem uma.
+  if (g && !g.audios.some((o) => o.id !== id && near(o.y, a.y)))
+    for (const o of g.audios) if (o.y > a.y + 1) p.blocks.find((b) => b.id === o.id).y -= AUD_H;
+  return { project: p, videoId: v.id };
+}
+
+/** O som de um vídeo vinculado e uma cópia dele tocam juntos no mesmo grupo. */
+export function doubledSound(project, gs = groups(project)) {
+  return gs.some((g) => g.blocks.some((v) => linked(v) && !v.mute && g.audios.some((a) => a.origin === "video" && a.src === v.src && !a.mute)));
 }
 
 export function removeItems(project, ids) {

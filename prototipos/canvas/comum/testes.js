@@ -77,3 +77,27 @@ test("desvincular: o som vira um bloco de áudio logo embaixo e a música desce"
   assert.deepEqual(g.audios.map((b) => b.id).sort(), [audioId, "musica"].sort());
   assert.deepEqual([a.tin, a.tout, a.kind], [0, 8, "audio"]);
 });
+
+test("vincular de novo: o vídeo volta a tocar o próprio som e a cópia não muda", () => {
+  const { project: q, audioId } = M.unlinkAudio(p, "corpo");
+  const copia = q.blocks.find((b) => b.id === audioId);
+  const r = M.relinkVideo(q, "corpo");
+  const v = r.blocks.find((b) => b.id === "corpo");
+  assert.equal(M.linked(v), true);
+  assert.deepEqual(r.blocks.find((b) => b.id === audioId), { ...copia, y: copia.y + M.LINK_H });
+  assert.equal(M.doubledSound(r), true);
+  // A cópia de áudio vira vídeo de novo, sem mexer no vídeo original.
+  const { project: s2, videoId } = M.audioToVideo(r, audioId);
+  const nv = s2.blocks.find((b) => b.id === videoId);
+  assert.deepEqual([nv.kind, nv.name, nv.audio, nv.tin, nv.tout], ["video", "Corpo", "linked", 0, 8]);
+  assert.deepEqual(s2.blocks.find((b) => b.id === "corpo"), v);
+  assert.equal(M.audioToVideo(s2, "musica").videoId, null);
+});
+
+test("a faixa que fica vazia fecha e a música continua no grupo", () => {
+  const { project: q, audioId } = M.unlinkAudio(p, "corpo");
+  const { project: r } = M.audioToVideo(q, audioId);
+  const g = M.groups(r).find((g) => g.id === "corpo");
+  assert.deepEqual(g.audios.map((b) => b.id), ["musica"]);
+  assert.equal(r.blocks.find((b) => b.id === "musica").y, g.y + g.h);
+});
