@@ -147,6 +147,7 @@ function setTab(tab) {
   sheetBody.dataset.tab = tab;
   for (const b of document.querySelectorAll(".viewer__sheet [data-tab][role=tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   for (const p of sheetBody.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== tab;
+  showActions();
   try {
     localStorage.setItem("canvas-aba", tab);
   } catch {}
@@ -357,7 +358,14 @@ function renderSide(gs) {
   }
   side.innerHTML = `<h2 class="sheet-title">${title}</h2>` + h;
   sideActions.innerHTML = actions;
-  sideActions.hidden = !actions;
+  showActions();
+}
+
+/** Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes. */
+function showActions() {
+  // Busca o elemento aqui: setTab() roda no começo, antes das constantes do painel.
+  const el = $("#side-actions");
+  el.hidden = !el.innerHTML || $(".sheet-body").dataset.tab !== "ajustes";
 }
 
 sideActions.addEventListener("click", (e) => side.onclickAction(e));

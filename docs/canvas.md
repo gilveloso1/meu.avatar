@@ -83,6 +83,7 @@ menos custo.
   sobra, com margens de 12 px; nos Ajustes, o título do que estiver escolhido e os
   campos (versões do Final, bloco, grupo, linha). Tocar algo
   (bloco, grupo ou versão) mostra a Prévia; a aba escolhida fica lembrada.
+  Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).
   O zoom vai até 2000% e a onda é desenhada com 200 px por segundo, para ficar
