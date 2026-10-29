@@ -38,13 +38,13 @@ const redo = [];
 /* ---------- prévia ---------- */
 
 const pv = {
-  canvas: $("#pv-canvas"),
+  stage: $("#pv-stage"),
   play: $("#pv-play"),
   time: $("#pv-time"),
   slider: $("#pv-slider"),
   title: $("#pv-title"),
 };
-const player = new Player(pv.canvas, {
+const player = new Player(pv.stage, {
   onTick(t, d) {
     pv.time.textContent = `${clock(t)} / ${clock(d)}`;
     pv.slider.max = d;
@@ -128,6 +128,8 @@ function playhead(t) {
   if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - 1}px`, top: `${box.y - 4}px`, height: `${box.h + 8}px` });
 }
 function playNow(p) {
+  // Tocar algo mostra a Prévia.
+  setTab("previa");
   preview = p;
   render();
   player.seek(0);
@@ -135,6 +137,23 @@ function playNow(p) {
   setPlayIcon();
   render({ side: false });
 }
+
+/* ---------- abas da folha ---------- */
+
+const sheetBody = $(".sheet-body");
+function setTab(tab) {
+  sheetBody.dataset.tab = tab;
+  for (const b of document.querySelectorAll(".viewer__sheet [data-tab][role=tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+  for (const p of sheetBody.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== tab;
+  try {
+    localStorage.setItem("canvas-aba", tab);
+  } catch {}
+}
+for (const b of document.querySelectorAll(".viewer__sheet [role=tab]")) b.addEventListener("click", () => setTab(b.dataset.tab));
+try {
+  const saved = localStorage.getItem("canvas-aba");
+  if (saved === "previa" || saved === "ajustes") setTab(saved);
+} catch {}
 
 /* ---------- histórico ---------- */
 
@@ -179,7 +198,7 @@ function render({ side = true } = {}) {
     if (!el) {
       el = document.createElement("div");
       el.dataset.id = b.id;
-      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><div class="blk__link"><span class="icon">graphic_eq</span><span class="blk__wave"></span><span class="icon blk__mute">volume_off</span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
+      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><div class="blk__link"><span class="blk__wave"></span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
       world.append(el);
       blockEls.set(b.id, el);
       thumb(b).then((u) => {
@@ -338,6 +357,7 @@ side.onclickAction = (e) => {
     versionIdx = +v.dataset.version;
     preview = null;
     render();
+    setTab("previa");
     player.play();
     setPlayIcon();
   }

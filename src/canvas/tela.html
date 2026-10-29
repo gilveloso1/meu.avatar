@@ -57,12 +57,11 @@ body { min-height: 0; overflow: hidden; }
 .blk:hover .blk__media, .blk.is-sel .blk__media { mix-blend-mode: normal; }
 .blk.is-mute .blk__media { opacity: 0.38; }
 /* Áudio vinculado: faixa de 40 px embaixo da imagem, na cor e no tom do vídeo, com a onda dele. */
-.blk__link { display: none; position: absolute; left: 4px; right: 4px; bottom: 4px; height: 32px; align-items: center; gap: 4px; padding: 0 4px; border-radius: var(--md-sys-shape-corner-small); background: color-mix(in srgb, var(--on) 10%, transparent); pointer-events: none; }
-.blk__link .icon { font-size: 16px; flex: none; }
-.blk__wave { flex: 1; align-self: stretch; margin: 4px 0; background: var(--on); opacity: 0.55; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
-.blk.is-linked .blk__link { display: flex; }
+/* A onda vai de borda a borda do bloco: o x dela é o mesmo tempo do vídeo (o corte de agora). */
+.blk__link { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 40px; border-radius: 0 0 var(--md-sys-shape-corner-medium) var(--md-sys-shape-corner-medium); background: color-mix(in srgb, var(--on) 10%, transparent); pointer-events: none; }
+.blk__wave { position: absolute; inset: 4px 0; background: var(--on); opacity: 0.55; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.blk.is-linked .blk__link { display: block; }
 .blk.is-linked .blk__media { bottom: 40px; }
-.blk.is-linked .blk__label .blk__mute { display: none; }
 .blk.is-linked.is-mute .blk__wave { opacity: 0.2; }
 .blk--audio { border-radius: var(--md-sys-shape-corner-small); }
 .blk--audio .blk__label { height: 20px; }
@@ -143,9 +142,17 @@ body { min-height: 0; overflow: hidden; }
 
 /* Folha: a prévia 9:16 com a barra do player do site, e o que estiver escolhido. */
 .viewer__head h2 { font: var(--md-sys-typescale-title-large); }
-.preview { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.preview .player__frame { height: 280px; max-width: 100%; box-shadow: var(--md-sys-elevation-level1); }
-.preview .player__frame canvas { width: 100%; height: 100%; display: block; }
+/* Abas Prévia e Ajustes (abas principais fixas do M3, como na página do vídeo). Na Prévia,
+   o vídeo 9:16 ocupa a altura que sobra (cabe pela altura ou pela largura). */
+.sheet-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.sheet-body[data-tab="previa"] { overflow: hidden; }
+.preview { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.preview__stage { flex: 1; min-height: 0; width: 100%; display: grid; place-items: center; container-type: size; }
+.preview .player__frame { height: auto; width: min(100cqw, 100cqh * 9 / 16); max-width: none; aspect-ratio: 9 / 16; box-shadow: var(--md-sys-elevation-level1); }
+/* Cada trecho é um vídeo ou imagem empilhado no quadro; só o da vez aparece. */
+.pv-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
+.pv-media[data-layer="1"] { z-index: 1; }
+.pv-media.is-on { opacity: 1; }
 .preview .vbar { width: 100%; box-shadow: none; }
 .preview__title { align-self: stretch; text-align: center; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); text-wrap: balance; }
 .sheet-hint { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
@@ -205,6 +212,7 @@ body { min-height: 0; overflow: hidden; }
 .dialog__actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 839px) {
+  .preview__stage { min-height: 420px; }
   body { overflow: auto; height: auto; }
   .editor { grid-template-columns: 1fr; }
   .canvas { height: 70vh; }
@@ -261,9 +269,13 @@ body { min-height: 0; overflow: hidden; }
   </div>
   <aside class="viewer__sheet" aria-label="Prévia e ajustes">
     <div class="viewer__head"><h2 id="side-title">Final</h2></div>
-    <div class="viewer__body">
-      <div class="preview">
-        <div class="player__frame"><canvas id="pv-canvas" width="360" height="640"></canvas></div>
+    <div class="tabs" role="tablist">
+      <button class="tabs__tab interactive" type="button" role="tab" data-tab="previa" aria-selected="true"><span class="tabs__content"><span class="icon">play_circle</span>Prévia</span></button>
+      <button class="tabs__tab interactive" type="button" role="tab" data-tab="ajustes" aria-selected="false"><span class="tabs__content"><span class="icon">tune</span>Ajustes</span></button>
+    </div>
+    <div class="viewer__body sheet-body" data-tab="previa">
+      <div class="preview" data-panel="previa">
+        <div class="preview__stage"><div class="player__frame" id="pv-stage"></div></div>
         <div class="vbar" role="group" aria-label="Controles da prévia">
           <button class="vbar__play interactive" type="button" id="pv-play" aria-label="Tocar" title="Tocar"><span class="icon">play_arrow</span></button>
           <span class="vbar__time" id="pv-time">0:00.0 / 0:00.0</span>
@@ -271,7 +283,7 @@ body { min-height: 0; overflow: hidden; }
         </div>
         <p class="preview__title" id="pv-title"></p>
       </div>
-      <div id="side"></div>
+      <div id="side" data-panel="ajustes" hidden></div>
     </div>
     <div class="viewer__actions" id="side-actions" hidden></div>
   </aside>

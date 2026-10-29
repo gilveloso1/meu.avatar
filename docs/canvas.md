@@ -76,6 +76,17 @@ menos custo.
 - **Corte**: no bloco escolhido, puxar a borda da esquerda ou da direita (sem
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.
 
+- **Folha da direita**: abas Prévia e Ajustes (abas principais fixas do M3, como na
+  página do vídeo). Na Prévia, o vídeo 9:16 ocupa a altura que sobra; nos Ajustes,
+  o que estiver escolhido (versões do Final, bloco, grupo, linha). Tocar algo
+  (bloco, grupo ou versão) mostra a Prévia; a aba escolhida fica lembrada.
+- **Onda do som**: sem ícone, de borda a borda do bloco, no corte de agora (o x da
+  onda é o mesmo tempo do vídeo), para cortar vendo onde a fala começa e termina.
+- **Prévia sem tela preta**: cada trecho é um vídeo empilhado no quadro (o
+  navegador desenha, sem copiar para canvas); cada um já espera parado no começo
+  do trecho; a troca só acontece quando o próximo tem imagem (até lá fica o
+  anterior); se um trecho precisa carregar, o relógio da prévia espera por ele.
+
 ## No site (em teste)
 
 - `/canvas`, só o administrador (para os outros, 404), com um card "Canvas de

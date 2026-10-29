@@ -47,8 +47,8 @@ const ICONS = [
   "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
   "edit", "error", "face", "fit_screen", "flag", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
   "image", "info", "layers", "link", "link_off", "lock", "logout", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
-  "person_add", "photo_library", "play_arrow", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search", "send", "swap_vert",
-  "switch_account", "translate", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
+  "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
+  "send", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
