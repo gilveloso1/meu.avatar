@@ -141,11 +141,13 @@ body { min-height: 0; overflow: hidden; }
 .tooltip:empty { display: none; }
 
 /* Folha: a prévia 9:16 com a barra do player do site, e o que estiver escolhido. */
-.viewer__head h2 { font: var(--md-sys-typescale-title-large); }
+/* Título do que está escolhido, no alto da aba Ajustes (a Prévia fica sem título, para o vídeo). */
+.sheet-title { font: var(--md-sys-typescale-title-large); }
 /* Abas Prévia e Ajustes (abas principais fixas do M3, como na página do vídeo). Na Prévia,
    o vídeo 9:16 ocupa a altura que sobra (cabe pela altura ou pela largura). */
 .sheet-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.sheet-body[data-tab="previa"] { overflow: hidden; }
+/* Na Prévia, margens de 12 px: o vídeo ganha largura. */
+.sheet-body[data-tab="previa"] { overflow: hidden; padding: 12px; }
 .preview { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .preview__stage { flex: 1; min-height: 0; width: 100%; display: grid; place-items: center; container-type: size; }
 .preview .player__frame { height: auto; width: min(100cqw, 100cqh * 9 / 16); max-width: none; aspect-ratio: 9 / 16; box-shadow: var(--md-sys-elevation-level1); }
@@ -244,7 +246,7 @@ body { min-height: 0; overflow: hidden; }
         <div id="chrome"></div>
       </div>
     </div>
-    <div class="hints"><span><b>Arraste</b> para mover</span><span><b>Encoste</b> do lado para juntar</span><span><b>Solte em cima</b> para cobrir</span><span><b>Puxe o ponto</b> da direita para ligar</span><span><b>Ctrl + roda</b> para zoom</span><span><b>Alt</b> solta sem encaixar</span></div>
+    <div class="hints"><span><b>Arraste</b> para mover</span><span><b>Encoste</b> do lado para juntar</span><span><b>Solte em cima</b> para cobrir</span><span><b>Puxe o ponto</b> da direita para ligar</span><span><b>Ctrl + roda</b> para zoom</span><span><b>Dois cliques</b> amplia o bloco</span><span><b>Alt</b> solta sem encaixar</span></div>
     <div class="tooltip" id="snapinfo" role="status"></div>
     <div class="canvas-empty" id="canvas-empty" hidden>
       <div class="empty">
@@ -268,7 +270,6 @@ body { min-height: 0; overflow: hidden; }
     </div>
   </div>
   <aside class="viewer__sheet" aria-label="Prévia e ajustes">
-    <div class="viewer__head"><h2 id="side-title">Final</h2></div>
     <div class="tabs" role="tablist">
       <button class="tabs__tab interactive" type="button" role="tab" data-tab="previa" aria-selected="true"><span class="tabs__content"><span class="icon">play_circle</span>Prévia</span></button>
       <button class="tabs__tab interactive" type="button" role="tab" data-tab="ajustes" aria-selected="false"><span class="tabs__content"><span class="icon">tune</span>Ajustes</span></button>

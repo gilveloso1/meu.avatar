@@ -77,9 +77,14 @@ menos custo.
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.
 
 - **Folha da direita**: abas Prévia e Ajustes (abas principais fixas do M3, como na
-  página do vídeo). Na Prévia, o vídeo 9:16 ocupa a altura que sobra; nos Ajustes,
-  o que estiver escolhido (versões do Final, bloco, grupo, linha). Tocar algo
+  página do vídeo), sem título em cima. Na Prévia, o vídeo 9:16 ocupa a altura que
+  sobra, com margens de 12 px; nos Ajustes, o título do que estiver escolhido e os
+  campos (versões do Final, bloco, grupo, linha). Tocar algo
   (bloco, grupo ou versão) mostra a Prévia; a aba escolhida fica lembrada.
+- **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
+  largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).
+  O zoom vai até 2000% e a onda é desenhada com 200 px por segundo, para ficar
+  nítida de perto. "Ver tudo" volta.
 - **Onda do som**: sem ícone, de borda a borda do bloco, no corte de agora (o x da
   onda é o mesmo tempo do vídeo), para cortar vendo onde a fala começa e termina.
 - **Prévia sem tela preta**: cada trecho é um vídeo empilhado no quadro (o
@@ -101,6 +106,9 @@ menos custo.
 - O protótipo (`prototipos/canvas/`) usa a mesma tela, com o exemplo de 6 versões.
 
 ## Em aberto
+
+- **Timeline embaixo do canvas, com zoom**, para o vídeo ou o áudio escolhido:
+  cortar vendo a onda e os quadros de perto (a próxima etapa da edição fina).
 
 - Salvar projetos (tabela no D1), arquivos do computador no R2 e o Exportar de
   verdade (ffmpeg no contêiner).

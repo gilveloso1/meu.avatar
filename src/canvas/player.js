@@ -50,6 +50,8 @@ export class Player {
         // Parado no quadro onde o trecho começa, pronto para entrar.
         el.addEventListener("loadedmetadata", () => el.currentTime === 0 && i.tin && (el.currentTime = i.tin), { once: true });
       }
+      // Mostra o primeiro quadro assim que ele chega (antes de tocar).
+      el.addEventListener(k === "image" ? "load" : "loadeddata", () => this.show(), { once: true });
       el.src = i.block.src;
       if (k !== "audio") this.stage.append(el);
       return { ...i, el, active: false };

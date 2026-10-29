@@ -298,7 +298,6 @@ const curve = (a, b) => {
 
 /* ---------- painel ---------- */
 
-const sideTitle = $("#side-title");
 const sideActions = $("#side-actions");
 const btn = (kind, act, icon, text) => `<button class="button button--${kind} interactive" type="button" ${act}><span class="icon">${icon}</span>${text}</button>`;
 const field = (id, label, value, attrs = "") =>
@@ -344,8 +343,7 @@ function renderSide(gs) {
   } else {
     h += `<p class="sheet-hint">Escolha um bloco, um grupo ou o Final.</p>`;
   }
-  sideTitle.textContent = title;
-  side.innerHTML = h;
+  side.innerHTML = `<h2 class="sheet-title">${title}</h2>` + h;
   sideActions.innerHTML = actions;
   sideActions.hidden = !actions;
 }
@@ -561,11 +559,33 @@ $("#zoom-in").onclick = () => zoomAt(1.2);
 $("#zoom-out").onclick = () => zoomAt(1 / 1.2);
 $("#fit").onclick = () => fit();
 
+const ZOOM_MIN = 0.15;
+// Até 2000%: dá para ver a onda do som de perto para cortar.
+const ZOOM_MAX = 20;
+
+/** Dois cliques num bloco: amplia até ele ocupar a largura do canvas (a proporção não muda). */
+function zoomToBlock(b) {
+  const r = vp.getBoundingClientRect();
+  const w = M.width(b);
+  const h = M.height(b);
+  const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, (r.width - 96) / w));
+  // Se não cabe na altura, fica à vista a parte de baixo (a onda do som), acima da barra flutuante.
+  const top = h * z <= r.height - 200 ? (r.height - h * z) / 2 : r.height - 112 - h * z;
+  view = { z, x: (r.width - w * z) / 2 - b.x * z, y: top - b.y * z };
+  applyView();
+}
+vp.addEventListener("dblclick", (e) => {
+  const el = e.target.closest(".blk");
+  if (!el) return;
+  const b = project.blocks.find((o) => o.id === el.dataset.id);
+  if (b) zoomToBlock(b);
+});
+
 function zoomAt(k, cx, cy) {
   const r = vp.getBoundingClientRect();
   cx ??= r.left + r.width / 2;
   cy ??= r.top + r.height / 2;
-  const z = Math.min(3, Math.max(0.15, view.z * k));
+  const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.z * k));
   const px = cx - r.left;
   const py = cy - r.top;
   view.x = px - ((px - view.x) * z) / view.z;
