@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { handle } from "../src/index";
 import type { AudioApi, ContainerPlan, Face } from "../src/audio";
 import { randomToken, sha256 } from "../src/auth";
-import type { VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
+import type { ChatRequest, ChatResult, VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
 
 export const SITE = "https://meu-avatar.gilveloso.workers.dev";
 
@@ -40,13 +40,24 @@ export const SEEDANCE: VideoModel = {
   pricing_skus: { video_tokens: "0.000007", video_tokens_with_video_input: "0.0000043", video_tokens_1080p_with_video_input: "0.0000047" },
 };
 
-const MODELS = [WAN, HEYGEN, SEEDANCE];
+export const ALEPH_MODEL: VideoModel = {
+  id: "runway/aleph-2",
+  name: "Runway: Aleph 2.0",
+  supported_durations: null,
+  supported_resolutions: null,
+  supported_aspect_ratios: ["16:9", "4:3", "3:2", "1:1", "2:3", "3:4", "9:16", "21:9"],
+  supported_frame_images: null,
+  generate_audio: false,
+  pricing_skus: { cents_per_second_output: "28", minimum_cents_per_generation: "56" },
+};
+
+const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL];
 
 /**
  * Um MP4 mínimo com a duração no cabeçalho (ftyp, mdat e moov > mvhd). A
  * versão 1 do mvhd usa campos de 64 bits; `moovFirst` põe o moov antes do mdat.
  */
-export function fakeMp4(seconds: number, { version = 0, moovFirst = false } = {}): Uint8Array<ArrayBuffer> {
+export function fakeMp4(seconds: number, { version = 0, moovFirst = false, width = 0, height = 0 } = {}): Uint8Array<ArrayBuffer> {
   const timescale = 1000;
   const box = (type: string, body: Uint8Array) => {
     const out = new Uint8Array(8 + body.length);
@@ -65,7 +76,16 @@ export function fakeMp4(seconds: number, { version = 0, moovFirst = false } = {}
     view.setUint32(12, timescale);
     view.setUint32(16, Math.round(seconds * timescale));
   }
-  const moov = box("moov", box("mvhd", mvhd));
+  // Com tamanho: uma trilha de imagem com o tkhd (versão 0: largura e altura em 16.16 no byte 76).
+  const tkhd = new Uint8Array(84);
+  new DataView(tkhd.buffer).setUint32(76, width * 65536);
+  new DataView(tkhd.buffer).setUint32(80, height * 65536);
+  const mvhdBox = box("mvhd", mvhd);
+  const trak = width ? box("trak", box("tkhd", tkhd)) : new Uint8Array(0);
+  const moovBody = new Uint8Array(mvhdBox.length + trak.length);
+  moovBody.set(mvhdBox, 0);
+  moovBody.set(trak, mvhdBox.length);
+  const moov = box("moov", moovBody);
   const parts = [box("ftyp", new TextEncoder().encode("isom")), ...(moovFirst ? [moov, box("mdat", new Uint8Array(16))] : [box("mdat", new Uint8Array(16)), moov])];
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;
@@ -104,6 +124,25 @@ export class FakeVideoApi implements VideoApi {
   async download(_job: VideoJob) {
     this.downloads++;
     return new TextEncoder().encode("mp4-falso").buffer as ArrayBuffer;
+  }
+  /** Pedidos de conversa (troca de rosto e conferência do fundo). */
+  chats: ChatRequest[] = [];
+  /** Quadros (pelo conteúdo, ex.: "quadro-2.5") cujo fundo a conferência sempre reprova. */
+  rejectFrames: string[] = [];
+  /** Quantas trocas de rosto voltam sem imagem (as primeiras). */
+  facesWithoutImage = 0;
+  async chat(body: ChatRequest): Promise<ChatResult> {
+    this.chats.push(body);
+    const images = body.messages[0]!.content.flatMap((p) => (p.type === "image_url" ? [atob(p.image_url.url.split(",")[1]!)] : []));
+    if (body.modalities?.includes("image")) {
+      if (this.facesWithoutImage > 0) {
+        this.facesWithoutImage--;
+        return { text: "não consegui", images: [], cost: 0.04 };
+      }
+      return { text: "", images: [`data:image/jpeg;base64,${btoa(`${images[0]}+rosto`)}`], cost: 0.04 };
+    }
+    const fundo = this.rejectFrames.includes(images[0]!);
+    return { text: `\`\`\`json\n{"fundo": ${fundo}, "objetos": false, "maos": false, "detalhes": ""}\n\`\`\``, images: [], cost: 0.001 };
   }
   finish(jobId: string, changes: Partial<VideoJob>) {
     this.jobs.set(jobId, { ...this.jobs.get(jobId)!, ...changes });
@@ -164,6 +203,28 @@ export class FakeAudioApi implements AudioApi {
     if (new TextDecoder().decode(mp4) !== "mp4-falso") throw new Error("o MP4 não chegou inteiro");
     if (this.fail) throw new Error(this.fail);
     return this.faceFound;
+  }
+  prepared = 0;
+  /** O vídeo que o preparo devolve (um MP4 falso com duração e tamanho). */
+  preparedMp4 = fakeMp4(5.5, { width: 1078, height: 1920 });
+  frameTimes: number[][] = [];
+  noFace = false;
+  async prepare(mp4: ReadableStream, size: number) {
+    this.prepared++;
+    const original = new Uint8Array(await new Response(mp4).arrayBuffer());
+    if (original.length !== size) throw new Error(`tamanho errado: ${original.length} != ${size}`);
+    if (this.fail) throw new Error(this.fail);
+    return new Response(this.preparedMp4, { headers: { "content-length": String(this.preparedMp4.length), "content-type": "video/mp4" } });
+  }
+  async frames(_mp4: ArrayBuffer, seconds: number[]) {
+    this.frameTimes.push(seconds);
+    return seconds.map((t) => btoa(`quadro-${t}`));
+  }
+  async faceCrop(_image: ArrayBuffer) {
+    return this.noFace ? null : btoa("rosto");
+  }
+  async resize(image: string, width: number, height: number) {
+    return btoa(`${atob(image)}-${width}x${height}`);
   }
   private async answer(mp4: ReadableStream, size: number, suffix: string) {
     const original = new Uint8Array(await new Response(mp4).arrayBuffer());

@@ -35,7 +35,7 @@ export interface VideoRequest {
    */
   input_references?: InputReference[];
   /** Opções do provedor, por slug (só as de allowed_passthrough_parameters). */
-  provider?: { options: Record<string, Record<string, string>> };
+  provider?: { options: Record<string, Record<string, unknown>> };
 }
 
 export type InputReference =
@@ -55,12 +55,32 @@ export interface VideoJob {
   error?: string;
 }
 
+export type ChatPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+
+/** Uma conversa com imagens (chat completions): trocar o rosto num quadro ou conferir o fundo. */
+export interface ChatRequest {
+  model: string;
+  messages: { role: "user"; content: ChatPart[] }[];
+  /** ["image", "text"] para o modelo devolver imagem. */
+  modalities?: ("image" | "text")[];
+  temperature?: number;
+}
+
+export interface ChatResult {
+  text: string;
+  /** Imagens devolvidas, em data URL. */
+  images: string[];
+  /** Custo em US$, como o OpenRouter informa. */
+  cost: number;
+}
+
 /** O que o resto do projeto usa da API; os testes trocam por um falso. */
 export interface VideoApi {
   getModel(id: string): Promise<VideoModel>;
   submit(body: VideoRequest): Promise<VideoJob>;
   get(jobId: string): Promise<VideoJob>;
   download(job: VideoJob): Promise<ArrayBuffer>;
+  chat(body: ChatRequest): Promise<ChatResult>;
 }
 
 export class OpenRouterVideo implements VideoApi {
@@ -97,6 +117,19 @@ export class OpenRouterVideo implements VideoApi {
   async download(job: VideoJob, index = 0): Promise<ArrayBuffer> {
     const url = job.unsigned_urls?.[index] ?? `${this.base}/videos/${encodeURIComponent(job.id)}/content?index=${index}`;
     return (await this.request(url)).arrayBuffer();
+  }
+
+  async chat(body: ChatRequest): Promise<ChatResult> {
+    const data = (await (await this.request(`${this.base}/chat/completions`, { method: "POST", body: JSON.stringify(body) })).json()) as {
+      choices?: { message?: { content?: string | null; images?: { image_url?: { url?: string } }[] } }[];
+      usage?: { cost?: number };
+    };
+    const message = data.choices?.[0]?.message;
+    return {
+      text: message?.content ?? "",
+      images: (message?.images ?? []).map((i) => i.image_url?.url).filter((u): u is string => Boolean(u)),
+      cost: data.usage?.cost ?? 0,
+    };
   }
 
   private async request(url: string, init: RequestInit = {}): Promise<Response> {

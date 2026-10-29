@@ -67,6 +67,8 @@ export interface Defaults {
 export interface CostRule {
   sku: string;
   seconds: { field: string } | { speech: string } | { video: string };
+  /** US$ fixos por vídeo, além do preço por segundo (as imagens dos quadros-chave do Aleph 2). */
+  extra?: number;
 }
 
 /** O vídeo enviado, já lido: quantos segundos tem. */
@@ -84,6 +86,11 @@ export interface Built {
   image: "first_frame" | "reference" | null;
   /** O vídeo enviado vai como referência (só o Seedance 2 em diante aceita). */
   video?: boolean;
+  /**
+   * O pedido não sai na hora: o vídeo entra na fila de preparo (Studio.prepareNext),
+   * que monta as referências e envia. A foto e o vídeo ficam guardados no R2.
+   */
+  prepare?: boolean;
   /** O que fica guardado no banco. */
   record: {
     /** A fala. */

@@ -1,5 +1,11 @@
 # Runway Aleph 2 (`runway/aleph-2`): em teste para trocar avatar
 
+**Estrutura `aleph` (`src/structures/aleph.ts`), só para o administrador,
+desde 29/10/2026**, com a receita do terceiro teste e a conferência do fundo
+(abaixo). Como funciona por dentro: `docs/operacao.md`, "Troca de avatar pelo
+Aleph 2". Ainda não gerou nenhum vídeo pelo site.
+
+
 Pedido pelo OpenRouter (conferido em 28/10/2026, pelas recusas, que não
 custam nada, e pelos tipos do SDK oficial, `@runwayml/sdk`):
 
@@ -134,3 +140,28 @@ fundo. O teto de qualidade agora é o vídeo de origem: a parte com o rosto tinh
 só 406×720 e foi ampliada; um vídeo nítido, em 1080p de verdade, deve render
 mais que qualquer ajuste nos quadros. **Conferir cada quadro-chave contra o
 original — pose, mãos, objetos, olhos e o fundo — antes de mandar ao Aleph.**
+
+## Conferência do fundo dos quadros-chave (29/10/2026)
+
+Para não repetir a prateleira do quarto teste, cada quadro com o rosto trocado
+é conferido contra o original antes de virar quadro-chave.
+
+- **Por pixels não funcionou.** Diferença de brilho fora da pessoa (máscara em
+  volta do rosto achado pelo YuNet), com e sem alinhamento (ECC) e tirando as
+  áreas de pele: em nenhum ajuste o quadro com a prateleira ficou acima de
+  todos os bons. As mãos e o cabelo, que o modelo de imagem redesenha, pesam
+  mais que o defeito.
+- **Por um modelo de visão, sim.** Os 11 pares dos testes 3 e 4, pedindo
+  respostas separadas para fundo, objetos e mãos:
+  `anthropic/claude-haiku-5.5` marcou o fundo mudado só no quadro da prateleira
+  ("aparece uma prateleira de madeira no canto superior direito") e em um outro
+  em que um objeto azul da parede sumiu; `google/gemini-3.5-flash-lite` não
+  marcou nada. US$ 0,0005 a 0,001 por par.
+- Os dois **não notaram o frasco** que o modelo de imagem tira da frente do
+  rosto (nem em resolução cheia) e reclamam de mãos levemente diferentes em
+  quadros que funcionaram bem. Por isso **só o fundo reprova**; objetos e mãos
+  ficam no log.
+
+A estimativa do formulário arredonda a duração para cima (5,5 s → 6 s); nos
+testes, o Aleph cobrou 5 s por 5,5 s (US$ 1,40). O custo real vem do
+OpenRouter.

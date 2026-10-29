@@ -1,6 +1,7 @@
 /**
- * Duração de um MP4 ou MOV, lida do cabeçalho do filme (caixa moov > mvhd),
- * sem decodificar nada. O moov pode vir no começo ou no fim do arquivo.
+ * Duração e tamanho do quadro de um MP4 ou MOV, lidos do cabeçalho do filme
+ * (caixas moov > mvhd e moov > trak > tkhd), sem decodificar nada. O moov pode
+ * vir no começo ou no fim do arquivo.
  */
 
 /** Segundos do vídeo, ou null se o arquivo não tem o cabeçalho de um MP4/MOV. */
@@ -22,6 +23,26 @@ export function mp4Duration(bytes: ArrayBuffer): number | null {
     duration = view.getUint32(at + 16);
   }
   return timescale > 0 && duration > 0 ? duration / timescale : null;
+}
+
+/** Largura e altura do quadro: o tkhd da primeira trilha com imagem (a de áudio tem 0×0). */
+export function mp4Size(bytes: ArrayBuffer): { width: number; height: number } | null {
+  const view = new DataView(bytes);
+  const moov = findBox(view, 0, view.byteLength, "moov");
+  if (!moov) return null;
+  let at = moov.start;
+  for (let trak = findBox(view, at, moov.end, "trak"); trak; trak = findBox(view, at, moov.end, "trak")) {
+    at = trak.end;
+    const tkhd = findBox(view, trak.start, trak.end, "tkhd");
+    if (!tkhd) continue;
+    // Largura e altura em ponto fixo 16.16, no fim do tkhd (versão 1: campos de tempo de 64 bits).
+    const offset = tkhd.start + (view.getUint8(tkhd.start) === 1 ? 88 : 76);
+    if (offset + 8 > tkhd.end) continue;
+    const width = Math.round(view.getUint32(offset) / 65536);
+    const height = Math.round(view.getUint32(offset + 4) / 65536);
+    if (width > 0 && height > 0) return { width, height };
+  }
+  return null;
 }
 
 /** A primeira caixa `type` entre `from` e `to`: onde começa e termina o conteúdo dela. */

@@ -1,10 +1,11 @@
 import type { AudioApi, Face } from "./audio";
 import { Db, OPEN_STATUSES, type Role, type Video } from "./db";
 import { ERROS } from "./erros";
-import { mp4Duration } from "./mp4";
+import { mp4Duration, mp4Size } from "./mp4";
 import { type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import { canUse, InputError, structureById, type Structure, type Values } from "./structures";
+import { aspectLabel, CHECK_MODEL, CHECK_PROMPT, FACE_MODEL, FACE_TRIES, facePrompt, keyframeTimes, MAX_PREPARED_BYTES, parseCheck } from "./structures/aleph";
 
 export { InputError } from "./structures";
 
@@ -89,6 +90,8 @@ export class Studio {
 
     const model = await this.model(structure.model);
     const built = structure.build(input.values, image !== null, model, seconds !== null ? { seconds } : null);
+    // O preparo (Aleph 2) roda no contêiner: sem ele, não dá para começar.
+    if (built.prepare && !this.audio) throw new InputError(ERROS.trocaIndisponivel);
     const request: VideoRequest = { model: structure.model, ...built.request };
     const placeholder = { type: "image_url" as const, image_url: { url: "" } };
     const source = { type: "video_url" as const, video_url: { url: "" } };
@@ -110,14 +113,14 @@ export class Studio {
       imageKey = `avatares/${crypto.randomUUID()}.${ext}`;
       const bytes = await image.arrayBuffer();
       await this.media.put(imageKey, bytes, { httpMetadata: { contentType: image.type } });
-      placeholder.image_url.url = await this.imageUrl(imageKey, image.type, bytes);
+      if (!built.prepare) placeholder.image_url.url = await this.imageUrl(imageKey, image.type, bytes);
     }
     let sourceKey: string | null = null;
     if (upload && videoBytes && built.video) {
       // Como a foto: nome impossível de adivinhar, público só para o provedor baixar.
       sourceKey = `origens/${crypto.randomUUID()}.${videoExt}`;
       await this.media.put(sourceKey, videoBytes, { httpMetadata: { contentType: upload.type } });
-      source.video_url.url = await this.imageUrl(sourceKey, upload.type, videoBytes);
+      if (!built.prepare) source.video_url.url = await this.imageUrl(sourceKey, upload.type, videoBytes);
     }
     if (this.config.siteUrl.startsWith("https://")) request.callback_url = `${this.config.siteUrl}/openrouter/webhook`;
 
@@ -131,6 +134,9 @@ export class Studio {
       structure: structure.id,
       settings: settings || sourceKey ? JSON.stringify({ ...settings, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
     });
+
+    // O pedido sai depois, da fila de preparo (prepareNext).
+    if (built.prepare) return (await this.db.updateVideo(id, { prep_status: "pending" }))!;
 
     try {
       const job = await api.submit(request);
@@ -152,19 +158,22 @@ export class Studio {
       return video;
     }
 
+    // O que o preparo já gastou (as imagens dos quadros-chave do Aleph 2) entra no custo.
+    const prepCost = Number(parseSettings(video.settings).prep_cost) || 0;
+    const cost = job.usage?.cost != null ? job.usage.cost + prepCost : null;
     if (job.status === "completed") {
       const key = `videos/${video.id}.mp4`;
       await this.media.put(key, await api.download(job), { httpMetadata: { contentType: "video/mp4" } });
       return (await this.db.updateVideo(video.id, {
         status: "completed",
         video_key: key,
-        cost: job.usage?.cost ?? null,
+        cost,
         // O áudio entra na fila do contêiner, se a estrutura pede; o agendamento trata um por vez.
         audio_status: this.audio && (structureById(video.structure)?.treatAudio ?? true) ? "pending" : null,
       }))!;
     }
     if (job.status === "failed" || job.status === "cancelled" || job.status === "expired") {
-      return (await this.db.updateVideo(video.id, { status: job.status, error: job.error ?? null, cost: job.usage?.cost ?? null }))!;
+      return (await this.db.updateVideo(video.id, { status: job.status, error: job.error ?? null, cost }))!;
     }
     if (job.status !== video.status) return (await this.db.updateVideo(video.id, { status: job.status }))!;
     return video;
@@ -176,6 +185,123 @@ export class Studio {
     if (typeof jobId !== "string") return null;
     const video = await this.db.videoByJob(jobId);
     return video ? this.sync(video) : null;
+  }
+
+  /**
+   * Agendamento: prepara o próximo vídeo da fila de preparo (troca de avatar
+   * pelo Aleph 2, src/structures/aleph.ts) e envia ao OpenRouter. Um por
+   * rodada (uns 2 min: o contêiner e as imagens dos quadros-chave).
+   */
+  async prepareNext(now = new Date()): Promise<Video | null> {
+    if (!this.audio || !this.api) return null;
+    await this.db.failStalePrep(new Date(now.getTime() - AUDIO_TIMEOUT_MS).toISOString(), now.toISOString());
+    const video = await this.db.claimPrep(now.toISOString());
+    if (!video) return null;
+    try {
+      return await this.prepare(video, this.api, this.audio);
+    } catch (err) {
+      console.error("Falha no preparo", video.id, err);
+      return (await this.db.updateVideo(video.id, { prep_status: "failed", prep_error: errorMessage(err), status: "failed", error: errorMessage(err) }))!;
+    }
+  }
+
+  private async prepare(video: Video, api: VideoApi, audio: AudioApi): Promise<Video> {
+    const settings = parseSettings(video.settings);
+    if (!settings.source_key || !video.image_key) throw new Error("Faltam o vídeo de origem ou a foto no registro.");
+
+    // 1. O vídeo sem faixas pretas e ampliado até 1080p.
+    const preparedKey = `origens/${video.id}.preparado.mp4`;
+    await this.runInContainer(settings.source_key, preparedKey, (body, size) => audio.prepare(body, size));
+    const prepared = await (await this.media.get(preparedKey))!.arrayBuffer();
+    const seconds = mp4Duration(prepared);
+    const size = mp4Size(prepared);
+    if (!seconds || !size) throw new Error("O vídeo preparado não tem duração ou tamanho legíveis.");
+    if (prepared.byteLength > MAX_PREPARED_BYTES) throw new Error(`O vídeo preparado tem ${prepared.byteLength} bytes; o Aleph aceita até ${MAX_PREPARED_BYTES}.`);
+
+    // 2. Os quadros, a foto e o recorte do rosto dela.
+    const times = keyframeTimes(seconds);
+    const frames = await audio.frames(prepared, times);
+    const photoObject = await this.media.get(video.image_key);
+    if (!photoObject) throw new Error("A foto do avatar não está no R2.");
+    const photo = await photoObject.arrayBuffer();
+    const photoUrl = `data:${photoObject.httpMetadata?.contentType ?? "image/jpeg"};base64,${base64(photo)}`;
+    const crop = await audio.faceCrop(photo);
+
+    // 3. O rosto trocado em cada quadro, conferido contra o original; o reprovado é refeito uma vez.
+    let prepCost = 0;
+    const keyframe = async (frame: string, at: number): Promise<{ at: number; image: string } | null> => {
+      const original = `data:image/jpeg;base64,${frame}`;
+      for (let attempt = 1; attempt <= FACE_TRIES; attempt++) {
+        const edit = await api.chat({
+          model: FACE_MODEL,
+          modalities: ["image", "text"],
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: facePrompt(crop !== null) },
+                { type: "image_url", image_url: { url: original } },
+                { type: "image_url", image_url: { url: photoUrl } },
+                ...(crop ? [{ type: "image_url" as const, image_url: { url: `data:image/jpeg;base64,${crop}` } }] : []),
+              ],
+            },
+          ],
+        });
+        prepCost += edit.cost;
+        const edited = edit.images[0]?.replace(/^data:[^,]*,/, "");
+        if (!edited) {
+          console.error("Troca do rosto sem imagem", video.id, at, edit.text.slice(0, 300));
+          continue;
+        }
+        const image = await audio.resize(edited, size.width, size.height);
+        const check = await api.chat({
+          model: CHECK_MODEL,
+          temperature: 0,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: CHECK_PROMPT },
+                { type: "image_url", image_url: { url: original } },
+                { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } },
+              ],
+            },
+          ],
+        });
+        prepCost += check.cost;
+        const verdict = parseCheck(check.text);
+        if (verdict && !verdict.fundo) return { at, image };
+        console.error("Quadro-chave reprovado na conferência do fundo", video.id, at, attempt, check.text.slice(0, 300));
+      }
+      return null;
+    };
+    const accepted = (await Promise.all(frames.map((frame, i) => keyframe(frame, times[i]!)))).filter((k): k is { at: number; image: string } => k !== null);
+    if (!accepted.length) throw new Error("Nenhum quadro-chave passou na conferência do fundo.");
+
+    // 4. Os quadros-chave no R2 (o provedor baixa de lá) e o pedido ao Aleph.
+    const keyframes = await Promise.all(
+      accepted.map(async ({ at, image }, i) => {
+        const key = `quadros/${video.id}/${i}.jpg`;
+        const bytes = fromBase64(image);
+        await this.media.put(key, bytes, { httpMetadata: { contentType: "image/jpeg" } });
+        return { seconds: at, uri: await this.imageUrl(key, "image/jpeg", bytes) };
+      }),
+    );
+    const request: VideoRequest = {
+      model: video.model,
+      prompt: video.request_prompt ?? "",
+      input_references: [{ type: "video_url", video_url: { url: await this.imageUrl(preparedKey, "video/mp4", prepared) } }],
+      provider: { options: { runway: { keyframes } } },
+    };
+    if (this.config.siteUrl.startsWith("https://")) request.callback_url = `${this.config.siteUrl}/openrouter/webhook`;
+    const record = {
+      duration: Math.round(seconds),
+      resolution: `${Math.min(size.width, size.height)}p`,
+      aspect_ratio: aspectLabel(size.width, size.height),
+      settings: JSON.stringify({ ...settings, prepared_key: preparedKey, keyframes: String(accepted.length), prep_cost: prepCost.toFixed(4) }),
+    };
+    const job = await api.submit(request);
+    return (await this.db.updateVideo(video.id, { ...record, job_id: job.id, status: job.status ?? "pending", prep_status: "done", prep_error: null }))!;
   }
 
   /** Agendamento: confere os vídeos ainda abertos. */
@@ -305,18 +431,38 @@ export class Studio {
    * Em desenvolvimento (localhost), essa URL não é alcançável de fora: vai o
    * arquivo em base64.
    */
-  private async imageUrl(key: string, type: string, bytes: ArrayBuffer): Promise<string> {
+  private async imageUrl(key: string, type: string, bytes: ArrayBuffer | Uint8Array<ArrayBuffer>): Promise<string> {
     if (this.config.siteUrl.startsWith("https://")) return `${this.config.siteUrl}/midia/${key}`;
-    let binary = "";
-    const view = new Uint8Array(bytes);
-    for (let i = 0; i < view.length; i += 0x8000) binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
-    return `data:${type};base64,${btoa(binary)}`;
+    return `data:${type};base64,${base64(bytes)}`;
   }
 
   private requireApi(): VideoApi {
     if (!this.api) throw new InputError(ERROS.criacaoPausada);
     return this.api;
   }
+}
+
+/** As configurações da estrutura guardadas no vídeo (JSON); ilegíveis, vazias. */
+function parseSettings(json: string | null): Record<string, string> {
+  try {
+    return json ? (JSON.parse(json) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function base64(bytes: ArrayBuffer | Uint8Array<ArrayBuffer>): string {
+  let binary = "";
+  const view = new Uint8Array(bytes);
+  for (let i = 0; i < view.length; i += 0x8000) binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+function fromBase64(text: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(text);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
 }
 
 /** O plano guardado no banco; sem ele, os padrões. */

@@ -12,7 +12,7 @@ cd "$(dirname "$0")"
 
 # Funciona no Linux e no Mac: o sha256sum do Mac não tem --quiet (lá vai o shasum),
 # o tar do Mac não tem --wildcards (ele já aceita o padrão) e pode não haver "pip".
-if sha256sum --version 2>/dev/null | grep -q GNU; then confere() { confere; }; else confere() { shasum -a 256 -c --quiet; }; fi
+if sha256sum --version 2>/dev/null | grep -q GNU; then confere() { sha256sum -c --quiet; }; else confere() { shasum -a 256 -c --quiet; }; fi
 if tar --version | grep -q GNU; then CURINGA=--wildcards; else CURINGA=; fi
 
 DF_VERSAO=0.5.6

@@ -9,8 +9,9 @@ import { planParts, RULES } from "../src/quickedit";
 import { mp4Duration } from "../src/mp4";
 import { estimate } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
+import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
-import { call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
+import { ALEPH_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
@@ -696,6 +697,224 @@ describe("Seedance 2.0", () => {
     const res = await call(postForm("/modelo/seedance", { video: origem(), imagem: foto() }, { cookie: member }), api);
     expect(res.status).toBe(404);
     expect(api.submitted).toHaveLength(0);
+  });
+});
+
+describe("Aleph 2", () => {
+  const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
+  const origem = (seconds = 5.5) => new File([fakeMp4(seconds, { width: 1280, height: 720 })], "cena.mp4", { type: "video/mp4" });
+  const studio = (api: FakeVideoApi, audio: FakeAudioApi) => createStudio({ ...env, SITE_URL: SITE }, { api, audio });
+  async function pedido(api: FakeVideoApi, audio: FakeAudioApi | null, fields: Record<string, string | File> = {}) {
+    return post(api, { video: origem(), imagem: foto(), ...fields }, "aleph", audio);
+  }
+
+  it("quadros-chave espalhados até a duração em segundos inteiros, formato pelo nome comum e a resposta da conferência", () => {
+    expect(keyframeTimes(5.5)).toEqual([0, 1.25, 2.5, 3.75, 5]);
+    expect(keyframeTimes(2.2)).toEqual([0, 0.5, 1, 1.5, 2]);
+    expect(aspectLabel(1078, 1920)).toBe("9:16");
+    expect(aspectLabel(1920, 1080)).toBe("16:9");
+    expect(aspectLabel(1000, 1100)).toBe("1000:1100");
+    expect(parseCheck('```json\n{"fundo": true, "objetos": false, "maos": true, "detalhes": "prateleira nova"}\n```')).toEqual({ fundo: true, objetos: false, maos: true, detalhes: "prateleira nova" });
+    expect(parseCheck("não sei")).toBeNull();
+    expect(parseCheck('{"objetos": true}')).toBeNull();
+  });
+
+  it("lê o tamanho do quadro do MP4", async () => {
+    const { mp4Size } = await import("../src/mp4");
+    expect(mp4Size(fakeMp4(3, { width: 1078, height: 1920 }).buffer)).toEqual({ width: 1078, height: 1920 });
+    expect(mp4Size(fakeMp4(3).buffer)).toBeNull();
+  });
+
+  it("o custo é por segundo (o preço vem em centavos) mais as imagens dos quadros-chave", async () => {
+    expect(ALEPH.prices!(ALEPH_MODEL)).toEqual({ segundo: "0.28" });
+    expect(ALEPH.cost.extra).toBeCloseTo(0.2);
+    const page = await (await get("/modelo/aleph")).text();
+    expect(page).toContain("&quot;extra&quot;:0.2");
+  });
+
+  it("o formulário abre com o uso e pede o vídeo e a foto, sem resolução nem formato", async () => {
+    const page = await (await get("/modelo/aleph")).text();
+    expect(page).toMatch(/<select class="text-field__input" id="uso" name="uso"[^>]*><option value="trocar-avatar" selected/);
+    expect(page).toMatch(/<input type="file" name="video"[^>]* required/);
+    expect(page).toMatch(/<input type="file" name="imagem"[^>]* required/);
+    expect(page).not.toContain('name="resolucao"');
+    expect(page).not.toContain('name="formato"');
+  });
+
+  it("sem contêiner, a troca é recusada antes de guardar qualquer coisa", async () => {
+    const api = new FakeVideoApi();
+    const res = await pedido(api, null);
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain(ERROS.trocaIndisponivel);
+    expect(await new Db(env.DB).recentVideos()).toHaveLength(0);
+  });
+
+  it("ao gerar, guarda o vídeo e a foto e entra na fila de preparo, sem pedir nada ao OpenRouter", async () => {
+    const api = new FakeVideoApi();
+    const res = await pedido(api, new FakeAudioApi(), { instrucoes: "mantém os óculos" });
+    expect(res.status).toBe(303);
+    expect(api.submitted).toHaveLength(0);
+    expect(api.chats).toHaveLength(0);
+    const [video] = await new Db(env.DB).recentVideos();
+    expect(video).toMatchObject({ structure: "aleph", status: "submitting", prep_status: "pending", job_id: null, extra: "mantém os óculos", request_prompt: alephPrompt("mantém os óculos") });
+    const settings = JSON.parse(video!.settings!);
+    expect(settings).toMatchObject({ use: "trocar-avatar", source_seconds: "5.5" });
+    expect(await env.MIDIA.head(settings.source_key)).not.toBeNull();
+    expect(await env.MIDIA.head(video!.image_key!)).not.toBeNull();
+    expect(await (await get("/modelo/aleph", undefined, api)).text()).toContain("Preparando · 0 min");
+  });
+
+  it("o preparo amplia o vídeo, troca o rosto nos 5 quadros, confere o fundo e pede ao Aleph com os quadros-chave", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await pedido(api, audio);
+    const pronto = await studio(api, audio).prepareNext();
+    expect(pronto).toMatchObject({ status: "pending", prep_status: "done", job_id: "job-1", aspect_ratio: "9:16", resolution: "1078p", duration: 6 });
+    expect(audio.prepared).toBe(1);
+    expect(audio.frameTimes).toEqual([[0, 1.25, 2.5, 3.75, 5]]);
+
+    // Troca do rosto com o quadro, a foto e o recorte do rosto; conferência com o quadro original e o trocado.
+    const faces = api.chats.filter((c) => c.model === FACE_MODEL);
+    const checks = api.chats.filter((c) => c.model === CHECK_MODEL);
+    expect(faces).toHaveLength(5);
+    expect(checks).toHaveLength(5);
+    expect(faces[0]!.messages[0]!.content.filter((p) => p.type === "image_url")).toHaveLength(3);
+    expect(checks[0]!.messages[0]!.content.filter((p) => p.type === "image_url")).toHaveLength(2);
+
+    const [req] = api.submitted;
+    expect(req).toMatchObject({ model: "runway/aleph-2", prompt: alephPrompt("") });
+    expect(req!.aspect_ratio).toBeUndefined();
+    expect(req!.duration).toBeUndefined();
+    expect(req!.callback_url).toBe(`${SITE}/openrouter/webhook`);
+    const [source] = req!.input_references! as { type: string; video_url: { url: string } }[];
+    expect(source!.type).toBe("video_url");
+    expect(source!.video_url.url).toBe(`${SITE}/midia/origens/${pronto!.id}.preparado.mp4`);
+    const keyframes = (req!.provider!.options.runway as { keyframes: { seconds: number; uri: string }[] }).keyframes;
+    expect(keyframes.map((k) => k.seconds)).toEqual([0, 1.25, 2.5, 3.75, 5]);
+    expect(keyframes[0]!.uri).toBe(`${SITE}/midia/quadros/${pronto!.id}/0.jpg`);
+
+    // Os quadros-chave ficam públicos para o provedor baixar, já no tamanho do vídeo.
+    const quadro = await call(new Request(keyframes[2]!.uri));
+    expect(quadro.status).toBe(200);
+    expect(await quadro.text()).toBe("quadro-2.5+rosto-1078x1920");
+    const preparado = await call(new Request(source!.video_url.url));
+    expect(preparado.status).toBe(200);
+
+    const settings = JSON.parse(pronto!.settings!);
+    expect(settings).toMatchObject({ keyframes: "5", prep_cost: "0.2050", prepared_key: `origens/${pronto!.id}.preparado.mp4` });
+    const detalhes = await (await get(`/video/${pronto!.id}`, undefined, api)).text();
+    expect(detalhes).toContain('<dt class="qe-result__label">Quadros-chave</dt><dd class="qe-result__value">5 de 5</dd>');
+
+    // Pronto, o custo soma o do Aleph e o das imagens; o áudio não passa pelo contêiner.
+    api.finish("job-1", { status: "completed", usage: { cost: 1.4 } });
+    await studio(api, audio).syncOpen();
+    const [video] = await new Db(env.DB).recentVideos();
+    expect(video!.cost).toBeCloseTo(1.605);
+    expect(video!.audio_status).toBeNull();
+  });
+
+  it("quadro reprovado no fundo é refeito uma vez e, reprovado de novo, fica de fora", async () => {
+    const api = new FakeVideoApi();
+    api.rejectFrames = ["quadro-2.5"];
+    const audio = new FakeAudioApi();
+    await pedido(api, audio);
+    const pronto = await studio(api, audio).prepareNext();
+    expect(api.chats.filter((c) => c.model === FACE_MODEL)).toHaveLength(6);
+    const keyframes = (api.submitted[0]!.provider!.options.runway as { keyframes: { seconds: number }[] }).keyframes;
+    expect(keyframes.map((k) => k.seconds)).toEqual([0, 1.25, 3.75, 5]);
+    expect(JSON.parse(pronto!.settings!).keyframes).toBe("4");
+  });
+
+  it("troca de rosto que volta sem imagem é tentada de novo", async () => {
+    const api = new FakeVideoApi();
+    api.facesWithoutImage = 1;
+    const audio = new FakeAudioApi();
+    await pedido(api, audio);
+    await studio(api, audio).prepareNext();
+    expect(api.chats.filter((c) => c.model === FACE_MODEL)).toHaveLength(6);
+    expect((api.submitted[0]!.provider!.options.runway as { keyframes: unknown[] }).keyframes).toHaveLength(5);
+  });
+
+  it("sem rosto na foto, a troca vai só com a foto inteira", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    audio.noFace = true;
+    await pedido(api, audio);
+    await studio(api, audio).prepareNext();
+    expect(api.chats.find((c) => c.model === FACE_MODEL)!.messages[0]!.content.filter((p) => p.type === "image_url")).toHaveLength(2);
+  });
+
+  it("se nenhum quadro passar ou o contêiner falhar, o vídeo vira falha sem pedir ao Aleph", async () => {
+    const api = new FakeVideoApi();
+    api.rejectFrames = keyframeTimes(5.5).map((t) => `quadro-${t}`);
+    const audio = new FakeAudioApi();
+    await pedido(api, audio);
+    const falhou = await studio(api, audio).prepareNext();
+    expect(falhou).toMatchObject({ status: "failed", prep_status: "failed" });
+    expect(falhou!.error).toContain("Nenhum quadro-chave");
+    expect(api.submitted).toHaveLength(0);
+    // Na tela, a frase do catálogo; o motivo técnico fica no banco.
+    const pagina = await (await get(`/video/${falhou!.id}`, undefined, api)).text();
+    expect(pagina).toContain(ERROS.videoFalhou);
+    expect(pagina).not.toContain("Nenhum quadro-chave");
+
+    const api2 = new FakeVideoApi();
+    const audio2 = new FakeAudioApi();
+    audio2.fail = "ffmpeg quebrou";
+    await pedido(api2, audio2);
+    expect(await studio(api2, audio2).prepareNext()).toMatchObject({ status: "failed", prep_status: "failed", error: expect.stringContaining("ffmpeg quebrou") });
+  });
+
+  it("um preparo por rodada; sem fila, nada acontece", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await pedido(api, audio);
+    await pedido(api, audio);
+    expect(await studio(api, audio).prepareNext()).not.toBeNull();
+    expect(api.submitted).toHaveLength(1);
+    expect(await studio(api, audio).prepareNext()).not.toBeNull();
+    expect(await studio(api, audio).prepareNext()).toBeNull();
+    expect(api.submitted).toHaveLength(2);
+  });
+
+  it("preparo que não termina em 20 minutos vira falha", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await pedido(api, audio);
+    const db = new Db(env.DB);
+    const inicio = new Date();
+    await db.claimPrep(inicio.toISOString());
+    await studio(api, audio).prepareNext(new Date(inicio.getTime() + 21 * 60_000));
+    const [video] = await db.recentVideos();
+    expect(video).toMatchObject({ status: "failed", prep_status: "failed" });
+    expect(api.submitted).toHaveLength(0);
+  });
+
+  it("recusa uso fora da lista, sem vídeo, vídeo longo e sem foto", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    const casos: [Record<string, string | File>, string][] = [
+      [{ uso: "inventado" }, ERROS.uso],
+      [{ video: "" }, ERROS.videoOrigem],
+      [{ video: origem(40) }, ERROS.videoDuracao(2, 30)],
+      [{ imagem: "" }, ERROS.foto],
+    ];
+    for (const [fields, erro] of casos) {
+      const res = await pedido(api, audio, fields);
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(erro);
+    }
+    expect(await new Db(env.DB).recentVideos()).toHaveLength(0);
+  });
+
+  it("conta comum não vê nem usa o Aleph", async () => {
+    const api = new FakeVideoApi();
+    const member = await memberCookie();
+    expect(await (await get("/", member)).text()).not.toContain("/modelo/aleph");
+    expect((await get("/modelo/aleph", member)).status).toBe(404);
+    const res = await call(postForm("/modelo/aleph", { video: origem(), imagem: foto() }, { cookie: member }), api, new FakeAudioApi());
+    expect(res.status).toBe(404);
+    expect(await new Db(env.DB).recentVideos()).toHaveLength(0);
   });
 });
 

@@ -141,9 +141,9 @@ Próximos passos:
 1. Testar com um vídeo de origem nítido, em 1080p de verdade (o teto de
    qualidade hoje é o vídeo de origem; quadros-chave em 2K não melhoraram e um
    deles criou um erro no fundo; vale a receita do terceiro teste).
-2. Estrutura nova para o Aleph 2 com a receita (o contêiner corta e amplia o
-   vídeo e tira os quadros; o Worker troca o rosto neles e faz o pedido). O
-   Seedance fica como está, para outros usos.
+2. Estrutura do Aleph 2 feita (`src/structures/aleph.ts`, só o administrador):
+   falta publicar (migration 0009 e o contêiner novo) e gerar o primeiro vídeo
+   pelo site. O Seedance fica como está, para outros usos.
 3. Botão "Trocar avatar" na página do vídeo, que abre o formulário já com
    aquele vídeo.
 

@@ -87,6 +87,7 @@ export const ERROS = {
   edicaoDemorou: erro("A edição demorou demais.", "Toque em Gerar editado para tentar de novo."),
   edicaoEmAndamento: erro("Este vídeo já está sendo editado.", "Aguarde terminar."),
   edicaoIndisponivel: erro("Edição indisponível agora.", "Tente mais tarde."),
+  trocaIndisponivel: erro("Troca de avatar indisponível agora.", "Tente mais tarde."),
   semEdicaoRapida: erro("Este modelo não tem edição rápida.", "Escolha um vídeo de outro modelo."),
   videoNaoPronto: erro("Este vídeo ainda não está pronto.", "Aguarde terminar."),
   audioEmTratamento: erro("O áudio ainda está sendo tratado.", "Aguarde terminar."),

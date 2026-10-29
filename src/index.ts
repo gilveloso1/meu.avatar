@@ -78,6 +78,8 @@ export default {
   // Rede de segurança: confere os vídeos que ainda estão na fila, caso o aviso se perca.
   async scheduled(_controller, env): Promise<void> {
     const studio = createStudio(env);
+    // A troca de avatar pelo Aleph 2 prepara um vídeo e o envia; depois, os da fila.
+    await studio.prepareNext();
     await studio.syncOpen();
     // Depois de buscar os prontos, trata o áudio de um vídeo da fila e faz uma edição rápida pedida.
     await studio.treatNextAudio();

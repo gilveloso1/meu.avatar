@@ -11,8 +11,9 @@
  *                  escolhido (?video=<id>) com a caixa da fala, e os vídeos
  *                  dele; o POST gera o vídeo
  *
- * Tudo pede sessão, menos /midia/avatares/... e /midia/origens/... (a foto e o
- * vídeo de origem), que o provedor de vídeo precisa baixar. Segurança como no painel do estuda.mais: cookie __Host- (HttpOnly,
+ * Tudo pede sessão, menos /midia/avatares/..., /midia/origens/... e
+ * /midia/quadros/... (a foto, o vídeo de origem e os quadros-chave do Aleph 2),
+ * que o provedor de vídeo precisa baixar. Segurança como no painel do estuda.mais: cookie __Host- (HttpOnly,
  * Secure, SameSite=Strict), todo POST precisa vir do próprio site (cabeçalho
  * Origin), páginas sem cache e sem abrir dentro de outros sites, e o script
  * da página só roda com o nonce da CSP.
@@ -43,7 +44,7 @@ const REFRESH_SECONDS = 20;
 const ICONS = [
   "add", "apps", "auto_awesome", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "calendar_today", "check", "check_circle", "checkroom", "chevron_left", "chevron_right",
   "close", "content_copy", "content_cut", "crop_square", "download", "edit", "error", "face", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq",
-  "grid_view", "hd", "hourglass_top", "info", "lock", "logout", "more_vert", "movie", "notes", "palette", "pause", "payments", "person_add", "play_arrow",
+  "grid_view", "hd", "hourglass_top", "info", "lock", "logout", "more_vert", "movie", "notes", "palette", "pause", "payments", "person_add", "photo_library", "play_arrow",
   "record_voice_over", "refresh", "replay", "schedule", "search", "send", "swap_vert", "switch_account", "translate", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
@@ -87,8 +88,8 @@ export class Site {
     const post = request.method === "POST";
     if (!post && request.method !== "GET" && request.method !== "HEAD") return new Response("método não permitido", { status: 405 });
 
-    // A foto do avatar e o vídeo de origem são baixados pelo provedor de vídeo, sem login.
-    if (!post && (path.startsWith("/midia/avatares/") || path.startsWith("/midia/origens/"))) {
+    // A foto do avatar, o vídeo de origem e os quadros-chave são baixados pelo provedor de vídeo, sem login.
+    if (!post && (path.startsWith("/midia/avatares/") || path.startsWith("/midia/origens/") || path.startsWith("/midia/quadros/"))) {
       return this.object(request, path.slice("/midia/".length), "public, max-age=86400");
     }
 
@@ -236,6 +237,7 @@ export class Site {
       seconds: structure.cost.seconds,
       rate: structure.wordsPerSecond,
       durations: model?.supported_durations ?? null,
+      extra: structure.cost.extra ?? 0,
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const videos = await this.db.videosByStructure(structure.id);
@@ -534,6 +536,10 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
     const since = minutes(v.edit_status === "processing" ? v.edit_started_at : v.updated_at);
     return { label: `Editando o vídeo · ${since} min`, icon: "content_cut", kind: "busy" };
   }
+  if (v.status === "submitting" && (v.prep_status === "pending" || v.prep_status === "processing")) {
+    // A troca de avatar pelo Aleph 2 prepara o vídeo e os quadros-chave antes do envio.
+    return { label: `Preparando · ${minutes(v.created_at)} min`, icon: "auto_awesome", kind: "busy" };
+  }
   const status = STATUS[v.status];
   // Na fila: quanto tempo já passou, para não parecer travado (720p leva uns 10 min).
   return status.kind === "busy" ? { ...status, label: `${status.label} · ${minutes(v.created_at)} min` } : status;
@@ -684,7 +690,7 @@ const FREE_TEXT = new Set(["Movimento", "Instruções extras"]);
 /** Ícone de cada linha dos detalhes do vídeo (precisa estar em ICONS); o que faltar usa "info". */
 const DETAIL_ICONS: Record<string, string> = {
   Modelo: "movie", Voz: "record_voice_over", Expressividade: "face", Movimento: "gesture",
-  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", "Vídeo de origem": "videocam", Roupa: "checkroom", Uso: "auto_awesome",
+  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", "Vídeo de origem": "videocam", Roupa: "checkroom", Uso: "auto_awesome", "Quadros-chave": "photo_library",
   Duração: "schedule", Resolução: "hd", Formato: "aspect_ratio", Custo: "payments", "Criado em": "calendar_today",
 };
 
@@ -1380,7 +1386,7 @@ const SCRIPT = `(() => {
       const s = fixed || (n ? Math.max(1, Math.round(n / mid)) : 0);
       const price = Number(cfg.prices[cfg.sku.replace(/\\{(\\w+)\\}/g, (_, k) => val(k))]);
       for (const e of f.querySelectorAll("[data-seconds]")) e.textContent = s ? (fixed ? "" : "≈ ") + s + " s" : "—";
-      for (const e of f.querySelectorAll("[data-cost]")) e.textContent = price && s ? "US$ " + (price * s).toFixed(2) : "—";
+      for (const e of f.querySelectorAll("[data-cost]")) e.textContent = price && s ? "US$ " + (price * s + cfg.extra).toFixed(2) : "—";
       if (!speech) {
         // Sem fala escrita (troca de avatar): nada de contador.
       } else if (fixed) {

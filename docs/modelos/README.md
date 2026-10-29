@@ -27,6 +27,7 @@ caminho no R2).
 | [Wan 3.0](wan-3.0.md) (`alibaba/wan-3.0`) | Avatar falando, a partir da foto e da fala | No ar | `wan.ts` |
 | [HeyGen Avatar IV](heygen-avatar-iv.md) (`heygen/avatar-iv`) | Avatar falando, voz pronta da HeyGen | Em teste | `heygen.ts` |
 | [Seedance 2.0](seedance-2.0.md) (`bytedance/seedance-2.0`) | Trocar avatar (vídeo + foto) | **Bloqueado** para vídeo com rosto realista | `seedance.ts` |
-| [Runway Aleph 2](runway-aleph-2.md) (`runway/aleph-2`) | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | Em teste, pelo terminal: a receita do terceiro teste troca o avatar e mantém o áudio. ≈ US$ 1,65 por 5,5 s | — |
-| [Gemini Nano Banana 2.1](gemini-nano-banana-2.1.md) (`google/gemini-nano-banana-2.1`) | Trocar o rosto nos quadros-chave do Aleph 2 | Em teste, pelo terminal | — |
+| [Runway Aleph 2](runway-aleph-2.md) (`runway/aleph-2`) | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | Em teste: a receita do terceiro teste troca o avatar e mantém o áudio. ≈ US$ 1,65 por 5,5 s | `aleph.ts` |
+| [Gemini Nano Banana 2.1](gemini-nano-banana-2.1.md) (`google/gemini-nano-banana-2.1`) | Trocar o rosto nos quadros-chave do Aleph 2 | Em teste, dentro do `aleph.ts` | — |
+| `anthropic/claude-haiku-5.5` | Conferir o fundo dos quadros-chave do Aleph 2 | Em teste, dentro do `aleph.ts` (ver [runway-aleph-2.md](runway-aleph-2.md)) | — |
 | [Higgsfield Genjutsu](higgsfield-genjutsu.md) (fora do OpenRouter) | Trocar avatar | Não testado | — |
