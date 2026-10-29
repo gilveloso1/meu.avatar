@@ -116,16 +116,25 @@ function render({ side = true } = {}) {
       el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="ms blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="ms blk__mute">volume_off</span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
       world.append(el);
       blockEls.set(b.id, el);
-      thumb(b).then((u) => u && ($(".blk__media", el).style.backgroundImage = `url("${u}")`));
+      thumb(b).then((u) => {
+        if (!u) return;
+        const m = $(".blk__media", el);
+        // O áudio é uma máscara: a onda pega a cor do bloco.
+        if (b.kind === "audio") m.style.maskImage = m.style.webkitMaskImage = `url("${u}")`;
+        else m.style.backgroundImage = `url("${u}")`;
+      });
     }
     const g = idx.get(b.id);
     const role = g?.covers.includes(b) ? "cover" : g?.audios.includes(b) && !g.soloAudio ? "under" : "";
     el.className = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""}`;
     Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${M.width(b)}px`, height: `${M.height(b)}px` });
+    const tipo = { video: "video", image: "imagem", audio: "audio" }[b.kind];
+    el.style.setProperty("--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
+    el.style.setProperty("--on", `var(--bloco-${tipo}-on)`);
     const media = $(".blk__media", el);
     if (b.kind === "audio") {
-      media.style.backgroundSize = `${b.dur * M.PX}px 100%`;
-      media.style.backgroundPosition = `${-b.tin * M.PX}px 0`;
+      media.style.maskSize = media.style.webkitMaskSize = `${b.dur * M.PX}px 100%`;
+      media.style.maskPosition = media.style.webkitMaskPosition = `${-b.tin * M.PX}px 0`;
     }
     $(".blk__kind", el).textContent = { video: "movie", image: "image", audio: "music_note" }[b.kind];
     $(".blk__name", el).textContent = b.name;
@@ -285,7 +294,7 @@ async function importFiles(files, at) {
   for (const file of files) {
     try {
       const { src, kind, dur } = await probe(file);
-      const b = { id: M.newId("b"), kind, name: file.name.replace(/\.[^.]+$/, ""), src, dur: kind === "image" ? M.IMAGE_MAX : dur, tin: 0, tout: Math.min(dur, kind === "image" ? 3 : dur), x: at.x, y, mute: false, vol: 1 };
+      const b = { id: M.newId("b"), tone: M.nextTone(project, kind, src), kind, name: file.name.replace(/\.[^.]+$/, ""), src, dur: kind === "image" ? M.IMAGE_MAX : dur, tin: 0, tout: Math.min(dur, kind === "image" ? 3 : dur), x: at.x, y, mute: false, vol: 1 };
       project.blocks.push(b);
       sel = { type: "block", id: b.id };
       y += M.height(b) + 48;

@@ -1,5 +1,5 @@
 // Monta os protótipos em dist/<nome>/: um index.html com o script e o CSS
-// embutidos, mais a mídia de exemplo (e, no tldraw, os arquivos dele).
+// embutidos, mais a mídia de exemplo.
 import { build } from "esbuild";
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -10,16 +10,12 @@ const THEME = `:root {${block("LIGHT")}}
 :root[data-theme="dark"] {${block("DARK")} color-scheme: dark; }`;
 const ESTILO = readFileSync("comum/estilo.css", "utf8");
 
-async function page(name, entry, extra = {}) {
+async function page(name, entry) {
   const out = await build({
     entryPoints: [entry],
     bundle: true,
     format: "esm",
     write: false,
-    minify: !!extra.minify,
-    jsx: "automatic",
-    loader: { ".css": "text" },
-    define: extra.define ?? {},
     legalComments: "none",
   });
   const js = out.outputFiles[0].text.replace(/<\/script/gi, "<\\/script");
@@ -34,12 +30,3 @@ async function page(name, entry, extra = {}) {
 }
 
 await page("proprio", "proprio/canvas.js");
-if (process.argv.includes("--tldraw") || !process.argv.includes("--proprio")) {
-  // Em produção sem chave o tldraw para de desenhar: o protótipo roda no modo
-  // de desenvolvimento dele, o que basta para avaliar.
-  await page("tldraw", "tldraw/main.jsx", { minify: true, define: { "process.env.NODE_ENV": '"development"' } });
-  const A = "node_modules/@tldraw/assets";
-  for (const f of ["icons/icon/0_merged.svg", "translations/pt-br.json", "translations/en.json", "translations/languages.json", "translations/main.json"])
-    cpSync(`${A}/${f}`, `dist/tldraw/tl/${f}`);
-  for (const d of ["fonts", "embed-icons"]) cpSync(`${A}/${d}`, `dist/tldraw/tl/${d}`, { recursive: true });
-}

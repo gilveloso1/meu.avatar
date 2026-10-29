@@ -39,11 +39,19 @@ menos custo.
 - O canvas tem de atender a essas exigências antes de qualquer escolha de
   construção (código próprio ou biblioteca, a combinar com o dono).
 
+## Construção e visual (29/10/2026)
+
+- **Código próprio**, sem biblioteca (DOM e SVG, como o resto do site), escolhido
+  pelo dono depois de comparar com o tldraw. O protótipo está em
+  [prototipos/canvas/](../prototipos/canvas/README.md).
+- **Visual e cores do M3.** Blocos do mesmo tipo têm a mesma cor e variam no tom
+  para diferenciar: vídeo na paleta primária, imagem na secundária, áudio na
+  terciária, 6 tons cada (`--bloco-<tipo>-<1 a 6>` e `--bloco-<tipo>-on`,
+  gerados por `npm run tema`). O mesmo arquivo repete o tom; arquivo novo pega
+  o tom menos usado do tipo. O bloco final vai em primary.
+
 ## Em aberto
 
-- Construção: código próprio ou biblioteca. Os dois protótipos estão em
-  [prototipos/canvas/](../prototipos/canvas/README.md), com o que se viu;
-  falta o dono escolher.
 - Prévia no navegador: funciona nos protótipos (um elemento de mídia por
   trecho, desenhados num canvas 9:16).
 - Esboço da tela no canvas de design, para aprovar.

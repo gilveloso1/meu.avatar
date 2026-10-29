@@ -21,63 +21,72 @@
 .wire--temp { stroke: var(--md-sys-color-primary); stroke-dasharray: 6 4; }
 .wire-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
 
+/* Blocos: a cor é do tipo (vídeo na primária, imagem na secundária, áudio na
+   terciária) e o tom diferencia um arquivo do outro (--c e --on vêm do script). */
 .blk {
   position: absolute; box-sizing: border-box; border-radius: 12px; overflow: hidden; cursor: grab;
-  background: var(--md-sys-color-surface-container-highest);
+  background: var(--c); color: var(--on);
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
 }
 .blk:active { cursor: grabbing; }
-.blk__media { position: absolute; inset: 0; background-repeat: repeat-x; background-size: auto 100%; }
-.blk--audio { background: var(--md-sys-color-tertiary-container); border-radius: 8px; }
-.blk--audio .blk__media { background-repeat: no-repeat; opacity: 0.7; }
+.blk__label {
+  position: absolute; left: 0; right: 0; top: 0; height: 28px; display: flex; align-items: center; gap: 4px;
+  padding: 0 8px; font: 500 12px/16px var(--font); letter-spacing: 0.5px; pointer-events: none; white-space: nowrap;
+}
+.blk__media {
+  position: absolute; left: 4px; right: 4px; top: 28px; bottom: 4px; border-radius: 8px;
+  background-repeat: repeat-x; background-size: auto 100%; background-color: color-mix(in srgb, var(--on) 12%, transparent);
+}
+.blk--audio { border-radius: 8px; }
+.blk--audio .blk__label { height: 20px; }
+.blk--audio .blk__media {
+  left: 0; right: 0; top: 18px; bottom: 2px; border-radius: 0; background: var(--on); opacity: 0.45;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+}
 .blk--cover { border-radius: 12px 12px 4px 4px; }
 .blk--under { border-radius: 4px 4px 8px 8px; }
-.blk.is-sel { outline: 3px solid var(--md-sys-color-primary); outline-offset: 1px; }
-.blk.is-mute .blk__media { filter: grayscale(0.6); }
-.blk__label {
-  position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 4px;
-  padding: 4px 8px; font: 500 12px/16px var(--font); color: #fff;
-  background: linear-gradient(transparent, rgb(0 0 0 / 0.65)); pointer-events: none; white-space: nowrap;
-}
-.blk--audio .blk__label { top: 0; bottom: auto; background: none; color: var(--md-sys-color-on-tertiary-container); }
+.blk.is-sel { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+.blk.is-mute .blk__media { opacity: 0.4; }
 .blk__kind { font-size: 16px; }
 .blk__name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.blk__dur { margin-left: auto; font-variant-numeric: tabular-nums; opacity: 0.85; }
+.blk__dur { margin-left: auto; font-variant-numeric: tabular-nums; }
 .blk__mute { font-size: 16px; display: none; }
 .blk.is-mute .blk__mute { display: inline-block; }
 .trim { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; z-index: 2; }
 .trim--l { left: 0; }
 .trim--r { right: 0; }
-.trim::after { content: ""; position: absolute; top: 30%; bottom: 30%; width: 4px; border-radius: 2px; background: #fff; opacity: 0; transition: opacity 0.15s; box-shadow: 0 0 2px rgb(0 0 0 / 0.6); }
+.trim::after { content: ""; position: absolute; top: 30%; bottom: 30%; width: 4px; border-radius: 2px; background: var(--on); opacity: 0; transition: opacity 0.15s; }
 .trim--l::after { left: 3px; }
 .trim--r::after { right: 3px; }
-.blk:hover .trim::after, .blk.is-sel .trim::after { opacity: 0.9; }
+.blk:hover .trim::after, .blk.is-sel .trim::after { opacity: 0.8; }
 
+/* Aba do grupo (como um chip de assistência), portas e o bloco final. */
 #chrome { position: absolute; left: 0; top: 0; }
 .gtab {
   position: absolute; height: 24px; display: flex; align-items: center; gap: 2px; padding: 0 10px 0 4px;
-  border-radius: 8px; background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface-variant);
-  font: 500 12px/16px var(--font); white-space: nowrap; cursor: grab; box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  border-radius: 8px; background: var(--md-sys-color-surface-container-lowest); color: var(--md-sys-color-on-surface-variant);
+  border: 1px solid var(--md-sys-color-outline-variant); box-sizing: border-box;
+  font: 500 12px/16px var(--font); letter-spacing: 0.5px; white-space: nowrap; cursor: grab;
 }
+.gtab:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, var(--md-sys-color-surface-container-lowest)); }
 .gtab .ms { font-size: 18px; }
-.gtab.is-sel { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.gtab.is-sel { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); border-color: transparent; }
 .port {
   position: absolute; width: 18px; height: 18px; box-sizing: border-box; border-radius: 50%; z-index: 3;
-  background: var(--md-sys-color-surface); border: 3px solid var(--md-sys-color-primary);
+  background: var(--md-sys-color-surface-container-lowest); border: 2px solid var(--md-sys-color-outline);
 }
-.port--out { cursor: crosshair; }
+.port--out { cursor: crosshair; border-color: var(--md-sys-color-primary); }
 .port--out:hover { background: var(--md-sys-color-primary); }
-.port--in { border-color: var(--md-sys-color-outline); pointer-events: auto; }
 .fin {
   position: absolute; width: 180px; height: 80px; box-sizing: border-box; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-content: center; column-gap: 12px;
   padding: 0 16px; border-radius: 16px; cursor: grab;
-  background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+  background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
 }
-.fin .ms { grid-row: span 2; font-size: 28px; align-self: center; }
-.fin b { font: 500 16px/24px var(--font); }
-.fin span:last-child { font: 400 14px/20px var(--font); }
-.fin.is-sel { outline: 3px solid var(--md-sys-color-primary); outline-offset: 2px; }
+.fin .ms { grid-row: span 2; font-size: 24px; align-self: center; }
+.fin b { font: 500 16px/24px var(--font); letter-spacing: 0.15px; }
+.fin span:last-child { font: 400 14px/20px var(--font); letter-spacing: 0.25px; }
+.fin.is-sel { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
 
 .tip {
   position: absolute; left: 16px; bottom: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 4px 16px;

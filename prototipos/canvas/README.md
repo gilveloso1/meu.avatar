@@ -1,13 +1,11 @@
 # Protótipos do canvas de edição
 
-Dois protótipos das partes difíceis do [canvas de edição](../../docs/canvas.md),
-fora do site, sem banco e sem gastar créditos. A mesma lógica (`comum/`) e o
-mesmo exemplo (3 ganchos → corpo com b-roll, produto e música → 2 CTAs → final,
-6 versões) nos dois; muda só quem desenha o canvas e trata os gestos.
+Protótipo das partes difíceis do [canvas de edição](../../docs/canvas.md),
+fora do site, sem banco e sem gastar créditos, com um exemplo de 3 ganchos →
+corpo com b-roll, produto e música → 2 CTAs → final (6 versões).
 
-- `proprio/`: código próprio (DOM e SVG, sem biblioteca), como o resto do site.
-- `tldraw/`: com o tldraw 5.5 (React). Blocos são uma forma própria, ligações
-  são as setas dele.
+- `proprio/`: o canvas com código próprio (DOM e SVG, sem biblioteca), como o
+  resto do site. É o escolhido.
 - `comum/modelo.js`: grupos, coberturas, versões e a linha do tempo, tirados só
   da posição dos blocos (testes em `comum/testes.js`, fora do vitest do site).
 - `comum/player.js`: a prévia de uma versão no navegador, sem montar arquivo.
@@ -18,12 +16,15 @@ mesmo exemplo (3 ganchos → corpo com b-roll, produto e música → 2 CTAs → 
 cd prototipos/canvas
 npm install
 npm run midia    # vídeos de exemplo (ffmpeg) em midia/
-npm run build    # dist/proprio e dist/tldraw
+npm run build    # dist/proprio
 npm run teste
 python3 -m http.server -d dist 8765   # http://localhost:8765/proprio/
 ```
 
-## O que se viu (29/10/2026)
+## Código próprio ou tldraw (29/10/2026)
+
+Houve um segundo protótipo com o tldraw 5.5 (no histórico do git, pasta
+`tldraw/`), com a mesma lógica. O dono escolheu o código próprio.
 
 - **Os dois fazem o que o canvas pede**: juntar encostando, cobrir soltando
   em cima, somar som embaixo, cortar pelas pontas (o que vem depois acompanha),

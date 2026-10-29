@@ -4,7 +4,6 @@
   --font: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
   --sheet: 360px;
   --bar: 64px;
-  --wave: var(--md-sys-color-on-tertiary-container);
   --dot: var(--md-sys-color-outline-variant);
 }
 [hidden] { display: none !important; }

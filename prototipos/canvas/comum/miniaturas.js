@@ -43,7 +43,7 @@ async function wave(src, dur) {
   c.width = Math.max(40, Math.round(dur * 24));
   c.height = 40;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--wave").trim() || "#555";
+  ctx.fillStyle = "#000";
   const step = Math.floor(data.length / c.width);
   for (let x = 0; x < c.width; x++) {
     let peak = 0;

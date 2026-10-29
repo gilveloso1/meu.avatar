@@ -4,7 +4,8 @@
  *
  * Projeto: { blocks, finals, edges }
  *   bloco: { id, kind: "video" | "image" | "audio", name, src, dur, tin, tout,
- *            x, y, mute, vol }   (dur: duração do arquivo; tin/tout: o corte)
+ *            x, y, mute, vol, tone }   (dur: duração do arquivo; tin/tout: o
+ *            corte; tone: 1 a TONES, o tom da cor do tipo)
  *   final: { id, x, y }
  *   linha: { id, from, to }      (from: um bloco do grupo de saída;
  *                                 to: um bloco do grupo de entrada ou um final)
@@ -25,6 +26,7 @@ export const AUD_H = 40;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
 export const MAX_VERSOES = 200;
+export const TONES = 6;
 const EPS = 1;
 
 export const len = (b) => b.tout - b.tin;
@@ -270,24 +272,36 @@ export function removeItems(project, ids) {
   return p;
 }
 
+/**
+ * Tom de um bloco novo: o mesmo arquivo repete o tom (é o mesmo trecho);
+ * arquivo novo pega o tom menos usado entre os blocos do mesmo tipo.
+ */
+export function nextTone(project, kind, src) {
+  const same = project.blocks.filter((b) => b.kind === kind);
+  const twin = same.find((b) => b.src === src);
+  if (twin) return twin.tone;
+  const use = Array.from({ length: TONES }, (_, i) => same.filter((b) => b.tone === i + 1).length);
+  return use.indexOf(Math.min(...use)) + 1;
+}
+
 let seq = 0;
 export const newId = (prefix) => `${prefix}${Date.now().toString(36)}${(seq++).toString(36)}`;
 
 /** O exemplo: 3 ganchos → corpo (com b-roll, produto e música) → 2 CTAs → final. */
 export function sample(media) {
-  const v = (id, name, file, dur, x, y, extra = {}) => ({
-    id, kind: "video", name, src: media(file), dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, ...extra,
+  const v = (id, name, file, dur, x, y, tone, extra = {}) => ({
+    id, kind: "video", tone, name, src: media(file), dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, ...extra,
   });
   const blocks = [
-    v("g1", "Gancho 1", "gancho-1.mp4", 3, 0, 0),
-    v("g2", "Gancho 2", "gancho-2.mp4", 3, 0, 192),
-    v("g3", "Gancho 3", "gancho-3.mp4", 4, 0, 384),
-    v("corpo", "Corpo", "corpo.mp4", 8, 400, 192),
-    { id: "produto", kind: "image", name: "Produto", src: media("produto.jpg"), dur: IMAGE_MAX, tin: 0, tout: 2, x: 720, y: 192, mute: false, vol: 1 },
-    v("broll", "B-roll", "broll.mp4", 4, 480, 96, { tout: 3, mute: true }),
-    { id: "musica", kind: "audio", name: "Música", src: media("musica.mp3"), dur: 16, tin: 0, tout: 10, x: 400, y: 288, mute: false, vol: 0.35 },
-    v("ctaa", "CTA A", "cta-a.mp4", 3, 960, 64),
-    v("ctab", "CTA B", "cta-b.mp4", 3, 960, 320),
+    v("g1", "Gancho 1", "gancho-1.mp4", 3, 0, 0, 1),
+    v("g2", "Gancho 2", "gancho-2.mp4", 3, 0, 192, 2),
+    v("g3", "Gancho 3", "gancho-3.mp4", 4, 0, 384, 3),
+    v("corpo", "Corpo", "corpo.mp4", 8, 400, 192, 5),
+    { id: "produto", kind: "image", tone: 3, name: "Produto", src: media("produto.jpg"), dur: IMAGE_MAX, tin: 0, tout: 2, x: 720, y: 192, mute: false, vol: 1 },
+    v("broll", "B-roll", "broll.mp4", 4, 480, 96, 2, { tout: 3, mute: true }),
+    { id: "musica", kind: "audio", tone: 4, name: "Música", src: media("musica.mp3"), dur: 16, tin: 0, tout: 10, x: 400, y: 288, mute: false, vol: 0.35 },
+    v("ctaa", "CTA A", "cta-a.mp4", 3, 960, 64, 4),
+    v("ctab", "CTA B", "cta-b.mp4", 3, 960, 320, 6),
   ];
   const e = (from, to) => ({ id: `e-${from}-${to}`, from, to });
   return {
