@@ -25,7 +25,7 @@ caminho no R2).
 | `alibaba/wan-3.0` | Avatar falando, a partir da foto e da fala | No ar | `wan.ts` |
 | `heygen/avatar-iv` | Avatar falando, voz pronta da HeyGen | Em teste | `heygen.ts` |
 | `bytedance/seedance-2.0` | Trocar avatar (vídeo + foto) | **Bloqueado** para vídeo com rosto realista | `seedance.ts` |
-| `runway/aleph-2` | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | Em teste, pelo terminal: troca o avatar quando o rosto está grande e nítido; mantém o áudio | — |
+| `runway/aleph-2` | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | Em teste, pelo terminal: troca o avatar quando o rosto está grande e nítido (vídeo ampliado); mantém o áudio. ≈ US$ 1,70 por 5,5 s | — |
 | `google/gemini-nano-banana-2.1` | Trocar o rosto no primeiro quadro (ajuda o Aleph 2) | Em teste, pelo terminal | — |
 
 ## Wan 3.0 (`alibaba/wan-3.0`)
@@ -177,8 +177,28 @@ imagens do OpenRouter, `POST /api/v1/images` com `resolution` e
 | `qwen/qwen-image-3-pro` | 1152×2048 | US$ 0,08 | 134 s | Mudou a mão, o enquadramento, o cabelo e a luz: não serve como quadro-chave |
 
 Escolhido: **`gemini-nano-banana-2.1` em 2K pela API de imagens** (5 quadros ≈
-US$ 0,30). Falta um teste do Aleph com esses quadros para ver se o rosto fica
-ainda mais firme.
+US$ 0,30).
+
+Quarto teste, 29/10/2026 (job pronto às 00:20): o mesmo do terceiro, com os
+quadros-chave em 2K (ampliados de 1536×2752 e reduzidos a 1080×1920).
+
+- O banana em 2K ainda muda o que não devia em alguns quadros: tirou o frasco
+  da frente do rosto (0 s) e abriu os olhos de quem olhava para baixo
+  (4,05 s). Refazer com a instrução explícita resolveu os olhos, não o frasco
+  (o modelo evita cobrir o rosto); no de 0 s ficou o quadro de 768 px do
+  terceiro teste. **Conferir cada quadro contra o original é parte da receita.**
+- **Custo real: US$ 1,40** mais US$ 0,42 de imagens (7 gerações).
+- Áudio original intacto (0,9999).
+- **Resultado: quase igual ao terceiro teste.** Lado a lado, o rosto é o mesmo;
+  a nitidez medida no rosto subiu pouco (variância do laplaciano de 13–16 para
+  16–18 no meio do vídeo). Nos sorrisos ainda puxa um pouco para o original.
+
+**Conclusão:** acima de uns 768 px, a resolução dos quadros-chave quase não
+muda o resultado. O teto agora é o vídeo de origem: a parte com o rosto tinha
+só 406×720 e foi ampliada; um vídeo de origem nítido, em 1080p de verdade,
+deve render mais que qualquer ajuste nos quadros. Para a estrutura: banana em
+2K (mesmo preço por qualidade) ou em 1K pelo chat (mais barato), com conferência
+de cada quadro.
 
 ## Fora do OpenRouter: Higgsfield Genjutsu (não testado)
 

@@ -138,8 +138,8 @@ o avatar. Receita, custos e testes em [docs/modelos.md](modelos.md).
 
 Próximos passos:
 
-1. Ver se 3 quadros-chave bastam e se um modelo de imagem com saída maior
-   melhora o rosto.
+1. Testar com um vídeo de origem nítido, em 1080p de verdade (o teto de
+   qualidade hoje é o vídeo de origem; quadros-chave em 2K quase não mudaram).
 2. Estrutura nova para o Aleph 2 com a receita (o contêiner corta e amplia o
    vídeo e tira os quadros; o Worker troca o rosto neles e faz o pedido). O
    Seedance fica como está, para outros usos.
