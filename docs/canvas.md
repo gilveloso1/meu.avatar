@@ -1,7 +1,6 @@
-# Canvas de edição (proposto, 29/10/2026)
+# Canvas de edição
 
-O que o dono descreveu, para virar esboço e depois PRs. Ainda sem tela
-aprovada nem código.
+O que o dono descreveu (29/10/2026) e o que já está no site.
 
 ## Ideia
 
@@ -63,6 +62,8 @@ menos custo.
   bloco escolhido tem o botão de tocar no meio; o chip do grupo também. A prévia
   toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo; a
   linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
+  Clicar num ponto vazio dentro da área de um grupo escolhe o grupo e leva a linha
+  de reprodução até ali; o tocar (ou o Espaço) toca dali.
 - **Áudio do vídeo**: todo vídeo com som mostra o próprio áudio numa faixa presa
   logo embaixo da imagem, na mesma cor e tom do vídeo (corta e anda junto).
   - "Desvincular o áudio" cria uma **cópia** do som como bloco de áudio comum
@@ -77,8 +78,43 @@ menos custo.
 - **Corte**: no bloco escolhido, puxar a borda da esquerda ou da direita (sem
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.
 
+- **Folha da direita**: abas Prévia e Ajustes (abas principais fixas do M3, como na
+  página do vídeo), sem título em cima. Na Prévia, o vídeo 9:16 ocupa a altura que
+  sobra, com margens de 12 px; nos Ajustes, o título do que estiver escolhido e os
+  campos (versões do Final, bloco, grupo, linha). Tocar algo
+  (bloco, grupo ou versão) mostra a Prévia; a aba escolhida fica lembrada.
+  Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
+- **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
+  largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).
+  O zoom vai até 2000% e a onda é desenhada com 200 px por segundo, para ficar
+  nítida de perto. "Ver tudo" volta. Com zoom, sombras, contornos, linhas, a linha
+  de reprodução e o botão de tocar mantêm o tamanho da tela; a onda fica dentro dos
+  cantos do bloco.
+- **Onda do som**: sem ícone, de borda a borda do bloco, no corte de agora (o x da
+  onda é o mesmo tempo do vídeo), para cortar vendo onde a fala começa e termina.
+- **Prévia sem tela preta**: cada trecho é um vídeo empilhado no quadro (o
+  navegador desenha, sem copiar para canvas); cada um já espera parado no começo
+  do trecho; a troca só acontece quando o próximo tem imagem (até lá fica o
+  anterior); se um trecho precisa carregar, o relógio da prévia espera por ele.
+
+## No site (em teste)
+
+- `/canvas`, só o administrador (para os outros, 404), com um card "Canvas de
+  edição" (Em teste) na tela inicial. A barra tem Bloco final, Do computador e
+  Seus vídeos (os vídeos prontos dos modelos que a pessoa usa).
+- Começa vazio, com o aviso "Comece pelos seus vídeos" e o Final à direita.
+- Nada fica salvo ainda: ao recarregar, volta vazio. O Exportar mostra o plano.
+- Código em `src/canvas/` (tela.html, canvas.js, modelo.js, player.js,
+  miniaturas.js); `npm run canvas` gera `src/site/canvas.ts`, que o Worker usa. A
+  página libera `data:` nas imagens e `blob:` no fetch (miniaturas e a onda do
+  som); as outras páginas não. As frases de erro vêm de `src/erros.ts` pelo config.
+- O protótipo (`prototipos/canvas/`) usa a mesma tela, com o exemplo de 6 versões.
+
 ## Em aberto
 
-- Prévia no navegador: funciona nos protótipos (um elemento de mídia por
-  trecho, desenhados num canvas 9:16).
+- **Timeline embaixo do canvas, com zoom**, para o vídeo ou o áudio escolhido:
+  cortar vendo a onda e os quadros de perto (a próxima etapa da edição fina).
+
+- Salvar projetos (tabela no D1), arquivos do computador no R2 e o Exportar de
+  verdade (ffmpeg no contêiner).
 - Esboço da tela no canvas de design, para aprovar.

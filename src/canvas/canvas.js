@@ -1,11 +1,15 @@
 /**
  * Canvas de edição com código próprio: DOM e SVG dentro de um "mundo" com
  * translate/scale. O significado (grupos, coberturas, versões) vem do
- * comum/modelo.js; aqui só desenho e gestos.
+ * modelo.js; aqui só desenho e gestos. Quem monta a página passa a
+ * configuração em <script type="application/json" id="canvas-config">:
+ * { amostra: true } (o protótipo, com o exemplo) ou { videos: [...] } (o site,
+ * com os vídeos prontos de quem usa: id, name, src, when), e as frases de erro em
+ * erros (arquivo, video), que vêm do catálogo src/erros.ts.
  */
-import * as M from "../comum/modelo.js";
-import { Player, clock } from "../comum/player.js";
-import { thumb, probe } from "../comum/miniaturas.js";
+import * as M from "./modelo.js";
+import { Player, clock } from "./player.js";
+import { thumb, probe } from "./miniaturas.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const vp = $("#vp");
@@ -17,7 +21,12 @@ const SNAP = { after: "Juntar na sequência", before: "Juntar na sequência", co
 const fmt = (s) => `${s.toFixed(1).replace(".", ",")} s`;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-let project = M.sample((f) => `midia/${f}`);
+let CONFIG = {};
+try {
+  CONFIG = JSON.parse($("#canvas-config")?.textContent || "{}");
+} catch {}
+const emptyProject = () => ({ blocks: [], finals: [{ id: "final", x: 720, y: 200 }], edges: [] });
+let project = CONFIG.amostra ? M.sample((f) => `midia/${f}`) : emptyProject();
 let view = { x: 80, y: 120, z: 0.8 };
 let sel = { type: "final", id: "final" };
 let versionIdx = 0;
@@ -29,13 +38,13 @@ const redo = [];
 /* ---------- prévia ---------- */
 
 const pv = {
-  canvas: $("#pv-canvas"),
+  stage: $("#pv-stage"),
   play: $("#pv-play"),
   time: $("#pv-time"),
   slider: $("#pv-slider"),
   title: $("#pv-title"),
 };
-const player = new Player(pv.canvas, {
+const player = new Player(pv.stage, {
   onTick(t, d) {
     pv.time.textContent = `${clock(t)} / ${clock(d)}`;
     pv.slider.max = d;
@@ -116,9 +125,13 @@ function playhead(t) {
   headBox = box;
   // Aparece sempre que a prévia toca um bloco ou um grupo, para poder arrastar.
   head.hidden = !box;
-  if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - 1}px`, top: `${box.y - 4}px`, height: `${box.h + 8}px` });
+  // Passa 4 px (na tela) acima e abaixo do que toca, com qualquer zoom.
+  const pad = 4 / Math.max(1, view.z);
+  if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - pad / 4}px`, top: `${box.y - pad}px`, height: `${box.h + 2 * pad}px` });
 }
 function playNow(p) {
+  // Tocar algo mostra a Prévia.
+  setTab("previa");
   preview = p;
   render();
   player.seek(0);
@@ -126,6 +139,24 @@ function playNow(p) {
   setPlayIcon();
   render({ side: false });
 }
+
+/* ---------- abas da folha ---------- */
+
+const sheetBody = $(".sheet-body");
+function setTab(tab) {
+  sheetBody.dataset.tab = tab;
+  for (const b of document.querySelectorAll(".viewer__sheet [data-tab][role=tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+  for (const p of sheetBody.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== tab;
+  showActions();
+  try {
+    localStorage.setItem("canvas-aba", tab);
+  } catch {}
+}
+for (const b of document.querySelectorAll(".viewer__sheet [role=tab]")) b.addEventListener("click", () => setTab(b.dataset.tab));
+try {
+  const saved = localStorage.getItem("canvas-aba");
+  if (saved === "previa" || saved === "ajustes") setTab(saved);
+} catch {}
 
 /* ---------- histórico ---------- */
 
@@ -146,6 +177,14 @@ function step(from, to) {
 
 // Espaço entre os blocos e o tracejado da área do grupo.
 const FRAME_PAD = 20;
+/** O grupo cuja área (o tracejado) tem este ponto do canvas. */
+function groupAt(pt) {
+  return M.groups(project).find((g) => {
+    if (!(g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio))) return false;
+    const top = Math.min(g.y, ...g.covers.map((c) => c.y)) - FRAME_PAD;
+    return pt.x >= g.x - FRAME_PAD && pt.x <= g.x + g.w + FRAME_PAD && pt.y >= top && pt.y <= groupBottom(g) + FRAME_PAD;
+  });
+}
 const groupBottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AUD_H));
 // As portas ficam um pouco fora do grupo, para não cobrir as alças de corte.
 const PORT_OUT = 14;
@@ -153,6 +192,8 @@ const blockEls = new Map();
 
 function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  world.style.setProperty("--zi", String(1 / Math.max(1, view.z)));
+  playhead(player.t);
   vp.style.backgroundSize = `${24 * view.z}px ${24 * view.z}px`;
   vp.style.backgroundPosition = `${view.x}px ${view.y}px`;
   $("#zoom").textContent = `${Math.round(view.z * 100)}%`;
@@ -170,7 +211,7 @@ function render({ side = true } = {}) {
     if (!el) {
       el = document.createElement("div");
       el.dataset.id = b.id;
-      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><div class="blk__link"><span class="icon">graphic_eq</span><span class="blk__wave"></span><span class="icon blk__mute">volume_off</span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
+      el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><div class="blk__link"><span class="blk__wave"></span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
       world.append(el);
       blockEls.set(b.id, el);
       thumb(b).then((u) => {
@@ -209,6 +250,8 @@ function render({ side = true } = {}) {
     $(".blk__dur", el).textContent = fmt(M.len(b));
   }
   for (const [id, el] of blockEls) if (!seen.has(id)) el.remove(), blockEls.delete(id);
+  const empty = $("#canvas-empty");
+  if (empty) empty.hidden = project.blocks.length > 0;
 
   // Abas dos grupos, portas e blocos finais.
   let html = "";
@@ -232,7 +275,7 @@ function render({ side = true } = {}) {
     const w = M.width(sb);
     const cy = sb.kind === "audio" ? sb.y + M.AUD_H / 2 : sb.y + 28 + (M.VIS_H - 32) / 2;
     const playing = player.playing && preview?.type === "block" && preview.id === sb.id;
-    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2 - 20}px;top:${cy - 20}px" aria-label="${playing ? "Pausar" : "Tocar o bloco"}" title="${playing ? "Pausar" : "Tocar o bloco"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
+    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2}px;top:${cy}px" aria-label="${playing ? "Pausar" : "Tocar o bloco"}" title="${playing ? "Pausar" : "Tocar o bloco"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
   }
   for (const f of project.finals) {
     const n = M.versions(project, f.id, gs).length;
@@ -268,7 +311,6 @@ const curve = (a, b) => {
 
 /* ---------- painel ---------- */
 
-const sideTitle = $("#side-title");
 const sideActions = $("#side-actions");
 const btn = (kind, act, icon, text) => `<button class="button button--${kind} interactive" type="button" ${act}><span class="icon">${icon}</span>${text}</button>`;
 const field = (id, label, value, attrs = "") =>
@@ -314,10 +356,16 @@ function renderSide(gs) {
   } else {
     h += `<p class="sheet-hint">Escolha um bloco, um grupo ou o Final.</p>`;
   }
-  sideTitle.textContent = title;
-  side.innerHTML = h;
+  side.innerHTML = `<h2 class="sheet-title">${title}</h2>` + h;
   sideActions.innerHTML = actions;
-  sideActions.hidden = !actions;
+  showActions();
+}
+
+/** Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes. */
+function showActions() {
+  // Busca o elemento aqui: setTab() roda no começo, antes das constantes do painel.
+  const el = $("#side-actions");
+  el.hidden = !el.innerHTML || $(".sheet-body").dataset.tab !== "ajustes";
 }
 
 sideActions.addEventListener("click", (e) => side.onclickAction(e));
@@ -327,6 +375,7 @@ side.onclickAction = (e) => {
     versionIdx = +v.dataset.version;
     preview = null;
     render();
+    setTab("previa");
     player.play();
     setPlayIcon();
   }
@@ -426,7 +475,7 @@ async function importFiles(files, at) {
       sel = { type: "block", id: b.id };
       y += M.height(b) + 48;
     } catch {
-      toast(`Não deu para abrir ${file.name}. Use MP4, MOV, JPG, PNG, MP3 ou M4A.`);
+      toast(CONFIG.erros?.arquivo ?? "");
     }
   }
   commit(before);
@@ -438,7 +487,62 @@ const toWorld = (cx, cy) => {
   return { x: (cx - r.left - view.x) / view.z, y: (cy - r.top - view.y) / view.z };
 };
 
-$("#import").onclick = () => $("#file").click();
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-open-file]")) $("#file").click();
+  if (e.target.closest("[data-open-library]")) openLibrary();
+});
+
+/* ---------- seus vídeos ---------- */
+
+const lib = $("#lib-dlg");
+function openLibrary() {
+  const videos = CONFIG.videos ?? [];
+  $("#lib-list").innerHTML = videos.length
+    ? videos
+        .map((v, i) => `<button class="xlist__item interactive" type="button" data-lib="${i}"><span class="xlist__thumb"><video src="${esc(v.src)}#t=0.5" preload="metadata" muted playsinline></video></span><span class="xlist__text">${esc(v.name)}</span><span class="xlist__trail">${esc(v.when ?? "")}</span><span class="icon" hidden>check</span></button>`)
+        .join("")
+    : `<p class="sheet-hint">Você ainda não tem vídeos prontos.</p>`;
+  lib.showModal();
+}
+$("#lib-close")?.addEventListener("click", () => lib.close());
+$("#lib-list")?.addEventListener("click", async (e) => {
+  const item = e.target.closest("[data-lib]");
+  if (!item || item.dataset.adding) return;
+  item.dataset.adding = "1";
+  const v = CONFIG.videos[+item.dataset.lib];
+  try {
+    const dur = await probeUrl(v.src);
+    const r = vp.getBoundingClientRect();
+    const at = toWorld(r.left + 80, r.top + 120);
+    const before = project;
+    project = structuredClone(project);
+    // Um embaixo do outro, para não cair em cima do que já está no canvas.
+    const y = Math.max(at.y, ...project.blocks.map((b) => b.y + M.height(b) + 48));
+    const b = { id: M.newId("b"), tone: M.nextTone(project, "video", v.src), kind: "video", name: v.name, src: v.src, dur, tin: 0, tout: dur, x: at.x, y, mute: false, vol: 1 };
+    project.blocks.push(b);
+    sel = { type: "block", id: b.id };
+    preview = { type: "block", id: b.id };
+    commit(before);
+    render();
+    item.querySelector(".icon").hidden = false;
+    toast(`${v.name} entrou no canvas.`);
+  } catch {
+    toast(CONFIG.erros?.video ?? "");
+  }
+  delete item.dataset.adding;
+});
+
+function probeUrl(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement("video");
+    el.preload = "metadata";
+    el.onloadedmetadata = () => resolve(el.duration);
+    el.onerror = reject;
+    el.src = src;
+  });
+}
+
+$("#import")?.addEventListener("click", () => $("#file").click());
 $("#file").onchange = (e) => {
   const r = vp.getBoundingClientRect();
   importFiles([...e.target.files], toWorld(r.left + r.width / 3, r.top + r.height / 3));
@@ -449,7 +553,7 @@ vp.addEventListener("drop", (e) => {
   e.preventDefault();
   if (e.dataTransfer.files.length) importFiles([...e.dataTransfer.files], toWorld(e.clientX, e.clientY));
 });
-$("#add-final").onclick = () => {
+$("#add-final")?.addEventListener("click", () => {
   const before = project;
   const r = vp.getBoundingClientRect();
   const at = toWorld(r.left + r.width / 2, r.top + r.height / 2);
@@ -459,10 +563,10 @@ $("#add-final").onclick = () => {
   sel = { type: "final", id: f.id };
   commit(before);
   render();
-};
+});
 $("#undo").onclick = () => step(undo, redo);
 $("#redo").onclick = () => step(redo, undo);
-$("#reset").onclick = () => {
+$("#reset")?.addEventListener("click", () => {
   const before = project;
   project = M.sample((f) => `midia/${f}`);
   sel = { type: "final", id: "final" };
@@ -470,16 +574,38 @@ $("#reset").onclick = () => {
   commit(before);
   fit();
   render();
-};
+});
 $("#zoom-in").onclick = () => zoomAt(1.2);
 $("#zoom-out").onclick = () => zoomAt(1 / 1.2);
 $("#fit").onclick = () => fit();
+
+const ZOOM_MIN = 0.15;
+// Até 2000%: dá para ver a onda do som de perto para cortar.
+const ZOOM_MAX = 20;
+
+/** Dois cliques num bloco: amplia até ele ocupar a largura do canvas (a proporção não muda). */
+function zoomToBlock(b) {
+  const r = vp.getBoundingClientRect();
+  const w = M.width(b);
+  const h = M.height(b);
+  const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, (r.width - 96) / w));
+  // Se não cabe na altura, fica à vista a parte de baixo (a onda do som), acima da barra flutuante.
+  const top = h * z <= r.height - 200 ? (r.height - h * z) / 2 : r.height - 112 - h * z;
+  view = { z, x: (r.width - w * z) / 2 - b.x * z, y: top - b.y * z };
+  applyView();
+}
+vp.addEventListener("dblclick", (e) => {
+  const el = e.target.closest(".blk");
+  if (!el) return;
+  const b = project.blocks.find((o) => o.id === el.dataset.id);
+  if (b) zoomToBlock(b);
+});
 
 function zoomAt(k, cx, cy) {
   const r = vp.getBoundingClientRect();
   cx ??= r.left + r.width / 2;
   cy ??= r.top + r.height / 2;
-  const z = Math.min(3, Math.max(0.15, view.z * k));
+  const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.z * k));
   const px = cx - r.left;
   const py = cy - r.top;
   view.x = px - ((px - view.x) * z) / view.z;
@@ -492,9 +618,15 @@ function fit() {
   const xs = [];
   const ys = [];
   for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - FRAME_PAD - 40, b.y + M.height(b) + FRAME_PAD);
+  const r = vp.getBoundingClientRect();
+  // Canvas vazio: o aviso do começo fica no meio; o Final, à direita dele.
+  if (!project.blocks.length && project.finals.length) {
+    const f = project.finals[0];
+    view = { x: r.width * 0.8 - 90 - f.x, y: r.height / 2 - 40 - f.y, z: 1 };
+    return applyView();
+  }
   for (const f of project.finals) xs.push(f.x, f.x + 180), ys.push(f.y, f.y + 80);
   if (!xs.length) return;
-  const r = vp.getBoundingClientRect();
   const x0 = Math.min(...xs);
   const y0 = Math.min(...ys);
   const w = Math.max(...xs) - x0;
@@ -583,8 +715,20 @@ vp.addEventListener("pointerdown", (e) => {
       view.y = v0.y + ev.clientY - start.y;
       applyView();
     };
-    onUp = () => {
-      if (!moved && sel.type) (sel = { type: null }), (preview = null), render();
+    onUp = (ev) => {
+      if (moved) return;
+      // Clique no vazio dentro da área de um grupo: a prévia vai para aquele ponto do grupo.
+      const at = toWorld(ev.clientX, ev.clientY);
+      const g = groupAt(at);
+      if (g) {
+        sel = { type: "group", id: g.id };
+        preview = { type: "group", id: g.id };
+        render();
+        player.seek(Math.min(Math.max((at.x - g.x) / M.PX, 0), g.dur));
+        setPlayIcon();
+        return;
+      }
+      if (sel.type) (sel = { type: null }), (preview = null), render();
     };
     vp.classList.add("is-panning");
   } else if (trimEl) {

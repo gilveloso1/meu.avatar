@@ -40,7 +40,8 @@ async function wave(src, dur) {
   const audio = await new OfflineAudioContext(1, 44100, 44100).decodeAudioData(buf);
   const data = audio.getChannelData(0);
   const c = document.createElement("canvas");
-  c.width = Math.max(40, Math.round(dur * 24));
+  // 200 px por segundo (até o limite do canvas): a onda continua nítida com o zoom no bloco.
+  c.width = Math.min(16000, Math.max(40, Math.round(dur * 200)));
   c.height = 40;
   const ctx = c.getContext("2d");
   ctx.fillStyle = "#000";
