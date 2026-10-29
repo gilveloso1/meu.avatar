@@ -13,6 +13,9 @@ simples, e paga por ele: ganha dinheiro com os vídeos, criando audiência
 ou fazendo anúncios no estilo UGC para marcas DTC. Ver "Direção" no `CLAUDE.md`. A ordem abaixo ainda é
 a anterior e será revista com o dono por essa direção.
 
+Novo, ainda sem lugar na ordem: **canvas de edição**, montar vários vídeos
+com blocos e conexões (ver [canvas.md](canvas.md)).
+
 ## Ordem
 
 1. **Testar outro modelo de vídeo com áudio próprio** (em andamento: HeyGen
