@@ -200,3 +200,29 @@ barato. Trechos só acima de 30 s (o limite do Aleph), e então com o corte numa
 troca de cena e um quadro-chave nos dois lados do corte, para o rosto não
 pular. Quadros-chave mais próximos firmam o rosto perto deles, mas não
 resolvem o meio.
+
+## Primeiro vídeo pelo site e quadros-chave em cadeia (29/10/2026)
+
+**Pelo site** (vídeo `b2e6dd52-72b8-4808-830b-d1e9bdc2d49e`, o de 5,5 s com uma
+foto de mulher loira): o preparo levou 1 min 45 s, os 5 quadros-chave passaram
+na conferência do fundo e o Aleph levou uns 2 min. **Custo real: US$ 1,62**
+(US$ 1,40 do Aleph e US$ 0,22 das imagens). O rosto ficou perto da foto e a
+mesma pessoa até o fim, mas **o cabelo muda de forma e de posição em saltos
+visíveis, embora suaves** (visto pelo dono). Causa: cada quadro-chave saiu com
+um cabelo diferente (risca, volume, mechas), porque cada um foi gerado sozinho
+a partir da foto; o Aleph segue cada quadro no instante dele. (Um teste antes
+deste, com um vídeo 3D, falhou porque o contêiner ainda respondia com a imagem
+anterior à publicação: `HTTP 404` em `/preparar`.)
+
+**Quadros-chave em cadeia** (pelo terminal, o mesmo vídeo preparado e a mesma
+foto): o primeiro quadro sai da foto, como antes, e os outros 4 usam esse
+primeiro como referência de rosto e cabelo (mais o recorte do rosto da foto).
+Além do fundo, o modelo de visão compara o cabelo de cada quadro com o do
+primeiro (`cabelo_igual`).
+
+- Os 5 quadros passaram de primeira; custo igual: US$ 1,40 + US$ 0,22.
+- Os quadros-chave ficaram com o mesmo cabelo (longo, liso, mesma risca);
+  nos independentes ele variava (preso atrás da orelha, solto, mais volume).
+- Mudança de um quadro para o seguinte nas laterais da cabeça, acima da do
+  vídeo original (o que a troca acrescenta): 56,9 nos independentes, 39,8 na
+  cadeia (uns 30% menos). A medida é ruidosa: as mãos passam por ali.
