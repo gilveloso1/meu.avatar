@@ -4,6 +4,14 @@ O que falta fazer no meu.avatar, em ordem. Cada item vira um PR próprio, com a
 sua migration quando precisar. Ao terminar um item, tire-o daqui (ou marque o
 que ficou para depois) no mesmo PR.
 
+## Direção (29/10/2026)
+
+Gere aqui, edite aqui, publique aqui. Os vídeos vêm de APIs prontas (sem
+construir a engenharia do zero), sempre buscando o menor custo; o trabalho de
+construção vai para a UI/UX. Quem usa quer o resultado final, mesmo que mais
+simples, e paga por ele. Ver "Direção" no `CLAUDE.md`. A ordem abaixo ainda é
+a anterior e será revista com o dono por essa direção.
+
 ## Ordem
 
 1. **Testar outro modelo de vídeo com áudio próprio** (em andamento: HeyGen
