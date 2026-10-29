@@ -7,6 +7,24 @@ Como publicar e operar: [docs/operacao.md](docs/operacao.md).
 O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
 é montado e as medições de áudio: [docs/prompt.md](docs/prompt.md).
 
+## Direção (29/10/2026)
+
+- **Gere aqui, edite aqui, publique aqui.** O meu.avatar é o ambiente onde a
+  pessoa faz o vídeo do começo ao fim, sem sair do site.
+- **Usar APIs prontas, não construir a engenharia do zero.** O vídeo vem de
+  modelos e serviços que já fazem o trabalho; não montar pipelines próprios
+  (quadros-chave, composição, correção de imagem) para compensar o que um
+  modelo não faz. Se um modelo não serve, procure outro pronto.
+- **Continuar reduzindo custos**: entre opções prontas que entregam o mesmo
+  resultado, a mais barata; mostrar o custo antes de gerar.
+- **O esforço de construção vai para a UI/UX**: telas amigáveis, fáceis de
+  trabalhar e de criar. Quem usa quer o resultado final, mesmo que mais
+  simples, e paga por ele.
+- **Quem paga ganha dinheiro com os vídeos**: cria audiência (perfis, canais)
+  ou faz anúncios no estilo UGC para marcas DTC. Cada tela deve ajudar a sair com mais vídeos que
+  dão retorno: rápido de fazer, em quantidade, no formato das redes e dos
+  anúncios, e pronto para publicar.
+
 ## Site leve
 
 - As páginas são HTML montado no Worker (`src/site/site.ts`), com CSS

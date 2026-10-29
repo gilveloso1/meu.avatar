@@ -1,0 +1,274 @@
+<meta charset="utf-8">
+<title>Canvas Próprio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&icon_names=add,arrow_back,content_copy,delete,download,drag_indicator,fit_screen,flag,graphic_eq,image,layers,link,link_off,movie,music_note,pause,play_arrow,redo,remove,replay,restart_alt,schedule,undo,upload,volume_off&display=block">
+<style>
+/*SITE*/
+/*THEME*/
+/* Editor: a barra superior do site, o canvas no meio e a folha lateral de 400 px
+   (side sheet do M3, como a da página do vídeo). Componentes do src/site/style.ts;
+   o que é só do canvas segue os tokens do M3 (forma, elevação, tipografia, estados). */
+html, body { height: 100%; }
+body { min-height: 0; overflow: hidden; }
+.editor { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--layout-config); border-top: 1px solid var(--md-sys-color-outline-variant); }
+.editor .viewer__sheet { border-left: 1px solid var(--md-sys-color-outline-variant); }
+.top-app-bar { flex-wrap: nowrap; }
+.top-app-bar__actions { flex-wrap: wrap; justify-content: flex-end; }
+
+/* Canvas: fundo de pontos (outline-variant) que acompanha o zoom. */
+.canvas { position: relative; min-width: 0; min-height: 0; }
+#vp {
+  position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none;
+  background-color: var(--md-sys-color-surface-container);
+  background-image: radial-gradient(circle, var(--md-sys-color-outline-variant) 1px, transparent 1.2px);
+}
+#vp.is-panning { cursor: grabbing; }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
+.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: 2; }
+.wire.is-sel { stroke: var(--md-sys-color-primary); stroke-width: 3; }
+.wire--temp { stroke: var(--md-sys-color-primary); stroke-dasharray: 6 4; }
+.wire-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
+
+/* Bloco: cor do tipo e tom do arquivo (--c e --on vêm do script, de --bloco-<tipo>-<tom>),
+   cantos médios (12 px), elevação 1; arrastando, elevação 3. */
+.blk {
+  position: absolute; cursor: grab; isolation: isolate;
+  border-radius: var(--md-sys-shape-corner-medium); background: var(--c); color: var(--on);
+  box-shadow: var(--md-sys-elevation-level1);
+  transition: box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
+}
+.blk::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; pointer-events: none; transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
+.blk:hover::after { opacity: var(--md-sys-state-hover-state-layer-opacity); }
+.blk.is-drag { cursor: grabbing; box-shadow: var(--md-sys-elevation-level3); z-index: 1; }
+.blk.is-sel { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+.blk__label {
+  position: absolute; left: 0; right: 0; top: 0; height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 8px;
+  font: var(--md-sys-typescale-label-medium); letter-spacing: 0.031rem; white-space: nowrap; pointer-events: none; overflow: hidden;
+}
+.blk__label .icon { font-size: 16px; }
+.blk__name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.blk__dur { margin-left: auto; font-variant-numeric: tabular-nums; }
+.blk__mute { display: none; }
+.blk.is-mute .blk__mute { display: inline-block; }
+/* Os quadros levam a cor do bloco (só a luz deles fica); com o mouse ou escolhido, as cores de verdade. */
+.blk__media {
+  position: absolute; left: 4px; right: 4px; top: 28px; bottom: 4px; border-radius: var(--md-sys-shape-corner-small);
+  background-repeat: repeat-x; background-size: auto 100%; background-color: color-mix(in srgb, var(--on) 12%, transparent);
+  mix-blend-mode: luminosity;
+}
+.blk:hover .blk__media, .blk.is-sel .blk__media { mix-blend-mode: normal; }
+.blk.is-mute .blk__media { opacity: 0.38; }
+/* Áudio vinculado: faixa de 40 px embaixo da imagem, na cor e no tom do vídeo, com a onda dele. */
+.blk__link { display: none; position: absolute; left: 4px; right: 4px; bottom: 4px; height: 32px; align-items: center; gap: 4px; padding: 0 4px; border-radius: var(--md-sys-shape-corner-small); background: color-mix(in srgb, var(--on) 10%, transparent); pointer-events: none; }
+.blk__link .icon { font-size: 16px; flex: none; }
+.blk__wave { flex: 1; align-self: stretch; margin: 4px 0; background: var(--on); opacity: 0.55; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.blk.is-linked .blk__link { display: flex; }
+.blk.is-linked .blk__media { bottom: 40px; }
+.blk.is-linked .blk__label .blk__mute { display: none; }
+.blk.is-linked.is-mute .blk__wave { opacity: 0.2; }
+.blk--audio { border-radius: var(--md-sys-shape-corner-small); }
+.blk--audio .blk__label { height: 20px; }
+.blk--audio .blk__media { left: 0; right: 0; top: 18px; bottom: 2px; border-radius: 0; background: var(--on); opacity: 0.45; mix-blend-mode: normal; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.blk--cover { border-radius: var(--md-sys-shape-corner-medium) var(--md-sys-shape-corner-medium) var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-extra-small); }
+.blk--under { border-radius: var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-small) var(--md-sys-shape-corner-small); }
+/* Corte: sem desenho; no bloco escolhido, a borda da esquerda e a da direita (10 px, metade para
+   cada lado) puxam o corte, e o cursor vira a seta de redimensionar. Ele fica por cima do vizinho. */
+.trim { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; z-index: 2; display: none; }
+.trim--l { left: -5px; }
+.trim--r { right: -5px; }
+.blk.is-sel .trim { display: block; }
+.blk.is-sel { z-index: 2; }
+
+/* Aba do grupo: chip de assistência do M3 (32 px, cantos de 8 px, contorno, ícone de 18 px). */
+#chrome { position: absolute; left: 0; top: 0; }
+.gtab {
+  position: absolute; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 16px 0 8px; cursor: grab;
+  border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-low); color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; white-space: nowrap;
+}
+.gtab .icon { font-size: 18px; color: var(--md-sys-color-primary); }
+.gtab.is-sel { border-color: transparent; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.gtab.is-sel .icon { color: inherit; }
+/* Área do grupo: retângulo tracejado (contorno outline, cantos grandes), em primary quando escolhido. */
+.gframe { position: absolute; border: 2px dashed var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-large); pointer-events: none; }
+.gframe.is-sel { border-color: var(--md-sys-color-primary); }
+.gtab__play { width: 24px; height: 24px; margin: 0 -8px 0 0; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: none; color: var(--md-sys-color-primary); }
+.gtab__play .icon { font-size: 18px; }
+.gtab.is-sel .gtab__play { color: inherit; }
+/* Tocar o bloco escolhido: botão de ícone cheio do M3 (40 px, primary), por cima da imagem. */
+.blk-play { position: absolute; z-index: 4; width: 40px; height: 40px; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); box-shadow: var(--md-sys-elevation-level2); }
+.blk-play .icon { font-size: 24px; }
+/* Linha de reprodução: 2 px em primary sobre o que a prévia toca. */
+.playhead { position: absolute; z-index: 5; width: 2px; border-radius: 1px; background: var(--md-sys-color-primary); box-shadow: 0 0 0 1px var(--md-sys-color-surface-container-lowest); cursor: ew-resize; }
+/* Área de toque mais larga que a linha, e a alça em cima (como a do slider do M3: 4 × 24 px). */
+.playhead::before { content: ""; position: absolute; top: -16px; bottom: 0; left: -8px; right: -8px; }
+.playhead__knob { position: absolute; left: 50%; top: -20px; width: 12px; height: 20px; transform: translateX(-50%); border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); box-shadow: 0 0 0 2px var(--md-sys-color-surface-container-lowest); }
+.playhead:hover .playhead__knob, .playhead.is-drag .playhead__knob { width: 16px; }
+/* Portas: saída em primary (puxa a ligação), entrada no contorno. */
+.port {
+  position: absolute; width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full); z-index: 3;
+  background: var(--md-sys-color-surface-container-lowest); border: 2px solid var(--md-sys-color-outline);
+}
+.port--out { cursor: crosshair; border-color: var(--md-sys-color-primary); }
+.port--out:hover { background: var(--md-sys-color-primary); }
+/* Bloco final: a saída, em primary (cantos grandes, elevação 1). */
+.fin {
+  position: absolute; width: 180px; height: 80px; display: flex; align-items: center; gap: 16px; padding: 0 16px; cursor: grab;
+  border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-sys-elevation-level1);
+}
+.fin > span:last-child { display: flex; flex-direction: column; }
+.fin b { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
+.fin small { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
+.fin.is-sel { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+
+/* Barra de ferramentas flutuante do M3 Expressive: 64 px, cantos inteiros, surface-container,
+   8 px nas pontas, 4 px entre itens, 16 px da borda. */
+.float-bar {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 4px; height: 64px; padding: 0 8px;
+  border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface);
+  box-shadow: var(--md-sys-elevation-level3);
+}
+.float-bar__zoom { min-width: 48px; text-align: center; font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; font-variant-numeric: tabular-nums; }
+.float-bar__divider { width: 1px; height: 32px; margin: 0 4px; background: var(--md-sys-color-outline-variant); }
+/* Dicas e o aviso do encaixe: tooltip simples do M3 (24 px, 8 px dos lados, cantos de 4 px). */
+.hints { position: absolute; left: 16px; top: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 4px 16px; pointer-events: none; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.hints b { font-weight: 500; color: var(--md-sys-color-on-surface); }
+.tooltip {
+  position: absolute; left: 50%; top: 48px; transform: translateX(-50%); z-index: 4; pointer-events: none;
+  display: flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: var(--md-sys-shape-corner-extra-small);
+  background: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem;
+}
+.tooltip:empty { display: none; }
+
+/* Folha: a prévia 9:16 com a barra do player do site, e o que estiver escolhido. */
+.viewer__head h2 { font: var(--md-sys-typescale-title-large); }
+.preview { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.preview .player__frame { height: 280px; max-width: 100%; box-shadow: var(--md-sys-elevation-level1); }
+.preview .player__frame canvas { width: 100%; height: 100%; display: block; }
+.preview .vbar { width: 100%; box-shadow: none; }
+.preview__title { align-self: stretch; text-align: center; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); text-wrap: balance; }
+.sheet-hint { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+/* Lista expressiva segmentada: 2 px entre itens, cantos de 4 px por dentro e 16 px nas pontas;
+   a escolhida em primary-container, com cantos de 16 px. */
+.xlist { display: flex; flex-direction: column; gap: 2px; }
+.xlist__item {
+  display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 8px 16px; margin: 0; border: 0; text-align: left;
+  border-radius: var(--md-sys-shape-corner-extra-small); background: var(--md-sys-color-surface-container-lowest); color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem;
+}
+.xlist__item:first-child { border-top-left-radius: var(--md-sys-shape-corner-large); border-top-right-radius: var(--md-sys-shape-corner-large); }
+.xlist__item:last-child { border-bottom-left-radius: var(--md-sys-shape-corner-large); border-bottom-right-radius: var(--md-sys-shape-corner-large); }
+.xlist__item[aria-current="true"] { border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.xlist__lead { width: 24px; flex: none; text-align: center; font: var(--md-sys-typescale-label-large); color: var(--md-sys-color-on-surface-variant); }
+.xlist__item[aria-current="true"] .xlist__lead, .xlist__item[aria-current="true"] .xlist__trail { color: inherit; }
+.xlist__text { flex: 1; min-width: 0; }
+.xlist__trail { flex: none; font: var(--md-sys-typescale-label-small); letter-spacing: 0.031rem; font-variant-numeric: tabular-nums; color: var(--md-sys-color-on-surface-variant); }
+.fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.editor .viewer__sheet { --field-surface: var(--md-sys-color-surface-container-low); }
+.editor .viewer__body { gap: 24px; }
+#side { display: flex; flex-direction: column; gap: 24px; }
+#side .viewer__section { gap: 12px; }
+
+/* Switch do M3: trilha de 52 × 32, contorno de 2 px; alça de 16 px (24 escolhido, 28 pressionado);
+   camada de estado de 40 px. Escolhido: trilha primary e alça on-primary. */
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; cursor: pointer; }
+.switch { position: relative; flex: none; width: 52px; height: 32px; }
+.switch input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+.switch__track { position: absolute; inset: 0; border: 2px solid var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-surface-container-highest); transition: background-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
+.switch__handle {
+  position: absolute; top: 50%; left: 16px; width: 16px; height: 16px; transform: translate(-50%, -50%); border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-outline);
+  transition: left var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard), width var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard), height var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
+}
+.switch__handle::before { content: ""; position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; transform: translate(-50%, -50%); border-radius: inherit; background: var(--md-sys-color-on-surface); opacity: 0; transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
+.switch:hover .switch__handle::before { opacity: var(--md-sys-state-hover-state-layer-opacity); }
+.switch input:checked ~ .switch__track { border-color: var(--md-sys-color-primary); background: var(--md-sys-color-primary); }
+.switch input:checked ~ .switch__handle { left: 36px; width: 24px; height: 24px; background: var(--md-sys-color-on-primary); }
+.switch input:checked ~ .switch__handle::before { background: var(--md-sys-color-primary); }
+.switch input:active ~ .switch__handle { width: 28px; height: 28px; }
+.switch input:focus-visible ~ .switch__track { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
+/* Slider do volume: o mesmo slider do M3 Expressive da barra do player. */
+.slider-field { display: flex; flex-direction: column; gap: 4px; }
+.slider-field__label { display: flex; justify-content: space-between; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.slider-field .vbar__seek { margin: 0; }
+.slider-field .vbar__seek::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--md-sys-color-surface-container-low); }
+.slider-field .vbar__seek::-moz-range-thumb { box-shadow: 0 0 0 4px var(--md-sys-color-surface-container-low); }
+
+/* Diálogo básico do M3: surface-container-high, cantos de 28 px, 24 px de margem, de 280 a 560 px, elevação 3. */
+.dialog { width: min(560px, calc(100% - 48px)); min-width: 280px; max-height: calc(100% - 48px); padding: 24px; border: 0; border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); box-shadow: var(--md-sys-elevation-level3); }
+.dialog::backdrop { background: rgb(0 0 0 / 0.32); }
+.dialog[open] { display: flex; flex-direction: column; gap: 16px; }
+.dialog h3 { margin: 0; font: var(--md-sys-typescale-headline-small); }
+.dialog p { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.dialog pre { margin: 0; overflow: auto; padding: 12px; border-radius: var(--md-sys-shape-corner-medium); background: var(--md-sys-color-surface-container-lowest); font: 400 0.75rem/1rem ui-monospace, "Roboto Mono", monospace; }
+.dialog__actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+@media (max-width: 839px) {
+  body { overflow: auto; height: auto; }
+  .editor { grid-template-columns: 1fr; }
+  .canvas { height: 70vh; }
+  .editor .viewer__sheet { border-left: 0; border-top: 1px solid var(--md-sys-color-outline-variant); }
+  .top-app-bar__title { display: none; }
+}
+</style>
+
+<header class="top-app-bar">
+  <button class="icon-button interactive" type="button" aria-label="Voltar" title="Voltar"><span class="icon">arrow_back</span></button>
+  <h1 class="top-app-bar__title top-app-bar__title--page">Canvas de edição</h1>
+  <div class="top-app-bar__actions">
+    <button class="button button--text interactive" type="button" id="reset"><span class="icon">restart_alt</span>Exemplo</button>
+    <button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
+    <button class="button button--filled interactive" type="button" id="import"><span class="icon">upload</span>Importar</button>
+    <input type="file" id="file" accept="video/*,image/*,audio/*" multiple hidden>
+  </div>
+</header>
+<main class="editor">
+  <div class="canvas">
+    <div id="vp">
+      <div id="world">
+        <svg id="wires"></svg>
+        <div id="chrome"></div>
+      </div>
+    </div>
+    <div class="hints"><span><b>Arraste</b> para mover</span><span><b>Encoste</b> do lado para juntar</span><span><b>Solte em cima</b> para cobrir</span><span><b>Puxe o ponto</b> da direita para ligar</span><span><b>Ctrl + roda</b> para zoom</span><span><b>Alt</b> solta sem encaixar</span></div>
+    <div class="tooltip" id="snapinfo" role="status"></div>
+    <div class="float-bar" role="toolbar" aria-label="Canvas">
+      <button class="icon-button interactive" type="button" id="undo" aria-label="Desfazer" title="Desfazer (Ctrl+Z)"><span class="icon">undo</span></button>
+      <button class="icon-button interactive" type="button" id="redo" aria-label="Refazer" title="Refazer (Ctrl+Shift+Z)"><span class="icon">redo</span></button>
+      <span class="float-bar__divider"></span>
+      <button class="icon-button interactive" type="button" id="zoom-out" aria-label="Diminuir o zoom" title="Diminuir o zoom"><span class="icon">remove</span></button>
+      <span class="float-bar__zoom" id="zoom">100%</span>
+      <button class="icon-button interactive" type="button" id="zoom-in" aria-label="Aumentar o zoom" title="Aumentar o zoom"><span class="icon">add</span></button>
+      <button class="icon-button interactive" type="button" id="fit" aria-label="Ver tudo" title="Ver tudo"><span class="icon">fit_screen</span></button>
+    </div>
+  </div>
+  <aside class="viewer__sheet" aria-label="Prévia e ajustes">
+    <div class="viewer__head"><h2 id="side-title">Final</h2></div>
+    <div class="viewer__body">
+      <div class="preview">
+        <div class="player__frame"><canvas id="pv-canvas" width="360" height="640"></canvas></div>
+        <div class="vbar" role="group" aria-label="Controles da prévia">
+          <button class="vbar__play interactive" type="button" id="pv-play" aria-label="Tocar" title="Tocar"><span class="icon">play_arrow</span></button>
+          <span class="vbar__time" id="pv-time">0:00.0 / 0:00.0</span>
+          <input class="vbar__seek" type="range" id="pv-slider" min="0" max="1" step="0.01" value="0" aria-label="Posição na prévia">
+        </div>
+        <p class="preview__title" id="pv-title"></p>
+      </div>
+      <div id="side"></div>
+    </div>
+    <div class="viewer__actions" id="side-actions" hidden></div>
+  </aside>
+</main>
+<dialog class="dialog" id="dlg" aria-labelledby="dlg-title">
+  <h3 id="dlg-title">Exportar</h3>
+  <p>No site, o contêiner monta cada versão com ffmpeg a partir deste plano. Não chama modelo de vídeo.</p>
+  <pre id="dlg-body"></pre>
+  <div class="dialog__actions"><button class="button button--text interactive" type="button" id="dlg-close">Fechar</button></div>
+</dialog>
+<div class="snackbar" id="toast" role="status" hidden><span class="snackbar__text" id="toast-text"></span></div>
+<script type="module">/*SCRIPT*/</script>
