@@ -141,9 +141,11 @@ Próximos passos:
 1. Testar com um vídeo de origem nítido, em 1080p de verdade (o teto de
    qualidade hoje é o vídeo de origem; quadros-chave em 2K não melhoraram e um
    deles criou um erro no fundo; vale a receita do terceiro teste).
-2. Estrutura do Aleph 2 feita (`src/structures/aleph.ts`, só o administrador):
-   falta publicar (migration 0009 e o contêiner novo) e gerar o primeiro vídeo
-   pelo site. O Seedance fica como está, para outros usos.
+2. Estrutura do Aleph 2 no ar desde 29/10/2026 (`src/structures/aleph.ts`, só o
+   administrador; migration 0009 e o contêiner novo publicados): falta gerar o
+   primeiro vídeo pelo site e confirmar a cobrança (US$ 1,40 por pedido nos
+   testes) antes de ajustar a estimativa do formulário. O Seedance fica como
+   está, para outros usos.
 3. Botão "Trocar avatar" na página do vídeo, que abre o formulário já com
    aquele vídeo.
 
