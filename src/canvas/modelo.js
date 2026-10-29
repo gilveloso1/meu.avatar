@@ -9,7 +9,7 @@
  *            só no vídeo: "linked" (o som dele numa faixa presa embaixo, na cor
  *            do vídeo), "unlinked" (desvinculado: virou um bloco de áudio) ou
  *            "none" (o arquivo não tem som))
- *   final: { id, x, y }
+ *   final: { id, x, y, size }   (size: um dos SIZES; sem ele, o primeiro)
  *   linha: { id, from, to }      (from: um bloco do grupo de saída;
  *                                 to: um bloco do grupo de entrada ou um final)
  *
@@ -34,6 +34,11 @@ export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
 export const MAX_VERSOES = 200;
 export const TONES = 6;
+/** Tamanhos do vídeo exportado (escolhidos nos Ajustes do Final), sempre vertical 9:16. */
+export const SIZES = [
+  { value: "720x1280", label: "720 × 1280" },
+  { value: "1080x1920", label: "1080 × 1920" },
+];
 const EPS = 1;
 
 export const len = (b) => b.tout - b.tin;

@@ -19,7 +19,7 @@
  * da página só roda com o nonce da CSP.
  */
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
-import type { Db, User, Video, VideoStatus } from "../db";
+import type { Db, Project, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -139,8 +139,8 @@ export class Site {
     const watch = /^\/video\/([0-9a-f-]{36})$/.exec(path);
     if (!post && watch) return this.videoPage(user, watch[1]!, url);
 
-    // Canvas de edição: em teste, só o administrador (para os outros, a página nem existe).
-    if (!post && path === "/canvas") return user.role === "admin" ? this.canvasPage(user) : new Response("não encontrado", { status: 404 });
+    // Projetos do canvas de edição: em teste, só o administrador (para os outros, as páginas nem existem).
+    if (/^\/(canvas|projetos)(\/|$)/.test(path)) return user.role === "admin" ? this.projects(request, user, path, url) : new Response("não encontrado", { status: 404 });
 
     const quickEdit = /^\/videos\/([0-9a-f-]{36})\/edicao-rapida$/.exec(path);
     if (post && quickEdit) return this.quickEdit(request, user, quickEdit[1]!);
@@ -181,18 +181,6 @@ export class Site {
         ],
       });
     });
-    // O canvas de edição, em teste: um card a mais, só para o administrador.
-    if (user.role === "admin" && "canvas de edição".includes(q.toLowerCase()))
-      cards.push(
-        tileCard({
-          href: "/canvas",
-          tile: `<span class="icon-tile icon-tile--large icon-tile--primary" aria-hidden="true"><span class="icon">video_library</span></span>`,
-          badge: { label: "Em teste", title: "Em teste: só o administrador vê" },
-          headline: "Canvas de edição",
-          supporting: "Monte várias versões com seus vídeos",
-          menu: [{ label: "Abrir", icon: "video_library", href: "/canvas" }],
-        }),
-      );
     const body = `
 <main class="page" id="conteudo">
   <div class="page__head">
@@ -207,10 +195,94 @@ export class Site {
   }
 
   /**
-   * Canvas de edição (src/canvas/, gerado em canvas.ts): monta versões com os
-   * vídeos prontos de quem usa. Nada fica salvo ainda; o Exportar mostra o plano.
+   * Projetos do canvas de edição (src/canvas/, gerado em canvas.ts): a lista em
+   * /projetos, o canvas em /canvas/<id> (salvo enquanto a pessoa edita) e os
+   * arquivos enviados do computador. Cada projeto é só de quem o criou.
    */
-  private async canvasPage(user: User): Promise<Response> {
+  private async projects(request: Request, user: User, path: string, url: URL): Promise<Response> {
+    const post = request.method === "POST";
+    if (path === "/canvas") return redirect("/projetos");
+    if (path === "/projetos") {
+      if (!post) return this.projectsPage(user, url);
+      const project = await this.db.insertProject({ id: crypto.randomUUID(), user_id: user.id, name: "Projeto sem nome", data: EMPTY_PROJECT });
+      return redirect(`/canvas/${project.id}`);
+    }
+    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|arquivos|apagar)(?:\/([0-9a-f-]{36}))?)?$/.exec(path);
+    const project = m ? await this.db.projectById(m[1]!) : null;
+    // Projeto de outra pessoa (ou que não existe): a página nem existe.
+    if (!m || !project || project.user_id !== user.id) return new Response("não encontrado", { status: 404 });
+    const [, , action, fileId] = m;
+    if (!action && !post && path.startsWith("/canvas/")) return this.canvasPage(user, project);
+    if (action === "salvar" && post) return this.saveProject(request, project);
+    if (action === "arquivos" && post && !fileId) return this.uploadProjectFile(request, project);
+    if (action === "arquivos" && !post && fileId) {
+      const file = await this.db.projectFile(project.id, fileId);
+      return file ? this.object(request, file.key, "private, max-age=86400") : new Response("não encontrado", { status: 404 });
+    }
+    if (action === "apagar") {
+      if (!post) return this.deleteProjectPage(user, project);
+      const keys = await this.db.deleteProject(project.id);
+      if (keys.length) await this.media.delete(keys);
+      return redirect("/projetos");
+    }
+    return new Response("não encontrado", { status: 404 });
+  }
+
+  /** A lista dos projetos da pessoa (o editado por último primeiro), com a busca pelo nome. */
+  private async projectsPage(user: User, url: URL): Promise<Response> {
+    const q = (url.searchParams.get("q") ?? "").trim();
+    const projects = await this.db.projectsByUser(user.id, q);
+    const cards = projects.map((p, i) => {
+      const blocks = (() => {
+        try {
+          return (JSON.parse(p.data) as { blocks?: unknown[] }).blocks?.length ?? 0;
+        } catch {
+          return 0;
+        }
+      })();
+      return tileCard({
+        href: `/canvas/${p.id}`,
+        tile: `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">video_library</span></span>`,
+        headline: p.name,
+        supporting: `${blocks === 1 ? "1 bloco" : `${blocks} blocos`} · editado em ${formatDate(p.updated_at)}`,
+        menu: [
+          { label: "Abrir", icon: "video_library", href: `/canvas/${p.id}` },
+          { label: "Apagar", icon: "delete", href: `/projetos/${p.id}/apagar` },
+        ],
+      });
+    });
+    const body = `
+<main class="page" id="conteudo">
+  <div class="page__head">
+    <div>
+      <h1 class="page__headline">Projetos <span class="pane__count">${cards.length}</span></h1>
+      <p class="page__intro">Monte várias versões dos seus vídeos num canvas.</p>
+    </div>
+    <form method="post" action="/projetos"><button class="fab interactive" type="submit"><span class="icon">add</span>Novo projeto</button></form>
+  </div>
+  ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : q ? emptyState("search", "Nenhum projeto encontrado", `Nada com “${q}” no nome.`) : emptyState("video_library", "Nenhum projeto ainda", "Toque em Novo projeto para começar.")}
+</main>`;
+    return html(page(`Projetos · ${SITE_NAME}`, body, { bar: { user, tab: "projetos", search: { action: "/projetos", label: "Pesquisar projetos", q } } }));
+  }
+
+  /** Confirmação antes de apagar: o projeto e os arquivos enviados para ele somem; os vídeos não. */
+  private deleteProjectPage(user: User, project: Project): Response {
+    const body = `
+<main class="page" id="conteudo">
+  <div class="confirm">
+    <h1 class="confirm__title">Apagar “${esc(project.name)}”?</h1>
+    <p class="confirm__text">O projeto e os arquivos enviados para ele somem. Os seus vídeos continuam.</p>
+    <form class="confirm__actions" method="post" action="/projetos/${project.id}/apagar">
+      <a class="button button--text interactive" href="/projetos">Cancelar</a>
+      <button class="button button--filled interactive" type="submit"><span class="icon">delete</span>Apagar</button>
+    </form>
+  </div>
+</main>`;
+    return html(page(`Apagar projeto · ${SITE_NAME}`, body, { bar: { user, back: "/projetos", title: "Apagar projeto" } }));
+  }
+
+  /** O canvas de um projeto, com os vídeos prontos de quem usa e o que já estava salvo. */
+  private async canvasPage(user: User, project: Project): Promise<Response> {
     const usable = STRUCTURES.filter((s) => canUse(s, user.role));
     const videos = (await this.db.videosByStructures(usable.map((s) => s.id)))
       .filter((v) => v.status === "completed" && v.video_key)
@@ -220,7 +292,24 @@ export class Site {
         src: `/videos/${v.id}.mp4`,
         when: formatDate(v.created_at),
       }));
-    const config = { videos, erros: { arquivo: ERROS.canvasArquivo, video: ERROS.canvasVideo } };
+    let data: unknown = null;
+    try {
+      data = JSON.parse(project.data);
+    } catch {}
+    const config = {
+      videos,
+      projeto: { id: project.id, name: project.name, data, salvar: `/projetos/${project.id}/salvar`, arquivos: `/projetos/${project.id}/arquivos` },
+      limites: { imagem: MAX_IMAGE_BYTES, video: MAX_VIDEO_BYTES },
+      erros: {
+        arquivo: ERROS.canvasArquivo,
+        video: ERROS.canvasVideo,
+        salvar: ERROS.canvasSalvar,
+        enviar: ERROS.canvasEnviar,
+        grandeImagem: ERROS.canvasArquivoGrande(MAX_IMAGE_BYTES / 1024 / 1024),
+        grandeVideo: ERROS.canvasArquivoGrande(MAX_VIDEO_BYTES / 1024 / 1024),
+        nome: ERROS.projetoNome,
+      },
+    };
     const actions = `<button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
     <button class="button button--tonal interactive" type="button" data-open-file><span class="icon">upload</span>Do computador</button>
     <button class="button button--filled interactive" type="button" data-open-library><span class="icon">video_library</span>Seus vídeos</button>`;
@@ -229,7 +318,55 @@ export class Site {
 ${CANVAS_BODY}
 <script type="application/json" id="canvas-config">${JSON.stringify(config).replace(/</g, "\\u003c")}</script>
 <script type="module" nonce="${NONCE}">${CANVAS_SCRIPT}</script>`;
-    return html(page(`Canvas de edição · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Canvas de edição", actions } }), 200, CANVAS_CSP);
+    return html(page(`${project.name} · ${SITE_NAME}`, body, { bar: { user, back: "/projetos", title: project.name, actions } }), 200, CANVAS_CSP);
+  }
+
+  /** Salva o canvas (JSON) e o nome, enquanto a pessoa edita. */
+  private async saveProject(request: Request, project: Project): Promise<Response> {
+    if (Number(request.headers.get("content-length") ?? 0) > MAX_PROJECT_BYTES) return new Response("grande demais", { status: 413 });
+    const text = await request.text();
+    if (text.length > MAX_PROJECT_BYTES) return new Response("grande demais", { status: 413 });
+    let body: { name?: unknown; data?: unknown };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return new Response("json inválido", { status: 400 });
+    }
+    const changes: { name?: string; data?: string } = {};
+    if (body.name !== undefined) {
+      const name = typeof body.name === "string" ? body.name.trim().slice(0, 120) : "";
+      if (!name) return new Response(ERROS.projetoNome, { status: 400 });
+      changes.name = name;
+    }
+    if (body.data !== undefined) {
+      const d = body.data as { blocks?: unknown; finals?: unknown; edges?: unknown } | null;
+      if (!d || !Array.isArray(d.blocks) || !Array.isArray(d.finals) || !Array.isArray(d.edges)) return new Response("projeto inválido", { status: 400 });
+      changes.data = JSON.stringify(d);
+    }
+    await this.db.saveProject(project.id, changes);
+    return new Response(null, { status: 204 });
+  }
+
+  /** Recebe um arquivo do computador (o corpo do pedido) e guarda no R2, dentro do projeto. */
+  private async uploadProjectFile(request: Request, project: Project): Promise<Response> {
+    const type = (request.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+    const kind = type.startsWith("image/") ? "imagem" : type.startsWith("video/") ? "video" : type.startsWith("audio/") ? "audio" : null;
+    if (!kind) return new Response(ERROS.canvasArquivo, { status: 400 });
+    const max = kind === "imagem" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+    const tooBig = new Response(ERROS.canvasArquivoGrande(max / 1024 / 1024), { status: 413 });
+    if (Number(request.headers.get("content-length") ?? 0) > max) return tooBig;
+    const bytes = await request.arrayBuffer();
+    if (!bytes.byteLength) return new Response(ERROS.canvasArquivo, { status: 400 });
+    if (bytes.byteLength > max) return tooBig;
+    let name = "arquivo";
+    try {
+      name = decodeURIComponent(request.headers.get("x-nome") ?? "").slice(0, 200) || name;
+    } catch {}
+    const id = crypto.randomUUID();
+    const key = `projetos/${project.id}/${id}`;
+    await this.media.put(key, bytes, { httpMetadata: { contentType: type } });
+    await this.db.insertProjectFile({ id, project_id: project.id, key, name, type, size: bytes.byteLength });
+    return Response.json({ src: `/projetos/${project.id}/arquivos/${id}` }, { status: 201 });
   }
 
   /** Os vídeos de todos os modelos que a pessoa pode usar, com filtro por status, busca pela fala e grade ou lista. */
@@ -595,6 +732,11 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
 
 /** Cor do ícone de cada modelo, na ordem dos cards. */
 const MODEL_TONES = ["primary", "tertiary", "secondary"] as const;
+
+/** Projeto novo: só o bloco Final (src/canvas/modelo.js). */
+const EMPTY_PROJECT = JSON.stringify({ blocks: [], finals: [{ id: "final", x: 720, y: 200 }], edges: [] });
+/** O canvas salvo (JSON): até 1 MB. */
+const MAX_PROJECT_BYTES = 1024 * 1024;
 
 /** Ícone num contêiner tonal, na cor do grupo de status: pronto, na fila, áudio ou edição, ou erro. */
 function statusTile(status: ReturnType<typeof cardStatus>, large = false): string {
@@ -1059,7 +1201,7 @@ function snackbar(text: string): string {
  * a marca (que volta para Modelos), o nome do modelo, o botão de sair e a conta.
  */
 type Search = { action: string; label: string; q: string; keep?: Record<string, string> };
-type Bar = false | { user: User; tab: "modelos" | "videos"; search: Search } | { user: User; back: string; title: string; actions?: string };
+type Bar = false | { user: User; tab: "modelos" | "videos" | "projetos"; search: Search } | { user: User; back: string; title: string; actions?: string };
 
 function accountActions(user: User): string {
   const initial = esc((user.name.trim()[0] ?? "?").toUpperCase());
@@ -1098,7 +1240,7 @@ function topAppBar(bar: Exclude<Bar, false>): string {
   const tab = (id: string, href: string, label: string) => `<a class="nav-pill interactive" href="${href}"${bar.tab === id ? ' aria-current="page"' : ""}>${label}</a>`;
   return `<header class="top-app-bar top-app-bar--home" data-app-bar>
   ${brand("/")}
-  <nav class="nav-pills" aria-label="Seções">${tab("modelos", "/", "Modelos")}${tab("videos", "/videos", "Vídeos")}</nav>
+  <nav class="nav-pills" aria-label="Seções">${tab("modelos", "/", "Modelos")}${tab("videos", "/videos", "Vídeos")}${bar.user.role === "admin" ? tab("projetos", "/projetos", "Projetos") : ""}</nav>
   <div class="top-app-bar__tools">
     <form class="search-field" role="search" method="get" action="${search.action}">
       <span class="icon" aria-hidden="true">search</span>

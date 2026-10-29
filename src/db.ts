@@ -119,6 +119,27 @@ export type VideoChanges = Partial<
   >
 >;
 
+/** Projeto do canvas de edição: o canvas inteiro em JSON (src/canvas/modelo.js). */
+export interface Project {
+  id: string;
+  user_id: number;
+  name: string;
+  data: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Arquivo enviado do computador para um projeto (no R2, em key). */
+export interface ProjectFile {
+  id: string;
+  project_id: string;
+  key: string;
+  name: string;
+  type: string;
+  size: number;
+  created_at: string;
+}
+
 /** Status em que o vídeo ainda pode mudar (vale consultar o OpenRouter). */
 export const OPEN_STATUSES: VideoStatus[] = ["pending", "in_progress"];
 
@@ -310,6 +331,56 @@ export class Db {
 
   // --- contas e sessões (como no estuda.mais) ---------------------------------------
 
+  // --- Projetos do canvas ---
+
+  async insertProject(p: { id: string; user_id: number; name: string; data: string }, now = new Date()): Promise<Project> {
+    const at = now.toISOString();
+    return (await this.d1
+      .prepare("INSERT INTO projects (id, user_id, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING *")
+      .bind(p.id, p.user_id, p.name, p.data, at, at)
+      .first<Project>())!;
+  }
+
+  async projectById(id: string): Promise<Project | null> {
+    return this.d1.prepare("SELECT * FROM projects WHERE id = ?").bind(id).first<Project>();
+  }
+
+  /** Os projetos da pessoa, o editado por último primeiro; q filtra pelo nome. */
+  async projectsByUser(userId: number, q = "", limit = 200): Promise<Project[]> {
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    return (
+      await this.d1
+        .prepare("SELECT * FROM projects WHERE user_id = ? AND name LIKE ? ESCAPE '\\' ORDER BY updated_at DESC, rowid DESC LIMIT ?")
+        .bind(userId, like, limit)
+        .all<Project>()
+    ).results;
+  }
+
+  async saveProject(id: string, changes: { name?: string; data?: string }, now = new Date()): Promise<void> {
+    await this.d1
+      .prepare("UPDATE projects SET name = COALESCE(?, name), data = COALESCE(?, data), updated_at = ? WHERE id = ?")
+      .bind(changes.name ?? null, changes.data ?? null, now.toISOString(), id)
+      .run();
+  }
+
+  /** Apaga o projeto e devolve as chaves no R2 dos arquivos dele (para apagar lá também). */
+  async deleteProject(id: string): Promise<string[]> {
+    const keys = (await this.d1.prepare("SELECT key FROM project_files WHERE project_id = ?").bind(id).all<{ key: string }>()).results.map((r) => r.key);
+    await this.d1.batch([this.d1.prepare("DELETE FROM project_files WHERE project_id = ?").bind(id), this.d1.prepare("DELETE FROM projects WHERE id = ?").bind(id)]);
+    return keys;
+  }
+
+  async insertProjectFile(f: Omit<ProjectFile, "created_at">, now = new Date()): Promise<void> {
+    await this.d1
+      .prepare("INSERT INTO project_files (id, project_id, key, name, type, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(f.id, f.project_id, f.key, f.name, f.type, f.size, now.toISOString())
+      .run();
+  }
+
+  async projectFile(projectId: string, id: string): Promise<ProjectFile | null> {
+    return this.d1.prepare("SELECT * FROM project_files WHERE project_id = ? AND id = ?").bind(projectId, id).first<ProjectFile>();
+  }
+
   async hasUsers(): Promise<boolean> {
     return (await this.d1.prepare("SELECT 1 FROM users LIMIT 1").first()) !== null;
   }
@@ -373,6 +444,8 @@ export class Db {
   /** Só nos testes. */
   async resetAll(): Promise<void> {
     await this.d1.batch([
+      this.d1.prepare("DELETE FROM project_files"),
+      this.d1.prepare("DELETE FROM projects"),
       this.d1.prepare("DELETE FROM videos"),
       this.d1.prepare("DELETE FROM sessions"),
       this.d1.prepare("DELETE FROM users"),

@@ -3,9 +3,11 @@
  * translate/scale. O significado (grupos, coberturas, versões) vem do
  * modelo.js; aqui só desenho e gestos. Quem monta a página passa a
  * configuração em <script type="application/json" id="canvas-config">:
- * { amostra: true } (o protótipo, com o exemplo) ou { videos: [...] } (o site,
- * com os vídeos prontos de quem usa: id, name, src, when), e as frases de erro em
- * erros (arquivo, video), que vêm do catálogo src/erros.ts.
+ * { amostra: true } (o protótipo, com o exemplo) ou, no site, { videos: [...] }
+ * (os vídeos prontos de quem usa: id, name, src, when), projeto ({ id, name,
+ * data, salvar, arquivos }: o que está salvo e para onde salvar e enviar
+ * arquivos) e limites ({ imagem, video }, em bytes); e as frases de erro em
+ * erros, que vêm do catálogo src/erros.ts.
  */
 import * as M from "./modelo.js";
 import { Player, clock } from "./player.js";
@@ -26,7 +28,10 @@ try {
   CONFIG = JSON.parse($("#canvas-config")?.textContent || "{}");
 } catch {}
 const emptyProject = () => ({ blocks: [], finals: [{ id: "final", x: 720, y: 200 }], edges: [] });
-let project = CONFIG.amostra ? M.sample((f) => `midia/${f}`) : emptyProject();
+const PROJETO = CONFIG.projeto ?? null;
+const valid = (d) => d && Array.isArray(d.blocks) && Array.isArray(d.finals) && Array.isArray(d.edges);
+let project = valid(PROJETO?.data) ? PROJETO.data : CONFIG.amostra ? M.sample((f) => `midia/${f}`) : emptyProject();
+let projectName = PROJETO?.name ?? "";
 let view = { x: 80, y: 120, z: 0.8 };
 let sel = { type: "final", id: "final" };
 let versionIdx = 0;
@@ -165,12 +170,54 @@ function commit(before) {
   undo.push(before);
   if (undo.length > 100) undo.shift();
   redo.length = 0;
+  scheduleSave();
 }
+
+/* ---------- salvar (no site: o projeto vai para o servidor pouco depois de cada mudança) ---------- */
+
+let saveTimer = 0;
+let saving = Promise.resolve();
+let nameDirty = false;
+function scheduleSave() {
+  if (!PROJETO) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 700);
+}
+function payload() {
+  const body = { data: project };
+  if (nameDirty) body.name = projectName;
+  return JSON.stringify(body);
+}
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  const body = payload();
+  const sentName = nameDirty;
+  nameDirty = false;
+  // Um salvamento por vez, na ordem: o último sempre chega por último.
+  saving = saving.then(async () => {
+    try {
+      const res = await fetch(PROJETO.salvar, { method: "POST", headers: { "content-type": "application/json" }, body });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      if (sentName) nameDirty = true;
+      toast(CONFIG.erros?.salvar ?? "");
+    }
+  });
+  return saving;
+}
+// Ao sair da página com mudança ainda não enviada: manda junto com a saída (se couber).
+addEventListener("pagehide", () => {
+  if (!PROJETO || !saveTimer) return;
+  const body = payload();
+  if (body.length < 60000) fetch(PROJETO.salvar, { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true });
+});
 function step(from, to) {
   if (!from.length) return;
   to.push(project);
   project = from.pop();
   render();
+  scheduleSave();
 }
 
 /* ---------- desenho ---------- */
@@ -328,6 +375,11 @@ function renderSide(gs) {
     h += `<div class="xlist">${vs
       .map((v, i) => `<button class="xlist__item interactive" type="button" data-version="${i}" aria-current="${i === versionIdx && !preview}"><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(M.versionName(v))}</span><span class="xlist__trail">${fmt(M.timeline(v).duration)}</span></button>`)
       .join("")}</div></section>`;
+    const f = project.finals.find((f) => f.id === sel.id);
+    const size = f?.size ?? M.SIZES[0].value;
+    h += `<section class="viewer__section"><h3 class="viewer__title">Tamanho do vídeo</h3><div class="segmented-button sheet-segmented" role="radiogroup" aria-label="Tamanho do vídeo">${M.SIZES.map(
+      (o) => `<label class="segmented-button__segment interactive"><input type="radio" name="f-size" value="${o.value}"${o.value === size ? " checked" : ""}><span>${o.label}</span></label>`,
+    ).join("")}</div><p class="sheet-hint">Vertical, 9:16. As versões saem neste tamanho.</p></section>`;
     if (vs.length) actions = btn("outlined", 'data-export="one"', "download", "Exportar esta") + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
@@ -354,7 +406,11 @@ function renderSide(gs) {
     h += `<p class="sheet-hint">Liga um grupo ao seguinte. Cada caminho até o Final é uma versão.</p>`;
     actions = btn("text", 'data-act="del"', "delete", "Excluir linha");
   } else {
-    h += `<p class="sheet-hint">Escolha um bloco, um grupo ou o Final.</p>`;
+    if (PROJETO) {
+      title = "Projeto";
+      h += field("f-project", "Nome do projeto", projectName, 'maxlength="120"');
+    }
+    h += `<p class="sheet-hint">Escolha um bloco, um grupo ou o Final para ver os ajustes dele.</p>`;
   }
   side.innerHTML = `<h2 class="sheet-title">${title}</h2>` + h;
   sideActions.innerHTML = actions;
@@ -383,7 +439,9 @@ side.onclickAction = (e) => {
   if (ex) {
     const vs = M.versions(project, sel.id);
     const list = ex.dataset.export === "all" ? vs : [vs[versionIdx]];
-    $("#dlg-body").textContent = JSON.stringify(list.map(M.exportPlan), null, 2);
+    const f = project.finals.find((f) => f.id === sel.id);
+    const size = f?.size ?? M.SIZES[0].value;
+    $("#dlg-body").textContent = JSON.stringify(list.map((v) => ({ tamanho: size, ...M.exportPlan(v) })), null, 2);
     $("#dlg-title").textContent = list.length === 1 ? "Exportar 1 versão" : `Exportar ${list.length} versões`;
     $("#dlg").showModal();
   }
@@ -418,6 +476,25 @@ side.onclickAction = (e) => {
 };
 side.addEventListener("click", side.onclickAction);
 side.addEventListener("input", (e) => {
+  const t0 = e.target;
+  // Nome do projeto: muda o título da barra e da aba, e vai junto no próximo salvamento.
+  if (t0.id === "f-project") {
+    const name = t0.value.trim();
+    if (!name) return;
+    projectName = name;
+    nameDirty = true;
+    const bar = $(".top-app-bar__title");
+    if (bar) bar.textContent = name;
+    document.title = document.title.replace(/^.*?( · [^·]+)$/, `${name}$1`);
+    return scheduleSave();
+  }
+  if (t0.name === "f-size" && sel.type === "final") {
+    const before = project;
+    project = structuredClone(project);
+    project.finals.find((f) => f.id === sel.id).size = t0.value;
+    commit(before);
+    return;
+  }
   if (sel.type !== "block") return;
   const before = project;
   project = structuredClone(project);
@@ -463,23 +540,41 @@ function duplicate() {
   render();
 }
 
+/** No site, o arquivo vai para o projeto no servidor (não some ao recarregar); devolve o endereço dele. */
+async function upload(file) {
+  if (!PROJETO) return null;
+  const image = file.type.startsWith("image/");
+  const max = image ? CONFIG.limites?.imagem : CONFIG.limites?.video;
+  if (max && file.size > max) throw new Error(image ? CONFIG.erros?.grandeImagem : CONFIG.erros?.grandeVideo);
+  const res = await fetch(PROJETO.arquivos, { method: "POST", headers: { "content-type": file.type, "x-nome": encodeURIComponent(file.name) }, body: file });
+  if (!res.ok) throw new Error(res.status === 413 || res.status === 400 ? await res.text() : CONFIG.erros?.enviar);
+  return (await res.json()).src;
+}
+
 async function importFiles(files, at) {
-  const before = project;
-  project = structuredClone(project);
   let y = at.y;
   for (const file of files) {
     try {
-      const { src, kind, dur } = await probe(file);
+      const local = await probe(file);
+      if (PROJETO) toast(`Enviando ${file.name}…`);
+      const sent = await upload(file);
+      // O arquivo do navegador (blob:) só serviu para medir: no site fica o do servidor.
+      if (sent) URL.revokeObjectURL(local.src);
+      const { kind, dur } = local;
+      const src = sent ?? local.src;
+      const before = project;
+      project = structuredClone(project);
       const b = { id: M.newId("b"), tone: M.nextTone(project, kind, src), kind, name: file.name.replace(/\.[^.]+$/, ""), src, dur: kind === "image" ? M.IMAGE_MAX : dur, tin: 0, tout: Math.min(dur, kind === "image" ? 3 : dur), x: at.x, y, mute: false, vol: 1 };
       project.blocks.push(b);
       sel = { type: "block", id: b.id };
       y += M.height(b) + 48;
-    } catch {
-      toast(CONFIG.erros?.arquivo ?? "");
+      commit(before);
+      render();
+      if (PROJETO) toast(`${file.name} entrou no canvas.`);
+    } catch (err) {
+      toast(err?.message && err.message !== "[object Event]" ? err.message : (CONFIG.erros?.arquivo ?? ""));
     }
   }
-  commit(before);
-  render();
 }
 
 const toWorld = (cx, cy) => {

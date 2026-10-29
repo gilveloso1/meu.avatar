@@ -99,4 +99,8 @@ export const ERROS = {
   // Canvas de edição (no navegador, pelo config da página)
   canvasArquivo: erro("Não foi possível abrir o arquivo.", "Use MP4, MOV, JPG, PNG, MP3 ou M4A."),
   canvasVideo: erro("Não foi possível abrir este vídeo.", "Tente de novo em instantes."),
+  canvasSalvar: erro("Não foi possível salvar o projeto.", "Confira a conexão e continue editando."),
+  canvasEnviar: erro("Não foi possível enviar o arquivo.", "Tente de novo em instantes."),
+  canvasArquivoGrande: (max: number) => erro("Este arquivo é grande demais.", `Use um arquivo de até ${max} MB.`),
+  projetoNome: campo("Escreva o nome do projeto."),
 };

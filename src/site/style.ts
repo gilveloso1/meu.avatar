@@ -783,6 +783,16 @@ a.frame { display: block; }
   font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem;
 }
 
+/* Confirmação numa página (apagar um projeto): o diálogo básico do M3, no meio da página
+   (surface-container-high, cantos de 28 px, 24 px de margem, até 560 px, ações à direita). */
+.confirm {
+  width: min(560px, 100%); margin: 12vh auto 0; padding: 24px; display: flex; flex-direction: column; gap: 16px;
+  border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container-high);
+}
+.confirm__title { font: var(--md-sys-typescale-headline-small); overflow-wrap: anywhere; }
+.confirm__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.confirm__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
 /* --- Página ---------------------------------------------------------------------------- */
 .page {
   flex: 1; width: 100%; max-width: calc(var(--layout-max) + 2 * var(--layout-margin)); margin: 0 auto;
