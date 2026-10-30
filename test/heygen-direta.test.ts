@@ -220,6 +220,49 @@ describe("HeyGen direta: acompanhar", () => {
     expect(html).not.toContain("≈ 12 s");
   });
 
+  it("depois de salvar no R2, apaga na HeyGen o vídeo, a foto e o áudio", async () => {
+    await useHeyGen();
+    const heygen = new FakeHeyGenApi();
+    await post(heygen, { fonte: "audio", audio: mp3(), imagem: foto() });
+    const [video] = await db().recentVideos();
+    const enviados = heygen.assets.map((a) => a.id);
+    expect(JSON.parse(video!.settings!).heygen_assets).toBe(enviados.join(","));
+    heygen.finish(video!.job_id!, { status: "completed", video_url: "https://files.heygen.ai/v.mp4", duration: 5 });
+    const [done] = await createStudio({ ...env, SITE_URL: SITE }, { api: null, heygen }).syncOpen();
+    expect(heygen.deletedVideos).toEqual([video!.job_id]);
+    expect(heygen.deletedAssets).toEqual(enviados);
+    const settings = JSON.parse(done!.settings!);
+    expect(settings.heygen_video_deleted).toBe("sim");
+    expect(settings.heygen_assets).toBeUndefined();
+    // O vídeo continua no meu.avatar.
+    expect(await (await env.MIDIA.get(done!.video_key!))!.text()).toBe("mp4-heygen");
+  });
+
+  it("se a HeyGen não deixar apagar, o vídeo fica pronto e os arquivos ficam anotados", async () => {
+    await useHeyGen();
+    const heygen = new FakeHeyGenApi();
+    await post(heygen, { fonte: "pronta", voz: "voz-rui", fala: FALA, imagem: foto() });
+    const [video] = await db().recentVideos();
+    heygen.failDelete = true;
+    heygen.finish(video!.job_id!, { status: "completed", video_url: "https://files.heygen.ai/v.mp4", duration: 5 });
+    const [done] = await createStudio({ ...env, SITE_URL: SITE }, { api: null, heygen }).syncOpen();
+    expect(done!.status).toBe("completed");
+    const settings = JSON.parse(done!.settings!);
+    expect(settings.heygen_assets).toBe(heygen.assets[0]!.id);
+    expect(settings.heygen_video_deleted).toBeUndefined();
+  });
+
+  it("vídeo que falhou também é apagado na HeyGen, com a gravação da voz", async () => {
+    await useHeyGen();
+    const heygen = new FakeHeyGenApi();
+    await post(heygen, { fonte: "clonada", clone: "nova", nome_voz: "Minha voz", consentimento: "sim", fala: FALA, imagem: foto(), amostra: mp3() });
+    const [video] = await db().recentVideos();
+    const [voice] = await db().voicesByUser(video!.user_id!);
+    heygen.cloneStatuses.set(voice!.provider_voice_id, { status: "FAILED" });
+    await createStudio({ ...env, SITE_URL: SITE }, { api: null, heygen }).voiceNext();
+    expect(heygen.deletedAssets).toEqual(heygen.assets.map((a) => a.id));
+  });
+
   it("falhou na HeyGen: guarda o motivo", async () => {
     await useHeyGen();
     const heygen = new FakeHeyGenApi();

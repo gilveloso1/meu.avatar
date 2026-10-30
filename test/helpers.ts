@@ -308,6 +308,17 @@ export class FakeHeyGenApi implements HeyGenApi {
     this.speeches.push({ voiceId, text });
     return `https://files.heygen.ai/audio/${voiceId}.wav`;
   }
+  deletedVideos: string[] = [];
+  deletedAssets: string[] = [];
+  failDelete = false;
+  async deleteVideo(id: string) {
+    if (this.failDelete) throw new Error("HeyGen fora do ar");
+    this.deletedVideos.push(id);
+  }
+  async deleteAsset(id: string) {
+    if (this.failDelete) throw new Error("HeyGen fora do ar");
+    this.deletedAssets.push(id);
+  }
   finish(videoId: string, changes: Partial<HeyGenVideo>) {
     this.details.set(videoId, { ...this.details.get(videoId)!, ...changes });
   }

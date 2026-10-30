@@ -61,6 +61,10 @@ export interface HeyGenApi {
   cloneStatus(voiceId: string): Promise<CloneStatus>;
   /** Fala de uma voz clonada (texto para fala); devolve a URL do áudio. */
   speech(voiceId: string, text: string): Promise<string>;
+  /** Apaga o vídeo e os arquivos dele na HeyGen (a página do vídeo lá abre sem login). */
+  deleteVideo(id: string): Promise<void>;
+  /** Apaga um arquivo enviado (foto, áudio, gravação da voz). */
+  deleteAsset(id: string): Promise<void>;
 }
 
 export class HeyGenClient implements HeyGenApi {
@@ -115,6 +119,14 @@ export class HeyGenClient implements HeyGenApi {
       body: JSON.stringify({ voice_id: voiceId, text, language: "pt" }),
     });
     return data.audio_url;
+  }
+
+  async deleteVideo(id: string): Promise<void> {
+    await this.json(`/v3/videos/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  async deleteAsset(id: string): Promise<void> {
+    await this.json(`/v3/assets/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
   private headers(json = false): Record<string, string> {

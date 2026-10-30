@@ -465,9 +465,17 @@ export class Studio {
     });
 
     try {
+      // Os arquivos enviados ficam anotados no vídeo, para serem apagados na HeyGen depois (cleanUpHeyGen).
+      const assets: string[] = [];
+      const upload = async (bytes: ArrayBuffer, type: string, name: string) => {
+        const assetId = await heygen.uploadAsset(bytes, type, name);
+        assets.push(assetId);
+        await this.db.updateVideo(id, { settings: JSON.stringify({ ...parseSettings(video.settings), heygen_assets: assets.join(",") }) });
+        return assetId;
+      };
       const body: HeyGenVideoRequest = {
         type: "image",
-        image: { type: "asset_id", asset_id: await heygen.uploadAsset(imageBytes, image!.type, `avatar.${ext}`) },
+        image: { type: "asset_id", asset_id: await upload(imageBytes, image!.type, `avatar.${ext}`) },
         resolution: plan.resolution,
         aspect_ratio: plan.aspectRatio,
         expressiveness: plan.expressiveness,
@@ -480,14 +488,14 @@ export class Studio {
         body.voice_id = plan.voiceId!;
         if (plan.locale) body.voice_settings = { locale: plan.locale };
       }
-      if (audio) body.audio_asset_id = await heygen.uploadAsset(audioBytes!, audio.file.type, `fala.${audio.ext}`);
+      if (audio) body.audio_asset_id = await upload(audioBytes!, audio.file.type, `fala.${audio.ext}`);
       if (plan.source === "clonada") {
         if (sample) {
-          const assetId = await heygen.uploadAsset(await sample.file.arrayBuffer(), sample.file.type, `voz.${sample.ext}`);
+          const assetId = await upload(await sample.file.arrayBuffer(), sample.file.type, `voz.${sample.ext}`);
           const providerId = await heygen.cloneVoice(plan.cloneName!, assetId);
           voice = await this.db.insertVoice({ id: crypto.randomUUID(), user_id: input.user.id, name: plan.cloneName!, provider_voice_id: providerId, status: "PENDING" });
         }
-        const waiting = JSON.stringify({ ...parseSettings(video.settings), voice_row: voice!.id, voice: voice!.name, heygen_request: JSON.stringify(body) });
+        const waiting = JSON.stringify({ ...parseSettings(video.settings), heygen_assets: assets.join(","), voice_row: voice!.id, voice: voice!.name, heygen_request: JSON.stringify(body) });
         if (voice!.status !== "ACTIVE") return (await this.db.updateVideo(id, { prep_status: "voz", settings: waiting }))!;
         await this.db.updateVideo(id, { settings: waiting });
         body.audio_url = await heygen.speech(voice!.provider_voice_id, plan.script!);
@@ -496,7 +504,8 @@ export class Studio {
       return (await this.db.updateVideo(id, { job_id: video_id, status: "pending" }))!;
     } catch (err) {
       console.error("Falha ao pedir o vídeo à HeyGen", id, err);
-      return (await this.db.updateVideo(id, { status: "failed", error: errorMessage(err) }))!;
+      const failed = (await this.db.updateVideo(id, { status: "failed", error: errorMessage(err) }))!;
+      return this.cleanUpHeyGen(failed);
     }
   }
 
@@ -531,7 +540,8 @@ export class Studio {
         done.push((await this.db.updateVideo(video.id, { job_id: video_id, status: "pending", prep_status: "done" }))!);
       } catch (err) {
         console.error("Falha na voz clonada", video.id, err);
-        done.push((await this.db.updateVideo(video.id, { status: "failed", prep_status: "failed", prep_error: errorMessage(err), error: errorMessage(err) }))!);
+        const failed = (await this.db.updateVideo(video.id, { status: "failed", prep_status: "failed", prep_error: errorMessage(err), error: errorMessage(err) }))!;
+        done.push(await this.cleanUpHeyGen(failed));
       }
     }
     return done;
@@ -551,7 +561,7 @@ export class Studio {
       const key = `videos/${video.id}.mp4`;
       await this.media.put(key, await this.heygen.download(detail.video_url), { httpMetadata: { contentType: "video/mp4" } });
       const seconds = detail.duration ?? video.duration;
-      return (await this.db.updateVideo(video.id, {
+      const saved = (await this.db.updateVideo(video.id, {
         status: "completed",
         video_key: key,
         duration: Math.max(1, Math.round(seconds)),
@@ -559,13 +569,42 @@ export class Studio {
         // A voz vem pronta da HeyGen (ou é o áudio da pessoa): não passa pelo contêiner.
         audio_status: null,
       }))!;
+      return this.cleanUpHeyGen(saved);
     }
     if (detail.status === "failed") {
       const reason = [detail.failure_code, detail.failure_message].filter(Boolean).join(": ") || "A HeyGen não gerou o vídeo.";
-      return (await this.db.updateVideo(video.id, { status: "failed", error: reason }))!;
+      return this.cleanUpHeyGen((await this.db.updateVideo(video.id, { status: "failed", error: reason }))!);
     }
     const status = detail.status === "processing" ? "in_progress" : "pending";
     return status !== video.status ? (await this.db.updateVideo(video.id, { status }))! : video;
+  }
+
+  /**
+   * Apaga na HeyGen o vídeo e os arquivos enviados (foto, áudio, gravação da voz) depois que o vídeo
+   * está no R2 ou falhou: a página do vídeo lá abre sem login, e a HeyGen pode usar o que fica guardado.
+   * O que não deu para apagar fica anotado (heygen_assets) e vai para o log; o vídeo segue normal.
+   */
+  private async cleanUpHeyGen(video: Video): Promise<Video> {
+    const heygen = this.heygen;
+    if (!heygen) return video;
+    const settings = parseSettings(video.settings);
+    const left: string[] = [];
+    const remove = async (what: string, run: () => Promise<void>) => {
+      try {
+        await run();
+      } catch (err) {
+        console.error("Não deu para apagar na HeyGen", video.id, what, err);
+        left.push(what);
+      }
+    };
+    if (video.job_id && settings.heygen_video_deleted !== "sim") {
+      await remove(`video:${video.job_id}`, () => heygen.deleteVideo(video.job_id!));
+    }
+    for (const assetId of (settings.heygen_assets ?? "").split(",").filter(Boolean)) await remove(assetId, () => heygen.deleteAsset(assetId));
+    const assets = left.filter((w) => !w.startsWith("video:"));
+    const next = { ...settings, heygen_assets: assets.join(","), ...(video.job_id && !left.includes(`video:${video.job_id}`) ? { heygen_video_deleted: "sim" } : {}) };
+    if (!next.heygen_assets) delete (next as Record<string, string>).heygen_assets;
+    return (await this.db.updateVideo(video.id, { settings: JSON.stringify(next) }))!;
   }
 
   /** Aviso da HeyGen de que um vídeo terminou: acha pelo callback_id (o id do vídeo) ou pelo id da HeyGen e confere. */
