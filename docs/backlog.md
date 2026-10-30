@@ -25,8 +25,8 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
 
 1. **HeyGen pela API direta, com três vozes** (feito: voz pronta, voz clonada
    e o áudio da pessoa; troca de plataforma pela config do banco, ver
-   `docs/operacao.md`). Falta: testar com a chave de verdade e anotar em
-   `docs/modelos/heygen-avatar-iv.md`.
+   `docs/operacao.md`). Testado com a chave de verdade nas três vozes (ver
+   `docs/modelos/heygen-avatar-iv.md`). Falta publicar.
 2. **Tela Avatares**, logo depois de "Modelos": guarda os ativos de cada
    avatar (fotos, frames, vozes, áudios). Não depende de nenhum modelo: os
    modelos criam algo e a pessoa salva no avatar para usar depois.

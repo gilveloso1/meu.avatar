@@ -77,8 +77,38 @@ Um vídeo de 30 s com foto: US$ 1,16 direto, contra US$ 1,50 pelo OpenRouter
 
 ### Próximo passo
 
-1. Na estrutura atual, pelo OpenRouter: `voice_settings.locale = "pt-BR"` e
-   legenda.
-2. Para voz própria ou clonada e o preço menor: uma estrutura nova pela API
-   direta da HeyGen, com chave e saldo próprios (hoje o saldo é zero). Um
-   teste pago antes de decidir.
+1. Conferir de ouvido os três vídeos abaixo e o lip sync.
+2. Publicar: chave no Worker (`npx wrangler secret put HEYGEN_API_KEY`),
+   migração 0011, e ligar a config `plataforma.heygen` (ver `docs/operacao.md`).
+3. Conferir no ar o aviso `/heygen/webhook`: no computador ele não chega, e o
+   corpo do aviso não está documentado.
+
+## Testes pela API direta (30/10/2026)
+
+No computador, com a mesma foto (avatar com os produtos na mesa), o mesmo texto
+nos testes 1 e 3 ("Vocês já viram o valor que tá o kit completo do colágeno
+Lifter aqui no Tik Tok Shop, gente!"), 720p, 9:16, expressividade média. Vídeos
+no D1 local.
+
+| Teste | Voz | Duração | Custo calculado | Vídeo |
+|---|---|---|---|---|
+| 1 | Voz pronta (Lucilene) | 5,5 s | US$ 0,2132 | `b298d6d0-c58a-46e7-be05-f0404d462e52` |
+| 2 | Meu áudio (gravação de 6,76 s) | 6,8 s | US$ 0,2593 | `9b5f5fa7-8d5b-4852-aa6f-683eb305634a` |
+| 3 | Voz clonada (Camila, com autorização dela) | 6,1 s | US$ 0,2332 | `cf00562b-6dd9-459d-ba2c-1b044028e8d5` |
+
+- **Funcionou de ponta a ponta nas três vozes:** pedido, vídeo salvo no R2,
+  duração e limpeza na HeyGen. O vídeo fica pronto em menos de 1 minuto.
+- **Voz clonada:** a clonagem levou menos de 3 minutos com uma amostra de
+  2 min 59 s, e o `POST /v3/models/audio/voices` e o TTS funcionaram como a
+  documentação diz.
+- **Saldo:** caiu US$ 0,67 nos três vídeos, contra US$ 0,7057 calculados: a
+  cobrança real fica um pouco abaixo da conta pela duração. A HeyGen não
+  devolve o custo do vídeo.
+- **As vozes em português (100+) têm `support_locale: false`:** o sotaque pt-BR
+  por `locale` não se aplica a elas; elas já falam em português.
+- **A página do vídeo na HeyGen abre sem login**, com nome, visualizações,
+  comentários e transcrição (`app.heygen.com/videos/<id>`), e não há campo de
+  privacidade na API. Por isso o estúdio apaga o vídeo e os arquivos lá depois
+  de salvar. A voz clonada fica na conta da HeyGen.
+- **Treinamento:** a política da HeyGen permite usar o conteúdo enviado para
+  treinar modelos; a recusa é por e-mail (heygen.com/policy).
