@@ -28,9 +28,12 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    `docs/operacao.md`). Testado com a chave de verdade nas três vozes (ver
    `docs/modelos/heygen-avatar-iv.md`). No ar desde 30/10/2026, só para o
    administrador.
-2. **Tela Avatares**, logo depois de "Modelos": guarda os ativos de cada
-   avatar (fotos, frames, vozes, áudios). Não depende de nenhum modelo: os
-   modelos criam algo e a pessoa salva no avatar para usar depois.
+2. **Tela Avatares** (feito): guarda os ativos de cada avatar (fotos, vídeos,
+   áudios) e não depende de nenhum modelo. Os modelos geram por arquivo solto
+   ou por avatar (`videos.avatar_id`), e "Salvar no avatar" leva o vídeo pronto
+   para os ativos. Falta: usar a voz do avatar ao gerar, gerar um vídeo real
+   com avatar e voltar ao formulário do modelo depois de criar um avatar por
+   "Usar um avatar".
 3. **Modelo de imagem** (um card em "Modelos"): gera a imagem inicial, por
    exemplo a personagem da pessoa na cena de um print do vídeo de referência.
    Primeiro candidato: Nano Banana 2.1 pelo OpenRouter (já usado no Aleph).

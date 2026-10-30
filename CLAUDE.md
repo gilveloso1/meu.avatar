@@ -42,6 +42,28 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
   à mão) e `npm run teste:canvas` roda os testes do modelo. Como funciona e o que
   foi decidido: [docs/canvas.md](docs/canvas.md).
 
+## Reaproveitar componentes
+
+- Antes de criar um componente, procure em `src/site/site.ts` e `src/site/style.ts`
+  o que já existe. Se uma tela nova tem algo igual a outra, ela usa o mesmo
+  componente, com o mesmo HTML e as mesmas classes; nada de cópia parecida. Não
+  basta as medidas baterem: abra as duas telas lado a lado.
+- Se o que existe quase serve, generalize o componente (uma opção a mais) em vez
+  de escrever outro. Vale também para o script da página e o CSS.
+- Componentes do site:
+  - Telas de lista: `pageHead` (título, contagem, texto e botão principal).
+  - Botão principal: `fab` (link ou envio) e `fabUpload` (escolher arquivo). O padrão é o
+    "Novo vídeo" da página Vídeos; nunca escreva `class="fab"` à mão.
+  - Listagem: `library` (vistas, filtros, ordem, agrupar por data), usada por
+    `videoLibrary` e `assetLibrary`. Lista nova só diz os itens, card, linha, filtros e colunas.
+  - Cards de escolha: `tileCard` dentro de `.tile-grid` (Modelos, Avatares, Projetos).
+  - Painel de configuração: `pane pane--config` em `.workspace`, com `formField`, e `filePicker`
+    para foto, vídeo e áudio.
+  - Item aberto: o molde da página do vídeo (`.viewer`), como a página de um ativo.
+  - Escolher um avatar: `avatarDialog` (diálogo básico do M3, com busca), em "Salvar no avatar" e
+    "Usar um avatar".
+  - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`.
+
 ## Esboço e M3
 
 - O layout segue o esboço aprovado no canvas (Design): disposição, tamanhos
@@ -157,6 +179,13 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   `campo("O que fazer.")`; as regras estão no topo do arquivo. Erro novo é chave
   nova lá; `test/erros.test.ts` recusa frase fora do molde ou escrita fora do
   catálogo. O motivo técnico fica no banco e no log, nunca na tela.
+- Avatares (`/avatares`, logo depois de Modelos, aprovada em 30/10/2026): cards iguais
+  aos de Modelos, com a foto principal de capa. Só guarda ativos e não depende de
+  nenhum modelo. A página do avatar segue a do modelo: painel com Nome, Descrição, Foto
+  principal e Voz para clonagem; no centro, a listagem de ativos; tocar num ativo abre o
+  molde da página do vídeo. O avatar só existe depois de Salvar (`/avatares/novo`, nunca
+  criar no clique). "Salvar no avatar" fica abaixo de Detalhes e abre o diálogo com busca;
+  o Novo avatar desse diálogo leva o vídeo junto (`?video=`), salvo com o avatar.
 - Barra superior: a marca é o ícone de rosto (`face`, o mesmo da foto do
   avatar) e o nome, sem cara de botão (sem camada de estado no hover). Sair fica
   só no menu do perfil. Não há rodapé.

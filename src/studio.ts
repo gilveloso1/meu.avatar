@@ -43,6 +43,8 @@ export interface NewVideoInput {
   audio?: File | null;
   /** Gravação para clonar uma voz nova (HeyGen pela API direta). */
   sample?: File | null;
+  /** O avatar de onde veio a foto (null com arquivo solto). */
+  avatarId?: string | null;
   /** Quem está pedindo. */
   user: { id: number; role: Role };
 }
@@ -198,6 +200,7 @@ export class Studio {
       image_key: imageKey,
       user_id: input.user.id,
       structure: structure.id,
+      avatar_id: input.avatarId ?? null,
       settings: settings || sourceKey ? JSON.stringify({ ...settings, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
     });
 
@@ -461,6 +464,7 @@ export class Studio {
       image_key: imageKey,
       user_id: input.user.id,
       structure: structure.id,
+      avatar_id: input.avatarId ?? null,
       settings: JSON.stringify({ ...settings, ...(audioKey ? { audio_key: audioKey } : {}) }),
     });
 

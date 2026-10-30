@@ -112,4 +112,9 @@ export const ERROS = {
   canvasEnviar: erro("Não foi possível enviar o arquivo.", "Tente de novo em instantes."),
   canvasArquivoGrande: (max: number) => erro("Este arquivo é grande demais.", `Use um arquivo de até ${max} MB.`),
   projetoNome: campo("Escreva o nome do projeto."),
+
+  // Avatares
+  avatarNome: campo("Escreva o nome do avatar."),
+  avatarSemFoto: erro("Este avatar não tem foto.", "Adicione a foto principal ao avatar."),
+  ativoSalvar: erro("Não foi possível salvar no avatar.", "Tente de novo em instantes."),
 };

@@ -19,7 +19,7 @@
  * da página só roda com o nonce da CSP.
  */
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
-import type { Db, Project, User, Video, VideoStatus } from "../db";
+import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -44,12 +44,12 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "calendar_today", "check", "check_circle",
+  "add", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today", "check", "check_circle",
   "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
-  "edit", "error", "face", "fit_screen", "flag", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
+  "edit", "error", "face", "fit_screen", "flag", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
   "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
   "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
-  "send", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
+  "send", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -142,6 +142,11 @@ export class Site {
     const watch = /^\/video\/([0-9a-f-]{36})$/.exec(path);
     if (!post && watch) return this.videoPage(user, watch[1]!, url);
 
+    // Avatares: os ativos de cada avatar, sem depender de nenhum modelo.
+    if (/^\/avatares(\/|$)/.test(path)) return this.avatars(request, user, path, url);
+    const saveToAvatar = /^\/videos\/([0-9a-f-]{36})\/salvar-avatar$/.exec(path);
+    if (post && saveToAvatar) return this.saveVideoToAvatar(request, user, saveToAvatar[1]!);
+
     // Projetos do canvas de edição: em teste, só o administrador (para os outros, as páginas nem existem).
     if (/^\/(canvas|projetos)(\/|$)/.test(path)) return user.role === "admin" ? this.projects(request, user, path, url) : new Response("não encontrado", { status: 404 });
 
@@ -165,6 +170,284 @@ export class Site {
     return new Response("não encontrado", { status: 404 });
   }
 
+  /**
+   * Avatares: a lista em /avatares, a página de cada um em /avatares/<id> e os
+   * ativos dele. Cada avatar é só de quem o criou.
+   */
+  private async avatars(request: Request, user: User, path: string, url: URL): Promise<Response> {
+    const post = request.method === "POST";
+    if (path === "/avatares") return post ? this.saveAvatar(request, user, null) : this.avatarsPage(user, url);
+    // O avatar novo só passa a existir quando a pessoa toca em Salvar.
+    if (path === "/avatares/novo" && !post) {
+      // Vindo de "Salvar no avatar", o vídeo vai junto: aparece como ativo e é salvo com o avatar.
+      const pending = await this.savableVideo(url.searchParams.get("video"), user);
+      return this.avatarPage(user, null, undefined, undefined, pending);
+    }
+    const m = /^\/avatares\/([0-9a-f-]{36})(?:\/(salvar|apagar|arquivos)(?:\/([0-9a-f-]{36})(\/ver|\/apagar)?)?)?$/.exec(path);
+    const avatar = m ? await this.db.avatarById(m[1]!) : null;
+    // Avatar de outra pessoa (ou que não existe): a página nem existe.
+    if (!m || !avatar || avatar.user_id !== user.id) return new Response("não encontrado", { status: 404 });
+    const [, , action, assetId, assetAction] = m;
+    if (!action && !post) return this.avatarPage(user, avatar);
+    if (action === "salvar" && post) return this.saveAvatar(request, user, avatar);
+    if (action === "apagar") {
+      if (!post) return this.deleteAvatarPage(user, avatar);
+      const keys = await this.db.deleteAvatar(avatar.id);
+      if (keys.length) await this.media.delete(keys);
+      return redirect("/avatares");
+    }
+    if (action === "arquivos" && !assetId && post) return this.uploadAsset(request, user, avatar);
+    if (action === "arquivos" && assetId) {
+      const asset = await this.db.asset(avatar.id, assetId);
+      if (!asset) return new Response("não encontrado", { status: 404 });
+      if (assetAction === "/ver" && !post) return this.assetPage(user, avatar, asset);
+      if (assetAction === "/apagar" && !post) return this.deleteAssetPage(user, avatar, asset);
+      if (assetAction === "/apagar" && post) {
+        await this.media.delete(asset.key);
+        await this.db.deleteAsset(asset.id);
+        return redirect(`/avatares/${avatar.id}`);
+      }
+      if (!assetAction && !post) return this.object(request, asset.key, "private, max-age=86400", url.searchParams.has("baixar") ? asset.name.replace(/[^\w.-]+/g, "-") : undefined);
+    }
+    return new Response("não encontrado", { status: 404 });
+  }
+
+  /** A lista dos avatares da pessoa, com a capa (a primeira foto) e a busca pelo nome. */
+  private async avatarsPage(user: User, url: URL): Promise<Response> {
+    const q = (url.searchParams.get("q") ?? "").trim();
+    const avatars = await this.db.avatarsByUser(user.id, q);
+    const cards = avatars.map((a, i) =>
+      tileCard({
+        href: `/avatares/${a.id}`,
+        tile: a.cover
+          ? `<img class="avatar-cover" src="/avatares/${a.id}/arquivos/${esc(a.cover)}" alt="">`
+          : `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">face</span></span>`,
+        headline: a.name,
+        supporting: a.assets === 1 ? "1 ativo" : `${a.assets ?? 0} ativos`,
+        menu: [
+          { label: "Abrir", icon: "face", href: `/avatares/${a.id}` },
+          { label: "Apagar", icon: "delete", href: `/avatares/${a.id}/apagar` },
+        ],
+      }),
+    );
+    const body = `
+<main class="page" id="conteudo">
+  ${pageHead("Avatares", cards.length, "Guarde as fotos, os vídeos e as vozes de cada avatar.", fab("add", "Novo avatar", { href: "/avatares/novo" }))}
+  ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : q ? emptyState("search", "Nenhum avatar encontrado", `Nada com “${q}” no nome.`) : emptyState("face", "Nenhum avatar ainda", "Toque em Novo avatar para começar.")}
+</main>`;
+    return html(page(`Avatares · ${SITE_NAME}`, body, { bar: { user, tab: "avatares", search: { action: "/avatares", label: "Pesquisar avatares", q } } }));
+  }
+
+  /**
+   * A página do avatar, no molde da página do modelo: à esquerda o painel com o nome, a
+   * descrição, a foto principal e a voz para clonagem; no centro, a lista dos ativos.
+   */
+  private async avatarPage(user: User, avatar: Avatar | null, error?: string, typed?: { name: string; description: string }, pending?: SavableVideo | null): Promise<Response> {
+    const assets = avatar ? await this.db.assetsByAvatar(avatar.id) : [];
+    const fileName = (id: string | null) => assets.find((a) => a.id === id)?.name ?? null;
+    const value: Values = (name) => (name === "nome" ? (typed?.name ?? avatar?.name ?? "") : name === "descricao" ? (typed?.description ?? avatar?.description ?? "") : "");
+    // O script do formulário (data-composer) cuida das prévias da foto e do áudio; aqui não há custo.
+    const config = { prices: {}, sku: "", seconds: {}, rate: { min: 2, max: 3 }, durations: null, extra: 0 };
+    const photo = avatar?.photo_asset ? `/avatares/${avatar.id}/arquivos/${avatar.photo_asset}` : null;
+    const voiceName = fileName(avatar?.voice_asset ?? null);
+    const body = `
+<main class="workspace" id="conteudo">
+  <form class="workspace__form" method="post" action="${avatar ? `/avatares/${avatar.id}/salvar` : "/avatares"}" enctype="multipart/form-data" data-composer='${esc(JSON.stringify(config))}'>
+  ${pending ? `<input type="hidden" name="video" value="${pending.video.id}">` : ""}
+  <section class="pane pane--config" aria-labelledby="configuracao">
+    <div class="pane__head"><h2 class="pane__headline" id="configuracao">Configuração</h2></div>
+    <div class="pane__body" id="configuracao-corpo">
+      ${formField({ kind: "text", name: "nome", label: "Nome", maxLength: 120, placeholder: "Ex.: Camila", supporting: "Como o avatar aparece na lista." }, value)}
+      ${formField({ kind: "text", name: "descricao", label: "Descrição", maxLength: MAX_AVATAR_DESCRIPTION, placeholder: "Ex.: 30 anos, jeito simpático, fala de beleza", supporting: "Opcional. Quem é este avatar." }, value)}
+      ${filePicker("image", {
+        name: "imagem",
+        label: "Foto principal",
+        title: `JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB`,
+        accept: "image/jpeg,image/png,image/webp",
+        icon: "face",
+        empty: "Adicionar foto principal",
+        hint: "",
+        current: photo ? { name: "Foto principal", hint: "Trocar foto", preview: `<img src="${photo}" alt="">` } : undefined,
+      })}
+      ${filePicker("audio", {
+        name: "voz",
+        label: "Voz para clonagem",
+        title: `MP3, WAV, M4A ou OGG, até ${MAX_VIDEO_BYTES / 1024 / 1024} MB`,
+        accept: "audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/ogg",
+        icon: "mic",
+        empty: "Adicionar voz para clonagem",
+        hint: "1 a 3 min de fala limpa.",
+        current: voiceName ? { name: voiceName, hint: "Trocar voz" } : undefined,
+      })}
+    </div>
+    <div class="pane__footer"><button class="button button--filled interactive" type="submit"><span class="icon">check</span>Salvar</button></div>
+  </section>
+  </form>
+  <div class="workspace__main">
+    ${
+      avatar
+        ? assetLibrary(assets, { key: `avatar-${avatar.id}`, avatar })
+        : pending
+          ? assetLibrary([{ id: "", avatar_id: "", kind: "video", key: pending.key, name: videoAssetName(pending), type: "video/mp4", size: pending.size, source_video: pending.video.id, created_at: new Date().toISOString() }], {
+              key: "avatar-novo",
+              src: () => `/videos/${pending.video.id}.mp4`,
+              href: () => `/video/${pending.video.id}`,
+            })
+          : `<div class="library"><div class="library__head"><h2 class="library__title">Ativos <span class="pane__count">0</span></h2></div>${emptyState("face", "Nenhum ativo ainda", "Toque em Salvar para criar o avatar e adicionar arquivos.")}</div>`
+    }
+  </div>
+</main>
+${error ? snackbar(error) : ""}`;
+    const title = avatar?.name ?? "Novo avatar";
+    return html(page(`${title} · ${SITE_NAME}`, body, { bar: { user, back: "/avatares", title } }), error ? 400 : 200);
+  }
+
+  /** "Salvar", no painel do avatar: cria (sem `avatar`) ou atualiza; a foto principal e a voz viram ativos. */
+  private async saveAvatar(request: Request, user: User, current: Avatar | null): Promise<Response> {
+    const form = await request.formData();
+    const name = String(form.get("nome") ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+    const description = String(form.get("descricao") ?? "").trim().slice(0, MAX_AVATAR_DESCRIPTION);
+    // O vídeo que veio junto de "Salvar no avatar" (só ao criar).
+    const pending = current ? null : await this.savableVideo(String(form.get("video") ?? ""), user);
+    if (!name) return this.avatarPage(user, current, ERROS.avatarNome, { name, description }, pending);
+    const photo = form.get("imagem"), voice = form.get("voz");
+    const invalid = (file: unknown, kind: AssetKind): string | null => {
+      if (!(file instanceof File) || !file.size) return null;
+      if (assetKind(file.type) !== kind) return ERROS.canvasArquivo;
+      const max = kind === "imagem" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+      return file.size > max ? ERROS.canvasArquivoGrande(max / 1024 / 1024) : null;
+    };
+    // Confere os arquivos antes de criar: com arquivo errado, o avatar novo não nasce.
+    const problem = invalid(photo, "imagem") ?? invalid(voice, "audio");
+    if (problem) return this.avatarPage(user, current, problem, { name, description }, pending);
+    const avatar = current ?? (await this.db.insertAvatar({ id: crypto.randomUUID(), user_id: user.id, name, description }));
+    const take = (file: unknown, kind: AssetKind) => (file instanceof File && file.size ? this.storeAsset(avatar.id, file, kind) : Promise.resolve(null));
+    const photoId = await take(photo, "imagem");
+    const voiceId = await take(voice, "audio");
+    await this.db.updateAvatar(avatar.id, { name, description, photo_asset: photoId ?? avatar.photo_asset, voice_asset: voiceId ?? avatar.voice_asset });
+    if (pending) await this.copyVideo(pending, avatar.id);
+    return redirect(`/avatares/${avatar.id}`);
+  }
+
+  /** A página de um ativo, no molde da página do vídeo: o arquivo à esquerda e a folha com os detalhes. */
+  private async assetPage(user: User, avatar: Avatar, asset: AvatarAsset): Promise<Response> {
+    const src = `/avatares/${avatar.id}/arquivos/${asset.id}`;
+    const back = `/avatares/${avatar.id}`;
+    const media = asset.kind === "imagem" ? `<img class="viewer__video" src="${src}" alt="${esc(asset.name)}">` : asset.kind === "video" ? `<video class="viewer__video" src="${src}" controls playsinline></video>` : `<audio src="${src}" controls></audio>`;
+    const role = asset.id === avatar.photo_asset ? "Foto principal" : asset.id === avatar.voice_asset ? "Voz para clonagem" : null;
+    const details = [
+      { icon: "folder_open", term: "Tipo", value: ASSET_LABELS[asset.kind] },
+      ...(role ? [{ icon: "star", term: "Uso", value: role }] : []),
+      { icon: "download", term: "Tamanho", value: formatBytes(asset.size) },
+      { icon: "schedule", term: "Origem", value: asset.source_video ? "Salvo de um vídeo" : "Enviado" },
+      { icon: "calendar_today", term: "Criado em", value: formatDate(asset.created_at) },
+    ];
+    const body = `
+<main class="viewer" id="conteudo">
+  <section class="viewer__stage viewer__stage--asset" aria-label="Ativo">${media}</section>
+  <aside class="viewer__sheet" aria-label="Informações do ativo">
+    <div class="viewer__head">
+      <p class="status-line status-line--done"><span class="icon">check_circle</span>${esc(ASSET_LABELS[asset.kind])}</p>
+      <a class="icon-button interactive" href="${back}" aria-label="Fechar" title="Fechar"><span class="icon">close</span></a>
+    </div>
+    <div class="viewer__body"><div class="viewer__panel">
+      <section class="viewer__section"><h2 class="viewer__title">Nome</h2><div class="viewer__card"><p class="viewer__text">${esc(asset.name)}</p></div></section>
+      <section class="viewer__card viewer__details"><h2 class="qe-result__title">Detalhes</h2>
+        <dl>${details.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${d.icon}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.value)}</dd></div>`).join("")}</dl>
+      </section>
+    </div></div>
+    <div class="viewer__actions">
+      <a class="button button--outlined interactive" href="${src}/apagar"><span class="icon">delete</span>Apagar</a>
+      <a class="button button--filled interactive" href="${src}?baixar" download><span class="icon">download</span>Baixar</a>
+    </div>
+  </aside>
+</main>`;
+    return html(page(`${asset.name} · ${SITE_NAME}`, body, { bar: { user, back, title: avatar.name } }));
+  }
+
+  private deleteAssetPage(user: User, avatar: Avatar, asset: AvatarAsset): Response {
+    const back = `/avatares/${avatar.id}/arquivos/${asset.id}/ver`;
+    const body = `
+<main class="page" id="conteudo">
+  <div class="confirm">
+    <h1 class="confirm__title">Apagar “${esc(asset.name)}”?</h1>
+    <p class="confirm__text">O arquivo sai deste avatar. Os seus vídeos continuam.</p>
+    <form class="confirm__actions" method="post" action="/avatares/${avatar.id}/arquivos/${asset.id}/apagar">
+      <a class="button button--text interactive" href="${back}">Cancelar</a>
+      <button class="button button--filled interactive" type="submit"><span class="icon">delete</span>Apagar</button>
+    </form>
+  </div>
+</main>`;
+    return html(page(`Apagar arquivo · ${SITE_NAME}`, body, { bar: { user, back, title: "Apagar arquivo" } }));
+  }
+
+  private deleteAvatarPage(user: User, avatar: Avatar): Response {
+    const body = `
+<main class="page" id="conteudo">
+  <div class="confirm">
+    <h1 class="confirm__title">Apagar “${esc(avatar.name)}”?</h1>
+    <p class="confirm__text">O avatar e os ativos dele somem. Os seus vídeos continuam.</p>
+    <form class="confirm__actions" method="post" action="/avatares/${avatar.id}/apagar">
+      <a class="button button--text interactive" href="/avatares/${avatar.id}">Cancelar</a>
+      <button class="button button--filled interactive" type="submit"><span class="icon">delete</span>Apagar</button>
+    </form>
+  </div>
+</main>`;
+    return html(page(`Apagar avatar · ${SITE_NAME}`, body, { bar: { user, back: `/avatares/${avatar.id}`, title: "Apagar avatar" } }));
+  }
+
+  /** Recebe um arquivo do computador e guarda como ativo do avatar. */
+  private async uploadAsset(request: Request, user: User, avatar: Avatar): Promise<Response> {
+    const file = (await request.formData()).get("arquivo");
+    if (!(file instanceof File) || !file.size) return this.avatarPage(user, avatar, ERROS.canvasArquivo);
+    const kind = assetKind(file.type);
+    if (!kind) return this.avatarPage(user, avatar, ERROS.canvasArquivo);
+    const max = kind === "imagem" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+    if (file.size > max) return this.avatarPage(user, avatar, ERROS.canvasArquivoGrande(max / 1024 / 1024));
+    await this.storeAsset(avatar.id, file, kind);
+    return redirect(`/avatares/${avatar.id}`);
+  }
+
+  /** Guarda o arquivo no R2 como ativo do avatar e devolve o id. */
+  private async storeAsset(avatarId: string, file: File, kind: AssetKind): Promise<string> {
+    const id = crypto.randomUUID();
+    const key = `avatares-ativos/${avatarId}/${id}`;
+    await this.media.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+    await this.db.insertAsset({ id, avatar_id: avatarId, kind, key, name: file.name.slice(0, 200) || "arquivo", type: file.type, size: file.size, source_video: null });
+    return id;
+  }
+
+  /** "Salvar no avatar", na página do vídeo: copia o vídeo pronto para os ativos do avatar escolhido. */
+  private async saveVideoToAvatar(request: Request, user: User, videoId: string): Promise<Response> {
+    const saving = await this.savableVideo(videoId, user);
+    if (!saving) return new Response("não encontrado", { status: 404 });
+    const avatar = await this.db.avatarById(String((await request.formData()).get("avatar") ?? ""));
+    if (!avatar || avatar.user_id !== user.id) return new Response("não encontrado", { status: 404 });
+    await this.copyVideo(saving, avatar.id);
+    return redirect(`/avatares/${avatar.id}`);
+  }
+
+  /** O vídeo pronto que a pessoa pode salvar num avatar, com a versão que vale (editada, tratada ou original). */
+  private async savableVideo(id: string | null, user: User): Promise<SavableVideo | null> {
+    const video = id ? await this.db.videoById(id) : null;
+    const structure = video ? videoStructure(video) : undefined;
+    if (!video || !structure || !canUse(structure, user.role)) return null;
+    const key = video.edited_key ?? video.processed_key ?? video.video_key;
+    const head = key ? await this.media.head(key) : null;
+    return key && head ? { video, structure, key, size: head.size } : null;
+  }
+
+  /** Copia o vídeo para os ativos do avatar: a cópia continua aqui mesmo que o vídeo seja apagado. */
+  private async copyVideo(saving: SavableVideo, avatarId: string): Promise<void> {
+    const object = await this.media.get(saving.key);
+    if (!object) throw new Error(`O vídeo ${saving.video.id} não está no R2.`);
+    const id = crypto.randomUUID();
+    const key = `avatares-ativos/${avatarId}/${id}`;
+    const bytes = await object.arrayBuffer();
+    await this.media.put(key, bytes, { httpMetadata: { contentType: "video/mp4" } });
+    await this.db.insertAsset({ id, avatar_id: avatarId, kind: "video", key, name: videoAssetName(saving), type: "video/mp4", size: bytes.byteLength, source_video: saving.video.id });
+  }
+
   /** Tela inicial: um card por estrutura que a pessoa pode usar; a busca filtra pelo nome. */
   private async home(user: User, url: URL): Promise<Response> {
     const q = (url.searchParams.get("q") ?? "").trim();
@@ -186,12 +469,7 @@ export class Site {
     });
     const body = `
 <main class="page" id="conteudo">
-  <div class="page__head">
-    <div>
-      <h1 class="page__headline">Modelos <span class="pane__count">${cards.length}</span></h1>
-      <p class="page__intro">Escolha um modelo para criar imagens ou vídeos.</p>
-    </div>
-  </div>
+  ${pageHead("Modelos", cards.length, "Escolha um modelo para criar imagens ou vídeos.")}
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : emptyState("search", "Nenhum modelo encontrado", `Nada com “${q}” no nome.`)}
 </main>`;
     return html(page(SITE_NAME, body, { bar: { user, tab: "modelos", search: { action: "/", label: "Pesquisar modelos", q } } }));
@@ -256,13 +534,7 @@ export class Site {
     });
     const body = `
 <main class="page" id="conteudo">
-  <div class="page__head">
-    <div>
-      <h1 class="page__headline">Projetos <span class="pane__count">${cards.length}</span></h1>
-      <p class="page__intro">Monte várias versões dos seus vídeos num canvas.</p>
-    </div>
-    <form method="post" action="/projetos"><button class="fab interactive" type="submit"><span class="icon">add</span>Novo projeto</button></form>
-  </div>
+  ${pageHead("Projetos", cards.length, "Monte várias versões dos seus vídeos num canvas.", fab("add", "Novo projeto", { post: "/projetos" }))}
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : q ? emptyState("search", "Nenhum projeto encontrado", `Nada com “${q}” no nome.`) : emptyState("video_library", "Nenhum projeto ainda", "Toque em Novo projeto para começar.")}
 </main>`;
     return html(page(`Projetos · ${SITE_NAME}`, body, { bar: { user, tab: "projetos", search: { action: "/projetos", label: "Pesquisar projetos", q } } }));
@@ -390,7 +662,7 @@ ${CANVAS_BODY}
     title: only && usable[0] ? `Vídeos · ${usable[0].name}` : "Vídeos",
     heading: "h1",
     intro: only ? "Os vídeos que você gerou com este modelo." : "Todos os vídeos que você gerou.",
-    action: `<a class="fab fab--extended interactive" href="/"><span class="icon">add</span>Novo vídeo</a>`,
+    action: fab("add", "Novo vídeo", { href: "/" }),
     empty: q || only ? emptyState("search", "Nenhum vídeo encontrado", "Tente outra busca.") : emptyState("movie", "Nenhum vídeo ainda", "Escolha um modelo para gerar o primeiro."),
     structureOf: (v) => structureById(v.structure)!,
   })}
@@ -427,6 +699,8 @@ ${CANVAS_BODY}
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const videos = await this.db.videosByStructure(structure.id);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
+    // A foto vem de um arquivo solto ou de um avatar (só os que têm foto).
+    const avatars = (await this.db.avatarsByUser(user.id)).filter((a) => a.cover);
 
     // Os arquivos (vídeo de origem e foto) abrem o painel, depois das seções que vêm antes (o "Uso");
     // o resto (a fala inclusive) segue as seções da estrutura.
@@ -444,6 +718,7 @@ ${CANVAS_BODY}
       <div class="pane__body" id="configuracao-corpo">
         ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
         ${images.map((f) => formField(f, value)).join("")}
+        ${images.some((f) => f.kind === "image") ? `<input type="hidden" name="avatar" value="" data-avatar-input><button class="button button--text interactive" type="button" data-dialog-open="usar-avatar"><span class="icon">face</span>Usar um avatar</button>` : ""}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
       ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)))}
@@ -464,6 +739,16 @@ ${CANVAS_BODY}
     </div>
   </form>
 </main>
+${
+  images.some((f) => f.kind === "image")
+    ? avatarDialog({
+        id: "usar-avatar",
+        title: "Usar um avatar",
+        avatars,
+        item: (a, content) => `<button class="avatar-option interactive" type="button" data-avatar-pick="${a.id}" data-avatar-cover="/avatares/${a.id}/arquivos/${esc(a.cover!)}" data-avatar-name="${esc(a.name)}">${content}</button>`,
+      })
+    : ""
+}
 ${error ? snackbar(error) : ""}`;
     return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
   }
@@ -525,6 +810,7 @@ ${error ? snackbar(error) : ""}`;
     const v = await this.db.videoById(id);
     const structure = v && videoStructure(v);
     if (!v || !structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
+    const avatars = await this.db.avatarsByUser(user.id);
     // De onde a pessoa veio (só caminhos do próprio site): a seta e o X voltam para lá.
     const from = url.searchParams.get("de") ?? "";
     const back = /^\/(?!\/)/.test(from) ? from : `/modelo/${structure.id}`;
@@ -543,7 +829,8 @@ ${error ? snackbar(error) : ""}`;
         ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p><p class="stage__text">${esc(ERROS.videoFalhou)}</p></div>`
         : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">Leva alguns minutos. A página se atualiza sozinha.</p></div>`;
     // Campos de texto livre (movimento, instruções) ganham um bloco próprio, como o Texto; vazios não aparecem.
-    const all = [{ term: "Modelo", description: structure.name }, ...structure.details(v)];
+    const usedAvatar = v.avatar_id ? await this.db.avatarById(v.avatar_id) : null;
+    const all = [{ term: "Modelo", description: structure.name }, ...(usedAvatar ? [{ term: "Avatar", description: usedAvatar.name }] : []), ...structure.details(v)];
     const notes = all.filter((d) => FREE_TEXT.has(d.term) && d.description !== "—");
     const details = [
       ...all.filter((d) => !FREE_TEXT.has(d.term)),
@@ -568,6 +855,20 @@ ${error ? snackbar(error) : ""}`;
           ...(v.processed_key ? [{ label: "Sem tratamento de áudio", icon: "graphic_eq", href: `/videos/${v.id}.original.mp4?baixar`, download: true }] : []),
         ]
       : [];
+    // O avatar usado para gerar vem primeiro na lista.
+    const used = avatars.find((a) => a.id === v.avatar_id);
+    const ordered = used ? [used, ...avatars.filter((a) => a !== used)] : avatars;
+    const saveButton = v.video_key ? `<button class="button button--outlined interactive viewer__save" type="button" data-dialog-open="salvar-avatar"><span class="icon">bookmark_add</span>Salvar no avatar</button>` : "";
+    const saveDialog = v.video_key
+      ? avatarDialog({
+          id: "salvar-avatar",
+          title: "Salvar no avatar",
+          avatars: ordered,
+          item: (a, content) => `<form method="post" action="/videos/${v.id}/salvar-avatar"><button class="avatar-option interactive" type="submit" name="avatar" value="${a.id}">${content}</button></form>`,
+          note: (a) => (a.id === v.avatar_id ? "Usado neste vídeo" : null),
+          newHref: `/avatares/novo?video=${v.id}`,
+        })
+      : "";
     const avatar = v.image_key?.startsWith("avatares/") ? `<img class="viewer__avatar" src="/midia/${esc(v.image_key)}" alt="Foto do avatar">` : "";
     const info = `
         <div class="viewer__panel" data-tab-panel="info">
@@ -584,6 +885,7 @@ ${error ? snackbar(error) : ""}`;
             <h2 class="qe-result__title" id="detalhes-titulo">Detalhes</h2>
             <dl>${details.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${DETAIL_ICONS[d.term] ?? "info"}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.description)}</dd></div>`).join("")}</dl>
           </section>
+          ${saveButton}
         </div>`;
     const body = `
 <main class="viewer" id="conteudo">
@@ -627,6 +929,7 @@ ${error ? snackbar(error) : ""}`;
     </div>
   </aside>
 </main>
+${saveDialog}
 ${quick ? `<form id="edicao-rapida" method="post" action="/videos/${v.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
 ${error ? snackbar(error) : ""}`;
     return html(page(`Vídeo · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
@@ -658,15 +961,27 @@ ${error ? snackbar(error) : ""}`;
       const f = form.get(name);
       return f instanceof File ? f : null;
     };
+    // Arquivo solto ou avatar: com avatar, a foto vem dos ativos dele.
+    const chosen = String(form.get("avatar") ?? "");
+    const fromAvatar = chosen ? await this.avatarPhoto(chosen, user) : null;
+    if (chosen && !fromAvatar) return this.modelPage(user, structure, values, ERROS.avatarSemFoto);
     let video: Video;
     try {
-      video = await this.studio.create({ structure, values, image: file("imagem"), video: file("video"), audio: file("audio"), sample: file("amostra"), user });
+      video = await this.studio.create({ structure, values, image: fromAvatar ?? file("imagem"), video: file("video"), audio: file("audio"), sample: file("amostra"), avatarId: fromAvatar ? chosen : null, user });
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
       return this.modelPage(user, structure, values, err.message);
     }
     return redirect(`/modelo/${structure.id}?video=${video.id}`);
+  }
+
+  /** A foto do avatar da pessoa (a principal ou a primeira), como arquivo para o modelo. */
+  private async avatarPhoto(id: string, user: User): Promise<File | null> {
+    const avatar = (await this.db.avatarsByUser(user.id)).find((a) => a.id === id);
+    const asset = avatar?.cover ? await this.db.asset(avatar.id, avatar.cover) : null;
+    const object = asset ? await this.media.get(asset.key) : null;
+    return asset && object ? new File([await object.arrayBuffer()], asset.name, { type: asset.type }) : null;
   }
 
   private async login(request: Request): Promise<Response> {
@@ -775,6 +1090,11 @@ function overflowMenu(label: string, items: MenuItem[]): string {
  * direita, e o título e a linha de apoio embaixo. O card inteiro é o link; o
  * menu fica por cima dele.
  */
+/** O tipo de ativo pelo tipo do arquivo; arquivo de outro tipo não entra. */
+function assetKind(type: string): AssetKind | null {
+  return type.startsWith("image/") ? "imagem" : type.startsWith("video/") ? "video" : type.startsWith("audio/") ? "audio" : null;
+}
+
 function tileCard(c: { href: string; tile: string; headline: string; supporting: string; hidden?: string; badge?: { label: string; title: string }; menu: MenuItem[] }): string {
   return `
     <article class="tile-card">
@@ -888,7 +1208,7 @@ const FREE_TEXT = new Set(["Movimento", "Instruções extras"]);
 
 /** Ícone de cada linha dos detalhes do vídeo (precisa estar em ICONS); o que faltar usa "info". */
 const DETAIL_ICONS: Record<string, string> = {
-  Modelo: "movie", Voz: "record_voice_over", Expressividade: "face", Movimento: "gesture",
+  Modelo: "movie", Avatar: "face", Voz: "record_voice_over", Expressividade: "face", Movimento: "gesture",
   Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", "Vídeo de origem": "videocam", Roupa: "checkroom", Uso: "auto_awesome", "Quadros-chave": "photo_library",
   Duração: "schedule", Resolução: "hd", Formato: "aspect_ratio", Custo: "payments", "Criado em": "calendar_today",
 };
@@ -955,63 +1275,100 @@ interface LibraryOptions {
   structureOf: (v: Video) => Structure;
 }
 
-function videoLibrary(videos: Video[], o: LibraryOptions): string {
-  const h = o.heading ?? "h2";
-  const head = (count: string) => {
-    const title = `<${h} class="${o.intro ? "page__headline" : "library__title"}">${esc(o.title)} <span class="pane__count"${count === "" ? "" : " data-library-count"}>${count || 0}</span></${h}>`;
-    return o.intro ? `<div>${title}<p class="page__intro">${esc(o.intro)}</p></div>` : title;
+/** Título, contagem e texto de uma tela de lista; `action` é o botão principal (fab). */
+function pageHead(title: string, count: number, intro: string, action = ""): string {
+  return `<div class="page__head">
+    <div>
+      <h1 class="page__headline">${esc(title)} <span class="pane__count">${count}</span></h1>
+      <p class="page__intro">${esc(intro)}</p>
+    </div>
+    ${action ? `<div class="library__end">${action}</div>` : ""}
+  </div>`;
+}
+
+/** O botão principal das telas, o mesmo em todas ("Novo vídeo", "Novo avatar"): link ou envio de formulário. */
+function fab(icon: string, label: string, to: { href: string } | { post: string }): string {
+  const content = `<span class="icon">${icon}</span>${esc(label)}`;
+  return "href" in to
+    ? `<a class="fab fab--extended interactive" href="${to.href}">${content}</a>`
+    : `<form method="post" action="${to.post}"><button class="fab fab--extended interactive" type="submit">${content}</button></form>`;
+}
+
+/**
+ * Diálogo para escolher um avatar (M3: diálogo básico), com busca para quando houver muitos.
+ * `item` diz o que tocar faz: salvar nele ou usar a foto dele.
+ */
+function avatarDialog(o: { id: string; title: string; avatars: Avatar[]; item: (a: Avatar, content: string) => string; note?: (a: Avatar) => string | null; newHref?: string }): string {
+  const row = (a: Avatar) => {
+    const cover = a.cover ? `<img class="avatar-cover" src="/avatares/${a.id}/arquivos/${esc(a.cover)}" alt="" loading="lazy">` : `<span class="icon-tile icon-tile--large icon-tile--primary" aria-hidden="true"><span class="icon">face</span></span>`;
+    const support = o.note?.(a) ?? (a.assets === 1 ? "1 ativo" : `${a.assets ?? 0} ativos`);
+    return `<li data-avatar-item="${esc(a.name.toLowerCase())}">${o.item(a, `${cover}<span class="avatar-option__text"><span class="vrow__headline">${esc(a.name)}</span><span class="vrow__support">${esc(support)}</span></span>`)}</li>`;
   };
-  if (!videos.length) return `<div class="library"><div class="library__head">${head("")}${o.action ?? ""}</div>${o.empty}</div>`;
-  const chips = FILTERS.map(
-    (f, i) => `<button class="chip interactive" type="button" data-filter="${f.kind ?? ""}" aria-pressed="${i === 0}"><span class="icon chip__check">check</span>${esc(f.label)}</button>`,
-  ).join("");
-  const views = [
-    { id: "p", label: "Cards pequenos", icon: "apps" },
-    { id: "m", label: "Cards médios", icon: "grid_view" },
-    { id: "g", label: "Cards grandes", icon: "crop_square" },
-    { id: "d", label: "Detalhes", icon: "view_list" },
-  ]
-    .map((z) => `<button class="segmented-button__segment interactive" type="button" data-view="${z.id}"${z.id === "m" ? ' aria-current="true"' : ""} aria-label="${z.label}" title="${z.label}"><span class="icon">${z.icon}</span></button>`)
+  return `<dialog class="dialog" id="${o.id}" aria-labelledby="${o.id}-titulo">
+    <h2 class="dialog__title" id="${o.id}-titulo">${esc(o.title)}</h2>
+    ${o.avatars.length ? `<div class="search-field"><span class="icon" aria-hidden="true">search</span><input class="search-field__input" type="search" placeholder="Pesquisar avatares" aria-label="Pesquisar avatares" data-avatar-search></div>` : ""}
+    <ul class="dialog__list">${o.avatars.map(row).join("")}</ul>
+    <p class="library__empty" data-avatar-none${o.avatars.length ? " hidden" : ""}>Nenhum avatar encontrado.</p>
+    <form class="dialog__actions" method="dialog">
+      <a class="button button--text interactive dialog__start" href="${o.newHref ?? "/avatares/novo"}"><span class="icon">add</span>Novo avatar</a>
+      <button class="button button--text interactive" type="submit">Cancelar</button>
+    </form>
+  </dialog>`;
+}
+
+/** O mesmo botão principal, escolhendo um arquivo: enviar é escolher (data-auto-submit). */
+function fabUpload(icon: string, label: string, action: string, accept: string): string {
+  return `<form method="post" action="${action}" enctype="multipart/form-data">
+          <label class="fab fab--extended interactive"><span class="icon">${icon}</span>${esc(label)}<input class="visually-hidden" type="file" name="arquivo" accept="${accept}" data-auto-submit aria-label="${esc(label)}"></label>
+        </form>`;
+}
+
+const LIBRARY_VIEWS = [
+  { id: "p", label: "Cards pequenos", icon: "apps" },
+  { id: "m", label: "Cards médios", icon: "grid_view" },
+  { id: "g", label: "Cards grandes", icon: "crop_square" },
+  { id: "d", label: "Detalhes", icon: "view_list" },
+];
+
+/**
+ * A listagem do site (vídeos e ativos): vistas de cards e Detalhes, filtros, ordem e agrupamento por
+ * data, tudo no navegador. Cada lista só diz o que muda: os itens, como vira card e linha, os filtros
+ * (`data-kind` do item) e as colunas de Detalhes.
+ */
+function library<T>(o: {
+  key: string;
+  /** O título já montado; `count` é "" na lista vazia (sem o contador que o script atualiza). */
+  head: (count: string) => string;
+  action?: string;
+  empty: string;
+  items: T[];
+  date: (item: T) => string;
+  frame: (item: T) => string;
+  row: (item: T) => string;
+  filters: readonly { kind: string | null; label: string }[];
+  columns: string;
+  noMatch: string;
+}): string {
+  if (!o.items.length) return `<div class="library"><div class="library__head">${o.head("")}${o.action ? `<div class="library__end">${o.action}</div>` : ""}</div>${o.empty}</div>`;
+  const chips = o.filters
+    .map((f, i) => `<button class="chip interactive" type="button" data-filter="${f.kind ?? ""}" aria-pressed="${i === 0}"><span class="icon chip__check">check</span>${esc(f.label)}</button>`)
     .join("");
-  const groups = new Map<string, Video[]>();
-  for (const v of videos) {
-    const g = dateGroup(v.created_at);
-    groups.set(g, [...(groups.get(g) ?? []), v]);
+  const views = LIBRARY_VIEWS.map(
+    (z) => `<button class="segmented-button__segment interactive" type="button" data-view="${z.id}"${z.id === "m" ? ' aria-current="true"' : ""} aria-label="${z.label}" title="${z.label}"><span class="icon">${z.icon}</span></button>`,
+  ).join("");
+  const groups = new Map<string, T[]>();
+  for (const item of o.items) {
+    const g = dateGroup(o.date(item));
+    groups.set(g, [...(groups.get(g) ?? []), item]);
   }
-  const thumb = (v: Video, status: ReturnType<typeof cardStatus>) =>
-    v.video_key ? `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>` : `<span class="frame__placeholder">${statusTile(status, true)}</span>`;
-  const section = ([title, list]: [string, Video[]]) => {
-    const frames = list
-      .map((v) => {
-        const status = cardStatus(v);
-        const structure = o.structureOf(v);
-        const label = esc([v.prompt, status.kind === "done" ? null : status.label, formatDate(v.created_at), structure.name, durationLabel(v, structure)].filter(Boolean).join(" · "));
-        return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}" aria-label="${label}" title="${label}"><span class="frame__media">${thumb(v, status)}</span></a>`;
-      })
-      .join("");
-    const rows = list
-      .map((v) => {
-        const status = cardStatus(v), structure = o.structureOf(v);
-        return `<a class="vrow interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" role="row" data-video="${v.id}" data-kind="${status.kind}">
-          <span class="vrow__thumb" role="cell">${thumb(v, status)}</span>
-          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(v.prompt)}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
-          <span class="vrow__status vrow__status--${status.kind}" role="cell"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label.replace(/ · .*/, ""))}</span>
-          <span role="cell">${esc(durationLabel(v, structure))}</span>
-          <span class="vrow__wide" role="cell">${esc(`${v.aspect_ratio} · ${v.resolution}`)}</span>
-          <span class="vrow__wide" role="cell">${v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—"}</span>
-          <span role="cell">${esc(formatDate(v.created_at))}</span>
-        </a>`;
-      })
-      .join("");
-    return `<section class="vgroup" data-group>
+  const section = ([title, list]: [string, T[]]) => `<section class="vgroup" data-group>
         <h3 class="vgroup__title">${esc(title)}</h3>
-        <div class="frames" data-items>${frames}</div>
-        <div class="vrows" role="rowgroup" data-items>${rows}</div>
+        <div class="frames" data-items>${list.map(o.frame).join("")}</div>
+        <div class="vrows" role="rowgroup" data-items>${list.map(o.row).join("")}</div>
       </section>`;
-  };
   return `<div class="library" data-library="${esc(o.key)}" data-view="m" data-grouped="false">
       <div class="library__head">
-        ${head(String(videos.length))}
+        ${o.head(String(o.items.length))}
         <div class="library__end"><div class="segmented-button library__sizes" role="group" aria-label="Vista">${views}</div>${o.action ?? ""}</div>
       </div>
       <div class="chip-set library__tools" role="toolbar" aria-label="Filtrar e ordenar">
@@ -1020,10 +1377,110 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
         <button class="chip interactive" type="button" data-sort aria-label="Ordem: mais recentes primeiro"><span class="icon">swap_vert</span><span data-sort-label>Mais recentes</span></button>
         <button class="chip interactive" type="button" data-group-toggle aria-pressed="false"><span class="icon chip__check">check</span>Agrupar por data</button>
       </div>
-      <div class="vrows__head" role="row" aria-hidden="true"><span></span><span>Texto</span><span>Status</span><span>Duração</span><span class="vrow__wide">Formato</span><span class="vrow__wide">Custo</span><span>Criado em</span></div>
-      <p class="library__empty" data-library-empty hidden>Nenhum vídeo com esse filtro.</p>
+      <div class="vrows__head" role="row" aria-hidden="true">${o.columns}</div>
+      <p class="library__empty" data-library-empty hidden>${esc(o.noMatch)}</p>
       <div class="library__groups" data-groups>${[...groups].map(section).join("")}</div>
     </div>`;
+}
+
+function videoLibrary(videos: Video[], o: LibraryOptions): string {
+  const h = o.heading ?? "h2";
+  const head = (count: string) => {
+    const title = `<${h} class="${o.intro ? "page__headline" : "library__title"}">${esc(o.title)} <span class="pane__count"${count === "" ? "" : " data-library-count"}>${count || 0}</span></${h}>`;
+    return o.intro ? `<div>${title}<p class="page__intro">${esc(o.intro)}</p></div>` : title;
+  };
+  const thumb = (v: Video, status: ReturnType<typeof cardStatus>) =>
+    v.video_key ? `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>` : `<span class="frame__placeholder">${statusTile(status, true)}</span>`;
+  return library({
+    key: o.key,
+    head,
+    action: o.action,
+    empty: o.empty,
+    items: videos,
+    date: (v) => v.created_at,
+    filters: FILTERS,
+    noMatch: "Nenhum vídeo com esse filtro.",
+    columns: `<span></span><span>Texto</span><span>Status</span><span>Duração</span><span class="vrow__wide">Formato</span><span class="vrow__wide">Custo</span><span>Criado em</span>`,
+    frame: (v) => {
+      const status = cardStatus(v);
+      const structure = o.structureOf(v);
+      const label = esc([v.prompt, status.kind === "done" ? null : status.label, formatDate(v.created_at), structure.name, durationLabel(v, structure)].filter(Boolean).join(" · "));
+      return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}" aria-label="${label}" title="${label}"><span class="frame__media">${thumb(v, status)}</span></a>`;
+    },
+    row: (v) => {
+      const status = cardStatus(v), structure = o.structureOf(v);
+      return `<a class="vrow interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" role="row" data-video="${v.id}" data-kind="${status.kind}">
+          <span class="vrow__thumb" role="cell">${thumb(v, status)}</span>
+          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(v.prompt)}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
+          <span class="vrow__status vrow__status--${status.kind}" role="cell"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label.replace(/ · .*/, ""))}</span>
+          <span role="cell">${esc(durationLabel(v, structure))}</span>
+          <span class="vrow__wide" role="cell">${esc(`${v.aspect_ratio} · ${v.resolution}`)}</span>
+          <span class="vrow__wide" role="cell">${v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—"}</span>
+          <span role="cell">${esc(formatDate(v.created_at))}</span>
+        </a>`;
+    },
+  });
+}
+
+/** Um vídeo pronto a caminho de um avatar. */
+interface SavableVideo {
+  video: Video;
+  structure: Structure;
+  key: string;
+  size: number;
+}
+
+function videoAssetName(s: SavableVideo): string {
+  return `${s.structure.name} ${s.video.id.slice(0, 8)}.mp4`;
+}
+
+const MAX_AVATAR_DESCRIPTION = 500;
+const ASSET_LABELS: Record<AssetKind, string> = { imagem: "Foto", video: "Vídeo", audio: "Áudio" };
+const ASSET_ICONS: Record<AssetKind, string> = { imagem: "image", video: "movie", audio: "mic" };
+const ASSET_ACCEPT = "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/ogg";
+
+function formatBytes(n: number): string {
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+/** Os ativos do avatar, na listagem do site. */
+function assetLibrary(assets: AvatarAsset[], o: { key: string; avatar?: Avatar; src?: (a: AvatarAsset) => string; href?: (a: AvatarAsset) => string }): string {
+  const { avatar } = o;
+  const src = o.src ?? ((a: AvatarAsset) => `/avatares/${avatar!.id}/arquivos/${a.id}`);
+  const href = o.href ?? ((a: AvatarAsset) => `${src(a)}/ver`);
+  const thumb = (a: AvatarAsset) =>
+    a.kind === "imagem"
+      ? `<img src="${src(a)}" alt="" loading="lazy">`
+      : a.kind === "video"
+        ? `<video data-src="${src(a)}" preload="metadata" muted playsinline tabindex="-1"></video>`
+        : `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--tertiary" aria-hidden="true"><span class="icon">mic</span></span></span>`;
+  return library({
+    key: o.key,
+    head: (count) => `<h2 class="library__title">Ativos <span class="pane__count"${count ? " data-library-count" : ""}>${count || 0}</span></h2>`,
+    // No avatar ainda não salvo não há onde guardar arquivos.
+    action: avatar ? fabUpload("upload", "Adicionar arquivo", `/avatares/${avatar.id}/arquivos`, ASSET_ACCEPT) : undefined,
+    empty: emptyState("face", "Nenhum ativo ainda", "Envie arquivos ou salve o que um modelo criar."),
+    items: assets,
+    date: (a) => a.created_at,
+    filters: [
+      { kind: null, label: "Todos" },
+      { kind: "imagem", label: "Fotos" },
+      { kind: "video", label: "Vídeos" },
+      { kind: "audio", label: "Áudios" },
+    ],
+    noMatch: "Nenhum ativo com esse filtro.",
+    columns: `<span></span><span>Nome</span><span>Tipo</span><span>Tamanho</span><span class="vrow__wide">Origem</span><span class="vrow__wide">Uso</span><span>Criado em</span>`,
+    frame: (a) => `<a class="frame interactive" href="${href(a)}" data-kind="${a.kind}" aria-label="${esc(a.name)}" title="${esc(a.name)}"><span class="frame__media">${thumb(a)}</span></a>`,
+    row: (a) => `<a class="vrow interactive" href="${href(a)}" role="row" data-kind="${a.kind}">
+          <span class="vrow__thumb" role="cell">${thumb(a)}</span>
+          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(a.name)}</span><span class="vrow__support">${esc(formatDate(a.created_at))}</span></span>
+          <span class="vrow__status vrow__status--done" role="cell"><span class="icon">${ASSET_ICONS[a.kind]}</span>${ASSET_LABELS[a.kind]}</span>
+          <span role="cell">${formatBytes(a.size)}</span>
+          <span class="vrow__wide" role="cell">${a.source_video ? "Salvo de um vídeo" : "Enviado"}</span>
+          <span class="vrow__wide" role="cell">${a.id === avatar?.photo_asset ? "Principal" : a.id === avatar?.voice_asset ? "Voz" : "—"}</span>
+          <span role="cell">${esc(formatDate(a.created_at))}</span>
+        </a>`,
+  });
 }
 
 /** Fim do painel de configuração: duração e custo estimados e o botão de gerar, na largura toda. */
@@ -1081,6 +1538,29 @@ function formField(f: Field, value: Values): string {
   return `<div class="conditional" data-show-if="${esc(JSON.stringify(f.showIf))}"${visible ? "" : " hidden"}>${inner}</div>`;
 }
 
+/**
+ * O seletor de arquivo do painel (foto, vídeo ou áudio): o script da página cuida da prévia
+ * e do nome pelo `kind` (data-image, data-source, data-audio). `current` é o arquivo já guardado.
+ */
+function filePicker(
+  kind: "image" | "source" | "audio",
+  o: { name: string; label: string; title: string; accept: string; required?: boolean; icon: string; empty: string; hint: string; current?: { name: string; hint: string; preview?: string } },
+): string {
+  const previewAttr = kind === "image" ? " data-preview" : kind === "source" ? " data-source-preview" : "";
+  const preview = o.current?.preview ?? `<span class="icon">${o.icon}</span>`;
+  const trailing = kind === "audio" ? "" : `<span class="icon file-picker__trailing" data-${kind}-trailing${o.current ? "" : " hidden"}>edit</span>`;
+  const name = o.current?.name ?? o.empty, hint = o.current?.hint ?? o.hint;
+  return `<label class="file-picker interactive" title="${esc(o.title)}">
+          <input type="file" name="${o.name}" accept="${o.accept}" aria-label="${esc(o.label)}"${o.required ? " required" : ""} data-${kind}>
+          <span class="file-picker__preview"${previewAttr}>${preview}</span>
+          <span class="file-picker__text">
+            <span class="file-picker__name" data-${kind}-name data-empty="${esc(name)}">${esc(name)}</span>
+            <span class="file-picker__hint" data-${kind}-hint data-empty="${esc(hint)}">${esc(hint)}</span>
+          </span>
+          ${trailing}
+        </label>`;
+}
+
 function fieldHtml(f: Field, value: Values): string {
   switch (f.kind) {
     case "textarea":
@@ -1111,34 +1591,38 @@ function fieldHtml(f: Field, value: Values): string {
     case "segmented":
       return segmented(f.name, f.label, f.options, value(f.name));
     case "image":
-      return `<label class="file-picker interactive" title="JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB">
-          <input type="file" name="${f.name}" accept="image/jpeg,image/png,image/webp" aria-label="${esc(f.label)}"${f.required ? " required" : ""} data-image>
-          <span class="file-picker__preview" data-preview><span class="icon">face</span></span>
-          <span class="file-picker__text">
-            <span class="file-picker__name" data-image-name data-empty="Adicionar ${esc(f.label.toLowerCase())}">Adicionar ${esc(f.label.toLowerCase())}</span>
-            <span class="file-picker__hint" data-image-hint data-empty="${esc(f.supporting)}">${esc(f.supporting)}</span>
-          </span>
-          <span class="icon file-picker__trailing" data-image-trailing hidden>edit</span>
-        </label>`;
+      return filePicker("image", {
+        name: f.name,
+        label: f.label,
+        title: `JPG, PNG ou WebP, até ${MAX_IMAGE_BYTES / 1024 / 1024} MB`,
+        accept: "image/jpeg,image/png,image/webp",
+        required: f.required,
+        icon: "face",
+        empty: `Adicionar ${f.label.toLowerCase()}`,
+        hint: f.supporting,
+      });
     case "video":
-      return `<label class="file-picker interactive" title="MP4 ou MOV, até ${MAX_VIDEO_BYTES / 1024 / 1024} MB">
-          <input type="file" name="${f.name}" accept="video/mp4,video/quicktime" aria-label="${esc(f.label)}" required data-source>
-          <span class="file-picker__preview" data-source-preview><span class="icon">videocam</span></span>
-          <span class="file-picker__text">
-            <span class="file-picker__name" data-source-name data-empty="Adicionar ${esc(f.label.toLowerCase())}">Adicionar ${esc(f.label.toLowerCase())}</span>
-            <span class="file-picker__hint" data-source-hint data-empty="${esc(f.supporting)}">${esc(f.supporting)}</span>
-          </span>
-          <span class="icon file-picker__trailing" data-source-trailing hidden>edit</span>
-        </label>`;
+      return filePicker("source", {
+        name: f.name,
+        label: f.label,
+        title: `MP4 ou MOV, até ${MAX_VIDEO_BYTES / 1024 / 1024} MB`,
+        accept: "video/mp4,video/quicktime",
+        required: true,
+        icon: "videocam",
+        empty: `Adicionar ${f.label.toLowerCase()}`,
+        hint: f.supporting,
+      });
     case "audio":
-      return `<label class="file-picker interactive" title="MP3 ou WAV, até ${MAX_AUDIO_BYTES / 1024 / 1024} MB">
-          <input type="file" name="${f.name}" accept="audio/mpeg,audio/wav,audio/x-wav" aria-label="${esc(f.label)}" required data-audio>
-          <span class="file-picker__preview"><span class="icon">mic</span></span>
-          <span class="file-picker__text">
-            <span class="file-picker__name" data-audio-name data-empty="Adicionar ${esc(f.label.toLowerCase())}">Adicionar ${esc(f.label.toLowerCase())}</span>
-            <span class="file-picker__hint" data-audio-hint data-empty="${esc(f.supporting)}">${esc(f.supporting)}</span>
-          </span>
-        </label>`;
+      return filePicker("audio", {
+        name: f.name,
+        label: f.label,
+        title: `MP3 ou WAV, até ${MAX_AUDIO_BYTES / 1024 / 1024} MB`,
+        accept: "audio/mpeg,audio/wav,audio/x-wav",
+        required: true,
+        icon: "mic",
+        empty: `Adicionar ${f.label.toLowerCase()}`,
+        hint: f.supporting,
+      });
     case "checkbox":
       return `<label class="checkbox-field">
           <input type="checkbox" name="${f.name}" value="sim" required${value(f.name) === "sim" ? " checked" : ""}>
@@ -1237,7 +1721,7 @@ function snackbar(text: string): string {
  * a marca (que volta para Modelos), o nome do modelo, o botão de sair e a conta.
  */
 type Search = { action: string; label: string; q: string; keep?: Record<string, string> };
-type Bar = false | { user: User; tab: "modelos" | "videos" | "projetos"; search: Search } | { user: User; back: string; title: string; actions?: string };
+type Bar = false | { user: User; tab: "modelos" | "avatares" | "videos" | "projetos"; search: Search } | { user: User; back: string; title: string; actions?: string };
 
 function accountActions(user: User): string {
   const initial = esc((user.name.trim()[0] ?? "?").toUpperCase());
@@ -1276,7 +1760,7 @@ function topAppBar(bar: Exclude<Bar, false>): string {
   const tab = (id: string, href: string, label: string) => `<a class="nav-pill interactive" href="${href}"${bar.tab === id ? ' aria-current="page"' : ""}>${label}</a>`;
   return `<header class="top-app-bar top-app-bar--home" data-app-bar>
   ${brand("/")}
-  <nav class="nav-pills" aria-label="Seções">${tab("modelos", "/", "Modelos")}${tab("videos", "/videos", "Vídeos")}${bar.user.role === "admin" ? tab("projetos", "/projetos", "Projetos") : ""}</nav>
+  <nav class="nav-pills" aria-label="Seções">${tab("modelos", "/", "Modelos")}${tab("avatares", "/avatares", "Avatares")}${tab("videos", "/videos", "Vídeos")}${bar.user.role === "admin" ? tab("projetos", "/projetos", "Projetos") : ""}</nav>
   <div class="top-app-bar__tools">
     <form class="search-field" role="search" method="get" action="${search.action}">
       <span class="icon" aria-hidden="true">search</span>
@@ -1597,6 +2081,27 @@ const SCRIPT = `(() => {
     });
   }
 
+  // Diálogos: abrir, buscar na lista e, no formulário do modelo, usar a foto de um avatar.
+  for (const b of document.querySelectorAll("[data-dialog-open]")) b.addEventListener("click", () => document.getElementById(b.dataset.dialogOpen).showModal());
+  for (const box of document.querySelectorAll("[data-avatar-search]")) box.addEventListener("input", () => {
+    const d = box.closest("dialog"), q = box.value.trim().toLowerCase();
+    let n = 0;
+    for (const it of d.querySelectorAll("[data-avatar-item]")) { it.hidden = !it.dataset.avatarItem.includes(q); if (!it.hidden) n++; }
+    d.querySelector("[data-avatar-none]").hidden = n > 0;
+  });
+  for (const b of document.querySelectorAll("[data-avatar-pick]")) b.addEventListener("click", () => {
+    const form = document.querySelector("[data-composer]"), input = form.querySelector("[data-image]");
+    form.querySelector("[data-avatar-input]").value = b.dataset.avatarPick;
+    input.value = ""; input.required = false;
+    const img = new Image(); img.alt = ""; img.src = b.dataset.avatarCover;
+    form.querySelector("[data-preview]").replaceChildren(img);
+    form.querySelector("[data-image-name]").textContent = b.dataset.avatarName;
+    form.querySelector("[data-image-hint]").textContent = "Avatar";
+    b.closest("dialog").close();
+  });
+
+  for (const input of document.querySelectorAll("[data-auto-submit]")) input.addEventListener("change", () => { if (input.files.length) input.form.submit(); });
+
   const f = document.querySelector("[data-composer]");
   let dirty = false;
   if (f) {
@@ -1661,6 +2166,8 @@ const SCRIPT = `(() => {
     const image = f.querySelector("[data-image]"), preview = f.querySelector("[data-preview]"), name = f.querySelector("[data-image-name]"), hint = f.querySelector("[data-image-hint]");
     if (image) image.addEventListener("change", () => {
       const file = image.files[0];
+      const chosen = f.querySelector("[data-avatar-input]");
+      if (chosen && file) chosen.value = "";
       name.textContent = file ? file.name : name.dataset.empty;
       hint.textContent = file ? "Trocar foto" : hint.dataset.empty;
       f.querySelector("[data-image-trailing]").hidden = !file;
