@@ -97,10 +97,10 @@ no D1 local.
 | 3 | Voz clonada (Camila, com autorização dela) | 6,1 s | US$ 0,2332 | `cf00562b-6dd9-459d-ba2c-1b044028e8d5` |
 
 - **Funcionou de ponta a ponta nas três vozes:** pedido, vídeo salvo no R2,
-  duração e limpeza na HeyGen. O vídeo fica pronto em menos de 1 minuto.
-- **Voz clonada:** a clonagem levou menos de 3 minutos com uma amostra de
-  2 min 59 s, e o `POST /v3/models/audio/voices` e o TTS funcionaram como a
-  documentação diz.
+  duração e limpeza na HeyGen. O vídeo fica pronto em cerca de 1 minuto.
+- **Voz clonada:** a voz estava pronta na primeira conferência, 3,5 min depois
+  do pedido (amostra de 2 min 59 s); pode ter ficado pronta antes. O
+  `POST /v3/models/audio/voices` e o TTS funcionaram como a documentação diz.
 - **Saldo:** caiu US$ 0,67 nos três vídeos, contra US$ 0,7057 calculados: a
   cobrança real fica um pouco abaixo da conta pela duração. A HeyGen não
   devolve o custo do vídeo.
