@@ -23,7 +23,7 @@ import type { Db, Project, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoStructure } from "../structures";
+import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
@@ -1057,7 +1057,9 @@ function videoSrc(v: Video): string {
 
 /** A duração do HeyGen segue a fala: até o vídeo ficar pronto, é uma estimativa. */
 function durationLabel(v: Video, structure: Structure): string {
-  return "speech" in structure.cost.seconds ? `≈ ${v.duration} s` : `${v.duration} s`;
+  // Pela fala é estimativa; a HeyGen direta devolve a duração certa quando o vídeo fica pronto.
+  const exact = videoPlatform(v) === "heygen" && v.status === "completed";
+  return "speech" in structure.cost.seconds && !exact ? `≈ ${v.duration} s` : `${v.duration} s`;
 }
 
 /** Uma seção do formulário: título e campos. */

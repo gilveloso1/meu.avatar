@@ -214,6 +214,10 @@ describe("HeyGen direta: acompanhar", () => {
     expect(done).toMatchObject({ status: "completed", video_key: `videos/${video!.id}.mp4`, duration: 12, cost: 0.4774, audio_status: null });
     expect(heygen.downloads).toEqual(["https://files.heygen.ai/v.mp4"]);
     expect(await (await env.MIDIA.get(done!.video_key!))!.text()).toBe("mp4-heygen");
+    // A duração que a HeyGen devolve é a certa: sem o "≈" da estimativa pela fala.
+    const html = await (await call(new Request(`${SITE}/video/${video!.id}`, { headers: { cookie: await cookie() } }), null, null, heygen)).text();
+    expect(html).toContain(">12 s<");
+    expect(html).not.toContain("≈ 12 s");
   });
 
   it("falhou na HeyGen: guarda o motivo", async () => {
