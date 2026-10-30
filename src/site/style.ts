@@ -252,6 +252,7 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 /* --- FAB estendido ("Novo vídeo"): contêiner primário, cantos de 16 px ------------------ */
 .fab {
   display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px 0 16px; flex: none;
+  border: 0; cursor: pointer;
   border-radius: var(--md-sys-shape-corner-large);
   background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
   box-shadow: var(--md-sys-elevation-level1);
@@ -652,6 +653,7 @@ a.frame { display: block; }
 .viewer__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 16px 24px 24px; border-top: 1px solid var(--md-sys-color-outline-variant); }
 .viewer__actions > .button, .viewer__actions > .menu, .viewer__actions .menu > summary { width: 100%; justify-content: center; }
 .viewer__actions:has(> :only-child) { grid-template-columns: 1fr; }
+.viewer__save { width: 100%; justify-content: center; }
 /* Edição rápida na folha: o resumo num card, cada opção numa seção com o grupo na largura toda
    e os botões presos no fim da folha (no lugar de Refazer e Baixar). */
 .viewer .quick-edit { flex: 1; gap: 24px; padding: 0; border-radius: 0; background: none; }
@@ -791,6 +793,25 @@ a.frame { display: block; }
 
 /* Confirmação numa página (apagar um projeto): o diálogo básico do M3, no meio da página
    (surface-container-high, cantos de 28 px, 24 px de margem, até 560 px, ações à direita). */
+/* Diálogo básico do M3: cantos de 28 px, 24 px de margem, de 280 a 560 px. */
+.dialog { width: min(560px, calc(100vw - 32px)); min-width: 280px; max-height: calc(100vh - 48px); margin: auto; padding: 24px; border: 0; border-radius: 28px; background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); box-shadow: var(--md-sys-elevation-level3, var(--md-sys-elevation-level2)); }
+.dialog[open] { display: flex; flex-direction: column; gap: 16px; }
+.dialog::backdrop { background: rgb(0 0 0 / 0.32); }
+.dialog__title { font: var(--md-sys-typescale-headline-small); }
+.dialog .search-field { width: 100%; max-width: none; background: var(--md-sys-color-surface-container-highest); }
+.dialog__list { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; max-height: 320px; }
+.dialog__list [hidden] { display: none; }
+.dialog__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dialog__start { margin-right: auto; }
+.avatar-option { display: flex; align-items: center; gap: 16px; width: 100%; padding: 8px; border: 0; border-radius: 16px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.avatar-option__text { display: flex; flex-direction: column; min-width: 0; }
+
+/* Avatares: a capa do card tem o tamanho do ícone dos cards de Modelos. */
+.avatar-cover { width: 48px; height: 48px; border-radius: 14px; object-fit: cover; }
+.frame__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vrow__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.viewer__stage--asset { display: flex; align-items: center; justify-content: center; }
+.viewer__stage--asset img, .viewer__stage--asset video { max-width: 100%; max-height: 100%; border-radius: 16px; object-fit: contain; }
 .confirm {
   width: min(560px, 100%); margin: 12vh auto 0; padding: 24px; display: flex; flex-direction: column; gap: 16px;
   border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container-high);

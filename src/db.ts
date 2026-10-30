@@ -50,6 +50,8 @@ export interface Video {
   prep_status: PrepStatus | null;
   prep_error: string | null;
   prep_started_at: string | null;
+  /** O avatar usado para gerar (null com arquivo solto). */
+  avatar_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -115,7 +117,7 @@ function toUserLogin(row: UserRow): UserLogin {
   return { ...toUser(row), passwordHash: row.password_hash, failedLogins: row.failed_logins, lockedUntil: row.locked_until };
 }
 
-export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "user_id" | "request_prompt" | "style" | "language" | "extra" | "structure" | "settings">;
+export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "user_id" | "request_prompt" | "style" | "language" | "extra" | "structure" | "settings"> & { avatar_id?: string | null };
 export type VideoChanges = Partial<
   Pick<
     Video,
@@ -158,6 +160,38 @@ export interface ProjectFile {
 /** Status em que o vídeo ainda pode mudar (vale consultar o OpenRouter). */
 export const OPEN_STATUSES: VideoStatus[] = ["pending", "in_progress"];
 
+/** Um avatar da pessoa: guarda ativos, sem depender de nenhum modelo. */
+export interface Avatar {
+  id: string;
+  user_id: number;
+  name: string;
+  description: string;
+  /** A foto principal e a gravação da voz para clonagem (ids em avatar_assets). */
+  photo_asset: string | null;
+  voice_asset: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Na lista: quantos ativos tem e a primeira foto (a capa). */
+  assets?: number;
+  cover?: string | null;
+}
+
+export type AssetKind = "imagem" | "video" | "audio";
+
+/** Um ativo do avatar (no R2, em key). */
+export interface AvatarAsset {
+  id: string;
+  avatar_id: string;
+  kind: AssetKind;
+  key: string;
+  name: string;
+  type: string;
+  size: number;
+  /** O vídeo de onde veio, quando foi salvo a partir de um modelo. */
+  source_video: string | null;
+  created_at: string;
+}
+
 export class Db {
   constructor(private readonly d1: D1Database) {}
 
@@ -165,10 +199,10 @@ export class Db {
     const at = now.toISOString();
     return (await this.d1
       .prepare(
-        `INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, image_key, user_id, request_prompt, style, language, extra, structure, settings, created_at, updated_at)
-         VALUES (?, 'submitting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        `INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, image_key, user_id, request_prompt, style, language, extra, structure, settings, avatar_id, created_at, updated_at)
+         VALUES (?, 'submitting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
-      .bind(v.id, v.prompt, v.model, v.duration, v.resolution, v.aspect_ratio, v.image_key, v.user_id, v.request_prompt, v.style, v.language, v.extra, v.structure, v.settings, at, at)
+      .bind(v.id, v.prompt, v.model, v.duration, v.resolution, v.aspect_ratio, v.image_key, v.user_id, v.request_prompt, v.style, v.language, v.extra, v.structure, v.settings, v.avatar_id ?? null, at, at)
       .first<Video>())!;
   }
 
@@ -344,6 +378,75 @@ export class Db {
     return result.meta.changes;
   }
 
+  // --- Avatares e seus ativos ---
+
+  async insertAvatar(a: { id: string; user_id: number; name: string; description?: string }, now = new Date()): Promise<Avatar> {
+    const at = now.toISOString();
+    return (await this.d1
+      .prepare("INSERT INTO avatars (id, user_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING *")
+      .bind(a.id, a.user_id, a.name, a.description ?? "", at, at)
+      .first<Avatar>())!;
+  }
+
+  avatarById(id: string): Promise<Avatar | null> {
+    return this.d1.prepare("SELECT * FROM avatars WHERE id = ?").bind(id).first<Avatar>();
+  }
+
+  /** Os avatares da pessoa (o mexido por último primeiro), com a contagem de ativos e a capa. */
+  async avatarsByUser(userId: number, q = ""): Promise<Avatar[]> {
+    return (
+      await this.d1
+        .prepare(
+          `SELECT a.*, (SELECT COUNT(*) FROM avatar_assets x WHERE x.avatar_id = a.id) AS assets,
+             COALESCE(a.photo_asset, (SELECT x.id FROM avatar_assets x WHERE x.avatar_id = a.id AND x.kind = 'imagem' ORDER BY x.created_at LIMIT 1)) AS cover
+           FROM avatars a WHERE a.user_id = ? AND a.name LIKE ? ORDER BY a.updated_at DESC`,
+        )
+        .bind(userId, `%${q}%`)
+        .all<Avatar>()
+    ).results;
+  }
+
+  async updateAvatar(id: string, c: { name: string; description: string; photo_asset: string | null; voice_asset: string | null }, now = new Date()): Promise<void> {
+    await this.d1
+      .prepare("UPDATE avatars SET name = ?, description = ?, photo_asset = ?, voice_asset = ?, updated_at = ? WHERE id = ?")
+      .bind(c.name, c.description, c.photo_asset, c.voice_asset, now.toISOString(), id)
+      .run();
+  }
+
+  /** Apaga o avatar e devolve as chaves dos ativos, para sair do R2. */
+  async deleteAvatar(id: string): Promise<string[]> {
+    const keys = (await this.d1.prepare("SELECT key FROM avatar_assets WHERE avatar_id = ?").bind(id).all<{ key: string }>()).results.map((r) => r.key);
+    await this.d1.batch([this.d1.prepare("DELETE FROM avatar_assets WHERE avatar_id = ?").bind(id), this.d1.prepare("DELETE FROM avatars WHERE id = ?").bind(id)]);
+    return keys;
+  }
+
+  async insertAsset(a: Omit<AvatarAsset, "created_at">, now = new Date()): Promise<void> {
+    const at = now.toISOString();
+    await this.d1.batch([
+      this.d1
+        .prepare("INSERT INTO avatar_assets (id, avatar_id, kind, key, name, type, size, source_video, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(a.id, a.avatar_id, a.kind, a.key, a.name, a.type, a.size, a.source_video, at),
+      this.d1.prepare("UPDATE avatars SET updated_at = ? WHERE id = ?").bind(at, a.avatar_id),
+    ]);
+  }
+
+  async assetsByAvatar(avatarId: string): Promise<AvatarAsset[]> {
+    return (await this.d1.prepare("SELECT * FROM avatar_assets WHERE avatar_id = ? ORDER BY created_at DESC").bind(avatarId).all<AvatarAsset>()).results;
+  }
+
+  asset(avatarId: string, id: string): Promise<AvatarAsset | null> {
+    return this.d1.prepare("SELECT * FROM avatar_assets WHERE avatar_id = ? AND id = ?").bind(avatarId, id).first<AvatarAsset>();
+  }
+
+  /** Apaga o ativo; se era a foto principal ou a voz do avatar, o lugar fica vazio. */
+  async deleteAsset(id: string): Promise<void> {
+    await this.d1.batch([
+      this.d1.prepare("UPDATE avatars SET photo_asset = NULL WHERE photo_asset = ?").bind(id),
+      this.d1.prepare("UPDATE avatars SET voice_asset = NULL WHERE voice_asset = ?").bind(id),
+      this.d1.prepare("DELETE FROM avatar_assets WHERE id = ?").bind(id),
+    ]);
+  }
+
   // --- Configuração e vozes clonadas ---
 
   /** Por onde o HeyGen Avatar IV gera (config 'plataforma.heygen'); sem valor válido, o OpenRouter. */
@@ -499,6 +602,8 @@ export class Db {
       this.d1.prepare("DELETE FROM project_files"),
       this.d1.prepare("DELETE FROM projects"),
       this.d1.prepare("DELETE FROM videos"),
+      this.d1.prepare("DELETE FROM avatar_assets"),
+      this.d1.prepare("DELETE FROM avatars"),
       this.d1.prepare("DELETE FROM voices"),
       this.d1.prepare("UPDATE config SET value = 'openrouter' WHERE key = 'plataforma.heygen'"),
       this.d1.prepare("DELETE FROM sessions"),
