@@ -14,9 +14,10 @@ export default defineConfig(async () => {
             BCRYPT_COST: "4",
             OPENROUTER_WEBHOOK_SECRET: "segredo-webhook",
             // O plugin também lê o .dev.vars do computador: os testes nunca rodam como "local"
-            // nem com a chave de verdade do OpenRouter (a API dos testes é a falsa, test/helpers.ts).
+            // nem com as chaves de verdade do OpenRouter e da HeyGen (as APIs dos testes são falsas, test/helpers.ts).
             AMBIENTE: "",
             OPENROUTER_API_KEY: "",
+            HEYGEN_API_KEY: "",
           },
         },
       }),

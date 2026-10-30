@@ -8,7 +8,7 @@
  * Os valores aceitos pelo modelo (duração, resolução, formato, preço) vêm
  * sempre de GET /videos/models; a estrutura só escolhe o padrão.
  */
-import type { Video } from "../db";
+import type { Platform, Video as VideoRow } from "../db";
 import type { VideoModel, VideoRequest } from "../openrouter";
 
 export class InputError extends Error {}
@@ -26,7 +26,10 @@ export interface Detail {
   description: string;
 }
 
-export type Field =
+/** O campo só aparece (e só vai no formulário) quando cada campo citado tem um dos valores. */
+export type ShowIf = Record<string, string[]>;
+
+export type Field = (
   | {
       kind: "textarea";
       name: string;
@@ -43,7 +46,12 @@ export type Field =
   | { kind: "segmented"; name: string; label: string; options: Option[]; value: string }
   | { kind: "image"; name: string; label: string; required: boolean; supporting: string }
   /** Vídeo enviado do computador (MP4 ou MOV); a duração é lida do arquivo. */
-  | { kind: "video"; name: string; label: string; supporting: string };
+  | { kind: "video"; name: string; label: string; supporting: string }
+  /** Áudio enviado do computador (MP3 ou WAV); a duração é lida no navegador. */
+  | { kind: "audio"; name: string; label: string; supporting: string }
+  /** Caixa de marcar obrigatória (o consentimento da voz clonada). */
+  | { kind: "checkbox"; name: string; label: string }
+) & { showIf?: ShowIf };
 
 export interface Section {
   title: string;
@@ -66,7 +74,8 @@ export interface Defaults {
  */
 export interface CostRule {
   sku: string;
-  seconds: { field: string } | { speech: string } | { video: string };
+  /** `audio`: com esse áudio enviado (e visível), os segundos são os dele, não os da fala. */
+  seconds: { field: string } | { speech: string; audio?: string } | { video: string };
   /** US$ fixos por vídeo, além do preço por segundo (as imagens dos quadros-chave do Aleph 2). */
   extra?: number;
 }
@@ -91,6 +100,8 @@ export interface Built {
    * que monta as referências e envia. A foto e o vídeo ficam guardados no R2.
    */
   prepare?: boolean;
+  /** Pedido pela API direta da HeyGen (estruturas com `platform: "heygen"`). */
+  heygen?: HeyGenPlan;
   /** O que fica guardado no banco. */
   record: {
     /** A fala. */
@@ -108,8 +119,38 @@ export interface Built {
   };
 }
 
+/**
+ * O que o vídeo pela API direta da HeyGen precisa, além da foto: de onde vem a
+ * voz e as opções do Avatar IV. O estúdio sobe os arquivos e monta o pedido.
+ */
+export interface HeyGenPlan {
+  /** "pronta": voz do catálogo lendo o texto; "clonada": voz clonada da pessoa; "audio": o áudio enviado. */
+  source: "pronta" | "clonada" | "audio";
+  script: string | null;
+  /** A voz pronta (id da HeyGen). */
+  voiceId: string | null;
+  /** A voz pronta aceita sotaque (voice_settings.locale). */
+  locale: string | null;
+  /** A voz clonada: id na tabela voices, ou "nova" (clonar a partir da amostra enviada). */
+  clone: string | null;
+  /** Nome da voz nova. */
+  cloneName: string | null;
+  resolution: string;
+  aspectRatio: string;
+  expressiveness: string;
+  motionPrompt: string;
+}
+
+/** Listas que vêm de fora da estrutura: as vozes da HeyGen e as vozes clonadas da pessoa. */
+export interface Lists {
+  voices?: Option[];
+  clones?: Option[];
+}
+
 export interface Structure {
   id: string;
+  /** Plataforma da estrutura; sem isto, o OpenRouter. */
+  platform?: Platform;
   /** Nome no cartão e no título da página. */
   name: string;
   /** Id do modelo no OpenRouter. */
@@ -132,14 +173,14 @@ export interface Structure {
   /** Palavras por segundo da fala, para o contador e o custo. */
   wordsPerSecond: { min: number; max: number };
   cost: CostRule;
-  sections(model: VideoModel | null, defaults: Defaults): Section[];
+  sections(model: VideoModel | null, defaults: Defaults, lists?: Lists): Section[];
   /**
    * Preço por segundo, por SKU (os nomes que `cost.sku` cita). Sem isto, os
    * SKUs do próprio modelo; o Seedance cobra por tokens e converte aqui.
    */
   prices?(model: VideoModel): Record<string, string>;
   /** Valida o formulário e monta o pedido; lança InputError. `video`: o vídeo enviado, se houver. */
-  build(values: Values, hasImage: boolean, model: VideoModel, video: SourceVideo | null): Built;
+  build(values: Values, hasImage: boolean, model: VideoModel, video: SourceVideo | null, lists?: Lists): Built;
   /** As configurações próprias de um vídeo, para o cartão de detalhes. */
-  details(video: Video): Detail[];
+  details(video: VideoRow): Detail[];
 }

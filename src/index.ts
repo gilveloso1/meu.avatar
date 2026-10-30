@@ -1,6 +1,7 @@
 import { type AudioApi, ContainerAudio } from "./audio";
 import { Accounts } from "./auth";
 import { Db } from "./db";
+import { HeyGenClient, type HeyGenApi } from "./heygen";
 import type { Env } from "./env";
 import { OpenRouterVideo, verifySignature, type VideoApi } from "./openrouter";
 import { Site } from "./site/site";
@@ -11,12 +12,14 @@ export { AudioFixer } from "./audio";
 export interface Deps {
   api?: VideoApi | null;
   audio?: AudioApi | null;
+  heygen?: HeyGenApi | null;
 }
 
 export function createStudio(env: Env, deps: Deps = {}): Studio {
   const api = deps.api !== undefined ? deps.api : env.OPENROUTER_API_KEY ? new OpenRouterVideo(env.OPENROUTER_API_KEY) : null;
   const audio = deps.audio !== undefined ? deps.audio : env.AUDIO ? new ContainerAudio(env.AUDIO) : null;
-  return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL }, audio);
+  const heygen = deps.heygen !== undefined ? deps.heygen : env.HEYGEN_API_KEY ? new HeyGenClient(env.HEYGEN_API_KEY) : null;
+  return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL }, audio, heygen);
 }
 
 export function createAccounts(env: Env): Accounts {
@@ -69,6 +72,25 @@ export async function handle(request: Request, env: Env, deps: Deps = {}): Promi
     return new Response("ok");
   }
 
+  // Aviso da HeyGen (callback_url do pedido) de que um vídeo terminou. O corpo
+  // desse aviso não tem assinatura documentada: ele só serve de gatilho, e o
+  // status vem sempre da própria API.
+  if (request.method === "POST" && url.pathname === "/heygen/webhook") {
+    let payload: unknown = null;
+    try {
+      payload = JSON.parse(await request.text());
+    } catch {
+      return new Response("bad request", { status: 400 });
+    }
+    try {
+      await studio.onHeyGenWebhook(payload);
+    } catch (err) {
+      console.error("Erro ao processar aviso da HeyGen", err);
+      return new Response("error", { status: 500 });
+    }
+    return new Response("ok");
+  }
+
   return createSite(env, studio).handle(request);
 }
 
@@ -80,6 +102,8 @@ export default {
     const studio = createStudio(env);
     // A troca de avatar pelo Aleph 2 prepara um vídeo e o envia; depois, os da fila.
     await studio.prepareNext();
+    // O HeyGen pela API direta com voz clonada: pede os vídeos cuja voz ficou pronta.
+    await studio.voiceNext();
     await studio.syncOpen();
     // Depois de buscar os prontos, trata o áudio de um vídeo da fila e faz uma edição rápida pedida.
     await studio.treatNextAudio();

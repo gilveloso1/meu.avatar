@@ -61,7 +61,22 @@ export type AudioStatus = "pending" | "processing" | "done" | "failed";
  * pronto no Aleph, 'compose' → 'composing' → 'done' (ou 'failed', e fica a
  * saída pura do Aleph).
  */
-export type PrepStatus = AudioStatus | "compose" | "composing";
+export type PrepStatus = AudioStatus | "compose" | "composing" | "voz";
+
+/** Por onde o HeyGen Avatar IV gera: o OpenRouter ou a API direta da HeyGen. */
+export type Platform = "openrouter" | "heygen";
+
+/** Voz clonada na API direta da HeyGen (tabela voices). */
+export interface Voice {
+  id: string;
+  user_id: number;
+  name: string;
+  /** O id da voz na HeyGen. */
+  provider_voice_id: string;
+  status: "PENDING" | "ACTIVE" | "FAILED";
+  error: string | null;
+  created_at: string;
+}
 
 export type Role = "admin" | "member";
 
@@ -329,6 +344,43 @@ export class Db {
     return result.meta.changes;
   }
 
+  // --- Configuração e vozes clonadas ---
+
+  /** Por onde o HeyGen Avatar IV gera (config 'plataforma.heygen'); sem valor válido, o OpenRouter. */
+  async platform(): Promise<Platform> {
+    const row = await this.d1.prepare("SELECT value FROM config WHERE key = 'plataforma.heygen'").first<{ value: string }>();
+    return row?.value === "heygen" ? "heygen" : "openrouter";
+  }
+
+  async setPlatform(platform: Platform): Promise<void> {
+    await this.d1.prepare("INSERT INTO config (key, value) VALUES ('plataforma.heygen', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(platform).run();
+  }
+
+  async insertVoice(v: Omit<Voice, "created_at" | "error">, now = new Date()): Promise<Voice> {
+    return (await this.d1
+      .prepare("INSERT INTO voices (id, user_id, name, provider_voice_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING *")
+      .bind(v.id, v.user_id, v.name, v.provider_voice_id, v.status, now.toISOString())
+      .first<Voice>())!;
+  }
+
+  /** As vozes da pessoa, as mais novas primeiro (as que falharam ficam de fora). */
+  async voicesByUser(userId: number): Promise<Voice[]> {
+    return (await this.d1.prepare("SELECT * FROM voices WHERE user_id = ? AND status != 'FAILED' ORDER BY created_at DESC").bind(userId).all<Voice>()).results;
+  }
+
+  voiceById(id: string): Promise<Voice | null> {
+    return this.d1.prepare("SELECT * FROM voices WHERE id = ?").bind(id).first<Voice>();
+  }
+
+  async updateVoice(id: string, status: Voice["status"], error: string | null = null): Promise<void> {
+    await this.d1.prepare("UPDATE voices SET status = ?, error = ? WHERE id = ?").bind(status, error, id).run();
+  }
+
+  /** Vídeos esperando a voz clonada ficar pronta (prep_status 'voz'), os mais antigos primeiro. */
+  async waitingVoice(limit = 10): Promise<Video[]> {
+    return (await this.d1.prepare("SELECT * FROM videos WHERE prep_status = 'voz' ORDER BY created_at LIMIT ?").bind(limit).all<Video>()).results;
+  }
+
   // --- contas e sessões (como no estuda.mais) ---------------------------------------
 
   // --- Projetos do canvas ---
@@ -447,6 +499,8 @@ export class Db {
       this.d1.prepare("DELETE FROM project_files"),
       this.d1.prepare("DELETE FROM projects"),
       this.d1.prepare("DELETE FROM videos"),
+      this.d1.prepare("DELETE FROM voices"),
+      this.d1.prepare("UPDATE config SET value = 'openrouter' WHERE key = 'plataforma.heygen'"),
       this.d1.prepare("DELETE FROM sessions"),
       this.d1.prepare("DELETE FROM users"),
     ]);
