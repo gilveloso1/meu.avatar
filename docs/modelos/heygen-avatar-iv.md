@@ -77,11 +77,9 @@ Um vídeo de 30 s com foto: US$ 1,16 direto, contra US$ 1,50 pelo OpenRouter
 
 ### Próximo passo
 
-1. Conferir de ouvido os três vídeos abaixo e o lip sync.
-2. Publicar: chave no Worker (`npx wrangler secret put HEYGEN_API_KEY`),
-   migração 0011, e ligar a config `plataforma.heygen` (ver `docs/operacao.md`).
-3. Conferir no ar o aviso `/heygen/webhook`: no computador ele não chega, e o
-   corpo do aviso não está documentado.
+No ar pela API direta desde 30/10/2026, só para o administrador. Falta decidir
+se libera para todos (`access: "all"`) e confirmar se o aviso
+`/heygen/webhook` chega (ver o teste no ar, abaixo).
 
 ## Testes pela API direta (30/10/2026)
 
@@ -112,3 +110,12 @@ no D1 local.
   de salvar. A voz clonada fica na conta da HeyGen.
 - **Treinamento:** a política da HeyGen permite usar o conteúdo enviado para
   treinar modelos; a recusa é por e-mail (heygen.com/policy).
+
+### Teste no ar (30/10/2026)
+
+Em meuavatar.ia.br, com a chave definitiva, voz pronta, 720p, 9:16: vídeo
+`5cde9a48-7d3e-45c9-bc74-132f730fed4e` no D1 do ar, 5,7 s, US$ 0,2182. Pronto em
+cerca de 1 min, salvo no R2 e apagado na HeyGen (`heygen_video_deleted`, sem
+arquivos pendentes). Não deu para saber se quem pegou o vídeo foi o aviso ou o
+agendamento: nos dois casos o resultado é o mesmo. Para saber, acompanhe o
+próximo vídeo com `npx wrangler tail`.
