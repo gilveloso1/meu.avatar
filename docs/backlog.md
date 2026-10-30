@@ -16,6 +16,28 @@ a anterior e será revista com o dono por essa direção.
 Novo, ainda sem lugar na ordem: **canvas de edição**, montar vários vídeos
 com blocos e conexões (ver [canvas.md](canvas.md)).
 
+## Recriar um vídeo de referência com outra personagem (29/10/2026)
+
+O desafio: a pessoa tem um vídeo de referência (ex.: review UGC de um produto)
+e quer o mesmo vídeo com outra personagem, sem subir o vídeo original para
+nenhum modelo. O básico realista resolve: a personagem falando, com os
+produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
+
+1. **HeyGen pela API direta, com três vozes** (feito: voz pronta, voz clonada
+   e o áudio da pessoa; troca de plataforma pela config do banco, ver
+   `docs/operacao.md`). Falta: testar com a chave de verdade e anotar em
+   `docs/modelos/heygen-avatar-iv.md`.
+2. **Tela Avatares**, logo depois de "Modelos": guarda os ativos de cada
+   avatar (fotos, frames, vozes, áudios). Não depende de nenhum modelo: os
+   modelos criam algo e a pessoa salva no avatar para usar depois.
+3. **Modelo de imagem** (um card em "Modelos"): gera a imagem inicial, por
+   exemplo a personagem da pessoa na cena de um print do vídeo de referência.
+   Primeiro candidato: Nano Banana 2.1 pelo OpenRouter (já usado no Aleph).
+4. **Depois: interface de produção de texto e copy.** Transcrever o áudio do
+   vídeo de referência (só o áudio, nunca o vídeo) e ajustar a fala.
+5. **Configuração do administrador**: tela para trocar a plataforma do HeyGen
+   (hoje pelo wrangler) e outras configs da tabela `config`.
+
 ## Ordem
 
 1. **Testar outro modelo de vídeo com áudio próprio** (em andamento: HeyGen

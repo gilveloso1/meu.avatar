@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { handle } from "../src/index";
 import type { AudioApi, ContainerPlan, Face } from "../src/audio";
 import { randomToken, sha256 } from "../src/auth";
+import type { CloneStatus, HeyGenApi, HeyGenVideo, HeyGenVideoRequest, HeyGenVoice } from "../src/heygen";
 import type { ChatRequest, ChatResult, VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
 
 export const SITE = "https://meu-avatar.gilveloso.workers.dev";
@@ -254,8 +255,66 @@ export class FakeAudioApi implements AudioApi {
   }
 }
 
-export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null): Promise<Response> {
-  return handle(request, { ...env, SITE_URL: SITE }, { api, audio });
+/** HeyGen de mentira (API direta): guarda os arquivos e os pedidos e responde o que o teste mandar. */
+export class FakeHeyGenApi implements HeyGenApi {
+  assets: { id: string; type: string; name: string; text: string }[] = [];
+  videos: HeyGenVideoRequest[] = [];
+  details = new Map<string, HeyGenVideo>();
+  clones: { name: string; assetId: string }[] = [];
+  cloneStatuses = new Map<string, CloneStatus>();
+  speeches: { voiceId: string; text: string }[] = [];
+  catalog: HeyGenVoice[] = [
+    { voice_id: "voz-ana", name: "Ana", language: "Portuguese", gender: "female", support_locale: true },
+    { voice_id: "voz-rui", name: "Rui", language: "Portuguese", gender: "male", support_locale: false },
+  ];
+  failVideo: string | null = null;
+  downloads: string[] = [];
+  private next = 1;
+
+  async uploadAsset(bytes: ArrayBuffer, type: string, name: string) {
+    const id = `asset-${this.next++}`;
+    this.assets.push({ id, type, name, text: new TextDecoder().decode(bytes) });
+    return id;
+  }
+  async createVideo(body: HeyGenVideoRequest) {
+    if (this.failVideo) throw new Error(this.failVideo);
+    this.videos.push(body);
+    const video_id = `hg-${this.next++}`;
+    this.details.set(video_id, { id: video_id, status: "pending" });
+    return { video_id };
+  }
+  async getVideo(id: string) {
+    const detail = this.details.get(id);
+    if (!detail) throw new Error("vídeo não existe");
+    return detail;
+  }
+  async download(url: string) {
+    this.downloads.push(url);
+    return new TextEncoder().encode("mp4-heygen").buffer as ArrayBuffer;
+  }
+  async voices() {
+    return this.catalog;
+  }
+  async cloneVoice(name: string, assetId: string) {
+    this.clones.push({ name, assetId });
+    const id = `clone-${this.next++}`;
+    this.cloneStatuses.set(id, { status: "PENDING" });
+    return id;
+  }
+  async cloneStatus(voiceId: string) {
+    return this.cloneStatuses.get(voiceId) ?? { status: "FAILED" as const, failure_reason: "INVALID_AUDIO" };
+  }
+  async speech(voiceId: string, text: string) {
+    this.speeches.push({ voiceId, text });
+    return `https://files.heygen.ai/audio/${voiceId}.wav`;
+  }
+  finish(videoId: string, changes: Partial<HeyGenVideo>) {
+    this.details.set(videoId, { ...this.details.get(videoId)!, ...changes });
+  }
+}
+
+export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null): Promise<Response> {
+  return handle(request, { ...env, SITE_URL: SITE }, { api, audio, heygen });
 }
 
 export function form(fields: Record<string, string | File>): FormData {

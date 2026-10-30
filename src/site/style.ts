@@ -405,6 +405,12 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 .file-picker__name { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-picker__hint { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .file-picker__trailing { flex: none; font-size: 24px; color: var(--md-sys-color-on-surface-variant); }
+/* Campo que só aparece com certas escolhas (data-show-if): some do fluxo quando escondido. */
+.conditional { display: contents; }
+.conditional[hidden] { display: none; }
+/* Caixa de marcar (M3: 18 px, cor primary quando marcada), com o texto ao lado. */
+.checkbox-field { display: flex; align-items: flex-start; gap: 12px; padding: 4px 0; cursor: pointer; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface); }
+.checkbox-field input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--md-sys-color-primary); cursor: pointer; }
 .file-picker__trailing[hidden] { display: none; }
 .file-picker__hint:empty { display: none; }
 

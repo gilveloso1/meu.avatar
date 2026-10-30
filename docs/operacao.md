@@ -244,7 +244,25 @@ Nenhuma chave fica no repositório.
 |---|---|---|
 | `OPENROUTER_API_KEY` | Segredo do Worker | Gerar e baixar os vídeos. Sem ela, o estúdio só mostra os vídeos já feitos |
 | `OPENROUTER_WEBHOOK_SECRET` | Segredo do Worker (recomendado) | Segredo de assinatura do workspace no OpenRouter; com ele, avisos sem assinatura válida são recusados (401) |
+| `HEYGEN_API_KEY` | Segredo do Worker e `.dev.vars` | API direta da HeyGen (o HeyGen Avatar IV com voz pronta, voz clonada ou o áudio da pessoa). **Vence em 27/01/2027**: gere outra em platform.heygen.com → API keys e troque nos dois lugares. Sem ela, o HeyGen segue pelo OpenRouter |
 | `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` | Só onde você publica | Publicar, criar banco e bucket, cadastrar segredos |
+
+## Trocar a plataforma do HeyGen
+
+O HeyGen Avatar IV gera pelo OpenRouter ou pela API direta da HeyGen, pela
+config `plataforma.heygen` do banco (tabela `config`, migração 0011). O
+formulário mostra só o que a plataforma escolhida aceita; os vídeos já feitos
+continuam consultados por onde foram feitos. Pela API direta: US$ 0,0385/s
+(contra US$ 0,05/s pelo OpenRouter), saldo pré-pago na conta da HeyGen.
+
+```bash
+npx wrangler d1 execute DB --remote --command "UPDATE config SET value = 'heygen' WHERE key = 'plataforma.heygen'" < /dev/null
+npx wrangler d1 execute DB --remote --command "UPDATE config SET value = 'openrouter' WHERE key = 'plataforma.heygen'" < /dev/null
+```
+
+No computador, troque `--remote` por `--local`. Com a config na HeyGen e sem a
+`HEYGEN_API_KEY`, o HeyGen segue pelo OpenRouter (e o log avisa). Depois, a
+troca vai para uma tela de configuração do administrador.
 
 Configurações que não são segredo ficam em `vars`, no `wrangler.jsonc`:
 `SITE_URL` e os padrões do formulário do Wan (`VIDEO_DURATION`,

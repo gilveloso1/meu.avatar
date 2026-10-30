@@ -77,6 +77,15 @@ export const ERROS = {
   expressividade: campo("Escolha a expressividade."),
   estilo: campo("Escolha um estilo da lista."),
   idioma: campo("Escolha um idioma da lista."),
+  fonteVoz: campo("Escolha de onde vem a voz."),
+  vozClonada: campo("Escolha uma voz clonada da lista."),
+  nomeVoz: campo("Dê um nome para a voz."),
+  amostraVoz: campo("Envie uma gravação da voz para clonar."),
+  consentimentoVoz: campo("Confirme que pode usar esta voz."),
+  audioFala: campo("Envie o áudio da fala."),
+  audioTipo: campo("Use um áudio MP3 ou WAV."),
+  audioTamanho: (max: number) => campo(`Use um áudio de até ${max} MB.`),
+  vozFalhou: erro("Não foi possível clonar a voz.", "Envie outra gravação, mais limpa."),
 
   // Áudio
   audioFalhou: erro("Não foi possível tratar o áudio.", "O vídeo segue com o áudio original."),

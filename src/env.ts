@@ -8,6 +8,8 @@ export interface Env {
   OPENROUTER_API_KEY?: string;
   /** Segredo de assinatura dos webhooks do OpenRouter (opcional: o status sempre é conferido na API). */
   OPENROUTER_WEBHOOK_SECRET?: string;
+  /** Chave da API direta da HeyGen (vence em 27/01/2027). Sem ela, o HeyGen segue pelo OpenRouter. */
+  HEYGEN_API_KEY?: string;
   /** Contêiner que trata o áudio (src/audio.ts). Sem ele, o vídeo fica como veio do modelo. */
   AUDIO?: DurableObjectNamespace<AudioFixer>;
   /** Custo do bcrypt das senhas; padrão 12 (os testes usam 4, para ir rápido). */

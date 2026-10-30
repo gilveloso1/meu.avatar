@@ -23,8 +23,9 @@ import type { Db, Project, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values } from "../structures";
-import { ForbiddenError, InputError, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
+import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoStructure } from "../structures";
+import { HEYGEN_MODEL } from "../structures/heygen-direta";
+import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
@@ -46,7 +47,7 @@ const ICONS = [
   "add", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "calendar_today", "check", "check_circle",
   "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
   "edit", "error", "face", "fit_screen", "flag", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
-  "image", "info", "layers", "link", "link_off", "lock", "logout", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
+  "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
   "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
   "send", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
@@ -128,8 +129,10 @@ export class Site {
     const model = /^\/modelo\/([a-z0-9-]+)$/.exec(path);
     if (model) {
       // Estrutura que não existe ou que a pessoa não pode usar: a página nem aparece.
-      const structure = structureById(model[1]);
-      if (!structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
+      const found = structureById(model[1]);
+      if (!found || !canUse(found, user.role)) return new Response("não encontrado", { status: 404 });
+      // O HeyGen pode estar na API direta (config do banco): o formulário mostra só o que ela aceita.
+      const structure = await this.studio.resolve(found);
       return post
         ? this.createVideo(request, user, structure)
         : this.modelPage(user, structure, await this.redoValues(structure, url.searchParams.get("refazer")));
@@ -407,9 +410,10 @@ ${CANVAS_BODY}
    */
   private async modelPage(user: User, structure: Structure, values?: Values, error?: string): Promise<Response> {
     const { model, error: modelError } = await this.tryModel(structure);
-    // Sem a chave do OpenRouter: no computador, nenhum aviso; no ar, um aviso na língua de quem usa.
-    const banner = modelError ?? (this.studio.canGenerate || this.config.local ? null : ERROS.criacaoPausadaAviso);
-    const sections = structure.sections(model, this.config.defaults);
+    // Sem a chave da plataforma: no computador, nenhum aviso; no ar, um aviso na língua de quem usa.
+    const canGenerate = this.studio.canGenerateWith(structure);
+    const banner = modelError ?? (canGenerate || this.config.local ? null : ERROS.criacaoPausadaAviso);
+    const sections = structure.sections(model, this.config.defaults, await this.studio.lists(structure, user.id));
     const value = values ?? defaultValues(sections);
     const cost = model ? estimate(structure, model, value) : undefined;
     const config = {
@@ -442,7 +446,7 @@ ${CANVAS_BODY}
         ${images.map((f) => formField(f, value)).join("")}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
-      ${generateBar(seconds, cost, Boolean(model) && (this.studio.canGenerate || Boolean(this.config.local)))}
+      ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)))}
     </section>
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
@@ -504,13 +508,14 @@ ${error ? snackbar(error) : ""}`;
     const v = id ? await this.db.videoById(id) : null;
     if (!v || v.structure !== structure.id) return undefined;
     const { model } = await this.tryModel(structure);
-    const base = defaultValues(structure.sections(model, this.config.defaults));
+    const base = defaultValues(structure.sections(model, this.config.defaults, v.user_id ? await this.studio.lists(structure, v.user_id) : {}));
     let settings: Record<string, string> = {};
     try { settings = JSON.parse(v.settings ?? "{}"); } catch {}
     const from: Record<string, string | null | undefined> = {
       fala: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
       estilo: v.style, idioma: v.language, instrucoes: v.extra, movimento: settings.motion_prompt ?? v.extra,
       voz: settings.voice_id, expressividade: settings.expressiveness, roupa: settings.outfit, uso: settings.use,
+      fonte: settings.source, clone: settings.voice_row,
     };
     return (name) => from[name] || base(name);
   }
@@ -518,7 +523,7 @@ ${error ? snackbar(error) : ""}`;
   /** A página do vídeo: o vídeo centralizado sobre ele mesmo desfocado e, ao lado, a folha com as informações. */
   private async videoPage(user: User, id: string, url: URL, error?: string): Promise<Response> {
     const v = await this.db.videoById(id);
-    const structure = v && structureById(v.structure);
+    const structure = v && videoStructure(v);
     if (!v || !structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
     // De onde a pessoa veio (só caminhos do próprio site): a seta e o X voltam para lá.
     const from = url.searchParams.get("de") ?? "";
@@ -628,6 +633,8 @@ ${error ? snackbar(error) : ""}`;
   }
 
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
+    // A API direta da HeyGen não tem lista de modelos: o que ela aceita fica na estrutura.
+    if (structure.platform === "heygen") return { model: HEYGEN_MODEL, error: null };
     try {
       // Sem a chave: no computador, a lista pública de modelos (o formulário mostra todas as opções);
       // no ar, nada (o aviso diz que a criação está pausada). Assim os testes não vão à rede.
@@ -645,13 +652,15 @@ ${error ? snackbar(error) : ""}`;
 
   private async createVideo(request: Request, user: User, structure: Structure): Promise<Response> {
     const form = await request.formData();
-    const image = form.get("imagem");
-    const source = form.get("video");
     const { model } = await this.tryModel(structure);
-    const values = formValues(form, structure.sections(model, this.config.defaults));
+    const values = formValues(form, structure.sections(model, this.config.defaults, await this.studio.lists(structure, user.id)));
+    const file = (name: string) => {
+      const f = form.get(name);
+      return f instanceof File ? f : null;
+    };
     let video: Video;
     try {
-      video = await this.studio.create({ structure, values, image: image instanceof File ? image : null, video: source instanceof File ? source : null, user });
+      video = await this.studio.create({ structure, values, image: file("imagem"), video: file("video"), audio: file("audio"), sample: file("amostra"), user });
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
@@ -1059,7 +1068,18 @@ function formSection(section: Section, value: Values): string {
       </section>`;
 }
 
+/**
+ * O campo, dentro de um bloco que só aparece quando os campos citados em `showIf`
+ * têm um dos valores (o script da página esconde e desliga o resto, para não ir no formulário).
+ */
 function formField(f: Field, value: Values): string {
+  const inner = fieldHtml(f, value);
+  if (!f.showIf) return inner;
+  const visible = Object.entries(f.showIf).every(([name, values]) => values.includes(value(name)));
+  return `<div class="conditional" data-show-if="${esc(JSON.stringify(f.showIf))}"${visible ? "" : " hidden"}>${inner}</div>`;
+}
+
+function fieldHtml(f: Field, value: Values): string {
   switch (f.kind) {
     case "textarea":
       return `<div class="text-field">
@@ -1107,6 +1127,20 @@ function formField(f: Field, value: Values): string {
             <span class="file-picker__hint" data-source-hint data-empty="${esc(f.supporting)}">${esc(f.supporting)}</span>
           </span>
           <span class="icon file-picker__trailing" data-source-trailing hidden>edit</span>
+        </label>`;
+    case "audio":
+      return `<label class="file-picker interactive" title="MP3 ou WAV, até ${MAX_AUDIO_BYTES / 1024 / 1024} MB">
+          <input type="file" name="${f.name}" accept="audio/mpeg,audio/wav,audio/x-wav" aria-label="${esc(f.label)}" required data-audio>
+          <span class="file-picker__preview"><span class="icon">mic</span></span>
+          <span class="file-picker__text">
+            <span class="file-picker__name" data-audio-name data-empty="Adicionar ${esc(f.label.toLowerCase())}">Adicionar ${esc(f.label.toLowerCase())}</span>
+            <span class="file-picker__hint" data-audio-hint data-empty="${esc(f.supporting)}">${esc(f.supporting)}</span>
+          </span>
+        </label>`;
+    case "checkbox":
+      return `<label class="checkbox-field">
+          <input type="checkbox" name="${f.name}" value="sim" required${value(f.name) === "sim" ? " checked" : ""}>
+          <span class="checkbox-field__label">${esc(f.label)}</span>
         </label>`;
   }
 }
@@ -1577,15 +1611,31 @@ const SCRIPT = `(() => {
       const r = Math.round(sourceSeconds);
       return (cfg.durations || [r]).reduce((best, d) => (Math.abs(d - r) < Math.abs(best - r) ? d : best));
     };
+    // Campos que só aparecem com certas escolhas (data-show-if): escondidos, ficam desligados e não vão no formulário.
+    const conditional = [...f.querySelectorAll("[data-show-if]")];
+    const applyShowIf = () => {
+      for (const box of conditional) {
+        const rule = JSON.parse(box.dataset.showIf);
+        const show = Object.keys(rule).every((k) => rule[k].includes(val(k)));
+        box.hidden = !show;
+        for (const input of box.querySelectorAll("input, textarea, select")) input.disabled = !show;
+      }
+    };
+    applyShowIf();
+    // Duração do áudio da fala enviado ("Meu áudio"), lida no navegador.
+    let audioSeconds = 0;
+    const audioField = cfg.seconds.audio ? f.elements[cfg.seconds.audio] : null;
     const update = () => {
-      const n = speech ? speech.value.split(/\\s+/).filter(Boolean).length : 0;
-      const fixed = cfg.seconds.field ? Number(val(cfg.seconds.field)) : cfg.seconds.video ? fromSource() : 0;
+      applyShowIf();
+      const useAudio = audioField && !audioField.disabled;
+      const n = speech && !speech.disabled ? speech.value.split(/\\s+/).filter(Boolean).length : 0;
+      const fixed = cfg.seconds.field ? Number(val(cfg.seconds.field)) : cfg.seconds.video ? fromSource() : useAudio ? Math.round(audioSeconds) : 0;
       const s = fixed || (n ? Math.max(1, Math.round(n / mid)) : 0);
       const price = Number(cfg.prices[cfg.sku.replace(/\\{(\\w+)\\}/g, (_, k) => val(k))]);
       for (const e of f.querySelectorAll("[data-seconds]")) e.textContent = s ? (fixed ? "" : "≈ ") + s + " s" : "—";
       for (const e of f.querySelectorAll("[data-cost]")) e.textContent = price && s ? "US$ " + (price * s + cfg.extra).toFixed(2) : "—";
-      if (!speech) {
-        // Sem fala escrita (troca de avatar): nada de contador.
+      if (!speech || speech.disabled) {
+        // Sem fala escrita (troca de avatar, ou o áudio enviado no lugar dela): nada de contador.
       } else if (fixed) {
         // Duração escolhida: a faixa de palavras que cabe nela.
         const min = Math.round(fixed * rate.min), max = Math.round(fixed * rate.max);
@@ -1614,6 +1664,24 @@ const SCRIPT = `(() => {
       f.querySelector("[data-image-trailing]").hidden = !file;
       preview.innerHTML = file ? '<img alt="">' : '<span class="icon">face</span>';
       if (file) preview.firstChild.src = URL.createObjectURL(file);
+    });
+
+    for (const input of f.querySelectorAll("[data-audio]")) input.addEventListener("change", () => {
+      const file = input.files[0], label = input.closest("label");
+      const audioName = label.querySelector("[data-audio-name]"), audioHint = label.querySelector("[data-audio-hint]");
+      audioName.textContent = file ? file.name : audioName.dataset.empty;
+      audioHint.textContent = file ? "Trocar áudio" : audioHint.dataset.empty;
+      if (input !== audioField) return;
+      audioSeconds = 0;
+      update();
+      if (!file) return;
+      const a = new Audio();
+      a.addEventListener("loadedmetadata", () => {
+        audioSeconds = Number.isFinite(a.duration) ? a.duration : 0;
+        if (audioSeconds) audioHint.textContent = audioSeconds.toFixed(1).replace(".", ",") + " s · Trocar áudio";
+        update();
+      });
+      a.src = URL.createObjectURL(file);
     });
 
     const source = f.querySelector("[data-source]");
