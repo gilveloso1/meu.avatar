@@ -156,6 +156,13 @@ test("mexer devagar na fronteira entre em cima e na fileira não fica trocando",
   assert.equal(new Set(trocas).size, 1);
 });
 
+test("vídeo ou imagem que chega por baixo não é empurrado para os lados", () => {
+  const q = dois();
+  const s = M.snap(q, "n", 100, 110, 16);
+  assert.deepEqual([s.mode, s.x, s.y], [null, 100, 110]);
+  assert.equal(M.snap(q, "n", 100, 10, 16).mode, "after");
+});
+
 test("o encaixe à direita é magnético", () => {
   const q = dois();
   assert.equal(M.snap(q, "n", 440, 0, 16).mode, "after");

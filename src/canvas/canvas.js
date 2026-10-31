@@ -121,6 +121,7 @@ const previewFinal = () => (sel.type === "final" && project.finals.find((f) => f
 const head = document.createElement("div");
 head.className = "playhead";
 head.innerHTML = `<span class="playhead__knob"></span>`;
+world.append(head);
 let headBox = null;
 function playhead(t) {
   let box = null;
@@ -342,6 +343,17 @@ function applyView() {
   scheduleSharp();
 }
 
+/** No arrasto, desenha no máximo uma vez por quadro, sem o painel (ele vem ao soltar). */
+let drawing = 0;
+function renderSoon() {
+  drawing ||= requestAnimationFrame(() => {
+    drawing = 0;
+    render({ side: false });
+  });
+}
+let chromeHtml = null;
+let wiresHtml = null;
+
 function render({ side = true } = {}) {
   const gs = M.groups(project);
   const idx = M.groupIndex(gs);
@@ -379,7 +391,12 @@ function render({ side = true } = {}) {
     }
     const g = idx.get(b.id);
     const role = g?.covers.includes(b) ? "cover" : g?.audios.includes(b) && !g.soloAudio ? "under" : "";
-    el.className = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""} ${path?.includes(g) ? "is-path" : ""}`;
+    const look = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""} ${path?.includes(g) ? "is-path" : ""}${el.classList.contains("is-drag") ? " is-drag" : ""}`;
+    // Só mexe no elemento se algo mudou: arrastar um bloco não redesenha os outros.
+    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}`;
+    if (el.drawn === state) continue;
+    el.drawn = state;
+    el.className = look;
     Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${M.width(b)}px`, height: `${M.height(b)}px` });
     const tipo = { video: "video", image: "imagem", audio: "audio" }[b.kind];
     el.style.setProperty("--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
@@ -427,8 +444,7 @@ function render({ side = true } = {}) {
     html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview, selectionIn(f.id, gs, idx)) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
     html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
-  chrome.innerHTML = html;
-  world.append(head);
+  if (html !== chromeHtml) chrome.innerHTML = chromeHtml = html;
 
   // Linhas.
   let svg = "";
@@ -440,7 +456,12 @@ function render({ side = true } = {}) {
     const onPath = path && M.linkOn(l, path, litFinal);
     svg += `<path class="wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
   }
-  wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d=""/>`;
+  // A linha sendo puxada fica fora disto: é só o atributo dela que muda.
+  if (svg !== wiresHtml) {
+    wiresHtml = svg;
+    const temp = $("#wire-temp")?.getAttribute("d") ?? "";
+    wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d="${temp}"/>`;
+  }
 
   if (side) renderSide(gs);
   frameRatio();
@@ -1195,7 +1216,7 @@ vp.addEventListener("pointerdown", (e) => {
     sel = { type: "block", id };
     onMove = (ev) => {
       project = M.trim(base, id, trimEl.dataset.trim, dW(ev).x / M.PX);
-      render();
+      renderSoon();
     };
   } else if (port) {
     const drag = linkDrag({ out: port.classList.contains("port--out"), group: port.dataset.group, final: port.dataset.final });
@@ -1209,7 +1230,7 @@ vp.addEventListener("pointerdown", (e) => {
     onMove = (ev) => {
       const d = dW(ev);
       project = M.moveGroup(base, gid, d.x, d.y);
-      render();
+      renderSoon();
     };
   } else if (blk) {
     const id = blk.dataset.id;
@@ -1219,18 +1240,24 @@ vp.addEventListener("pointerdown", (e) => {
     render();
     // O bloco que segura o elemento neste arrasto.
     let keep = {};
+    let placed = "";
     onMove = (ev) => {
       const d = dW(ev);
       const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + d.y, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + d.y, 16 / view.z, keep);
       keep = { group: s.group?.id, mode: s.mode };
+      // O mouse anda, mas o elemento pode estar parado no encaixe: nada a redesenhar.
+      const at = `${s.x}|${s.y}|${s.mode}|${s.target}`;
+      if (at === placed) return;
+      placed = at;
       project = M.dropBlock(base, id, s);
       $("#snapinfo").textContent = SNAP[s.mode] ?? "";
       blockEls.get(id)?.classList.add("is-drag");
-      render();
+      renderSoon();
     };
     onUp = () => {
       $("#snapinfo").textContent = "";
       blockEls.get(id)?.classList.remove("is-drag");
+      if (moved) render();
     };
   } else if (fin) {
     const id = fin.dataset.final;
@@ -1243,7 +1270,7 @@ vp.addEventListener("pointerdown", (e) => {
       const d = dW(ev);
       project = structuredClone(base);
       Object.assign(project.finals.find((f) => f.id === id), { x: f0.x + d.x, y: f0.y + d.y });
-      render();
+      renderSoon();
     };
   } else if (hit) {
     // Puxar a linha solta a ponta mais perto: cair num ponto liga de novo; no vazio, ela some.
@@ -1274,6 +1301,8 @@ vp.addEventListener("pointerdown", (e) => {
     onMove?.(ev);
   };
   const up = (ev) => {
+    cancelAnimationFrame(drawing);
+    drawing = 0;
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", up);
     window.removeEventListener("pointercancel", up);

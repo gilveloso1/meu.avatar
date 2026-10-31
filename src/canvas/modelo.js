@@ -348,6 +348,8 @@ export function snap(project, id, x, y, tol, keep = {}) {
         if (x + w <= start + (inside ? EPS * 2 : tol)) continue;
         return { x, y: g.y - h, mode: "cover", target: g.id, group: g };
       }
+      // Vídeo e imagem não têm lugar embaixo do bloco: abaixo da fileira, seguem livres.
+      if (cy > g.y + g.h) continue;
       // Na sequência, o lugar muda só na metade de cada elemento: não abre e fecha a cada emenda.
       const at = g.blocks.findIndex((o) => cx < o.x + width(o) / 2);
       if (at < 0) {
