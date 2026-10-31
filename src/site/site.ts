@@ -594,6 +594,8 @@ ${error ? snackbar(error) : ""}`;
         nome: ERROS.projetoNome,
         exportar: ERROS.exportarFalhou,
         exportarLimite: ERROS.exportarLimite(MAX_VERSOES),
+        ligacaoCiclo: ERROS.ligacaoCiclo,
+        ligacaoRepetida: ERROS.ligacaoRepetida,
       },
     };
     const actions = `<button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
@@ -1106,7 +1108,7 @@ function cardStatus(v: Video, now = Date.now()): { label: string; icon: string; 
 const MODEL_TONES = ["primary", "tertiary", "secondary"] as const;
 
 /** Projeto novo: só o bloco Final (src/canvas/modelo.js). */
-const EMPTY_PROJECT = JSON.stringify({ blocks: [], finals: [{ id: "final", x: 720, y: 200 }], edges: [] });
+const EMPTY_PROJECT = JSON.stringify({ blocks: [], finals: [], edges: [] });
 /** O canvas salvo (JSON): até 1 MB. */
 const MAX_PROJECT_BYTES = 1024 * 1024;
 
