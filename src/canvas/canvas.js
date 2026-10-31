@@ -848,6 +848,14 @@ $("#reset")?.addEventListener("click", () => {
 $("#zoom-in").onclick = () => zoomAt(1.2);
 $("#zoom-out").onclick = () => zoomAt(1 / 1.2);
 $("#fit").onclick = () => fit();
+// Info: o tooltip sobe do botão, 8 px acima da barra, sem sair da janela.
+$("#info-tip").addEventListener("toggle", (e) => {
+  if (e.newState !== "open") return;
+  const tip = e.target;
+  const r = $("#info").getBoundingClientRect();
+  tip.style.left = `${Math.max(16, Math.min(r.left + r.width / 2 - tip.offsetWidth / 2, innerWidth - tip.offsetWidth - 16))}px`;
+  tip.style.bottom = `${innerHeight - $(".float-bar").getBoundingClientRect().top + 8}px`;
+});
 $("#arrange").onclick = () => {
   const before = project;
   project = M.arrange(project);

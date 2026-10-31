@@ -98,7 +98,8 @@ menos custo.
   exportação: a ligação que passaria disso é recusada, com um aviso. Projeto antigo com
   mais ligações mostra as 48 primeiras e o aviso no card.
   Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
-- **Barra de baixo**: desfazer, refazer, zoom, Ver tudo e Organizar, em 48 px. A roda do
+- **Barra de baixo**: desfazer, refazer, zoom, Organizar, Ver tudo e Info, em 48 px. A Info
+  abre um tooltip rico do M3 com os gestos, que ficam fora do canvas. A roda do
   mouse com Ctrl dá cerca de 23% por giro, e o zoom anda até lá em alguns quadros.
 - **Organizar**: cada grupo numa coluna, depois de tudo o que vem antes dele e perto dos
   que ligam a ele; cada Final à direita, na altura do que chega a ele. Desfazer volta tudo.
