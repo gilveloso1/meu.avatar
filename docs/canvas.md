@@ -98,9 +98,13 @@ menos custo.
   exportação: a ligação que passaria disso é recusada, com um aviso. Projeto antigo com
   mais ligações mostra as 48 primeiras e o aviso no card.
   Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
+- **Barra de baixo**: desfazer, refazer, zoom, Ver tudo e Organizar, em 48 px. A roda do
+  mouse com Ctrl dá cerca de 23% por giro, e o zoom anda até lá em alguns quadros.
+- **Organizar**: cada grupo numa coluna, depois de tudo o que vem antes dele e perto dos
+  que ligam a ele; cada Final à direita, na altura do que chega a ele. Desfazer volta tudo.
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).
-  O zoom vai até 2000% e a onda é desenhada com 200 px por segundo, para ficar
+  O zoom vai até 800% e a onda é desenhada com 200 px por segundo, para ficar
   nítida de perto. "Ver tudo" volta. Com zoom, sombras, contornos, linhas, a linha
   de reprodução e o botão de tocar mantêm o tamanho da tela; a onda fica dentro dos
   cantos do bloco.
