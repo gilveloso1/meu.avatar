@@ -223,6 +223,20 @@ test("vídeo corre até o limite do bloco inteiro, contando o som que passou, e 
   assert.equal(g.w, 530);
 });
 
+test("som encostado no som que está no bloco expande o bloco, dos dois lados", () => {
+  const b = (id, x, y, dur, kind = "audio") => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, audio: "none" });
+  const q = { blocks: [b("v", 0, 0, 5, "image"), b("m", 100, 96, 5), b("s", 900, 900, 2)], finals: [], edges: [] };
+  const direita = M.snap(q, "s", 310, 100, 16);
+  assert.deepEqual([direita.x, direita.y], [300, 96]);
+  assert.deepEqual([M.groups(M.dropBlock(q, "s", direita))[0].x, M.groups(M.dropBlock(q, "s", direita))[0].w], [0, 380]);
+  const r = { ...q, blocks: q.blocks.map((o) => (o.id === "m" ? { ...o, x: -60 } : o)) };
+  const esquerda = M.snap(r, "s", -150, 100, 16);
+  assert.deepEqual([esquerda.x, esquerda.y], [-140, 96]);
+  const g = M.groups(M.dropBlock(r, "s", esquerda))[0];
+  assert.deepEqual([g.x, g.w, g.audios.length], [-140, 340, 2]);
+  assert.equal(M.groups(M.dropBlock(q, "s", { x: 500, y: 96 })).length, 2);
+});
+
 test("cada tipo vai para a sua área, venha de onde vier", () => {
   const q = dois();
   const video = M.snap(q, "n", 100, 110, 16);

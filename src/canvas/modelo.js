@@ -131,7 +131,7 @@ export function groups(project) {
     if (g) g.audios.push(a);
     else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   }
-  // Quem passou da sequência e encosta só no que também passou (o som, por exemplo) segue no bloco.
+  // Quem passou da sequência ou encosta na ponta do bloco, na linha dele, também é do bloco.
   for (let found = true; found; ) {
     found = false;
     for (const g of out.filter((g) => g.blocks.length)) {
@@ -140,7 +140,9 @@ export function groups(project) {
       const hi = Math.max(...edge.map((b) => b.x + width(b)));
       const stray = out.find((o) => {
         const [b] = o.blocks.length ? o.blocks : o.audios;
-        if (o === g || o.blocks.length > 1 || o.covers.length || (o.blocks.length && o.audios.length) || !overlapX(b.x, b.x + width(b), lo, hi)) return false;
+        if (o === g || o.blocks.length > 1 || o.covers.length || (o.blocks.length && o.audios.length)) return false;
+        // Em cima do bloco ou encostado na ponta dele.
+        if (!overlapX(b.x, b.x + width(b), lo, hi) && !near(b.x, hi) && !near(b.x + width(b), lo)) return false;
         return visual(b) ? restsOn(b, g.y) : Math.round(lane(b, g)) >= 0 && Math.round(lane(b, g)) < MAX_FAIXAS && near(Math.round(lane(b, g)) * AUD_H, b.y - g.y - VIS_H);
       });
       if (!stray) continue;
