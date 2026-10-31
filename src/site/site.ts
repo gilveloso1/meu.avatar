@@ -50,7 +50,7 @@ const ICONS = [
   "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
   "edit", "error", "face", "fit_screen", "flag", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
   "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
-  "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
+  "person", "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
   "send", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
@@ -581,7 +581,7 @@ ${error ? snackbar(error) : ""}`;
     const latest = await this.db.latestExport(project.id);
     const config = {
       videos,
-      projeto: { id: project.id, name: project.name, data, salvar: `/projetos/${project.id}/salvar`, arquivos: `/projetos/${project.id}/arquivos`, exportar: `/projetos/${project.id}/exportar` },
+      projeto: { id: project.id, name: project.name, data, criado: formatDate(project.created_at), modificado: formatDate(project.updated_at), autor: user.name, salvar: `/projetos/${project.id}/salvar`, arquivos: `/projetos/${project.id}/arquivos`, exportar: `/projetos/${project.id}/exportar` },
       exportacao: latest ? this.exports.state(project, latest) : null,
       limites: { imagem: MAX_IMAGE_BYTES, video: MAX_VIDEO_BYTES },
       erros: {

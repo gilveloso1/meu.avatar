@@ -5,7 +5,7 @@
  * configuração em <script type="application/json" id="canvas-config">:
  * { amostra: true } (o protótipo, com o exemplo) ou, no site, { videos: [...] }
  * (os vídeos prontos de quem usa: id, name, src, when), projeto ({ id, name,
- * data, salvar, arquivos }: o que está salvo e para onde salvar e enviar
+ * data, criado, modificado, autor, salvar, arquivos }: o que está salvo e para onde salvar e enviar
  * arquivos, exportar), exportacao (a última, para retomar) e limites ({ imagem, video }, em bytes); e as frases de erro em
  * erros, que vêm do catálogo src/erros.ts.
  */
@@ -32,6 +32,7 @@ const PROJETO = CONFIG.projeto ?? null;
 const valid = (d) => d && Array.isArray(d.blocks) && Array.isArray(d.finals) && Array.isArray(d.edges);
 let project = valid(PROJETO?.data) ? PROJETO.data : CONFIG.amostra ? M.sample((f) => `midia/${f}`) : emptyProject();
 let projectName = PROJETO?.name ?? "";
+let projectEdited = PROJETO?.modificado ?? "";
 let view = { x: 80, y: 120, z: 0.8 };
 let sel = { type: "final", id: "final" };
 let versionIdx = 0;
@@ -229,6 +230,10 @@ function save() {
     try {
       const res = await fetch(PROJETO.salvar, { method: "POST", headers: { "content-type": "application/json" }, body });
       if (!res.ok) throw new Error(String(res.status));
+      // No mesmo formato do servidor (formatDate, em src/site/site.ts).
+      projectEdited = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const edited = $("#p-edited");
+      if (edited) edited.textContent = projectEdited;
       return true;
     } catch {
       if (sentName) nameDirty = true;
@@ -489,8 +494,9 @@ function renderSide(gs) {
     if (PROJETO) {
       title = "Projeto";
       h += field("f-project", "Nome do projeto", projectName, 'maxlength="120"');
+      const variants = project.finals.reduce((n, f) => n + M.versions(project, f.id, gs).length, 0);
+      h += `<div class="viewer__card"><div>${row("calendar_today", "Criado em", esc(PROJETO.criado))}${row("edit", "Modificado em", `<span id="p-edited">${esc(projectEdited)}</span>`)}${row("person", "Criado por", esc(PROJETO.autor))}${row("movie", "Blocos", project.blocks.length)}${row("flag", "Variações", variants)}</div></div>`;
     }
-    h += `<p class="sheet-hint">Escolha um bloco, um grupo ou o Final para ver os ajustes dele.</p>`;
   }
   for (const undo of selectUndos.splice(0)) undo();
   side.innerHTML = `<h2 class="sheet-title">${title}</h2>` + h;
@@ -547,18 +553,49 @@ side.addEventListener("click", side.onclickAction);
 // O campo de seleção (o menu do site) avisa com "change"; o resto, com "input".
 side.addEventListener("change", (e) => e.target.id === "f-format" && onSideInput(e.target));
 side.addEventListener("input", (e) => e.target.id !== "f-format" && onSideInput(e.target));
+/** Nome do projeto: muda o título da barra e da aba, e vai junto no próximo salvamento. */
+function renameProject(value) {
+  const name = value.trim();
+  if (!name) return;
+  projectName = name;
+  nameDirty = true;
+  const bar = $(".title-edit__text");
+  if (bar) bar.textContent = name;
+  document.title = document.title.replace(/^.*?( · [^·]+)$/, `${name}$1`);
+  scheduleSave();
+}
+
+/* O nome na barra superior: um clique troca o título por um campo; sair dele salva, Esc desiste. */
+const barTitle = $(".top-app-bar__title");
+if (PROJETO && barTitle) {
+  barTitle.innerHTML = `<button class="title-edit interactive" type="button" aria-label="Mudar o nome do projeto" title="Mudar o nome do projeto"><span class="title-edit__text"></span><span class="icon" aria-hidden="true">edit</span></button><input class="title-edit__input" maxlength="120" aria-label="Nome do projeto" hidden>`;
+  const open = $(".title-edit", barTitle);
+  const input = $(".title-edit__input", barTitle);
+  $(".title-edit__text", barTitle).textContent = projectName;
+  const close = (commit) => {
+    if (input.hidden) return;
+    input.hidden = true;
+    open.hidden = false;
+    if (commit && input.value.trim() && input.value.trim() !== projectName) {
+      renameProject(input.value);
+      if (!sel.type) render();
+    } else if (commit && !input.value.trim()) toast(CONFIG.erros?.nome ?? "");
+  };
+  open.onclick = () => {
+    input.value = projectName;
+    open.hidden = true;
+    input.hidden = false;
+    input.select();
+  };
+  input.onblur = () => close(true);
+  input.onkeydown = (e) => {
+    if (e.key === "Enter") close(true);
+    if (e.key === "Escape") close(false);
+  };
+}
+
 function onSideInput(t0) {
-  // Nome do projeto: muda o título da barra e da aba, e vai junto no próximo salvamento.
-  if (t0.id === "f-project") {
-    const name = t0.value.trim();
-    if (!name) return;
-    projectName = name;
-    nameDirty = true;
-    const bar = $(".top-app-bar__title");
-    if (bar) bar.textContent = name;
-    document.title = document.title.replace(/^.*?( · [^·]+)$/, `${name}$1`);
-    return scheduleSave();
-  }
+  if (t0.id === "f-project") return renameProject(t0.value);
   if ((t0.name === "f-resolution" || t0.id === "f-format") && sel.type === "final") {
     const before = project;
     project = structuredClone(project);
