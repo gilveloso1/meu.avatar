@@ -541,7 +541,7 @@ ${error ? snackbar(error) : ""}`;
     });
     const body = `
 <main class="page" id="conteudo">
-  ${pageHead("Projetos", cards.length, "Monte várias versões dos seus vídeos num canvas.", fab("add", "Novo projeto", { post: "/projetos" }))}
+  ${pageHead("Projetos", cards.length, "Monte várias variações dos seus vídeos num canvas.", fab("add", "Novo projeto", { post: "/projetos" }))}
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : q ? emptyState("search", "Nenhum projeto encontrado", `Nada com “${q}” no nome.`) : emptyState("video_library", "Nenhum projeto ainda", "Toque em Novo projeto para começar.")}
 </main>`;
     return html(page(`Projetos · ${SITE_NAME}`, body, { bar: { user, tab: "projetos", search: { action: "/projetos", label: "Pesquisar projetos", q } } }));

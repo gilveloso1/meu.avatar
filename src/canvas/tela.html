@@ -30,7 +30,7 @@ body { min-height: 0; overflow: hidden; }
 }
 #wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
 .wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: 2; vector-effect: non-scaling-stroke; }
-.wire.is-sel { stroke: var(--md-sys-color-primary); stroke-width: 3; }
+.wire.is-sel, .wire.is-path { stroke: var(--md-sys-color-primary); stroke-width: 3; }
 .wire--temp { stroke: var(--md-sys-color-primary); stroke-dasharray: 6 4; }
 .wire-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
 
@@ -119,14 +119,17 @@ body { min-height: 0; overflow: hidden; }
 .port--out:hover { background: var(--md-sys-color-primary); }
 /* Bloco final: a saída, em primary (cantos grandes, elevação 1). */
 .fin {
-  position: absolute; width: 180px; height: 80px; display: flex; align-items: center; gap: 16px; padding: 0 16px; cursor: grab;
+  position: absolute; width: max-content; min-width: 180px; padding: 12px 8px 8px; cursor: grab;
   border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary);
   box-shadow: var(--el1);
 }
-.fin > span:last-child { display: flex; flex-direction: column; }
+.fin__head { display: flex; align-items: center; gap: 16px; height: 56px; padding: 0 8px; }
+.fin__head > span:last-child { display: flex; flex-direction: column; }
 .fin b { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
 .fin small { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
 .fin.is-sel { outline: var(--line) solid var(--md-sys-color-primary); outline-offset: var(--line); }
+/* A variação escolhida: o caminho dela fica, e o resto do canvas apaga. */
+#world.has-path :is(.blk, .gframe, .gtab):not(.is-path), #world.has-path .wire:not(.is-path, .wire--temp) { opacity: 0.3; }
 
 /* Barra de ferramentas flutuante do M3 Expressive: 64 px, cantos inteiros, surface-container,
    8 px nas pontas, 4 px entre itens, 16 px da borda. */
@@ -179,6 +182,18 @@ body { min-height: 0; overflow: hidden; }
 .xlist__item:last-child { border-bottom-left-radius: var(--md-sys-shape-corner-large); border-bottom-right-radius: var(--md-sys-shape-corner-large); }
 .xlist__item[aria-current="true"] { border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
 a.xlist__item { color: inherit; text-decoration: none; }
+/* Variações no card Final: a lista segmentada, mais baixa. Até 5 por coluna: cresce para o lado. */
+.fin__body { display: flex; flex-direction: column; gap: 2px; border-radius: var(--md-sys-shape-corner-medium); overflow: hidden; }
+.fin__list { display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--rows), 36px); grid-auto-columns: minmax(164px, 1fr); gap: 2px; }
+.fin__list--short { grid-auto-columns: minmax(104px, 1fr); }
+.fin__list--number { grid-auto-columns: 36px; }
+.fin .xlist__item { position: relative; min-height: 36px; gap: 8px; padding: 0 8px; border-radius: var(--md-sys-shape-corner-extra-small); font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fin .xlist__item[aria-current="true"] { border-radius: var(--md-sys-shape-corner-small); }
+.fin__list--number .xlist__item { justify-content: center; padding: 0; }
+.fin .xlist__item > .icon { font-size: 18px; color: var(--md-sys-color-primary); }
+.fin .xlist__item[aria-current="true"] > .icon { color: inherit; }
+.fin__bar { position: absolute; left: 0; bottom: 0; width: calc(var(--p, 0) * 100%); height: 3px; background: var(--md-sys-color-primary); pointer-events: none; }
+.fin__hint { width: 0; min-width: 100%; padding: 8px 8px 0; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; }
 .xlist__lead { width: 24px; flex: none; text-align: center; font: var(--md-sys-typescale-label-large); color: var(--md-sys-color-on-surface-variant); }
 .xlist__item[aria-current="true"] .xlist__lead, .xlist__item[aria-current="true"] .xlist__trail { color: inherit; }
 .xlist__text { flex: 1; min-width: 0; }

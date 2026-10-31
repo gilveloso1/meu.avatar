@@ -164,7 +164,14 @@ export function versions(project, finalId, gs = groups(project)) {
   return res;
 }
 
-export const versionName = (v) => v.map((g) => g.name).join(" → ");
+/** O nome de uma variação na tela e no arquivo, pela posição dela no Final. */
+export const versionName = (i) => `Variação ${i + 1}`;
+
+/** Quantas variações cabem em cada coluna do card Final: ele cresce para o lado, não para baixo. */
+export const VARIANT_ROWS = 5;
+
+/** Como o card escreve cada variação: "Variação 1" até 2 colunas, "V. 11" com 3, só o número depois. */
+export const variantLabel = (n) => (n <= 2 * VARIANT_ROWS ? "full" : n <= 3 * VARIANT_ROWS ? "short" : "number");
 
 /**
  * Linha do tempo de uma versão: o que toca, quando e de onde do arquivo.
@@ -205,7 +212,7 @@ export function exportWork(project, finalId, pick) {
   if (!final) return null;
   const gs = groups(project);
   const all = versions(project, finalId, gs);
-  const chosen = pick ? pick.map((i) => all[i]).filter(Boolean) : all;
+  const chosen = (pick ?? all.map((_, i) => i)).filter((i) => all[i]);
   const { width: largura, height: altura } = output(final);
   const tipo = { video: "video", image: "imagem", audio: "audio" };
   const camada = { 0: "base", 1: "cobertura", audio: "audio" };
@@ -230,7 +237,7 @@ export function exportWork(project, finalId, pick) {
     }
     return seen.get(g);
   };
-  return { largura, altura, trechos, versoes: chosen.map((v) => ({ nome: versionName(v), trechos: v.map(trecho) })) };
+  return { largura, altura, trechos, versoes: chosen.map((i) => ({ nome: versionName(i), trechos: all[i].map(trecho) })) };
 }
 
 /* ---------- Edição (funções puras: devolvem um projeto novo) ---------- */

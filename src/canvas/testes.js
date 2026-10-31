@@ -13,7 +13,8 @@ test("o exemplo tem 3 ganchos, o corpo e 2 CTAs: 6 versões", () => {
   assert.equal(corpo.dur, 10);
   const vs = M.versions(p, "final");
   assert.equal(vs.length, 6);
-  assert.equal(M.versionName(vs[0]), "Gancho 1 → Corpo + Produto → CTA A");
+  assert.equal(M.versionName(0), "Variação 1");
+  assert.deepEqual(vs[0].map((g) => g.name), ["Gancho 1", "Corpo + Produto", "CTA A"]);
 });
 
 test("a linha do tempo põe o b-roll no segundo certo e corta a música no fim do grupo", () => {
@@ -31,13 +32,13 @@ test("exportar faz cada grupo uma vez só: 6 versões saem de 6 trechos", () => 
   assert.equal(w.versoes.length, 6);
   assert.equal(w.trechos.length, 6);
   assert.deepEqual([w.largura, w.altura], [720, 1280]);
-  assert.equal(w.versoes[0].nome, "Gancho 1 → Corpo + Produto → CTA A");
+  assert.equal(w.versoes[0].nome, "Variação 1");
   assert.equal(new Set(w.versoes.map((v) => v.trechos[1])).size, 1);
   const corpo = w.trechos[w.versoes[0].trechos[1]];
   assert.equal(corpo.duracao, 10);
   const broll = corpo.itens.find((i) => i.camada === "cobertura");
   assert.deepEqual([broll.entra, broll.dura, broll.volume], [2, 3, 0]);
-  assert.deepEqual(M.exportWork(p, "final", [1, 99]).versoes.map((v) => v.nome), ["Gancho 2 → Corpo + Produto → CTA A"]);
+  assert.deepEqual(M.exportWork(p, "final", [1, 99]).versoes.map((v) => v.nome), ["Variação 2"]);
   assert.equal(M.exportWork(p, "nada"), null);
 });
 
@@ -123,4 +124,8 @@ test("o Final exporta na resolução e no formato escolhidos (e lê o tamanho de
   assert.deepEqual(M.output({ resolution: "480p", format: "4:3" }), { resolution: "480p", format: "4:3", width: 640, height: 480 });
   assert.deepEqual(M.output({ resolution: "480p", format: "9:16" }), { resolution: "480p", format: "9:16", width: 480, height: 854 });
   assert.deepEqual(M.output({ size: "1080x1920" }), { resolution: "1080p", format: "9:16", width: 1080, height: 1920 });
+});
+
+test("o card Final escreve o nome inteiro até 2 colunas, V. com 3 e só o número depois", () => {
+  assert.deepEqual([1, 5, 10, 11, 15, 16, 50, 200].map(M.variantLabel), ["full", "full", "full", "short", "short", "number", "number", "number"]);
 });

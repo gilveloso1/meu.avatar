@@ -88,7 +88,7 @@ const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map((b) => b.toSt
 
 /** Nome do arquivo baixado: "01-gancho-1-corpo-cta-a.mp4", sem acento nem caractere estranho. */
 export function fileName(index: number, nome: string): string {
-  const slug = nome.normalize("NFD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 80);
+  const slug = nome.normalize("NFD").replace(/\p{M}/gu, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 80);
   return `${String(index + 1).padStart(2, "0")}${slug ? `-${slug}` : ""}.mp4`;
 }
 

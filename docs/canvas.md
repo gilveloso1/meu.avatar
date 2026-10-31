@@ -25,7 +25,7 @@ menos custo.
 - **Conectar (linhas)**: a linha liga uma parte à seguinte e é o que cria
   variações. Elas se multiplicam: 3 ganchos ligados a um corpo, e o corpo a
   2 CTAs, dão 3 × 2 = 6 vídeos.
-- **Bloco final**: recebe as linhas e mostra as versões possíveis. Exporta
+- **Bloco final**: recebe as linhas e mostra as variações possíveis. Exporta
   todas ou só uma.
 
 ## Regras
@@ -81,8 +81,16 @@ menos custo.
 - **Folha da direita**: abas Prévia e Ajustes (abas principais fixas do M3, como na
   página do vídeo), sem título em cima. Na Prévia, o vídeo 9:16 ocupa a altura que
   sobra, com margens de 12 px; nos Ajustes, o título do que estiver escolhido e os
-  campos (versões do Final, bloco, grupo, linha). Tocar algo
-  (bloco, grupo ou versão) mostra a Prévia; a aba escolhida fica lembrada.
+  campos (Final, bloco, grupo, linha). Tocar algo
+  (bloco, grupo ou variação) mostra a Prévia; a aba escolhida fica lembrada.
+- **Variações no card Final**: cada caminho até o Final é uma variação, numerada na
+  ordem das ligações ("Variação 2", o mesmo nome no arquivo exportado; o número muda
+  se as ligações mudarem). O card cresce para o lado: até 5 linhas por coluna. Com 1
+  ou 2 colunas (até 10), "Variação 1"; com 3 (até 15), "V. 11"; depois só o número,
+  com a escolhida numa linha em cima. Tocar numa variação toca na Prévia, sem sair do
+  canvas, e destaca os blocos e as linhas dela, apagando o resto; o destaque fica
+  depois de pausar e sai ao clicar fora do Final. As setas ← e → passam de uma para
+  outra, com o Final escolhido. Acima de 50, o aviso do limite de exportar aparece no card.
   Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).

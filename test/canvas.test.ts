@@ -191,11 +191,11 @@ describe("exportar projetos", () => {
     const st = await exportar(fake, id, admin);
     expect(st.status).toBe("done");
     expect([fake.segments.length, fake.joins.length]).toEqual([3, 2]);
-    expect(st.versoes.map((v) => v.nome)).toEqual(["g1 → corpo", "g2 → corpo"]);
+    expect(st.versoes.map((v) => v.nome)).toEqual(["Variação 1", "Variação 2"]);
     expect(JSON.parse(fake.segments[0]!.plan)).toMatchObject({ largura: 720, altura: 1280, duracao: 4, itens: [{ tipo: "video", arquivo: 0, volume: 1 }] });
     expect(fake.segments[0]!.sizes.slice(1)).toEqual([1000]);
     const mp4 = await com(fake, st.versoes[1]!.href, admin);
-    expect([mp4.status, await mp4.text(), mp4.headers.get("content-disposition")]).toEqual([200, "mp4ok", 'attachment; filename="02-g2-corpo.mp4"']);
+    expect([mp4.status, await mp4.text(), mp4.headers.get("content-disposition")]).toEqual([200, "mp4ok", 'attachment; filename="02-variacao-2.mp4"']);
   });
 
   it("exportar de novo sem mudar nada não chama o contêiner e os arquivos continuam baixando", async () => {
@@ -210,7 +210,7 @@ describe("exportar projetos", () => {
     const bytes = new Uint8Array(await zip.arrayBuffer());
     expect(new DataView(bytes.buffer).getUint32(bytes.byteLength - 22, true)).toBe(0x06054b50);
     const uma = await exportar(fake, id, admin, { final: "final", versoes: [1] });
-    expect([uma.versoes.map((v) => v.nome), uma.zip, fake.joins.length]).toEqual([["g2 → corpo"], null, 0]);
+    expect([uma.versoes.map((v) => v.nome), uma.zip, fake.joins.length]).toEqual([["Variação 2"], null, 0]);
   });
 
   it("mudar um gancho refaz só ele e a versão dele", async () => {
@@ -254,7 +254,7 @@ describe("exportar projetos", () => {
     expect(view.getUint32(central + 20, true)).toBe(5);
     expect(view.getUint32(central + 16, true)).toBe(123);
     const nome = view.getUint16(central + 28, true);
-    expect(new TextDecoder().decode(bytes.slice(central + 46, central + 46 + nome))).toBe("01-g1-corpo.mp4");
+    expect(new TextDecoder().decode(bytes.slice(central + 46, central + 46 + nome))).toBe("01-variacao-1.mp4");
     const segundo = view.getUint32(central + 46 + nome + 42, true);
     expect(view.getUint32(segundo, true)).toBe(0x04034b50);
   });
