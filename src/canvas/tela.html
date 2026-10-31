@@ -189,6 +189,8 @@ a.xlist__item { color: inherit; text-decoration: none; }
 .fin__list--number { grid-auto-columns: 36px; }
 .fin .xlist__item { position: relative; min-height: 36px; gap: 8px; padding: 0 8px; border-radius: var(--md-sys-shape-corner-extra-small); font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fin .xlist__item[aria-current="true"] { border-radius: var(--md-sys-shape-corner-small); }
+/* As variações em que entra o que está selecionado no canvas: destaque suave. */
+.fin .xlist__item.is-part:not([aria-current="true"]) { background: var(--md-sys-color-surface-container-high); }
 .fin__list--number .xlist__item { justify-content: center; padding: 0; }
 .fin .xlist__item > .icon { font-size: 18px; color: var(--md-sys-color-primary); }
 .fin .xlist__item[aria-current="true"] > .icon { color: inherit; }
@@ -204,6 +206,8 @@ a.xlist__item { color: inherit; text-decoration: none; }
 /* Botões conectados na largura da folha (o tamanho do vídeo no Final). */
 .sheet-segmented { display: grid; align-self: stretch; }
 .viewer__section .segmented-field { gap: 8px; }
+/* Baixar uma ou todas: um botão por linha, para caber o nome da variação. */
+#side-actions:has([data-export]) { grid-template-columns: 1fr; }
 .editor .viewer__sheet { --field-surface: var(--md-sys-color-surface-container-low); }
 .editor .viewer__body { gap: 24px; }
 #side { display: flex; flex-direction: column; gap: 24px; }

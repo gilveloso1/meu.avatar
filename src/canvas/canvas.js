@@ -368,7 +368,7 @@ function render({ side = true } = {}) {
     const vs = M.versions(project, f.id, gs);
     const n = vs.length;
     const isSel = sel.type === "final" && sel.id === f.id;
-    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
+    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview, selectionIn(f.id, gs, idx)) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
     html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
   chrome.innerHTML = html;
@@ -382,8 +382,7 @@ function render({ side = true } = {}) {
     const b = f ? { x: f.x, y: f.y + 40 } : { x: l.to.x - PORT_OUT, y: l.to.y + (l.to.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
     const d = curve(a, b);
     const on = sel.type === "edge" && sel.id === l.edge.id;
-    const pos = path?.indexOf(l.from) ?? -1;
-    const onPath = pos >= 0 && (pos === path.length - 1 ? f?.id === litFinal : path[pos + 1] === l.to);
+    const onPath = path && M.linkOn(l, path, litFinal);
     svg += `<path class="wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
   }
   wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d=""/>`;
@@ -395,8 +394,16 @@ function render({ side = true } = {}) {
   $("#redo").disabled = !redo.length;
 }
 
+/** Diz se o que está selecionado (bloco, grupo ou linha) entra numa variação deste Final. */
+function selectionIn(finalId, gs, idx) {
+  if (sel.type === "block") return (v) => v.includes(idx.get(sel.id));
+  if (sel.type === "group") return (v) => v.some((g) => g.id === sel.id);
+  const link = sel.type === "edge" && M.links(project, gs).find((l) => l.edge.id === sel.id);
+  return link ? (v) => M.linkOn(link, v, finalId) : () => false;
+}
+
 /** As variações de um Final: em lista até 3 colunas, em números depois, com a escolhida em cima. */
-function variantList(vs, active) {
+function variantList(vs, active, part) {
   const { rows, cols } = M.variantShape(vs.length);
   const style = M.variantLabel(cols);
   const bar = active ? `<span class="fin__bar" style="--p:${player.duration ? player.t / player.duration : 0}"></span>` : "";
@@ -406,7 +413,7 @@ function variantList(vs, active) {
   const time = (v) => `<span class="xlist__trail">${fmt(M.timeline(v).duration)}</span>`;
   const item = (v, i) => {
     const on = active && i === versionIdx;
-    const attrs = `class="xlist__item interactive" type="button" data-variant="${i}" aria-label="${M.versionName(i)}" aria-current="${on}"`;
+    const attrs = `class="xlist__item interactive ${part(v) ? "is-part" : ""}" type="button" data-variant="${i}" aria-label="${M.versionName(i)}" aria-current="${on}"`;
     if (style === "number") return `<button ${attrs}>${i + 1}</button>`;
     return `<button ${attrs}>${lead(i)}<span class="xlist__text">${label(i)}</span>${time(v)}${on ? bar : ""}</button>`;
   };
@@ -436,11 +443,13 @@ function renderSide(gs) {
   if (sel.type === "final") {
     const vs = M.versions(project, sel.id, gs);
     title = "Final";
-    if (!vs.length) h += `<p class="sheet-hint">Ligue um grupo ao Final para ter variações.</p>`;
-    if (CONFIG.exportacao?.status === "done") h += btn("text", 'data-export="last"', "download", "Último exportado");
+    const durs = vs.map((v) => M.timeline(v).duration);
+    const [least, most] = [Math.min(...durs), Math.max(...durs)];
+    const dur = least === most ? fmt(most) : `${fmt(least).replace(" s", "")} a ${fmt(most)}`;
+    h += vs.length ? `<div class="viewer__card"><div>${row("movie", "Variações", vs.length)}${row("schedule", "Duração", dur)}</div></div>` : `<p class="sheet-hint">Ligue um grupo ao Final para ter variações.</p>`;
     const out = M.output(project.finals.find((f) => f.id === sel.id));
     // Os mesmos campos dos modelos: Resolução em botões conectados, Formato no campo de seleção.
-    h += `<section class="viewer__section"><h3 class="viewer__title">Vídeo exportado</h3>
+    h += `<section class="viewer__section"><h3 class="viewer__title">Qualidade e formato</h3>
       <div class="segmented-field"><span class="segmented-field__label">Resolução</span><div class="segmented-button sheet-segmented" role="radiogroup" aria-label="Resolução">${M.RESOLUTIONS.map(
         (r) => `<label class="segmented-button__segment interactive"><input type="radio" name="f-resolution" value="${r}"${r === out.resolution ? " checked" : ""}><span class="icon segmented-button__check" aria-hidden="true">check</span><span>${r}</span></label>`,
       ).join("")}</div></div>
@@ -448,7 +457,10 @@ function renderSide(gs) {
         (o) => `<option value="${o.value}"${o.value === out.format ? " selected" : ""}>${o.value}</option>`,
       ).join("")}</select><label class="text-field__label" for="f-format">Formato</label><span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
         <p class="text-field__supporting" id="f-format-ajuda"><span>${M.FORMATS.find((o) => o.value === out.format).description}</span><span>${out.width} × ${out.height}</span></p></div></section>`;
-    if (vs.length && PROJETO) actions += btn("outlined", 'data-export="one"', "download", `Exportar V. ${versionIdx + 1}`) + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
+    if (CONFIG.exportacao?.status === "done") h += `<section class="viewer__section"><h3 class="viewer__title">Última exportação</h3>${btn("outlined", 'data-export="last"', "download", "Ver os arquivos")}</section>`;
+    // Os mesmos nomes do menu do card.
+    if (vs.length > 1 && PROJETO) actions += btn("outlined", 'data-export="one"', "download", `Baixar ${M.versionName(versionIdx)}`) + btn("filled", 'data-export="all"', "download", `Baixar todas (${vs.length})`);
+    else if (vs.length && PROJETO) actions += btn("filled", 'data-export="one"', "download", "Baixar");
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
     title = { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
