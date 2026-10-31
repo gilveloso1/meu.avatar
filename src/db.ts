@@ -193,9 +193,6 @@ export interface Avatar {
 export type AssetKind = "imagem" | "video" | "audio";
 
 /** Um ativo do avatar (no R2, em key). */
-/** Onde ficam os arquivos enviados aos avatares; o que está fora é de um vídeo e não se apaga com o ativo. */
-export const ASSET_PREFIX = "avatares-ativos/";
-
 export interface AvatarAsset {
   id: string;
   avatar_id: string;
@@ -204,7 +201,7 @@ export interface AvatarAsset {
   name: string;
   type: string;
   size: number;
-  /** O vídeo a que está vinculado: sem arquivo próprio, usa a versão que vale dele. */
+  /** O vídeo que gerou o ativo: com ele, não há arquivo próprio; vazio, o arquivo é do avatar. */
   source_video: string | null;
   created_at: string;
 }
@@ -432,7 +429,7 @@ export class Db {
 
   /** Apaga o avatar e devolve as chaves dos ativos, para sair do R2. */
   async deleteAvatar(id: string): Promise<string[]> {
-    const keys = (await this.d1.prepare(`SELECT key FROM avatar_assets WHERE avatar_id = ? AND key LIKE '${ASSET_PREFIX}%'`).bind(id).all<{ key: string }>()).results.map((r) => r.key);
+    const keys = (await this.d1.prepare("SELECT key FROM avatar_assets WHERE avatar_id = ? AND source_video IS NULL").bind(id).all<{ key: string }>()).results.map((r) => r.key);
     await this.d1.batch([this.d1.prepare("DELETE FROM avatar_assets WHERE avatar_id = ?").bind(id), this.d1.prepare("DELETE FROM avatars WHERE id = ?").bind(id)]);
     return keys;
   }

@@ -19,7 +19,7 @@
  * da página só roda com o nonce da CSP.
  */
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
-import { ASSET_PREFIX, type AssetKind, type Avatar, type AvatarAsset, type Db, type Project, type User, type Video, type VideoStatus } from "../db";
+import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -206,8 +206,8 @@ export class Site {
       if (assetAction === "/ver" && !post) return this.assetPage(user, avatar, asset);
       if (assetAction === "/apagar" && !post) return this.deleteAssetPage(user, avatar, asset);
       if (assetAction === "/apagar" && post) {
-        // O ativo vinculado só some da lista: o vídeo continua nos Vídeos.
-        if (asset.key.startsWith(ASSET_PREFIX)) await this.media.delete(asset.key);
+        // O ativo gerado só some da lista: o vídeo continua nos Vídeos.
+        if (!asset.source_video) await this.media.delete(asset.key);
         await this.db.deleteAsset(asset.id);
         return redirect(`/avatares/${avatar.id}`);
       }
@@ -343,7 +343,7 @@ ${error ? snackbar(error) : ""}`;
       { icon: "folder_open", term: "Tipo", value: ASSET_LABELS[asset.kind] },
       ...(role ? [{ icon: "star", term: "Uso", value: role }] : []),
       { icon: "download", term: "Tamanho", value: formatBytes(asset.size) },
-      { icon: "schedule", term: "Origem", value: asset.source_video ? "Vídeo vinculado" : "Enviado" },
+      { icon: "schedule", term: "Origem", value: assetOrigin(asset) },
       { icon: "calendar_today", term: "Criado em", value: formatDate(asset.created_at) },
     ];
     const body = `
@@ -415,7 +415,7 @@ ${error ? snackbar(error) : ""}`;
   /** Guarda o arquivo no R2 como ativo do avatar e devolve o id. */
   private async storeAsset(avatarId: string, file: File, kind: AssetKind): Promise<string> {
     const id = crypto.randomUUID();
-    const key = `${ASSET_PREFIX}${avatarId}/${id}`;
+    const key = `avatares-ativos/${avatarId}/${id}`;
     await this.media.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
     await this.db.insertAsset({ id, avatar_id: avatarId, kind, key, name: file.name.slice(0, 200) || "arquivo", type: file.type, size: file.size, source_video: null });
     return id;
@@ -446,7 +446,7 @@ ${error ? snackbar(error) : ""}`;
     await this.db.insertAsset({ id: crypto.randomUUID(), avatar_id: avatarId, kind: "video", key: saving.key, name: videoAssetName(saving), type: "video/mp4", size: saving.size, source_video: saving.video.id });
   }
 
-  /** O arquivo do ativo: o enviado ou, se vinculado, a versão que vale do vídeo. */
+  /** O arquivo do ativo: o enviado ou, se gerado, a versão que vale do vídeo. */
   private async assetFile(asset: AvatarAsset): Promise<string> {
     const video = asset.source_video ? await this.db.videoById(asset.source_video) : null;
     return (video && (video.edited_key ?? video.processed_key ?? video.video_key)) || asset.key;
@@ -1483,7 +1483,8 @@ function videoAssetName(s: SavableVideo): string {
 }
 
 const MAX_AVATAR_DESCRIPTION = 500;
-const ASSET_LABELS: Record<AssetKind, string> = { imagem: "Foto", video: "Vídeo", audio: "Áudio" };
+const ASSET_LABELS: Record<AssetKind, string> = { imagem: "Imagem", video: "Vídeo", audio: "Áudio" };
+const assetOrigin = (a: AvatarAsset) => `${ASSET_LABELS[a.kind]} ${a.source_video ? "gerad" : "enviad"}${a.kind === "imagem" ? "a" : "o"}`;
 const ASSET_ICONS: Record<AssetKind, string> = { imagem: "image", video: "movie", audio: "mic" };
 const ASSET_ACCEPT = "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/ogg";
 
@@ -1524,7 +1525,7 @@ function assetLibrary(assets: AvatarAsset[], o: { key: string; avatar?: Avatar; 
           <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(a.name)}</span><span class="vrow__support">${esc(formatDate(a.created_at))}</span></span>
           <span class="vrow__status vrow__status--done" role="cell"><span class="icon">${ASSET_ICONS[a.kind]}</span>${ASSET_LABELS[a.kind]}</span>
           <span role="cell">${formatBytes(a.size)}</span>
-          <span class="vrow__wide" role="cell">${a.source_video ? "Vídeo vinculado" : "Enviado"}</span>
+          <span class="vrow__wide" role="cell">${assetOrigin(a)}</span>
           <span class="vrow__wide" role="cell">${a.id === avatar?.photo_asset ? "Principal" : a.id === avatar?.voice_asset ? "Voz" : "—"}</span>
           <span role="cell">${esc(formatDate(a.created_at))}</span>
         </a>`,
