@@ -16,6 +16,8 @@ import { canUse, InputError, structureById } from "./structures";
 
 /** Quanto os vídeos prontos ficam para baixar. Os trechos saem pela regra de ciclo de vida do R2. */
 const EXPORT_TTL_MS = 24 * 60 * 60 * 1000;
+/** Muda quando container/exportar.py passa a gerar trechos diferentes: os antigos não servem mais. */
+const SEGMENT_VERSION = "2";
 /** Um passo que ficou sem resposta (Worker caiu) pode ser retomado depois disso. */
 const STALE_MS = 15 * 60 * 1000;
 const MAX_TRIES = 3;
@@ -107,9 +109,23 @@ export class Exports {
     const id = crypto.randomUUID();
     const trechos: ExportPlan["trechos"] = [];
     for (const t of work.trechos) trechos.push(await this.segmentPlan(project, role, work.largura, work.altura, t));
-    const versoes = work.versoes.map((v, i) => ({ ...v, chave: `exportacoes/${id}/${i}.mp4` }));
+    const versoes: ExportPlan["versoes"] = [];
+    for (const v of work.versoes) versoes.push(await this.versionPlan(v, trechos, now));
     const plan: ExportPlan = { trechos, versoes };
     return this.db.insertExport({ id, project_id: project.id, total: trechos.length + versoes.length, plan: JSON.stringify(plan), expires_at: new Date(now.getTime() + EXPORT_TTL_MS).toISOString() }, now);
+  }
+
+  /**
+   * Versão com os mesmos trechos tem a mesma chave: a que já está no R2 sai pronta, sem
+   * contêiner. Só vale a enviada nas últimas 24 horas: a regra do R2 apaga em 2 dias, e o
+   * link de uma exportação nova dura 24 horas.
+   */
+  private async versionPlan(v: ExportWork["versoes"][number], trechos: ExportPlan["trechos"], now: Date) {
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v.trechos.map((i) => trechos[i]!.chave).join()));
+    const chave = `exportacoes/versoes/${hex(hash)}.mp4`;
+    const head = await this.media.head(chave);
+    const fresh = head && head.uploaded.getTime() > now.getTime() - EXPORT_TTL_MS && head.customMetadata?.crc32;
+    return { ...v, chave, ...(fresh ? { tamanho: head.size, crc: Number(head.customMetadata!.crc32) } : {}) };
   }
 
   /** O plano de um trecho, com os arquivos do R2 e a chave do que entra nele. */
@@ -125,7 +141,7 @@ export class Exports {
     const heads = await Promise.all(arquivos.map((k) => this.media.head(k)));
     if (heads.some((h) => !h)) throw new InputError(ERROS.exportarArquivo);
     // O etag entra na chave: se o arquivo mudar (áudio tratado de novo), o trecho é refeito.
-    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(plano + heads.map((h) => h!.etag).join()));
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SEGMENT_VERSION + plano + heads.map((h) => h!.etag).join()));
     return { chave: `trechos/${hex(hash)}.mkv`, plano, arquivos };
   }
 
@@ -154,10 +170,10 @@ export class Exports {
     const plan = JSON.parse(row.plan) as ExportPlan;
     try {
       let step = row.step;
-      // O que já está pronto no R2 (de outra exportação) não conta como passo.
-      while (step < plan.trechos.length && (await this.media.head(plan.trechos[step]!.chave))) step++;
+      // O que já está pronto (de outra exportação) ou não será usado não conta como passo.
+      while (step < row.total && (await this.done(plan, step))) step++;
       if (step < plan.trechos.length) await this.segment(id, plan.trechos[step]!);
-      else if (step - plan.trechos.length < plan.versoes.length) await this.version(id, plan, step - plan.trechos.length);
+      else if (step < row.total) await this.version(id, plan, step - plan.trechos.length);
       const next = Math.min(step + 1, row.total);
       return this.db.finishStep(id, next, next >= row.total ? "done" : "running", JSON.stringify(plan));
     } catch (err) {
@@ -165,6 +181,12 @@ export class Exports {
       const failed = row.tries >= MAX_TRIES;
       return this.db.failStep(id, failed ? "failed" : "running", failed ? String(err).slice(0, 1000) : null);
     }
+  }
+
+  private async done(plan: ExportPlan, step: number): Promise<boolean> {
+    if (step >= plan.trechos.length) return plan.versoes[step - plan.trechos.length]!.tamanho !== undefined;
+    const needed = plan.versoes.some((v) => v.tamanho === undefined && v.trechos.includes(step));
+    return !needed || (await this.media.head(plan.trechos[step]!.chave)) !== null;
   }
 
   private async segment(id: string, t: ExportPlan["trechos"][number]): Promise<void> {
@@ -179,9 +201,10 @@ export class Exports {
     const keys = v.trechos.map((i) => plan.trechos[i]!.chave);
     const sizes = await this.sizes(keys);
     const res = await this.pipe(sizes, keys, null, (body) => this.api!.join(id, body, sizes));
-    v.crc = Number(res.headers.get("x-crc32"));
+    const crc = res.headers.get("x-crc32") ?? "0";
+    await this.keep(res, v.chave, "video/mp4", { crc32: crc });
+    v.crc = Number(crc);
     v.tamanho = Number(res.headers.get("content-length"));
-    await this.keep(res, v.chave, "video/mp4");
   }
 
   private async sizes(keys: string[]): Promise<number[]> {
@@ -215,9 +238,9 @@ export class Exports {
     return res;
   }
 
-  private async keep(res: Response, key: string, contentType: string): Promise<void> {
+  private async keep(res: Response, key: string, contentType: string, customMetadata?: Record<string, string>): Promise<void> {
     const stream = new FixedLengthStream(Number(res.headers.get("content-length")));
-    await Promise.all([res.body!.pipeTo(stream.writable), this.media.put(key, stream.readable, { httpMetadata: { contentType } })]);
+    await Promise.all([res.body!.pipeTo(stream.writable), this.media.put(key, stream.readable, { httpMetadata: { contentType }, customMetadata })]);
   }
 
   /** Termina, aos poucos, o que a tela deixou pela metade. */

@@ -763,7 +763,7 @@ let exportHidden = false;
 function showExport(st) {
   const done = st.status === "done";
   $("#dlg-title").textContent = done ? (st.versoes.length === 1 ? "Vídeo pronto" : `${st.versoes.length} vídeos prontos`) : "Exportando";
-  $("#dlg-text").textContent = st.erro ?? (done ? "Disponíveis por 24 horas. Baixe para guardar." : `Montando: ${st.feitos} de ${st.total}. Pode continuar editando.`);
+  $("#dlg-text").textContent = st.erro ?? (done ? "Disponíveis por 24 horas. Baixe para guardar." : `Montando: ${st.feitos} de ${st.total}. Feche para continuar editando.`);
   $("#dlg-progress").hidden = done || !!st.erro;
   $("#dlg-list").innerHTML = st.versoes
     .map((v, i) => `<a class="xlist__item interactive" href="${esc(v.href)}" download><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(v.nome)}</span><span class="icon" aria-hidden="true">download</span></a>`)

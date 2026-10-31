@@ -123,12 +123,15 @@ menos custo.
 - **Exportar** (`src/exportar.ts`, `container/exportar.py`, tabela `exports`, migration
   0013): o Worker lê o projeto **salvo** e monta o plano com `exportWork` (`modelo.js`).
   Cada grupo vira um trecho (H.264 sem B-frames e FLAC), guardado em
-  `trechos/<hash>.mkv` pelo conteúdo: grupo igual não é refeito, nem entre exportações.
+  `trechos/<hash>.mkv` pelo conteúdo: grupo igual não é refeito, nem entre exportações. A versão também: mesma lista de
+  trechos, mesmo arquivo, em `exportacoes/versoes/<hash>.mp4`, reaproveitado por 24 horas;
+  exportar sem mudar nada não chama o contêiner. Mudou o que os trechos geram: suba
+  `SEGMENT_VERSION` (`src/exportar.ts`).
   Cada versão é a emenda dos trechos: vídeo copiado, só o som vira AAC. A imagem cobre o
   quadro, como na prévia, a 30 quadros por segundo. Um passo por vez: a tela chama o
   próximo assim que o anterior acaba; se ela fechar, o agendamento termina. Bloco só
   entra com vídeo que a pessoa pode usar ou arquivo do próprio projeto. Os vídeos ficam
-  24 horas em `exportacoes/<id>/`; cada exportação vai até 50 versões (`MAX_EXPORTAR`), um a um ou em ZIP sem compressão, montado no Worker.
+  24 horas para baixar; cada exportação vai até 50 versões (`MAX_EXPORTAR`), um a um ou em ZIP sem compressão, montado no Worker.
 - Código em `src/canvas/` (tela.html, canvas.js, modelo.js, player.js,
   miniaturas.js); `npm run canvas` gera `src/site/canvas.ts`, que o Worker usa. A
   página do canvas libera `data:` nas imagens e `blob:` no fetch (miniaturas e a

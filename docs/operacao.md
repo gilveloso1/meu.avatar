@@ -301,7 +301,7 @@ picos cortados e o vídeo idêntico byte a byte ao original.
 
 O contêiner `Exporter` (`container/Dockerfile.exportar`, `standard-3`) é separado do
 de áudio: imagem só com ffmpeg, dorme 30 s depois do último pedido. Regras do R2
-(uma vez só, para os arquivos não se acumularem):
+(uma vez só, para os arquivos não se acumularem; versões em `exportacoes/versoes/`):
 
 ```bash
 npx wrangler r2 bucket lifecycle add meu-avatar trechos-30d trechos/ --expire-days 30 < /dev/null

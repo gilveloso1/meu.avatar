@@ -147,8 +147,10 @@ describe("projetos do canvas", () => {
 describe("exportar projetos", () => {
   // O R2 dos testes não zera sozinho, e trecho igual é reaproveitado.
   beforeEach(async () => {
-    const { objects } = await env.MIDIA.list({ prefix: "trechos/" });
-    if (objects.length) await env.MIDIA.delete(objects.map((o) => o.key));
+    for (const prefix of ["trechos/", "exportacoes/"]) {
+      const { objects } = await env.MIDIA.list({ prefix });
+      if (objects.length) await env.MIDIA.delete(objects.map((o) => o.key));
+    }
   });
 
   const VIDEO = "11111111-1111-4111-8111-111111111111";
@@ -196,14 +198,43 @@ describe("exportar projetos", () => {
     expect([mp4.status, await mp4.text(), mp4.headers.get("content-disposition")]).toEqual([200, "mp4ok", 'attachment; filename="02-g2-corpo.mp4"']);
   });
 
-  it("exportar de novo reaproveita os trechos; só uma versão faz só a emenda dela", async () => {
+  it("exportar de novo sem mudar nada não chama o contêiner e os arquivos continuam baixando", async () => {
     const admin = await cookie();
     const id = await projeto(admin);
     await exportar(new FakeExportApi(), id, admin);
     const fake = new FakeExportApi();
-    const st = await exportar(fake, id, admin, { final: "final", versoes: [1] });
-    expect(st.versoes.map((v) => v.nome)).toEqual(["g2 → corpo"]);
-    expect([fake.segments.length, fake.joins.length, st.zip]).toEqual([0, 1, null]);
+    const st = await exportar(fake, id, admin);
+    expect([st.status, fake.segments.length, fake.joins.length]).toEqual(["done", 0, 0]);
+    expect((await (await com(fake, st.versoes[0]!.href, admin)).text())).toBe("mp4ok");
+    const zip = await com(fake, st.zip!, admin);
+    const bytes = new Uint8Array(await zip.arrayBuffer());
+    expect(new DataView(bytes.buffer).getUint32(bytes.byteLength - 22, true)).toBe(0x06054b50);
+    const uma = await exportar(fake, id, admin, { final: "final", versoes: [1] });
+    expect([uma.versoes.map((v) => v.nome), uma.zip, fake.joins.length]).toEqual([["g2 → corpo"], null, 0]);
+  });
+
+  it("mudar um gancho refaz só ele e a versão dele", async () => {
+    const admin = await cookie();
+    const data = dados();
+    const id = await projeto(admin, data);
+    await exportar(new FakeExportApi(), id, admin);
+    data.blocks[0]!.tin = 0.5;
+    expect((await post(`/projetos/${id}/salvar`, admin, JSON.stringify({ data }))).status).toBe(204);
+    const fake = new FakeExportApi();
+    expect((await exportar(fake, id, admin)).status).toBe("done");
+    expect([fake.segments.length, fake.joins.length]).toEqual([1, 1]);
+  });
+
+  it("versão com mais de 24 horas é emendada de novo, sem refazer os trechos", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    await exportar(new FakeExportApi(), id, admin);
+    const fake = new FakeExportApi();
+    const exports = new Exports(new Db(env.DB), env.MIDIA, fake);
+    const depois = new Date(Date.now() + 25 * 60 * 60 * 1000);
+    const row = await exports.start((await new Db(env.DB).projectById(id))!, "admin", "final", undefined, depois);
+    for (let i = 0; i < row.total; i++) await exports.advance(row.id);
+    expect([fake.segments.length, fake.joins.length]).toEqual([0, 2]);
   });
 
   it("o ZIP traz as versões com os tamanhos certos", async () => {

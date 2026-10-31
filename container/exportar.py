@@ -72,9 +72,11 @@ def filtros(plano, arquivos):
         tipo, caminho = item["tipo"], arquivos[indice]
         entra = numero(item.get("entra"), 0, exata)
         dura = min(numero(item.get("dura"), 0.01, 3600), exata - entra)
+        # Em quadros: um clipe termina exatamente onde o seguinte começa.
+        inicio, fim = round(entra * FPS), min(round((entra + dura) * FPS), quadros)
         corte = numero(item.get("corte"), 0, 36000)
         volume = numero(item.get("volume", 0), 0, 4)
-        if dura <= 0:
+        if dura <= 0 or fim <= inicio:
             continue
         if tipo == "imagem":
             # No servidor os arquivos não têm extensão: diz o demuxer, que é o que aceita -loop.
@@ -83,10 +85,12 @@ def filtros(plano, arquivos):
             entradas += ["-ss", f"{corte:.6f}", "-t", f"{dura:.6f}", "-i", caminho]
         i = len([a for a in entradas if a == "-i"]) - 1
         if tipo != "audio":
-            # Cobre o quadro, como a prévia (object-fit: cover).
+            # Cobre o quadro, como a prévia (object-fit: cover). O arquivo pode acabar um quadro
+            # antes (24 ou 25 fps viram 30): repete o último, senão o fundo preto pisca na emenda.
             grafo.append(
                 f"[{i}:v]fps={FPS},scale={w}:{h}:force_original_aspect_ratio=increase:flags=bicubic,crop={w}:{h},setsar=1,"
-                f"format=yuv420p,setpts=PTS-STARTPTS+{entra:.6f}/TB[v{n}]"
+                f"format=yuv420p,tpad=stop_mode=clone:stop_duration=1,trim=end_frame={fim - inicio},"
+                f"setpts=PTS-STARTPTS+{inicio}/({FPS}*TB)[v{n}]"
             )
             grafo.append(f"[{atual}][v{n}]overlay=eof_action=pass:format=yuv420[o{n}]")
             atual = f"o{n}"
