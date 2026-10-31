@@ -188,6 +188,7 @@ export interface Avatar {
   /** Na lista: quantos ativos tem e a primeira foto (a capa). */
   assets?: number;
   cover?: string | null;
+  cover_face?: string | null;
 }
 
 export type AssetKind = "imagem" | "video" | "audio";
@@ -203,6 +204,8 @@ export interface AvatarAsset {
   size: number;
   /** O vídeo que gerou o ativo: com ele, não há arquivo próprio; vazio, o arquivo é do avatar. */
   source_video: string | null;
+  /** Onde está o rosto, nas imagens: o mesmo JSON de videos.face. */
+  face: string | null;
   created_at: string;
 }
 
@@ -271,6 +274,15 @@ export class Db {
          ORDER BY created_at DESC LIMIT 1`,
       )
       .first<Video>();
+  }
+
+  /** Uma imagem de avatar que ainda não teve o rosto procurado. */
+  async nextAssetWithoutFace(): Promise<AvatarAsset | null> {
+    return this.d1.prepare("SELECT * FROM avatar_assets WHERE kind = 'imagem' AND face IS NULL ORDER BY created_at DESC LIMIT 1").first<AvatarAsset>();
+  }
+
+  async updateAssetFace(id: string, face: string): Promise<void> {
+    await this.d1.prepare("UPDATE avatar_assets SET face = ? WHERE id = ?").bind(face, id).run();
   }
 
   async countByStructure(): Promise<Map<string, number>> {
@@ -411,9 +423,11 @@ export class Db {
     return (
       await this.d1
         .prepare(
-          `SELECT a.*, (SELECT COUNT(*) FROM avatar_assets x WHERE x.avatar_id = a.id) AS assets,
-             COALESCE(a.photo_asset, (SELECT x.id FROM avatar_assets x WHERE x.avatar_id = a.id AND x.kind = 'imagem' ORDER BY x.created_at LIMIT 1)) AS cover
-           FROM avatars a WHERE a.user_id = ? AND a.name LIKE ? ORDER BY a.updated_at DESC`,
+          `SELECT t.*, (SELECT x.face FROM avatar_assets x WHERE x.id = t.cover) AS cover_face FROM (
+             SELECT a.*, (SELECT COUNT(*) FROM avatar_assets x WHERE x.avatar_id = a.id) AS assets,
+               COALESCE(a.photo_asset, (SELECT x.id FROM avatar_assets x WHERE x.avatar_id = a.id AND x.kind = 'imagem' ORDER BY x.created_at LIMIT 1)) AS cover
+             FROM avatars a WHERE a.user_id = ? AND a.name LIKE ?
+           ) t ORDER BY t.updated_at DESC`,
         )
         .bind(userId, `%${q}%`)
         .all<Avatar>()
@@ -434,7 +448,7 @@ export class Db {
     return keys;
   }
 
-  async insertAsset(a: Omit<AvatarAsset, "created_at">, now = new Date()): Promise<void> {
+  async insertAsset(a: Omit<AvatarAsset, "created_at" | "face">, now = new Date()): Promise<void> {
     const at = now.toISOString();
     await this.d1.batch([
       this.d1

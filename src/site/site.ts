@@ -224,7 +224,7 @@ export class Site {
       tileCard({
         href: `/avatares/${a.id}`,
         tile: a.cover
-          ? `<img class="avatar-cover" src="/avatares/${a.id}/arquivos/${esc(a.cover)}" alt="">`
+          ? faceImage(`/avatares/${a.id}/arquivos/${esc(a.cover)}`, a.cover_face, "avatar-cover")
           : `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">face</span></span>`,
         headline: a.name,
         supporting: a.assets === 1 ? "1 ativo" : `${a.assets ?? 0} ativos`,
@@ -292,7 +292,7 @@ export class Site {
       avatar
         ? assetLibrary(assets, { key: `avatar-${avatar.id}`, avatar })
         : pending
-          ? assetLibrary([{ id: "", avatar_id: "", kind: "video", key: pending.key, name: videoAssetName(pending), type: "video/mp4", size: pending.size, source_video: pending.video.id, created_at: new Date().toISOString() }], {
+          ? assetLibrary([{ id: "", avatar_id: "", kind: "video", key: pending.key, name: videoAssetName(pending), type: "video/mp4", size: pending.size, face: null, source_video: pending.video.id, created_at: new Date().toISOString() }], {
               key: "avatar-novo",
               src: () => `/videos/${pending.video.id}.mp4`,
               href: () => `/video/${pending.video.id}`,
@@ -1269,15 +1269,25 @@ function downloadMenu(items: MenuItem[]): string {
       </details>`;
 }
 
+/** O ponto entre os olhos, em frações do quadro; sem rosto, o terço de cima. */
+function facePoint(json: string | null | undefined): [number, number] {
+  let face: { x?: number; y?: number } = {};
+  try { face = JSON.parse(json ?? "{}"); } catch {}
+  return [typeof face.x === "number" ? face.x : 0.5, typeof face.y === "number" ? face.y : 0.35];
+}
+
+/** A imagem cortada no rosto: o script da página põe o corte quando sabe o tamanho dela. */
+function faceImage(src: string, face: string | null | undefined, cls = ""): string {
+  return `<img${cls ? ` class="${cls}"` : ""} src="${src}" alt="" loading="lazy" data-face="${facePoint(face).join(",")}">`;
+}
+
 /**
  * Onde a miniatura quadrada corta o vídeo (object-position): com o rosto achado (rosto.py: o ponto
  * entre os olhos, em frações do quadro), os olhos ficam a 40% da altura e no meio da largura;
  * sem ele, o terço de cima (onde o rosto costuma estar).
  */
 function thumbPosition(v: Video): string {
-  let face: { x?: number; y?: number } = {};
-  try { face = JSON.parse(v.face ?? "{}"); } catch {}
-  const fx = typeof face.x === "number" ? face.x : 0.5, fy = typeof face.y === "number" ? face.y : 0.35;
+  const [fx, fy] = facePoint(v.face);
   const [w, h] = v.aspect_ratio.split(":").map(Number);
   const ratio = w && h ? h / w : 16 / 9;
   // Corte no eixo que sobra: a parte do vídeo fora do quadrado, de 0 a 100%.
@@ -1348,7 +1358,7 @@ function fab(icon: string, label: string, to: { href: string } | { post: string 
  */
 function avatarDialog(o: { id: string; title: string; avatars: Avatar[]; item: (a: Avatar, content: string) => string; note?: (a: Avatar) => string | null; newHref?: string }): string {
   const row = (a: Avatar) => {
-    const cover = a.cover ? `<img class="avatar-cover" src="/avatares/${a.id}/arquivos/${esc(a.cover)}" alt="" loading="lazy">` : `<span class="icon-tile icon-tile--large icon-tile--primary" aria-hidden="true"><span class="icon">face</span></span>`;
+    const cover = a.cover ? faceImage(`/avatares/${a.id}/arquivos/${esc(a.cover)}`, a.cover_face, "avatar-cover") : `<span class="icon-tile icon-tile--large icon-tile--primary" aria-hidden="true"><span class="icon">face</span></span>`;
     const support = o.note?.(a) ?? (a.assets === 1 ? "1 ativo" : `${a.assets ?? 0} ativos`);
     return `<li data-avatar-item="${esc(a.name.toLowerCase())}">${o.item(a, `${cover}<span class="avatar-option__text"><span class="vrow__headline">${esc(a.name)}</span><span class="vrow__support">${esc(support)}</span></span>`)}</li>`;
   };
@@ -1499,7 +1509,7 @@ function assetLibrary(assets: AvatarAsset[], o: { key: string; avatar?: Avatar; 
   const href = o.href ?? ((a: AvatarAsset) => `${src(a)}/ver`);
   const thumb = (a: AvatarAsset) =>
     a.kind === "imagem"
-      ? `<img src="${src(a)}" alt="" loading="lazy">`
+      ? faceImage(src(a), a.face)
       : a.kind === "video"
         ? `<video data-src="${src(a)}" preload="metadata" muted playsinline tabindex="-1"></video>`
         : `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--tertiary" aria-hidden="true"><span class="icon">mic</span></span></span>`;
@@ -1954,6 +1964,17 @@ const SCRIPT = `(() => {
     const fit = () => { t.style.height = "auto"; t.style.height = t.scrollHeight + (t.offsetHeight - t.clientHeight) + "px"; };
     t.addEventListener("input", fit);
     fit();
+  }
+
+  // Imagens cortadas no rosto: os olhos a 40% da altura e no meio da largura, como em thumbPosition.
+  for (const img of document.querySelectorAll("img[data-face]")) {
+    const place = () => {
+      const [fx, fy] = img.dataset.face.split(",").map(Number);
+      const pct = (r, f, target) => (r > 1 ? Math.min(100, Math.max(0, ((r * f - target) / (r - 1)) * 100)) : 50);
+      const ratio = img.naturalHeight / img.naturalWidth;
+      img.style.objectPosition = pct(1 / ratio, fx, 0.5) + "% " + pct(ratio, fy, 0.4) + "%";
+    };
+    if (img.complete && img.naturalWidth) place(); else img.addEventListener("load", place, { once: true });
   }
 
   // Miniaturas: o vídeo só baixa quando aparece na tela (a vista escondida não baixa nada).
