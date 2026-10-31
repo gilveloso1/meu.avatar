@@ -194,3 +194,41 @@ test("organizar aguenta laço nas ligações e projeto vazio", () => {
   assert.equal(M.groups(M.arrange(p)).length, 2);
   assert.deepEqual(M.arrange({ blocks: [], finals: [], edges: [] }).blocks, []);
 });
+
+test("ligações impossíveis são recusadas, cada uma com o motivo", () => {
+  const bloco = (id, y) => ({ id, kind: "image", name: id, src: "a", dur: 5, tin: 0, tout: 5, x: 0, y, mute: false, vol: 1, tone: 1 });
+  const q = { blocks: [bloco("a", 0), bloco("b", 400), bloco("c", 800), bloco("d", 1200)], finals: [{ id: "final", x: 900, y: 0 }], edges: [{ id: "1", from: "a", to: "b" }, { id: "2", from: "b", to: "c" }] };
+  assert.equal(M.linkProblem(q, "c", "d"), null);
+  assert.equal(M.linkProblem(q, "c", "final"), null);
+  assert.equal(M.linkProblem(q, "a", "a"), "same");
+  assert.equal(M.linkProblem(q, "a", "b"), "repeated");
+  assert.equal(M.linkProblem(q, "b", "a"), "cycle");
+  assert.equal(M.linkProblem(q, "c", "a"), "cycle");
+  assert.equal(M.linkProblem(q, "a", "nada"), "missing");
+  assert.equal(M.linkProblem(q, "nada", "a"), "missing");
+  assert.equal(M.linkProblem(q, "final", "a"), "missing");
+});
+
+test("dois blocos do mesmo grupo não se ligam", () => {
+  const b = (id, x) => ({ id, kind: "image", name: id, src: "a", dur: 5, tin: 0, tout: 2, x, y: 0, mute: false, vol: 1, tone: 1 });
+  const q = { blocks: [b("a", 0), b("b", 2 * M.PX)], finals: [], edges: [] };
+  assert.equal(M.linkProblem(q, "a", "b"), "same");
+});
+
+test("ligação salva que não existe mais é ignorada", () => {
+  const q = { ...M.sample((f) => f) };
+  q.edges = [...q.edges, { id: "x", from: "sumiu", to: "final" }, { id: "y", from: "g1", to: "sumiu" }];
+  assert.equal(M.versions(q, "final").length, 6);
+});
+
+test("só a primeira importação traz o Final, ligado a ela", () => {
+  const b = (id) => ({ id, kind: "image", name: id, src: "a", dur: 5, tin: 0, tout: 5, x: 100, y: 50, mute: false, vol: 1, tone: 1 });
+  const q = { blocks: [b("a")], finals: [], edges: [] };
+  assert.equal(M.linkFirst(q, q.blocks[0]), true);
+  assert.equal(M.versions(q, "final").length, 1);
+  q.blocks.push(b("b"));
+  assert.equal(M.linkFirst(q, q.blocks[1]), false);
+  assert.equal(q.edges.length, 1);
+  const com = { blocks: [b("a")], finals: [{ id: "f", x: 0, y: 0 }], edges: [] };
+  assert.equal(M.linkFirst(com, com.blocks[0]), false);
+});

@@ -57,6 +57,12 @@ menos custo.
   Os quadros do vídeo e a imagem aparecem na cor do bloco (só a luz deles fica);
   com o mouse em cima ou escolhido, nas cores de verdade.
 
+- **Começo**: o canvas vazio não tem Final. O primeiro elemento que entra traz o Final, já
+  ligado a ele; os seguintes ficam soltos.
+- **Ligações**: puxa-se de um ponto de saída para uma entrada, ou de uma entrada para uma
+  saída. Puxar a linha solta a ponta mais perto: num ponto ela liga de novo, no vazio ela
+  some. Clique na linha e Delete apaga. `linkProblem` (`modelo.js`) recusa ligar um grupo a
+  ele mesmo, repetir uma ligação, fechar um círculo e passar do limite de variações.
 - **Área e prévia**: o grupo ganha um retângulo tracejado em volta de tudo o
   que entra nele (sequência, coberturas e som), com o chip do nome em cima. O
   bloco escolhido tem o botão de tocar no meio; o chip do grupo também. A prévia

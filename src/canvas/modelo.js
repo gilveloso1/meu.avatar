@@ -477,6 +477,35 @@ export function doubledSound(project, gs = groups(project)) {
   return gs.some((g) => g.blocks.some((v) => linked(v) && !v.mute && g.audios.some((a) => a.origin === "video" && a.src === v.src && !a.mute)));
 }
 
+/**
+ * Por que uma ligação não pode existir, ou null se pode: "missing" (ponta que não existe),
+ * "same" (o grupo com ele mesmo), "repeated" (já ligados), "cycle" (o caminho voltaria a
+ * passar por aqui) ou "limit" (passaria do limite de variações).
+ */
+export function linkProblem(project, from, to) {
+  const gs = groups(project);
+  const idx = groupIndex(gs);
+  const ls = links(project, gs);
+  const a = idx.get(from);
+  const isFinal = project.finals.some((f) => f.id === to);
+  const b = isFinal ? to : idx.get(to);
+  if (!a || !b) return "missing";
+  if (a === b) return "same";
+  if (ls.some((l) => l.from === a && l.to === b)) return "repeated";
+  const seen = new Set();
+  const reaches = (g) => g === a || (!seen.has(g) && (seen.add(g), ls.some((l) => l.from === g && reaches(l.to))));
+  if (!isFinal && reaches(b)) return "cycle";
+  return passesLimit(project, { ...project, edges: [...project.edges, { id: "nova", from, to }] }) ? "limit" : null;
+}
+
+/** Na primeira importação de um projeto sem Final: põe o Final à direita do bloco, ligado a ele. */
+export function linkFirst(project, b) {
+  if (project.blocks.length !== 1 || project.finals.length) return false;
+  project.finals.push({ id: "final", x: b.x + width(b) + 160, y: b.y + (VIS_H - 80) / 2 });
+  project.edges.push({ id: newId("e"), from: b.id, to: "final" });
+  return true;
+}
+
 export function removeItems(project, ids) {
   const p = clone(project);
   const s = new Set(ids);

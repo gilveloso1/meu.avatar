@@ -32,7 +32,7 @@ body { min-height: 0; overflow: hidden; }
 .wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .wire.is-sel, .wire.is-path { stroke: var(--md-sys-color-primary); stroke-width: 3; }
 .wire--temp { stroke: var(--md-sys-color-primary); stroke-dasharray: 6 4; }
-.wire-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
+.wire-hit { fill: none; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; cursor: pointer; pointer-events: stroke; }
 
 /* Bloco: cor do tipo e tom do arquivo (--c e --on vêm do script, de --bloco-<tipo>-<tom>),
    cantos médios (12 px), elevação 1; arrastando, elevação 3. */
@@ -115,8 +115,9 @@ body { min-height: 0; overflow: hidden; }
   position: absolute; width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full); z-index: 3;
   background: var(--md-sys-color-surface-container-lowest); border: 2px solid var(--md-sys-color-outline);
 }
-.port--out { cursor: crosshair; border-color: var(--md-sys-color-primary); }
-.port--out:hover { background: var(--md-sys-color-primary); }
+.port { cursor: crosshair; }
+.port--out { border-color: var(--md-sys-color-primary); }
+.port:hover { background: var(--md-sys-color-primary); border-color: var(--md-sys-color-primary); }
 /* Bloco final: a saída, em primary (cantos grandes, elevação 1). */
 .fin {
   position: absolute; width: max-content; min-width: 180px; padding: 12px 8px 8px; cursor: grab;
@@ -348,7 +349,9 @@ a.xlist__item { color: inherit; text-decoration: none; }
     <div><dt>Arraste</dt><dd>para mover</dd></div>
     <div><dt>Encoste do lado</dt><dd>para juntar</dd></div>
     <div><dt>Solte em cima</dt><dd>para cobrir</dd></div>
-    <div><dt>Puxe o ponto da direita</dt><dd>para ligar</dd></div>
+    <div><dt>Puxe um ponto</dt><dd>para ligar</dd></div>
+    <div><dt>Puxe a linha</dt><dd>para soltar ou trocar</dd></div>
+    <div><dt>Clique na linha e Delete</dt><dd>para apagar</dd></div>
     <div><dt>Ctrl + roda</dt><dd>para o zoom</dd></div>
     <div><dt>Dois cliques</dt><dd>para ampliar o bloco</dd></div>
     <div><dt>Clique no grupo e Espaço</dt><dd>para tocar dali</dd></div>

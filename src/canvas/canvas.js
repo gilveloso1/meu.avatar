@@ -27,14 +27,16 @@ let CONFIG = {};
 try {
   CONFIG = JSON.parse($("#canvas-config")?.textContent || "{}");
 } catch {}
-const emptyProject = () => ({ blocks: [], finals: [{ id: "final", x: 720, y: 200 }], edges: [] });
+const emptyProject = () => ({ blocks: [], finals: [], edges: [] });
 const PROJETO = CONFIG.projeto ?? null;
 const valid = (d) => d && Array.isArray(d.blocks) && Array.isArray(d.finals) && Array.isArray(d.edges);
 let project = valid(PROJETO?.data) ? PROJETO.data : CONFIG.amostra ? M.sample((f) => `midia/${f}`) : emptyProject();
+// O canvas vazio começa sem Final (projetos antigos já vinham com um).
+if (PROJETO && !project.blocks.length) project = { ...project, finals: [] };
 let projectName = PROJETO?.name ?? "";
 let projectEdited = PROJETO?.modificado ?? "";
 let view = { x: 80, y: 120, z: 0.8 };
-let sel = { type: "final", id: "final" };
+let sel = project.finals[0] ? { type: "final", id: project.finals[0].id } : { type: null };
 let versionIdx = 0;
 // O que a prévia toca: null (a variação escolhida no Final), um grupo ou um bloco.
 let preview = null;
@@ -433,10 +435,8 @@ function render({ side = true } = {}) {
   // Linhas.
   let svg = "";
   for (const l of M.links(project, gs)) {
-    const a = { x: l.from.x + l.from.w + PORT_OUT, y: l.from.y + (l.from.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
     const f = typeof l.to === "string" ? project.finals.find((f) => f.id === l.to) : null;
-    const b = f ? { x: f.x, y: f.y + 40 } : { x: l.to.x - PORT_OUT, y: l.to.y + (l.to.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
-    const d = curve(a, b);
+    const d = curve(outPoint(l.from), f ? finalPoint(f) : inPoint(l.to));
     const on = sel.type === "edge" && sel.id === l.edge.id;
     const onPath = path && M.linkOn(l, path, litFinal);
     svg += `<path class="wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
@@ -478,6 +478,10 @@ function variantList(vs, active, part) {
   const now = style === "number" ? `<button class="xlist__item interactive" type="button" data-variant="${cur}" aria-label="${M.versionName(cur)}">${lead(cur)}<span class="xlist__text">${M.versionName(cur)}</span>${time(vs[cur])}${bar}</button>` : "";
   return `<div class="fin__body">${now}<div class="fin__list fin__list--${style}" style="--rows:${rows}">${vs.map(item).join("")}</div></div>`;
 }
+
+const outPoint = (g) => ({ x: g.x + g.w + PORT_OUT, y: g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) / 2 });
+const inPoint = (g) => ({ x: g.x - PORT_OUT, y: g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) / 2 });
+const finalPoint = (f) => ({ x: f.x, y: f.y + 40 });
 
 const curve = (a, b) => {
   const k = Math.max(40, Math.abs(b.x - a.x) / 2);
@@ -737,10 +741,12 @@ async function importFiles(files, at) {
       project = structuredClone(project);
       const b = { id: M.newId("b"), tone: M.nextTone(project, kind, src), kind, name: file.name.replace(/\.[^.]+$/, ""), src, dur: kind === "image" ? M.IMAGE_MAX : dur, tin: 0, tout: Math.min(dur, kind === "image" ? 3 : dur), x: at.x, y, mute: false, vol: 1 };
       project.blocks.push(b);
+      const first = M.linkFirst(project, b);
       sel = { type: "block", id: b.id };
       y += M.height(b) + 48;
       commit(before);
       render();
+      if (first) fit();
       if (PROJETO) toast(`${file.name} entrou no canvas.`);
     } catch (err) {
       toast(err?.message && err.message !== "[object Event]" ? err.message : (CONFIG.erros?.arquivo ?? ""));
@@ -788,10 +794,12 @@ $("#lib-list")?.addEventListener("click", async (e) => {
     const y = Math.max(at.y, ...project.blocks.map((b) => b.y + M.height(b) + 48));
     const b = { id: M.newId("b"), tone: M.nextTone(project, "video", v.src), kind: "video", name: v.name, src: v.src, dur, tin: 0, tout: dur, x: at.x, y, mute: false, vol: 1 };
     project.blocks.push(b);
+    const first = M.linkFirst(project, b);
     sel = { type: "block", id: b.id };
     preview = { type: "block", id: b.id };
     commit(before);
     render();
+    if (first) fit();
     item.querySelector(".icon").hidden = false;
     toast(`${v.name} entrou no canvas.`);
   } catch {
@@ -1071,6 +1079,44 @@ vp.addEventListener(
   { passive: false },
 );
 
+/**
+ * Puxar uma ligação de um ponto até outro grupo ou Final. end: a ponta que fica parada, de
+ * saída (out) ou de entrada, num grupo (group, o id dele) ou num Final (final).
+ */
+function linkDrag(end) {
+  const gs0 = M.groups(project);
+  const f = end.final && project.finals.find((o) => o.id === end.final);
+  const g = gs0.find((o) => o.id === end.group);
+  const a = f ? finalPoint(f) : end.out ? outPoint(g) : inPoint(g);
+  return {
+    onMove(ev) {
+      const at = toWorld(ev.clientX, ev.clientY);
+      $("#wire-temp").setAttribute("d", end.out ? curve(a, at) : curve(at, a));
+    },
+    onUp(ev) {
+      $("#wire-temp").setAttribute("d", "");
+      const over = document.elementFromPoint(ev.clientX, ev.clientY);
+      const gs = M.groups(project);
+      const idx = M.groupIndex(gs);
+      const fEl = over?.closest("[data-final]");
+      const gEl = over?.closest(".port[data-group], .gtab");
+      const bEl = over?.closest(".blk");
+      const other = gEl ? gs.find((x) => x.id === gEl.dataset.group) : bEl ? idx.get(bEl.dataset.id) : null;
+      const self = gs.find((x) => x.id === end.group);
+      let from, to;
+      if (end.out) (from = self?.last.id), (to = fEl?.dataset.final ?? other?.first.id);
+      else (from = other?.last.id), (to = end.final ?? self?.first.id);
+      if (!from || !to) return;
+      const problem = M.linkProblem(project, from, to);
+      const text = { cycle: CONFIG.erros?.ligacaoCiclo, repeated: CONFIG.erros?.ligacaoRepetida, limit: CONFIG.erros?.exportarLimite }[problem];
+      if (text) toast(text);
+      if (problem) return;
+      project = structuredClone(project);
+      project.edges.push({ id: M.newId("e"), from, to });
+    },
+  };
+}
+
 vp.addEventListener("pointerdown", (e) => {
   if ((e.button !== 0 && e.button !== 1) || (e.button === 0 && e.ctrlKey)) return;
   // Sem isso o navegador começa a arrastar texto selecionado e cancela o gesto.
@@ -1114,13 +1160,13 @@ vp.addEventListener("pointerdown", (e) => {
     return;
   }
   const trimEl = t.closest("[data-trim]");
-  const outPort = t.closest(".port--out");
+  const port = t.closest(".port");
   const tab = t.closest(".gtab");
   const blk = t.closest(".blk");
   const fin = t.closest(".fin");
   const hit = t.closest(".wire-hit");
 
-  if (e.button === 1 || (!trimEl && !outPort && !tab && !blk && !fin && !hit && !t.closest(".port"))) {
+  if (e.button === 1 || (!trimEl && !port && !tab && !blk && !fin && !hit)) {
     const v0 = { ...view };
     onMove = (ev) => {
       view.x = v0.x + ev.clientX - start.x;
@@ -1150,34 +1196,10 @@ vp.addEventListener("pointerdown", (e) => {
       project = M.trim(base, id, trimEl.dataset.trim, dW(ev).x / M.PX);
       render();
     };
-  } else if (outPort) {
-    const gid = outPort.dataset.group;
-    const temp = $("#wire-temp");
-    const g = M.groups(project).find((g) => g.id === gid);
-    const a = { x: g.x + g.w + PORT_OUT, y: g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
-    onMove = (ev) => temp.setAttribute("d", curve(a, toWorld(ev.clientX, ev.clientY)));
-    onUp = (ev) => {
-      temp.setAttribute("d", "");
-      const over = document.elementFromPoint(ev.clientX, ev.clientY);
-      const gs = M.groups(project);
-      const idx = M.groupIndex(gs);
-      const fEl = over?.closest("[data-final]");
-      const gEl = over?.closest(".port--in[data-group], .gtab");
-      const bEl = over?.closest(".blk");
-      let to = fEl?.dataset.final;
-      if (!to) {
-        const tg = gEl ? gs.find((x) => x.id === gEl.dataset.group) : bEl ? idx.get(bEl.dataset.id) : null;
-        if (tg && tg.id !== gid) to = tg.first.id;
-      }
-      if (!to) return;
-      const from = g.last.id;
-      const dup = M.links(project).some((l) => l.from.id === gid && (l.to === to || l.to.id === idx.get(to)?.id));
-      if (dup) return;
-      const next = structuredClone(project);
-      next.edges.push({ id: M.newId("e"), from, to });
-      if (M.passesLimit(project, next)) return toast(CONFIG.erros?.exportarLimite ?? "");
-      project = next;
-    };
+  } else if (port) {
+    const drag = linkDrag({ out: port.classList.contains("port--out"), group: port.dataset.group, final: port.dataset.final });
+    onMove = drag.onMove;
+    onUp = drag.onUp;
   } else if (tab) {
     const gid = tab.dataset.group;
     sel = { type: "group", id: gid };
@@ -1220,8 +1242,26 @@ vp.addEventListener("pointerdown", (e) => {
       render();
     };
   } else if (hit) {
-    sel = { type: "edge", id: hit.dataset.edge };
+    // Puxar a linha solta a ponta mais perto: cair num ponto liga de novo; no vazio, ela some.
+    const id = hit.dataset.edge;
+    sel = { type: "edge", id };
     render();
+    let drag = null;
+    onMove = (ev) => {
+      if (!drag) {
+        const l = M.links(project).find((l) => l.edge.id === id);
+        const at = toWorld(ev.clientX, ev.clientY);
+        const f = typeof l.to === "string" ? project.finals.find((f) => f.id === l.to) : null;
+        const [p0, p1] = [outPoint(l.from), f ? finalPoint(f) : inPoint(l.to)];
+        const keepOut = Math.hypot(at.x - p1.x, at.y - p1.y) < Math.hypot(at.x - p0.x, at.y - p0.y);
+        project = M.removeItems(base, [id]);
+        sel = { type: null };
+        render();
+        drag = linkDrag(keepOut ? { out: true, group: l.from.id } : { out: false, group: f ? undefined : l.to.id, final: f?.id });
+      }
+      drag.onMove(ev);
+    };
+    onUp = (ev) => drag?.onUp(ev);
   }
 
   const move = (ev) => {
