@@ -30,6 +30,10 @@ export const AUD_H = 40;
 // Faixa do áudio vinculado, embaixo da imagem do vídeo.
 export const LINK_H = 40;
 export const MAX_FAIXAS = 8;
+// Organizar: a área do grupo (20 px em volta) e a aba dele (40 px) cabem nas folgas; o Final, na dele.
+const COL_GAP = 140;
+const ROW_GAP = 110;
+const FINAL_GAP = 340;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
 /** Quantas variações cada bloco final tem; é também o que uma exportação monta de uma vez. */
@@ -326,6 +330,50 @@ export function moveGroup(project, groupId, dx, dy) {
   if (!g) return p;
   const ids = new Set([...g.blocks, ...g.covers, ...g.audios].map((b) => b.id));
   for (const b of p.blocks) if (ids.has(b.id)) (b.x += dx), (b.y += dy);
+  return p;
+}
+
+/**
+ * Organiza o canvas: cada grupo numa coluna, depois de tudo o que vem antes dele,
+ * perto dos que ligam a ele, e cada Final à direita, na altura do que chega a ele.
+ */
+export function arrange(project) {
+  const p = clone(project);
+  const gs = groups(p);
+  if (!gs.length) return p;
+  const ls = links(p, gs);
+  // Coluna: o caminho mais longo até o grupo. Com um laço nas ligações, para no número de grupos.
+  const column = new Map(gs.map((g) => [g, 0]));
+  for (let pass = 0; pass < gs.length; pass++)
+    for (const l of ls) if (typeof l.to !== "string") column.set(l.to, Math.max(column.get(l.to), Math.min(column.get(l.from) + 1, gs.length)));
+  const top = (g) => Math.min(g.y, ...g.covers.map((c) => c.y));
+  const bottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
+  const center = new Map();
+  const fedAt = (node) => {
+    const ys = ls.filter((l) => l.to === node).map((l) => center.get(l.from)).filter((y) => y !== undefined);
+    return ys.length ? ys.reduce((a, b) => a + b) / ys.length : null;
+  };
+  let x = 0;
+  for (const c of [...new Set(column.values())].sort((a, b) => a - b)) {
+    const col = gs.filter((g) => column.get(g) === c).map((g) => ({ g, order: fedAt(g) ?? g.y }));
+    col.sort((a, b) => a.order - b.order);
+    const height = col.reduce((h, { g }) => h + bottom(g) - top(g), ROW_GAP * (col.length - 1));
+    let y = -height / 2;
+    for (const { g } of col) {
+      const dx = x - g.x;
+      const dy = y - top(g);
+      for (const b of [...g.blocks, ...g.covers, ...g.audios]) (b.x += dx), (b.y += dy);
+      center.set(g, y + (bottom(g) - top(g)) / 2);
+      y += bottom(g) - top(g) + ROW_GAP;
+    }
+    x += Math.max(...col.map(({ g }) => g.w)) + COL_GAP;
+  }
+  let free = -Infinity;
+  for (const f of p.finals) {
+    f.x = x;
+    f.y = Math.max(free, (fedAt(f.id) ?? 0) - 40);
+    free = f.y + FINAL_GAP;
+  }
   return p;
 }
 
