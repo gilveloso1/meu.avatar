@@ -17,7 +17,7 @@ import { canUse, InputError, structureById } from "./structures";
 /** Quanto os vídeos prontos ficam para baixar. Os trechos saem pela regra de ciclo de vida do R2. */
 const EXPORT_TTL_MS = 24 * 60 * 60 * 1000;
 /** Muda quando container/exportar.py passa a gerar trechos diferentes: os antigos não servem mais. */
-const SEGMENT_VERSION = "2";
+const SEGMENT_VERSION = "3";
 /** Um passo que ficou sem resposta (Worker caiu) pode ser retomado depois disso. */
 const STALE_MS = 15 * 60 * 1000;
 const MAX_TRIES = 3;
