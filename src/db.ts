@@ -147,6 +147,20 @@ export interface Project {
 }
 
 /** Arquivo enviado do computador para um projeto (no R2, em key). */
+export interface ExportRow {
+  id: string;
+  project_id: string;
+  status: string;
+  step: number;
+  total: number;
+  tries: number;
+  claimed_at: string | null;
+  plan: string;
+  error: string | null;
+  created_at: string;
+  expires_at: string;
+}
+
 export interface ProjectFile {
   id: string;
   project_id: string;
@@ -521,8 +535,55 @@ export class Db {
   /** Apaga o projeto e devolve as chaves no R2 dos arquivos dele (para apagar lá também). */
   async deleteProject(id: string): Promise<string[]> {
     const keys = (await this.d1.prepare("SELECT key FROM project_files WHERE project_id = ?").bind(id).all<{ key: string }>()).results.map((r) => r.key);
-    await this.d1.batch([this.d1.prepare("DELETE FROM project_files WHERE project_id = ?").bind(id), this.d1.prepare("DELETE FROM projects WHERE id = ?").bind(id)]);
+    await this.d1.batch([
+      this.d1.prepare("DELETE FROM exports WHERE project_id = ?").bind(id),
+      this.d1.prepare("DELETE FROM project_files WHERE project_id = ?").bind(id),
+      this.d1.prepare("DELETE FROM projects WHERE id = ?").bind(id),
+    ]);
     return keys;
+  }
+
+  async insertExport(e: Pick<ExportRow, "id" | "project_id" | "total" | "plan" | "expires_at">, now = new Date()): Promise<ExportRow> {
+    return (await this.d1
+      .prepare("INSERT INTO exports (id, project_id, total, plan, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING *")
+      .bind(e.id, e.project_id, e.total, e.plan, now.toISOString(), e.expires_at)
+      .first<ExportRow>())!;
+  }
+
+  async exportById(id: string): Promise<ExportRow | null> {
+    return this.d1.prepare("SELECT * FROM exports WHERE id = ?").bind(id).first<ExportRow>();
+  }
+
+  /** A última exportação do projeto, para a tela retomar ou mostrar ao abrir. */
+  async latestExport(projectId: string): Promise<ExportRow | null> {
+    return this.d1.prepare("SELECT * FROM exports WHERE project_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1").bind(projectId).first<ExportRow>();
+  }
+
+  /** Pega o próximo passo numa instrução só: dois pedidos juntos não fazem o mesmo trabalho. */
+  async claimExport(id: string, staleBefore: string, now = new Date()): Promise<ExportRow | null> {
+    return this.d1
+      .prepare("UPDATE exports SET claimed_at = ?, tries = tries + 1 WHERE id = ? AND status = 'running' AND (claimed_at IS NULL OR claimed_at < ?) RETURNING *")
+      .bind(now.toISOString(), id, staleBefore)
+      .first<ExportRow>();
+  }
+
+  async finishStep(id: string, step: number, status: string, plan: string): Promise<ExportRow | null> {
+    return this.d1
+      .prepare("UPDATE exports SET step = ?, status = ?, plan = ?, tries = 0, claimed_at = NULL WHERE id = ? RETURNING *")
+      .bind(step, status, plan, id)
+      .first<ExportRow>();
+  }
+
+  async failStep(id: string, status: string, error: string | null): Promise<ExportRow | null> {
+    return this.d1.prepare("UPDATE exports SET status = ?, error = ?, claimed_at = NULL WHERE id = ? RETURNING *").bind(status, error, id).first<ExportRow>();
+  }
+
+  async openExports(staleBefore: string): Promise<string[]> {
+    const rows = await this.d1
+      .prepare("SELECT id FROM exports WHERE status = 'running' AND (claimed_at IS NULL OR claimed_at < ?) ORDER BY created_at LIMIT 5")
+      .bind(staleBefore)
+      .all<{ id: string }>();
+    return rows.results.map((r) => r.id);
   }
 
   async insertProjectFile(f: Omit<ProjectFile, "created_at">, now = new Date()): Promise<void> {
@@ -599,6 +660,7 @@ export class Db {
   /** Só nos testes. */
   async resetAll(): Promise<void> {
     await this.d1.batch([
+      this.d1.prepare("DELETE FROM exports"),
       this.d1.prepare("DELETE FROM project_files"),
       this.d1.prepare("DELETE FROM projects"),
       this.d1.prepare("DELETE FROM videos"),

@@ -30,10 +30,21 @@
   // Contêiner que trata o áudio (src/audio.ts, container/). "basic": 1/4 de vCPU
   // e 1 GiB; um vídeo de 25 s leva uns 2 min. Uma instância basta (um vídeo por vez).
   "containers": [
-    { "class_name": "AudioFixer", "image": "./container/Dockerfile", "instance_type": "basic", "max_instances": 1 }
+    { "class_name": "AudioFixer", "image": "./container/Dockerfile", "instance_type": "basic", "max_instances": 1 },
+    // Contêiner que monta os vídeos dos projetos (src/exportar.ts, container/exportar.py):
+    // 2 vCPU e 8 GiB (medidos em docs/operacao.md), imagem própria e leve. Duas instâncias: uma exportação não trava a outra.
+    { "class_name": "Exporter", "image": "./container/Dockerfile.exportar", "instance_type": "standard-3", "max_instances": 2 }
   ],
-  "durable_objects": { "bindings": [{ "class_name": "AudioFixer", "name": "AUDIO" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AudioFixer"] }],
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "AudioFixer", "name": "AUDIO" },
+      { "class_name": "Exporter", "name": "EXPORTAR" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["AudioFixer"] },
+    { "tag": "v2", "new_sqlite_classes": ["Exporter"] }
+  ],
   "vars": {
     // Endereço público do Worker (sem barra no fim): o OpenRouter manda o aviso
     // para SITE_URL/openrouter/webhook e baixa a foto do avatar de SITE_URL/midia/...

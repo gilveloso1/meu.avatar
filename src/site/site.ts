@@ -27,6 +27,8 @@ import { canUse, type Defaults, estimate, type Field, type Option, prices, type 
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
+import { MAX_EXPORTAR } from "../canvas/modelo.js";
+import { type ExportPlan, type Exports, fileName } from "../exportar";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
 
@@ -82,6 +84,7 @@ export class Site {
     private readonly db: Db,
     private readonly media: R2Bucket,
     private readonly studio: Studio,
+    private readonly exports: Exports,
     private readonly accounts: Accounts,
     private readonly config: SiteConfig,
   ) {}
@@ -488,11 +491,14 @@ ${error ? snackbar(error) : ""}`;
       const project = await this.db.insertProject({ id: crypto.randomUUID(), user_id: user.id, name: "Projeto sem nome", data: EMPTY_PROJECT });
       return redirect(`/canvas/${project.id}`);
     }
-    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|arquivos|apagar)(?:\/([0-9a-f-]{36}))?)?$/.exec(path);
+    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|arquivos|apagar|exportar|exportacoes)(?:\/([0-9a-f-]{36})(?:\/(\d+\.mp4|todas\.zip))?)?)?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     // Projeto de outra pessoa (ou que não existe): a página nem existe.
     if (!m || !project || project.user_id !== user.id) return new Response("não encontrado", { status: 404 });
-    const [, , action, fileId] = m;
+    const [, , action, fileId, download] = m;
+    if (action === "exportar" && post && !fileId) return this.startExport(request, user, project);
+    if (action === "exportacoes" && fileId) return this.exportRoute(request, project, fileId, download);
+    if (download) return new Response("não encontrado", { status: 404 });
     if (!action && !post && path.startsWith("/canvas/")) return this.canvasPage(user, project);
     if (action === "salvar" && post) return this.saveProject(request, project);
     if (action === "arquivos" && post && !fileId) return this.uploadProjectFile(request, project);
@@ -571,9 +577,11 @@ ${error ? snackbar(error) : ""}`;
     try {
       data = JSON.parse(project.data);
     } catch {}
+    const latest = await this.db.latestExport(project.id);
     const config = {
       videos,
-      projeto: { id: project.id, name: project.name, data, salvar: `/projetos/${project.id}/salvar`, arquivos: `/projetos/${project.id}/arquivos` },
+      projeto: { id: project.id, name: project.name, data, salvar: `/projetos/${project.id}/salvar`, arquivos: `/projetos/${project.id}/arquivos`, exportar: `/projetos/${project.id}/exportar` },
+      exportacao: latest ? this.exports.state(project, latest) : null,
       limites: { imagem: MAX_IMAGE_BYTES, video: MAX_VIDEO_BYTES },
       erros: {
         arquivo: ERROS.canvasArquivo,
@@ -583,6 +591,8 @@ ${error ? snackbar(error) : ""}`;
         grandeImagem: ERROS.canvasArquivoGrande(MAX_IMAGE_BYTES / 1024 / 1024),
         grandeVideo: ERROS.canvasArquivoGrande(MAX_VIDEO_BYTES / 1024 / 1024),
         nome: ERROS.projetoNome,
+        exportar: ERROS.exportarFalhou,
+        exportarLimite: ERROS.exportarLimite(MAX_EXPORTAR),
       },
     };
     const actions = `<button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
@@ -594,6 +604,43 @@ ${CANVAS_BODY}
 <script type="application/json" id="canvas-config">${JSON.stringify(config).replace(/</g, "\\u003c")}</script>
 <script type="module" nonce="${NONCE}">${CANVAS_SCRIPT}</script>`;
     return html(page(`${project.name} · ${SITE_NAME}`, body, { bar: { user, back: "/projetos", title: project.name, actions } }), 200, CANVAS_CSP);
+  }
+
+  /** "Exportar": começa a partir do projeto salvo; a tela chama os passos e acompanha. */
+  private async startExport(request: Request, user: User, project: Project): Promise<Response> {
+    let body: { final?: unknown; versoes?: unknown };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return new Response("json inválido", { status: 400 });
+    }
+    const pick = Array.isArray(body.versoes) && body.versoes.every((v) => Number.isInteger(v)) ? (body.versoes as number[]) : undefined;
+    try {
+      const row = await this.exports.start(project, user.role, typeof body.final === "string" ? body.final : "", pick);
+      return Response.json(this.exports.state(project, row), { status: 201 });
+    } catch (err) {
+      if (err instanceof InputError) return new Response(err.message, { status: 400 });
+      throw err;
+    }
+  }
+
+  /** POST faz o próximo passo e GET só lê; os arquivos prontos ficam até expirar. */
+  private async exportRoute(request: Request, project: Project, id: string, download: string | undefined): Promise<Response> {
+    const row = await this.db.exportById(id);
+    if (!row || row.project_id !== project.id) return new Response("não encontrado", { status: 404 });
+    if (request.method === "POST" && !download) {
+      const now = await this.exports.advance(id);
+      return Response.json(this.exports.state(project, now ?? row));
+    }
+    if (request.method !== "GET") return new Response("não encontrado", { status: 404 });
+    if (!download) return Response.json(this.exports.state(project, row));
+    if (row.status !== "done") return new Response("não encontrado", { status: 404 });
+    if (row.expires_at <= new Date().toISOString()) return new Response(ERROS.exportarExpirou, { status: 410 });
+    const plan = JSON.parse(row.plan) as ExportPlan;
+    if (download === "todas.zip") return this.exports.zip(plan);
+    const index = parseInt(download, 10);
+    const version = plan.versoes[index];
+    return version ? this.object(request, version.chave, "private, no-store", fileName(index, version.nome)) : new Response("não encontrado", { status: 404 });
   }
 
   /** Salva o canvas (JSON) e o nome, enquanto a pessoa edita. */

@@ -754,8 +754,9 @@ a.frame { display: block; }
 .segmented-field__help { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
 .quick-edit__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
-/* --- Indicador de progresso linear (indeterminado), M3 Expressive: 4 px, pontas arredondadas e
-   4 px de folga entre o indicador e a trilha. ------------------------------------------------------ */
+/* --- Indicador de progresso linear, M3 Expressive: 4 px, pontas arredondadas e 4 px de folga entre
+   o indicador e a trilha. Indeterminado por padrão; com --determinate e --progress (0 a 1), mostra
+   o andamento e o ponto de parada no fim da trilha. É o indicador padrão do site. ------------------ */
 .linear-progress { --progress-gap: var(--md-sys-color-surface); position: relative; height: 4px; overflow: hidden; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-secondary-container); }
 /* A folga é uma borda na cor do fundo em volta do indicador. */
 .linear-progress::before {
@@ -764,6 +765,8 @@ a.frame { display: block; }
   box-shadow: 0 0 0 4px var(--progress-gap);
   animation: linear-progress 1.8s var(--md-sys-motion-easing-standard) infinite;
 }
+.linear-progress--determinate::before { width: calc(var(--progress, 0) * 100%); min-width: 4px; animation: none; transition: width var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard); }
+.linear-progress--determinate::after { content: ""; position: absolute; top: 0; right: 0; width: 4px; height: 4px; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); }
 @keyframes linear-progress { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 
 /* --- Snackbar ------------------------------------------------------------------------ */

@@ -297,6 +297,64 @@ Teste local da imagem (25/10/2026), com os limites do tipo "basic"
 87 s; resultado igual ao E2 aprovado (correlação 1,000), −13,9 LUFS, sem
 picos cortados e o vídeo idêntico byte a byte ao original.
 
+## Exportação dos projetos
+
+O contêiner `Exporter` (`container/Dockerfile.exportar`, `standard-3`) é separado do
+de áudio: imagem só com ffmpeg, dorme 30 s depois do último pedido. Regras do R2
+(uma vez só, para os arquivos não se acumularem; versões em `exportacoes/versoes/`):
+
+```bash
+npx wrangler r2 bucket lifecycle add meu-avatar trechos-30d trechos/ --expire-days 30 < /dev/null
+```
+
+```bash
+npx wrangler r2 bucket lifecycle add meu-avatar exportacoes-2d exportacoes/ --expire-days 2 < /dev/null
+```
+
+Teste sem o contêiner (precisa de ffmpeg): `python3 container/exportar.py trecho
+plano.json saida.mkv arquivo...` e `python3 container/exportar.py emendar saida.mp4
+trecho.mkv...`.
+
+Medido no Mac (31/10/2026), sem o contêiner: 50 versões de 16 s em 1080p, com vídeo
+real (5 ganchos × corpo × 10 CTAs, 55 s de conteúdo único): 37 s com 4 threads na
+codificação (14 s nos trechos, 23 s nas emendas, 0,5 s cada), 56 MB de trechos, 16 MB por
+versão, ZIP de 798 MB.
+
+Medido na imagem real (31/10/2026, ambiente cloud, Docker 29, máquina de 4 núcleos):
+imagem de 434 MB no disco (118 MB comprimida), `GET /saude` responde 0,3 a 0,5 s depois
+do `docker run` (imagem já baixada; a Cloudflare soma o download dela na partida fria).
+`docker run --cpus N --memory M --network none`, pedidos pelo HTTP de verdade (`POST
+/trecho` e `POST /emendar`, com `x-tamanhos`) por um script Python dentro do contêiner.
+Mesmo teste do Mac: 5 ganchos de 3 s × corpo de 10 s × 10 CTAs de 3 s = 16 trechos e 50
+versões de 16 s em 1080×1920; o corpo tem imagem, cobertura de vídeo e música. Duas
+fontes de 25 s, 720×1280, 25 fps, H.264 e AAC, feitas com ffmpeg (`testsrc2` com ruído):
+
+- **leve**, 4 Mbit/s, ruído de 4 (perto de um vídeo do avatar): trechos somam 49 MB,
+  14 MB por versão, 676 MB enviados nas emendas e 682 MB de versões (o ZIP);
+- **pesada**, 82 Mbit/s, ruído de 20 (o pior caso): trechos de 35 MB a cada 3 s (632 MB),
+  168 MB por versão, 8,4 GB enviados nas emendas e 8,4 GB de versões.
+
+| Instância | Fonte | Trechos | Emendas (média / máx.) | Total | Custo | Com os 30 s parado |
+|---|---|---|---|---|---|---|
+| `standard-4` (4 vCPU, 12 GiB, 20 GB) | leve | 17,9 s | 16,4 s (0,33 / 0,38 s) | 34 s | US$ 0,0038 | US$ 0,0072 |
+| `standard-3` (2 vCPU, 8 GiB, 16 GB) | leve | 28,4 s | 16,6 s (0,33 / 0,36 s) | 45 s | US$ 0,0027 | US$ 0,0046 |
+| `standard-2` (1 vCPU, 6 GiB, 12 GB) | leve | 59,4 s | 21,4 s (0,43 / 0,50 s) | 81 s | US$ 0,0029 | US$ 0,0040 |
+| `standard-4` | pesada | 53,5 s | 62,3 s (1,24 / 1,29 s) | 116 s | US$ 0,0129 | US$ 0,0162 |
+| `standard-3` | pesada | 98,6 s | 62,6 s (1,25 / 1,32 s) | 161 s | US$ 0,0099 | US$ 0,0117 |
+| `standard-2` | pesada | 199,4 s | 79,9 s (1,59 / 1,75 s) | 279 s | US$ 0,0100 | US$ 0,0111 |
+
+Custo pelo tempo total com a instância inteira cobrada: US$ 0,000020 por vCPU-s,
+US$ 0,0000025 por GiB-s e US$ 0,00000007 por GB-s de disco. Memória: pico de 430 a
+460 MiB (leve) e 800 a 830 MiB (pesada) no `docker stats`; com o cache de arquivos, que
+o kernel devolve quando falta, 0,5 GB e 1,5 GB. Nenhuma instância chegou perto do limite.
+Em todas as rodadas, as 50 emendas com `x-crc32` igual ao CRC-32 do arquivo e, em 3
+versões por rodada, 480 quadros, vídeo e som com 16,000 s e decodificação até o fim sem
+erro. O tempo dos trechos acompanha os núcleos; o das emendas quase não (é cópia e AAC).
+
+Escolhido: `standard-3`. Custa cerca de 30% menos que o `standard-4` e leva 11 s a
+mais nas 50 versões (45 s contra 34 s); 8 GiB sobram. O `standard-2` custa quase o mesmo
+que o `standard-3` e demora quase o dobro.
+
 ## Primeira publicação
 
 ```bash

@@ -40,7 +40,8 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
   script de verdade, em módulos sem biblioteca em `src/canvas/` (tela, modelo,
   prévia). `npm run canvas` junta tudo em `src/site/canvas.ts` (gerado; não edite
   à mão) e `npm run teste:canvas` roda os testes do modelo. Como funciona e o que
-  foi decidido: [docs/canvas.md](docs/canvas.md).
+  foi decidido: [docs/canvas.md](docs/canvas.md). A exportação dos projetos fica em
+  `src/exportar.ts` e `container/exportar.py`.
 
 ## Reaproveitar componentes
 
@@ -113,6 +114,11 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
   - Diálogo básico: cantos de 28 px, 24 px de margem, de 280 a 560 px.
   - Indicador de progresso linear: 4 px, pontas arredondadas, folga entre o
     indicador e a trilha.
+  - Indicador de progresso: o padrão do site para qualquer espera, `.linear-progress`
+    (primary sobre secondary-container, 4 px, 4 px de folga). Indeterminado até haver
+    andamento; com `--determinate` e `--progress` (0 a 1), mostra o andamento e o ponto de
+    parada. Toda ação demorada mostra retorno no clique, antes da resposta do servidor.
+    Hoje só a exportação usa o determinado; as outras esperas migram num PR próprio.
   - Snackbar: inverse-surface, inverse-on-surface e ação em inverse-primary.
 
 ## Telas aprovadas (out/2026)

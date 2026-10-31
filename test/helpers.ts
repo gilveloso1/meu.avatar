@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { handle } from "../src/index";
 import type { AudioApi, ContainerPlan, Face } from "../src/audio";
+import type { ExportApi } from "../src/exportar";
 import { randomToken, sha256 } from "../src/auth";
 import type { CloneStatus, HeyGenApi, HeyGenVideo, HeyGenVideoRequest, HeyGenVoice } from "../src/heygen";
 import type { ChatRequest, ChatResult, VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
@@ -189,6 +190,25 @@ export function sessionPair(res: Response): string {
   return res.headers.get("set-cookie")!.split(";")[0]!;
 }
 
+/** Contêiner de exportação de mentira: guarda o que recebeu e devolve bytes conhecidos, ou falha. */
+export class FakeExportApi implements ExportApi {
+  segments: { sizes: number[]; plan: string }[] = [];
+  joins: number[][] = [];
+  fail: string | null = null;
+  async segment(_job: string, body: ReadableStream, sizes: number[]) {
+    const bytes = new Uint8Array(await new Response(body).arrayBuffer());
+    if (this.fail) throw new Error(this.fail);
+    this.segments.push({ sizes, plan: new TextDecoder().decode(bytes.slice(0, sizes[0])) });
+    return new Response(new TextEncoder().encode(`trecho${this.segments.length}`), { headers: { "content-length": "7" } });
+  }
+  async join(_job: string, body: ReadableStream, sizes: number[]) {
+    await new Response(body).arrayBuffer();
+    if (this.fail) throw new Error(this.fail);
+    this.joins.push(sizes);
+    return new Response(new TextEncoder().encode("mp4ok"), { headers: { "content-length": "5", "x-crc32": "123" } });
+  }
+}
+
 /** Contêiner de áudio de mentira: devolve o MP4 com um sufixo, ou falha. */
 export class FakeAudioApi implements AudioApi {
   calls = 0;
@@ -324,8 +344,8 @@ export class FakeHeyGenApi implements HeyGenApi {
   }
 }
 
-export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null): Promise<Response> {
-  return handle(request, { ...env, SITE_URL: SITE }, { api, audio, heygen });
+export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null, exporter: ExportApi | null = null): Promise<Response> {
+  return handle(request, { ...env, SITE_URL: SITE }, { api, audio, heygen, exporter });
 }
 
 export function form(fields: Record<string, string | File>): FormData {

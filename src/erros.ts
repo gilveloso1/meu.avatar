@@ -112,6 +112,12 @@ export const ERROS = {
   canvasEnviar: erro("Não foi possível enviar o arquivo.", "Tente de novo em instantes."),
   canvasArquivoGrande: (max: number) => erro("Este arquivo é grande demais.", `Use um arquivo de até ${max} MB.`),
   projetoNome: campo("Escreva o nome do projeto."),
+  exportarSemVersao: erro("Este Final ainda não tem versões.", "Ligue um grupo ao Final."),
+  exportarLimite: (max: number) => erro(`Este Final passa de ${max} versões.`, "Exporte uma por vez ou tire ligações."),
+  exportarArquivo: erro("Um arquivo do projeto não está disponível.", "Troque o bloco e exporte de novo."),
+  exportarFalhou: erro("Não foi possível exportar os vídeos.", "Toque em Exportar para tentar de novo."),
+  exportarIndisponivel: erro("Exportação indisponível agora.", "Tente mais tarde."),
+  exportarExpirou: erro("Este vídeo não está mais disponível.", "Toque em Exportar para gerar de novo."),
 
   // Avatares
   avatarNome: campo("Escreva o nome do avatar."),

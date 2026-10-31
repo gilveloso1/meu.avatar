@@ -1,6 +1,7 @@
 import { type AudioApi, ContainerAudio } from "./audio";
 import { Accounts } from "./auth";
 import { Db } from "./db";
+import { ContainerExport, type ExportApi, Exports } from "./exportar";
 import { HeyGenClient, type HeyGenApi } from "./heygen";
 import type { Env } from "./env";
 import { OpenRouterVideo, verifySignature, type VideoApi } from "./openrouter";
@@ -8,11 +9,18 @@ import { Site } from "./site/site";
 import { Studio } from "./studio";
 
 export { AudioFixer } from "./audio";
+export { Exporter } from "./exportar";
 
 export interface Deps {
   api?: VideoApi | null;
   audio?: AudioApi | null;
   heygen?: HeyGenApi | null;
+  exporter?: ExportApi | null;
+}
+
+export function createExports(env: Env, deps: Deps = {}): Exports {
+  const api = deps.exporter !== undefined ? deps.exporter : env.EXPORTAR ? new ContainerExport(env.EXPORTAR) : null;
+  return new Exports(new Db(env.DB), env.MIDIA, api);
 }
 
 export function createStudio(env: Env, deps: Deps = {}): Studio {
@@ -26,8 +34,8 @@ export function createAccounts(env: Env): Accounts {
   return new Accounts(new Db(env.DB), Number(env.BCRYPT_COST) || 12);
 }
 
-export function createSite(env: Env, studio: Studio): Site {
-  return new Site(new Db(env.DB), env.MIDIA, studio, createAccounts(env), {
+export function createSite(env: Env, studio: Studio, exports: Exports = createExports(env)): Site {
+  return new Site(new Db(env.DB), env.MIDIA, studio, exports, createAccounts(env), {
     defaults: {
       duration: Number(env.VIDEO_DURATION),
       resolution: env.VIDEO_RESOLUTION,
@@ -91,7 +99,7 @@ export async function handle(request: Request, env: Env, deps: Deps = {}): Promi
     return new Response("ok");
   }
 
-  return createSite(env, studio).handle(request);
+  return createSite(env, studio, createExports(env, deps)).handle(request);
 }
 
 export default {
@@ -110,5 +118,7 @@ export default {
     await studio.editNext();
     // E acha o rosto de um vídeo pronto, para a miniatura das listas enquadrar.
     await studio.findNextFace();
+    // A exportação anda pela tela; o que ela deixou pela metade termina aqui.
+    await createExports(env).next();
   },
 } satisfies ExportedHandler<Env>;
