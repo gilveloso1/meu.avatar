@@ -204,7 +204,7 @@ export interface AvatarAsset {
   size: number;
   /** O vídeo que gerou o ativo: com ele, não há arquivo próprio; vazio, o arquivo é do avatar. */
   source_video: string | null;
-  /** Onde está o rosto, nas imagens: o mesmo JSON de videos.face. */
+  /** Onde está o rosto, em imagens e vídeos: o mesmo JSON de videos.face. */
   face: string | null;
   created_at: string;
 }
@@ -276,9 +276,9 @@ export class Db {
       .first<Video>();
   }
 
-  /** Uma imagem de avatar que ainda não teve o rosto procurado. */
+  /** Uma imagem ou um vídeo de avatar que ainda não teve o rosto procurado. */
   async nextAssetWithoutFace(): Promise<AvatarAsset | null> {
-    return this.d1.prepare("SELECT * FROM avatar_assets WHERE kind = 'imagem' AND face IS NULL ORDER BY created_at DESC LIMIT 1").first<AvatarAsset>();
+    return this.d1.prepare("SELECT * FROM avatar_assets WHERE kind IN ('imagem', 'video') AND face IS NULL ORDER BY created_at DESC LIMIT 1").first<AvatarAsset>();
   }
 
   async updateAssetFace(id: string, face: string): Promise<void> {

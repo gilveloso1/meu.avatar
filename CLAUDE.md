@@ -140,8 +140,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   data" (desligado por padrão). Tudo no navegador, sem recarregar, e guardado
   no `localStorage` por lista (`lista-<modelo>`, `lista-videos`). Miniatura só
   baixa quando aparece na tela e enquadra o rosto (`videos.face`, achado pelo
-  agendamento, um vídeo por minuto; sem rosto, o terço de cima). Imagem de avatar segue o
-  mesmo enquadramento (`faceImage`, `avatar_assets.face`). Com mouse, o
+  agendamento, um vídeo por minuto; sem rosto, o terço de cima). Imagens e vídeos dos
+  avatares seguem o mesmo enquadramento (`avatar_assets.face`). Com mouse, o
   vídeo aproxima de leve (1,06, 300 ms) dentro do card. No Safari, o recorte do
   vídeo fica preso às bordas do card (`inset: 0`), não em `height: 100%`. A busca pela fala de `/videos` fica no servidor.
 - Página do vídeo (`/video/<id>`, aberta por qualquer lista; `?de=` diz para

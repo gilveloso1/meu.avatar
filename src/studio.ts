@@ -707,7 +707,7 @@ export class Studio {
     return this.db.updateVideo(video.id, { face: await this.detectFace((video.processed_key ?? video.video_key)!) });
   }
 
-  /** Agendamento: acha o rosto de uma imagem de avatar, para a miniatura enquadrar como a dos vídeos. */
+  /** Agendamento: acha o rosto de um ativo de avatar, para a miniatura enquadrar como a dos vídeos. */
   async findNextAssetFace(): Promise<void> {
     if (!this.audio) return;
     const asset = await this.db.nextAssetWithoutFace();
