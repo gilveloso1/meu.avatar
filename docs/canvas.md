@@ -93,7 +93,8 @@ menos custo.
   depois de pausar e sai ao clicar fora do Final. As setas ← e → passam de uma para
   outra, com o Final escolhido. O botão direito no card abre o menu para baixar
   a variação do clique (fora de uma, a escolhida) ou todas, pela mesma exportação; ele não
-  toca nem muda a escolhida. Cada Final tem até 48 variações, o mesmo limite de uma
+  toca nem muda a escolhida. Com um bloco, grupo ou linha selecionado, as
+  variações em que ele entra ganham um destaque suave no card. Cada Final tem até 48 variações, o mesmo limite de uma
   exportação: a ligação que passaria disso é recusada, com um aviso. Projeto antigo com
   mais ligações mostra as 48 primeiras e o aviso no card.
   Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
@@ -124,7 +125,9 @@ menos custo.
 - **Do computador**: o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
   `project_files`), com os limites do site (imagem 10 MB, vídeo e áudio 50 MB), e o
   bloco usa o endereço de lá; não some ao recarregar.
-- **Vídeo exportado**: nos Ajustes do Final, os mesmos campos dos modelos:
+- **Ajustes do Final**: um card com Variações e Duração, depois Vídeo exportado,
+  a última exportação e, presos embaixo, Baixar a variação escolhida e Baixar todas (os
+  mesmos nomes do menu). **Vídeo exportado**: os mesmos campos dos modelos:
   Resolução (480p, 720p, 1080p, em botões conectados) e Formato (9:16, 16:9, 1:1,
   4:3, 3:4, no campo de seleção do site, com a explicação e o tamanho em pixels
   embaixo). O lado menor é o da resolução (720p em 16:9 = 1280 × 720). O quadro da

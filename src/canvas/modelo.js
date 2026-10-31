@@ -163,6 +163,13 @@ export function versions(project, finalId, gs = groups(project), max = MAX_VERSO
   return res;
 }
 
+/** Se a variação passa por esta linha (de M.links) até o Final. */
+export function linkOn(l, version, finalId) {
+  const pos = version.indexOf(l.from);
+  if (pos < 0) return false;
+  return pos === version.length - 1 ? l.to === finalId : version[pos + 1] === l.to;
+}
+
 /** Se as linhas que chegam a este Final dão mais variações do que ele tem. */
 export const overLimit = (project, finalId, gs) => versions(project, finalId, gs, MAX_VERSOES + 1).length > MAX_VERSOES;
 

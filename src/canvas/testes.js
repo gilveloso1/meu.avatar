@@ -161,3 +161,16 @@ test("a ligação que passa de 48 variações é recusada; as outras, não", () 
   assert.equal(M.passesLimit(com(ganchos.slice(0, 49)), com(ganchos.slice(0, 50))), true);
   assert.equal(M.passesLimit(com(ganchos.slice(0, 49)), com(ganchos.slice(0, 49))), false);
 });
+
+test("a linha está na variação que passa por ela até o Final", () => {
+  const p = M.sample((f) => f);
+  const gs = M.groups(p);
+  const vs = M.versions(p, "final", gs);
+  const ls = M.links(p, gs);
+  for (const v of vs) {
+    const nas = ls.filter((l) => M.linkOn(l, v, "final"));
+    assert.equal(nas.length, v.length);
+  }
+  const fim = ls.find((l) => l.to === "final");
+  assert.equal(vs.filter((v) => M.linkOn(fim, v, "final")).length, vs.filter((v) => v.at(-1) === fim.from).length);
+});
