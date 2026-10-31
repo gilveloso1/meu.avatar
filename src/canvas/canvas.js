@@ -272,8 +272,6 @@ function groupAt(pt) {
   });
 }
 const groupBottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AUD_H));
-// As portas ficam um pouco fora do grupo, para não cobrir as alças de corte.
-const PORT_OUT = 14;
 const blockEls = new Map();
 
 /* ---------- onda do som: a leve no bloco, a nítida só no que está à vista com zoom alto ---------- */
@@ -436,7 +434,7 @@ function render({ side = true } = {}) {
   let svg = "";
   for (const l of M.links(project, gs)) {
     const f = typeof l.to === "string" ? project.finals.find((f) => f.id === l.to) : null;
-    const d = curve(outPoint(l.from), f ? finalPoint(f) : inPoint(l.to));
+    const d = M.wirePath(outPoint(l.from), f ? finalPoint(f) : inPoint(l.to));
     const on = sel.type === "edge" && sel.id === l.edge.id;
     const onPath = path && M.linkOn(l, path, litFinal);
     svg += `<path class="wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
@@ -479,14 +477,7 @@ function variantList(vs, active, part) {
   return `<div class="fin__body">${now}<div class="fin__list fin__list--${style}" style="--rows:${rows}">${vs.map(item).join("")}</div></div>`;
 }
 
-const outPoint = (g) => ({ x: g.x + g.w + PORT_OUT, y: g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) / 2 });
-const inPoint = (g) => ({ x: g.x - PORT_OUT, y: g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) / 2 });
-const finalPoint = (f) => ({ x: f.x, y: f.y + 40 });
-
-const curve = (a, b) => {
-  const k = Math.max(40, Math.abs(b.x - a.x) / 2);
-  return `M${a.x},${a.y} C${a.x + k},${a.y} ${b.x - k},${b.y} ${b.x},${b.y}`;
-};
+const { PORT_OUT, outPoint, inPoint, finalPoint, curve } = M;
 
 /* ---------- painel ---------- */
 

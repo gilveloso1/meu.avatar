@@ -33,7 +33,10 @@ export const MAX_FAIXAS = 8;
 // Organizar: a área do grupo (20 px em volta) e a aba dele (40 px) cabem nas folgas; o Final, na dele.
 const COL_GAP = 140;
 const ROW_GAP = 110;
-const FINAL_GAP = 340;
+const FINAL_HEAD = 92;
+const FINAL_ROW = 38;
+const LANE_ABOVE = 70;
+const LANE_BELOW = 30;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
 /** Quantas variações cada bloco final tem; é também o que uma exportação monta de uma vez. */
@@ -333,9 +336,28 @@ export function moveGroup(project, groupId, dx, dy) {
   return p;
 }
 
+/* Linhas: reta na altura de saída e a curva só no último trecho, para não cortar as colunas do meio. */
+export const PORT_OUT = 14;
+const WIRE_BEND = 110;
+const portY = (g) => g.y + (g.soloAudio ? AUD_H : VIS_H) / 2;
+export const outPoint = (g) => ({ x: g.x + g.w + PORT_OUT, y: portY(g) });
+export const inPoint = (g) => ({ x: g.x - PORT_OUT, y: portY(g) });
+export const finalPoint = (f) => ({ x: f.x, y: f.y + 40 });
+export function curve(a, b) {
+  const k = Math.max(40, Math.abs(b.x - a.x) / 2);
+  return `M${a.x},${a.y} C${a.x + k},${a.y} ${b.x - k},${b.y} ${b.x},${b.y}`;
+}
+export function wirePath(a, b) {
+  if (b.x - a.x <= WIRE_BEND) return curve(a, b);
+  const x = b.x - WIRE_BEND;
+  return `M${a.x},${a.y} L${x},${a.y} C${x + WIRE_BEND / 2},${a.y} ${b.x - WIRE_BEND / 2},${b.y} ${b.x},${b.y}`;
+}
+
 /**
- * Organiza o canvas: cada grupo numa coluna, depois de tudo o que vem antes dele,
- * perto dos que ligam a ele, e cada Final à direita, na altura do que chega a ele.
+ * Organiza o canvas para nenhuma linha passar sobre um elemento. Cada grupo fica numa coluna,
+ * depois de tudo o que vem antes dele, e os Finais na última. Coluna a coluna, cada elemento
+ * tenta ter o conector na altura do que chega a ele (com uma ligação longa, a dela, para ela
+ * seguir reta). As ligações que atravessam uma coluna reservam a altura delas nessa coluna.
  */
 export function arrange(project) {
   const p = clone(project);
@@ -346,34 +368,71 @@ export function arrange(project) {
   const column = new Map(gs.map((g) => [g, 0]));
   for (let pass = 0; pass < gs.length; pass++)
     for (const l of ls) if (typeof l.to !== "string") column.set(l.to, Math.max(column.get(l.to), Math.min(column.get(l.from) + 1, gs.length)));
+  const lastCol = Math.max(...column.values()) + 1;
+  const col = (node) => (typeof node === "string" ? lastCol : column.get(node));
+  const finalH = (f) => FINAL_HEAD + variantShape(versions(p, f.id, gs).length).rows * FINAL_ROW;
   const top = (g) => Math.min(g.y, ...g.covers.map((c) => c.y));
   const bottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
-  const center = new Map();
-  const fedAt = (node) => {
-    const ys = ls.filter((l) => l.to === node).map((l) => center.get(l.from)).filter((y) => y !== undefined);
-    return ys.length ? ys.reduce((a, b) => a + b) / ys.length : null;
+  // Altura do elemento e do conector dentro dele; o Final entra pelo id, como nas ligações.
+  const size = (n) => (typeof n === "string" ? { h: finalH(p.finals.find((f) => f.id === n)), port: 40 } : { h: bottom(n) - top(n), port: portY(n) - top(n) });
+
+  const port = new Map();
+  const tops = new Map();
+  const wanted = (node) => {
+    const seen = ls.filter((l) => l.to === node && port.has(l.from));
+    const long = seen.filter((l) => col(l.to) - col(l.from) > 1).sort((a, b) => col(a.from) - col(b.from))[0];
+    const ys = seen.map((l) => port.get(l.from)).sort((a, b) => a - b);
+    const middle = ys[(ys.length - 1) >> 1];
+    // As alturas que servem, da melhor para a pior.
+    return [...new Set([...(long ? [port.get(long.from)] : []), ...(ys.length ? [middle] : []), ...ys])];
   };
-  let x = 0;
-  for (const c of [...new Set(column.values())].sort((a, b) => a - b)) {
-    const col = gs.filter((g) => column.get(g) === c).map((g) => ({ g, order: fedAt(g) ?? g.y }));
-    col.sort((a, b) => a.order - b.order);
-    const height = col.reduce((h, { g }) => h + bottom(g) - top(g), ROW_GAP * (col.length - 1));
-    let y = -height / 2;
-    for (const { g } of col) {
-      const dx = x - g.x;
-      const dy = y - top(g);
-      for (const b of [...g.blocks, ...g.covers, ...g.audios]) (b.x += dx), (b.y += dy);
-      center.set(g, y + (bottom(g) - top(g)) / 2);
-      y += bottom(g) - top(g) + ROW_GAP;
+  const place = (first) => {
+    port.clear();
+    tops.clear();
+    for (let c = 0; c <= lastCol; c++) {
+      const lanes = ls.filter((l) => col(l.from) < c && c < col(l.to)).map((l) => port.get(l.from));
+      const nodes = c === lastCol ? p.finals.map((f) => f.id) : c ? gs.filter((g) => column.get(g) === c) : first;
+      const items = nodes.map((n) => ({ n, wants: wanted(n) }));
+      if (c) items.sort((a, b) => (a.wants[0] ?? Infinity) - (b.wants[0] ?? Infinity));
+      let free = -Infinity;
+      for (const { n, wants } of items) {
+        const { h, port: offset } = size(n);
+        // A faixa não passa pelo elemento, contando a área e a aba do grupo.
+        const lane = (y) => lanes.find((l) => l >= y - LANE_ABOVE && l <= y + h + LANE_BELOW);
+        let y = wants.map((w) => w - offset).find((w) => w >= free && lane(w) === undefined);
+        if (y === undefined) {
+          y = Math.max(wants.length ? wants[0] - offset : free === -Infinity ? 0 : free, free);
+          for (let l = lane(y); l !== undefined; l = lane(y)) y = l + LANE_ABOVE + 1;
+        }
+        tops.set(n, y);
+        port.set(n, y + offset);
+        free = y + h + ROW_GAP;
+      }
     }
-    x += Math.max(...col.map(({ g }) => g.w)) + COL_GAP;
+  };
+  const sources = gs.filter((g) => column.get(g) === 0).sort((a, b) => a.y - b.y || (a.id < b.id ? -1 : 1));
+  place(sources);
+  // A primeira coluna segue a ordem do que vem depois: cruza menos.
+  const after = (g) => {
+    const ys = ls.filter((l) => l.from === g).map((l) => port.get(l.to));
+    return ys.length ? ys.reduce((a, b) => a + b) / ys.length : Infinity;
+  };
+  place([...sources].sort((a, b) => after(a) - after(b)));
+
+  const widths = new Map();
+  for (const g of gs) widths.set(column.get(g), Math.max(widths.get(column.get(g)) ?? 0, g.w));
+  const xs = new Map();
+  let x = 0;
+  for (let c = 0; c < lastCol; c++) {
+    xs.set(c, x);
+    if (widths.has(c)) x += widths.get(c) + COL_GAP;
   }
-  let free = -Infinity;
-  for (const f of p.finals) {
-    f.x = x;
-    f.y = Math.max(free, (fedAt(f.id) ?? 0) - 40);
-    free = f.y + FINAL_GAP;
+  for (const g of gs) {
+    const dx = xs.get(column.get(g)) - g.x;
+    const dy = tops.get(g) - top(g);
+    for (const b of [...g.blocks, ...g.covers, ...g.audios]) (b.x += dx), (b.y += dy);
   }
+  for (const f of p.finals) (f.x = x), (f.y = tops.get(f.id));
   return p;
 }
 

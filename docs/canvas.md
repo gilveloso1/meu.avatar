@@ -107,8 +107,12 @@ menos custo.
 - **Barra de baixo**: desfazer, refazer, zoom, Organizar, Ver tudo e Info, em 48 px. A Info
   abre um tooltip rico do M3 com os gestos, que ficam fora do canvas. A roda do
   mouse com Ctrl dá cerca de 23% por giro, e o zoom anda até lá em alguns quadros.
-- **Organizar**: cada grupo numa coluna, depois de tudo o que vem antes dele e perto dos
-  que ligam a ele; cada Final à direita, na altura do que chega a ele. Desfazer volta tudo.
+- **Organizar**: cada grupo numa coluna, depois de tudo o que vem antes dele, e os Finais na
+  última. Cada elemento tenta ter o conector na altura do que chega a ele; com uma ligação
+  longa, na altura dela. Quem atravessa uma coluna reserva a altura ali, e ninguém fica em
+  cima. O teste confere, em vários formatos de projeto, que nenhuma linha passa sobre um
+  elemento. Desfazer volta tudo.
+- **Linhas**: seguem retas na altura da saída e fazem a curva nos últimos 110 px.
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).
   O zoom vai até 800%. "Ver tudo" volta. Com zoom, sombras, contornos, linhas, a linha

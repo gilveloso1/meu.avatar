@@ -188,6 +188,86 @@ test("organizar põe cada grupo depois do que vem antes, sem mudar as variaçõe
   assert.notEqual(p.blocks[0], o.blocks[0]);
 });
 
+/** Pontos de uma linha desenhada, tirados do próprio caminho (M, L opcional e C). */
+function wirePoints(d) {
+  const n = d.match(/-?[\d.]+/g).map(Number);
+  const out = [];
+  const line = n.length === 10;
+  const [x0, y0] = n;
+  const c = line ? n.slice(2) : n.slice(0, 2).concat(n.slice(2));
+  if (line) for (let i = 0; i <= 200; i++) out.push([x0 + ((n[2] - x0) * i) / 200, y0 + ((n[3] - y0) * i) / 200]);
+  const [ax, ay, bx, by, cx, cy, dx, dy] = c;
+  for (let i = 0; i <= 200; i++) {
+    const t = i / 200;
+    const u = 1 - t;
+    out.push([u ** 3 * ax + 3 * u * u * t * bx + 3 * u * t * t * cx + t ** 3 * dx, u ** 3 * ay + 3 * u * u * t * by + 3 * u * t * t * cy + t ** 3 * dy]);
+  }
+  return out;
+}
+
+/** Quantas linhas passam sobre um grupo ou Final que não é ponta delas. */
+function wiresOverBlocks(p) {
+  const gs = M.groups(p);
+  let hits = 0;
+  for (const l of M.links(p, gs)) {
+    const f = typeof l.to === "string" ? p.finals.find((o) => o.id === l.to) : null;
+    const pts = wirePoints(M.wirePath(M.outPoint(l.from), f ? M.finalPoint(f) : M.inPoint(l.to)));
+    const boxes = gs.filter((g) => g !== l.from && g !== l.to).map((g) => ({ x0: g.x, x1: g.x + g.w, y0: Math.min(g.y, ...g.covers.map((c) => c.y)), y1: Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AUD_H)) }));
+    for (const o of p.finals) if (o !== f) boxes.push({ x0: o.x, x1: o.x + 180, y0: o.y, y1: o.y + 200 });
+    if (boxes.some((b) => pts.some(([x, y]) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1))) hits++;
+  }
+  return hits;
+}
+
+const peca = (id, y = 0, x = 0, kind = "video", dur = 5) => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, audio: "none" });
+const projeto = (ids, ligas, finais = ["final"]) => ({
+  blocks: ids.map((id, i) => peca(id, (i * 977) % 2500, (i * 613) % 1800)),
+  finals: finais.map((id) => ({ id, x: 0, y: 0 })),
+  edges: ligas.map(([from, to], i) => ({ id: `e${i}`, from, to })),
+});
+const cenarios = {
+  "gancho que pula o corpo": projeto(["g1", "g2", "c"], [["g1", "c"], ["g2", "c"], ["c", "final"], ["g2", "final"]]),
+  "3 ganchos, corpo e 2 CTAs": projeto(["g1", "g2", "g3", "c", "a", "b"], [["g1", "c"], ["g2", "c"], ["g3", "c"], ["c", "a"], ["c", "b"], ["a", "final"], ["b", "final"]]),
+  "ligações que pulam duas colunas": projeto(["a", "b", "c", "d", "e"], [["a", "b"], ["b", "c"], ["c", "d"], ["d", "final"], ["a", "c"], ["a", "d"], ["e", "d"], ["e", "final"], ["b", "final"]]),
+  "dois Finais": projeto(["a", "b", "c", "d"], [["a", "c"], ["b", "c"], ["c", "f1"], ["d", "f2"], ["b", "f2"], ["a", "f1"]], ["f1", "f2"]),
+  "muitos ganchos e CTAs": projeto(["g1", "g2", "g3", "g4", "g5", "c1", "c2", "x", "y", "z"], [["g1", "c1"], ["g2", "c1"], ["g3", "c1"], ["g4", "c2"], ["g5", "c2"], ["c1", "x"], ["c1", "y"], ["c2", "y"], ["c2", "z"], ["x", "final"], ["y", "final"], ["z", "final"], ["g5", "final"], ["g1", "z"]]),
+  "elementos soltos": projeto(["a", "b", "c", "d"], [["a", "b"], ["b", "final"]]),
+};
+
+for (const [nome, p] of Object.entries(cenarios))
+  test(`organizar não deixa linha sobre elemento: ${nome}`, () => {
+    assert.equal(wiresOverBlocks(M.arrange(p)), 0);
+  });
+
+test("organizar alinha os conectores, como no exemplo do gancho que pula o corpo", () => {
+  const o = M.arrange(cenarios["gancho que pula o corpo"]);
+  const gs = M.groups(o);
+  const y = (id) => M.outPoint(gs.find((g) => g.id === id)).y;
+  assert.equal(y("g1"), y("c"));
+  assert.equal(y("g2"), M.finalPoint(o.finals[0]).y);
+});
+
+test("com o gancho da ligação longa em cima, o outro ainda alinha com o corpo", () => {
+  const p = structuredClone(cenarios["gancho que pula o corpo"]);
+  p.blocks.find((b) => b.id === "g1").y = 3000;
+  p.blocks.find((b) => b.id === "g2").y = 0;
+  const o = M.arrange(p);
+  const gs = M.groups(o);
+  const y = (id) => M.outPoint(gs.find((g) => g.id === id)).y;
+  assert.equal(y("g1"), y("c"));
+  assert.equal(y("g2"), M.finalPoint(o.finals[0]).y);
+  assert.equal(wiresOverBlocks(o), 0);
+});
+
+test("organizar considera coberturas e som embaixo", () => {
+  const p = projeto(["a", "c"], [["a", "c"], ["c", "final"]]);
+  p.blocks.push({ ...peca("capa", p.blocks[1].y - M.VIS_H, p.blocks[1].x, "image", 3) }, { ...peca("som", p.blocks[1].y + M.VIS_H, p.blocks[1].x, "audio", 3) }, peca("b", 3000));
+  p.edges.push({ id: "z", from: "b", to: "final" }, { id: "w", from: "a", to: "final" });
+  const o = M.arrange(p);
+  assert.equal(wiresOverBlocks(o), 0);
+  assert.equal(M.groups(o).length, M.groups(p).length);
+});
+
 test("organizar aguenta laço nas ligações e projeto vazio", () => {
   const bloco = (id, y) => ({ id, kind: "image", name: id, src: "a", dur: 5, tin: 0, tout: 5, x: 0, y, mute: false, vol: 1, tone: 1 });
   const p = { blocks: [bloco("a", 0), bloco("b", 400)], finals: [{ id: "final", x: 0, y: 0 }], edges: [{ id: "1", from: "a", to: "b" }, { id: "2", from: "b", to: "a" }] };
