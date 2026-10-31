@@ -91,7 +91,9 @@ menos custo.
   "V. 13"; com 4 ou mais, só o número, com a escolhida numa linha em cima. Tocar numa variação toca na Prévia, sem sair do
   canvas, e destaca os blocos e as linhas dela, apagando o resto; o destaque fica
   depois de pausar e sai ao clicar fora do Final. As setas ← e → passam de uma para
-  outra, com o Final escolhido. Cada Final tem até 48 variações, o mesmo limite de uma
+  outra, com o Final escolhido. O botão direito no card abre o menu para baixar
+  a variação do clique (fora de uma, a escolhida) ou todas, pela mesma exportação; ele não
+  toca nem muda a escolhida. Cada Final tem até 48 variações, o mesmo limite de uma
   exportação: a ligação que passaria disso é recusada, com um aviso. Projeto antigo com
   mais ligações mostra as 48 primeiras e o aviso no card.
   Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
