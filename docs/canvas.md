@@ -104,10 +104,12 @@ menos custo.
   que ligam a ele; cada Final à direita, na altura do que chega a ele. Desfazer volta tudo.
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).
-  O zoom vai até 800% e a onda é desenhada com 480 px por segundo, para ficar
-  nítida de perto. "Ver tudo" volta. Com zoom, sombras, contornos, linhas, a linha
+  O zoom vai até 800%. "Ver tudo" volta. Com zoom, sombras, contornos, linhas, a linha
   de reprodução e o botão de tocar mantêm o tamanho da tela; a onda fica dentro dos
   cantos do bloco.
+- **Memória da onda**: de cada áudio fica guardado só um byte por passo de 1/480 s. O bloco
+  usa uma onda leve (120 px/s, 40 px de altura); a partir de 300%, o trecho à vista ganha
+  a nítida (480 px/s, 80 px), descartada ao sair da tela ou do zoom.
 - **Miniaturas**: o quadro do vídeo sai com até 720 px de altura, nítido no zoom de 800%;
   a imagem usa o próprio arquivo.
 - **Onda do som**: sem ícone, de borda a borda do bloco, no corte de agora (o x da

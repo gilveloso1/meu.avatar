@@ -11,7 +11,7 @@
  */
 import * as M from "./modelo.js";
 import { Player, clock } from "./player.js";
-import { thumb, probe } from "./miniaturas.js";
+import { thumb, sharpWave, probe } from "./miniaturas.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const vp = $("#vp");
@@ -274,6 +274,64 @@ const groupBottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AU
 const PORT_OUT = 14;
 const blockEls = new Map();
 
+/* ---------- onda do som: a leve no bloco, a nítida só no que está à vista com zoom alto ---------- */
+
+const SHARP_ZOOM = 3;
+function setWave(m, id, url) {
+  m.low = url;
+  const b = project.blocks.find((b) => b.id === id);
+  if (b) paintWave(m, b);
+}
+/** A máscara vale para o arquivo inteiro (a leve) ou para um trecho dele (a nítida). */
+function paintWave(m, b) {
+  if (!m.low) return;
+  const { from, to, url } = m.sharp ?? { from: 0, to: b.dur, url: m.low };
+  if (m.shown !== url) {
+    m.shown = url;
+    m.style.maskImage = m.style.webkitMaskImage = `url("${url}")`;
+  }
+  m.style.maskSize = m.style.webkitMaskSize = `${(to - from) * M.PX}px 100%`;
+  m.style.maskPosition = m.style.webkitMaskPosition = `${(from - b.tin) * M.PX}px 0`;
+}
+let sharpTimer = 0;
+function scheduleSharp() {
+  clearTimeout(sharpTimer);
+  sharpTimer = setTimeout(sharpen, 150);
+}
+function sharpen() {
+  const r = vp.getBoundingClientRect();
+  const left = -view.x / view.z;
+  const top = -view.y / view.z;
+  for (const b of project.blocks) {
+    const el = blockEls.get(b.id);
+    const m = b.kind === "audio" ? $(".blk__media", el) : M.linked(b) ? $(".blk__wave", el) : null;
+    if (!m) continue;
+    const s0 = Math.max(0, (left - b.x) / M.PX);
+    const s1 = Math.min(M.len(b), (left + r.width / view.z - b.x) / M.PX);
+    const seen = view.z >= SHARP_ZOOM && s1 > s0 && b.y < top + r.height / view.z && b.y + M.height(b) > top;
+    if (!seen) {
+      m.want = null;
+      if (m.sharp) (m.sharp = null), paintWave(m, b);
+      continue;
+    }
+    const [a, c] = [b.tin + s0, b.tin + s1];
+    const has = m.want ?? m.sharp;
+    if (has && has.from <= a && has.to >= c) continue;
+    // Pede um pouco a mais dos dois lados, para andar sem refazer a cada passo.
+    const want = { from: Math.max(0, a - (c - a) / 2), to: Math.min(b.dur, c + (c - a) / 2) };
+    m.want = want;
+    sharpWave(b.src, want.from, want.to)
+      .then((url) => {
+        if (m.want !== want) return;
+        m.want = null;
+        m.sharp = { ...want, url };
+        const now = project.blocks.find((o) => o.id === b.id);
+        if (now) paintWave(m, now);
+      })
+      .catch(() => {});
+  }
+}
+
 function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
   world.style.setProperty("--zi", String(1 / Math.max(1, view.z)));
@@ -281,6 +339,7 @@ function applyView() {
   vp.style.backgroundSize = `${24 * view.z}px ${24 * view.z}px`;
   vp.style.backgroundPosition = `${view.x}px ${view.y}px`;
   $("#zoom").textContent = `${Math.round(view.z * 100)}%`;
+  scheduleSharp();
 }
 
 function render({ side = true } = {}) {
@@ -309,14 +368,13 @@ function render({ side = true } = {}) {
         if (!u) return;
         const m = $(".blk__media", el);
         // O áudio é uma máscara: a onda pega a cor do bloco.
-        if (b.kind === "audio") m.style.maskImage = m.style.webkitMaskImage = `url("${u}")`;
+        if (b.kind === "audio") setWave(m, b.id, u);
         else m.style.backgroundImage = `url("${u}")`;
       });
       // O vídeo mostra o próprio som numa faixa embaixo, na cor dele.
       if (b.kind === "video")
         thumb({ kind: "audio", src: b.src, dur: b.dur }).then((u) => {
-          const w = $(".blk__wave", el);
-          if (u) w.style.maskImage = w.style.webkitMaskImage = `url("${u}")`;
+          if (u) setWave($(".blk__wave", el), b.id, u);
         });
     }
     const g = idx.get(b.id);
@@ -327,15 +385,8 @@ function render({ side = true } = {}) {
     el.style.setProperty("--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
     el.style.setProperty("--on", `var(--bloco-${tipo}-on)`);
     const media = $(".blk__media", el);
-    if (M.linked(b)) {
-      const w = $(".blk__wave", el);
-      w.style.maskSize = w.style.webkitMaskSize = `${b.dur * M.PX}px 100%`;
-      w.style.maskPosition = w.style.webkitMaskPosition = `${-b.tin * M.PX}px 0`;
-    }
-    if (b.kind === "audio") {
-      media.style.maskSize = media.style.webkitMaskSize = `${b.dur * M.PX}px 100%`;
-      media.style.maskPosition = media.style.webkitMaskPosition = `${-b.tin * M.PX}px 0`;
-    }
+    if (M.linked(b)) paintWave($(".blk__wave", el), b);
+    if (b.kind === "audio") paintWave(media, b);
     $(".blk__kind", el).textContent = { video: "movie", image: "image", audio: "music_note" }[b.kind];
     $(".blk__name", el).textContent = b.name;
     $(".blk__dur", el).textContent = fmt(M.len(b));
@@ -397,6 +448,7 @@ function render({ side = true } = {}) {
   loadPreview();
   $("#undo").disabled = !undo.length;
   $("#redo").disabled = !redo.length;
+  scheduleSharp();
 }
 
 /** Diz se o que está selecionado (bloco, grupo ou linha) entra numa variação deste Final. */
