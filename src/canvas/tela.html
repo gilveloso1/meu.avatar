@@ -182,7 +182,7 @@ body { min-height: 0; overflow: hidden; }
 .xlist__item:last-child { border-bottom-left-radius: var(--md-sys-shape-corner-large); border-bottom-right-radius: var(--md-sys-shape-corner-large); }
 .xlist__item[aria-current="true"] { border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
 a.xlist__item { color: inherit; text-decoration: none; }
-/* Variações no card Final: a lista segmentada, mais baixa. Até 5 por coluna: cresce para o lado. */
+/* Variações no card Final: a lista segmentada, mais baixa. O script diz as linhas (--rows), para fechar o retângulo. */
 .fin__body { display: flex; flex-direction: column; gap: 2px; border-radius: var(--md-sys-shape-corner-medium); overflow: hidden; }
 .fin__list { display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--rows), 36px); grid-auto-columns: minmax(164px, 1fr); gap: 2px; }
 .fin__list--short { grid-auto-columns: minmax(104px, 1fr); }

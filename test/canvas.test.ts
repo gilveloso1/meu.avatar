@@ -334,15 +334,15 @@ describe("exportar projetos", () => {
     };
   };
 
-  it("cada Final exporta até 50 variações, mesmo com mais ligações", async () => {
+  it("cada Final exporta até 48 variações, mesmo com mais ligações", async () => {
     const admin = await cookie();
     const fake = new FakeExportApi();
     const ok = await com(fake, `/projetos/${await projeto(admin, muitas(10))}/exportar`, admin, { final: "final" });
-    expect([ok.status, ((await ok.json()) as Estado).total]).toEqual([201, 15 + 50]);
+    expect([ok.status, ((await ok.json()) as Estado).total]).toEqual([201, 15 + 48]);
     const id = await projeto(admin, muitas(11));
     const mais = await com(fake, `/projetos/${id}/exportar`, admin, { final: "final" });
-    expect([mais.status, ((await mais.json()) as Estado).versoes.length <= 50]).toEqual([201, true]);
-    expect((await env.DB.prepare("SELECT plan FROM exports ORDER BY rowid DESC LIMIT 1").first<{ plan: string }>())!.plan.match(/"nome"/g)!.length).toBe(50);
+    expect([mais.status, ((await mais.json()) as Estado).versoes.length <= 48]).toEqual([201, true]);
+    expect((await env.DB.prepare("SELECT plan FROM exports ORDER BY rowid DESC LIMIT 1").first<{ plan: string }>())!.plan.match(/"nome"/g)!.length).toBe(48);
   });
 
   it("sem versão ou sem contêiner, avisa com a frase do catálogo", async () => {
