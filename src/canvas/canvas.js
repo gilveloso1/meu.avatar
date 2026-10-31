@@ -87,14 +87,14 @@ function loadPreview() {
   let tl = null;
   if (preview?.type === "group") {
     const g = gs.find((g) => g.id === preview.id);
-    if (g) (v = [g]), (title = `Grupo: ${g.name}`);
+    if (g) (v = [g]), (title = g.label);
   }
   if (preview?.type === "block") {
     const b = project.blocks.find((b) => b.id === preview.id);
     if (b) {
       // Só o bloco, do corte dele: sem o que está por cima nem o som somado.
       tl = { duration: M.len(b), items: [{ block: b, layer: b.kind === "audio" ? "audio" : 0, start: 0, len: M.len(b), tin: b.tin }] };
-      title = `Bloco: ${b.name}`;
+      title = b.name;
     }
   }
   if (!v && !tl) {
@@ -401,13 +401,13 @@ function render({ side = true } = {}) {
     const top = Math.min(g.y, ...g.covers.map((c) => c.y));
     const rowH = g.soloAudio ? M.AUD_H : M.VIS_H;
     const isSel = sel.type === "group" && sel.id === g.id;
-    if (g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio)) {
+    if (M.hasArea(g)) {
       const gPlaying = player.playing && preview?.type === "group" && preview.id === g.id;
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
       const bottom = groupBottom(g);
       const onPath = path?.includes(g) ? "is-path" : "";
       html += `<div class="gframe ${isSel ? "is-sel" : ""} ${onPath}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
-      html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o grupo"}" title="${gPlaying ? "Pausar" : "Tocar o grupo"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
+      html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.label)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o bloco"}" title="${gPlaying ? "Pausar" : "Tocar o bloco"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
     }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
@@ -418,7 +418,7 @@ function render({ side = true } = {}) {
     const w = M.width(sb);
     const cy = sb.kind === "audio" ? sb.y + M.AUD_H / 2 : sb.y + 28 + (M.VIS_H - 32) / 2;
     const playing = player.playing && preview?.type === "block" && preview.id === sb.id;
-    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2}px;top:${cy}px" aria-label="${playing ? "Pausar" : "Tocar o bloco"}" title="${playing ? "Pausar" : "Tocar o bloco"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
+    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2}px;top:${cy}px" aria-label="${playing ? "Pausar" : "Tocar"}" title="${playing ? "Pausar" : "Tocar"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
   }
   for (const f of project.finals) {
     const vs = M.versions(project, f.id, gs);
@@ -499,7 +499,7 @@ function renderSide(gs) {
     const durs = vs.map((v) => M.timeline(v).duration);
     const [least, most] = [Math.min(...durs), Math.max(...durs)];
     const dur = least === most ? fmt(most) : `${fmt(least).replace(" s", "")} a ${fmt(most)}`;
-    h += vs.length ? `<div class="viewer__card"><div>${row("movie", "Variações", vs.length)}${row("schedule", "Duração", dur)}</div></div>` : `<p class="sheet-hint">Ligue um grupo ao Final para ter variações.</p>`;
+    h += vs.length ? `<div class="viewer__card"><div>${row("movie", "Variações", vs.length)}${row("schedule", "Duração", dur)}</div></div>` : `<p class="sheet-hint">Ligue um bloco ao Final para ter variações.</p>`;
     const out = M.output(project.finals.find((f) => f.id === sel.id));
     // Os mesmos campos dos modelos: Resolução em botões conectados, Formato no campo de seleção.
     h += `<section class="viewer__section"><h3 class="viewer__title">Qualidade e formato</h3>
@@ -530,13 +530,14 @@ function renderSide(gs) {
   } else if (sel.type === "group") {
     const g = gs.find((g) => g.id === sel.id);
     if (g) {
-      title = "Grupo";
-      h += `<div class="viewer__card"><p class="qe-result__title">${esc(g.name)}</p><div>${row("schedule", "Duração", fmt(g.dur))}${row("movie", "Em sequência", g.blocks.length)}${row("layers", "Por cima", g.covers.length)}${row("music_note", "Som somado", g.audios.length)}</div></div>`;
-      actions = btn("text", 'data-act="del"', "delete", "Excluir grupo");
+      title = "Bloco";
+      if (M.hasArea(g)) h += field("f-group", "Nome", g.label, 'maxlength="60"');
+      h += `<div class="viewer__card"><div>${row("schedule", "Duração", fmt(g.dur))}${row("movie", "Em sequência", g.blocks.length)}${row("layers", "Por cima", g.covers.length)}${row("music_note", "Som somado", g.audios.length)}</div></div>`;
+      actions = btn("text", 'data-act="del"', "delete", "Excluir bloco");
     }
   } else if (sel.type === "edge") {
     title = "Linha";
-    h += `<p class="sheet-hint">Liga um grupo ao seguinte. Cada caminho até o Final é uma variação.</p>`;
+    h += `<p class="sheet-hint">Liga um bloco ao seguinte. Cada caminho até o Final é uma variação.</p>`;
     actions = btn("text", 'data-act="del"', "delete", "Excluir linha");
   } else {
     if (PROJETO) {
@@ -585,7 +586,7 @@ side.onclickAction = (e) => {
     project = M.relinkVideo(project, sel.id);
     commit(before);
     render();
-    toast(M.doubledSound(project) ? "Este grupo tem o som duas vezes: o do vídeo e o da cópia." : "O vídeo voltou a tocar o próprio som.");
+    toast(M.doubledSound(project) ? "Este bloco tem o som duas vezes: o do vídeo e o da cópia." : "O vídeo voltou a tocar o próprio som.");
   }
   if (act === "tovideo") {
     const before = project;
@@ -658,6 +659,12 @@ function onSideInput(t0) {
     if (help) help.innerHTML = `<span>${M.FORMATS.find((o) => o.value === out.format).description}</span><span>${out.width} × ${out.height}</span>`;
     frameRatio();
     return;
+  }
+  if (t0.id === "f-group") {
+    const before = project;
+    project = M.renameGroup(project, M.groups(project).find((g) => g.id === sel.id), t0.value);
+    commit(before);
+    return render({ side: false });
   }
   if (sel.type !== "block") return;
   const before = project;
@@ -1210,9 +1217,12 @@ vp.addEventListener("pointerdown", (e) => {
     sel = { type: "block", id };
     preview = { type: "block", id };
     render();
+    // O bloco que segura o elemento neste arrasto, e o de onde ele acabou de sair.
+    let keep = {};
     onMove = (ev) => {
       const d = dW(ev);
-      const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + d.y, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + d.y, 16 / view.z);
+      const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + d.y, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + d.y, 16 / view.z, keep);
+      keep = { group: s.group?.id, left: s.left };
       project = M.dropBlock(base, id, s);
       $("#snapinfo").textContent = SNAP[s.mode] ?? "";
       blockEls.get(id)?.classList.add("is-drag");

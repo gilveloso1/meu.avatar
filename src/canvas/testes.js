@@ -64,8 +64,67 @@ test("vídeo solto por cima vira cobertura; áudio embaixo soma o som", () => {
   assert.equal(s.y, 192 - M.height(novo));
   const a = { id: "a", kind: "audio", name: "A", src: "", dur: 5, tin: 0, tout: 5, x: 30, y: 250, mute: false, vol: 1 };
   const q2 = { ...p, blocks: [...p.blocks, a] };
-  assert.equal(M.snap(q2, "a", 30, 250, 12).mode, null);
+  assert.equal(M.snap(q2, "a", 30, 2000, 12).mode, null);
   assert.equal(M.snap(q2, "a", 450, 250, 12).mode, "audio");
+});
+
+const dois = () => {
+  const b = (id, x, y, dur = 5, kind = "image") => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1 });
+  return { blocks: [b("a", 0, 0), b("b", 200, 0), b("n", 2000, 2000, 2), b("s", 2000, 3000, 2, "audio")], finals: [], edges: [] };
+};
+
+test("o bloco puxa o elemento ao entrar na área, sem precisar ir ao meio", () => {
+  const q = dois();
+  const em = M.snap(q, "n", 10, -90 - 40, 16);
+  assert.deepEqual([em.mode, em.x, em.y], ["cover", 10, -M.VIS_H]);
+  assert.equal(M.snap(q, "n", 10, -500, 16).mode, null);
+  const som = M.snap(q, "s", 100, 96 + 30, 16);
+  assert.deepEqual([som.mode, som.y], ["audio", 96]);
+});
+
+test("com o botão apertado, o elemento corre dentro do bloco até o limite", () => {
+  const q = dois();
+  const keep = { group: "a" };
+  assert.equal(M.snap(q, "n", 120, -96, 16, keep).x, 120);
+  // Do lado direito, para no fim do que há dentro.
+  assert.equal(M.snap(q, "n", 330, -96, 16, keep).x, 320);
+  // Passou do fim: fica ao lado.
+  const fora = M.snap(q, "n", 400, -96, 16, keep);
+  assert.deepEqual([fora.mode, fora.x, fora.y, fora.target], ["after", 400, 0, "b"]);
+});
+
+test("pela esquerda o elemento sai do bloco e não é puxado de volta enquanto estiver em cima", () => {
+  const q = dois();
+  const saiu = M.snap(q, "n", -40, -96, 16, { group: "a" });
+  assert.deepEqual([saiu.mode, saiu.left], [null, "a"]);
+  const ainda = M.snap(q, "n", -30, -96, 16, { left: "a" });
+  assert.deepEqual([ainda.mode, ainda.left], [null, "a"]);
+  const longe = M.snap(q, "n", -200, -96, 16, { left: "a" });
+  assert.deepEqual([longe.mode, longe.left], [null, undefined]);
+});
+
+test("o encaixe à direita é magnético", () => {
+  const q = dois();
+  assert.equal(M.snap(q, "n", 440, 0, 16).mode, "after");
+  assert.equal(M.snap(q, "n", 440, 0, 16).x, 400);
+  assert.equal(M.snap(q, "n", 460, 0, 16).mode, null);
+});
+
+test("o bloco segura o elemento numa área maior, sem piscar na borda", () => {
+  const q = dois();
+  assert.equal(M.snap(q, "n", 100, -96 - 50, 16).mode, null);
+  assert.equal(M.snap(q, "n", 100, -96 - 50, 16, { group: "a" }).mode, "cover");
+});
+
+test("os blocos se chamam Bloco 1, Bloco 2, e aceitam nome próprio", () => {
+  const b = (id, x, y) => ({ id, kind: "image", name: id, src: id, dur: 5, tin: 0, tout: 5, x, y, mute: false, vol: 1, tone: 1 });
+  let q = { blocks: [b("solto", 0, 900), b("a", 0, 500), b("b", 200, 500), b("c", 0, 0), b("d", 200, 0)], finals: [], edges: [] };
+  const rotulos = () => M.groups(q).map((g) => [g.id, g.label]).sort();
+  assert.deepEqual(rotulos(), [["a", "Bloco 1"], ["c", "Bloco 2"], ["solto", "solto"]]);
+  q = M.renameGroup(q, M.groups(q).find((g) => g.id === "c"), "  Fim  ");
+  assert.deepEqual(rotulos(), [["a", "Bloco 1"], ["c", "Fim"], ["solto", "solto"]]);
+  q = M.renameGroup(q, M.groups(q).find((g) => g.id === "c"), "");
+  assert.deepEqual(rotulos(), [["a", "Bloco 1"], ["c", "Bloco 2"], ["solto", "solto"]]);
 });
 
 test("linha em ciclo não trava", () => {

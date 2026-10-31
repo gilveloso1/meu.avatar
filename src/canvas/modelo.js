@@ -33,6 +33,8 @@ export const MAX_FAIXAS = 8;
 // Organizar: a área do grupo (20 px em volta) e a aba dele (40 px) cabem nas folgas; o Final, na dele.
 const COL_GAP = 140;
 const ROW_GAP = 110;
+// O ímã do bloco alcança MAGNET vezes a mira fina do encaixe.
+const MAGNET = 3;
 const FINAL_HEAD = 92;
 const FINAL_ROW = 38;
 const LANE_ABOVE = 70;
@@ -132,7 +134,28 @@ export function groups(project) {
     g.last = g.blocks[g.blocks.length - 1] ?? g.audios[0];
     g.name = g.blocks.length ? g.blocks.map((b) => b.name).join(" + ") : g.audios[0].name;
   }
+  // Bloco é o que tem a área tracejada: numerado na ordem em que os elementos entraram no canvas.
+  const firstIndex = (g) => Math.min(...members(g).map((b) => blocks.indexOf(b)));
+  const framed = out.filter(hasArea).sort((a, b) => firstIndex(a) - firstIndex(b));
+  framed.forEach((g, i) => (g.number = i + 1));
+  for (const g of out) {
+    const own = members(g).map((b) => project.names?.[b.id]).find(Boolean);
+    g.label = own ?? (g.number ? `Bloco ${g.number}` : g.name);
+  }
   return out;
+}
+
+const members = (g) => [...g.blocks, ...g.covers, ...g.audios];
+/** Se o grupo tem a área tracejada: mais de um elemento em sequência, por cima ou de som somado. */
+export const hasArea = (g) => g.blocks.length > 1 || g.covers.length > 0 || (g.audios.length > 0 && !g.soloAudio);
+
+/** Dá nome a um bloco; vazio volta ao "Bloco 1". O nome fica no primeiro elemento dele. */
+export function renameGroup(project, group, name) {
+  const p = clone(project);
+  p.names = { ...p.names };
+  for (const b of members(group)) delete p.names[b.id];
+  if (name.trim()) p.names[members(group)[0].id] = name.trim();
+  return p;
 }
 
 export function groupIndex(gs) {
@@ -282,34 +305,46 @@ const clone = (p) => structuredClone(p);
  * grupo por cima (visual) ou entra embaixo dele (áudio). tol em unidades do
  * canvas. Devolve { x, y, mode, target } (mode null: solto, sem encaixe).
  */
-export function snap(project, id, x, y, tol) {
+export function snap(project, id, x, y, tol, keep = {}) {
   const b = project.blocks.find((o) => o.id === id);
   const w = width(b);
-  const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) });
-  const bases = gs.flatMap((g) => g.blocks.map((o) => ({ o, g })));
-  if (visual(b)) {
-    for (const { o, g } of bases) {
-      if (Math.abs(y - o.y) > VIS_H / 2) continue;
-      if (Math.abs(x - (o.x + width(o))) < tol) return { x: o.x + width(o), y: o.y, mode: "after", target: o.id, group: g };
-      if (Math.abs(x + w - o.x) < tol && o === g.first) return { x: o.x - w, y: o.y, mode: "before", target: o.id, group: g };
+  const h = height(b);
+  const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) }).filter((g) => g.blocks.length);
+  const magnet = tol * MAGNET;
+  const free = () => ({ x, y, mode: null });
+  if (visual(b))
+    // Nas emendas de dentro e antes do primeiro, a mira é fina; depois do último, é o ímã.
+    for (const g of gs)
+      for (const o of g.blocks) {
+        if (Math.abs(y - o.y) > VIS_H / 2) continue;
+        if (o !== g.last && Math.abs(x - (o.x + width(o))) < tol) return { x: o.x + width(o), y: o.y, mode: "after", target: o.id, group: g };
+        if (o === g.first && Math.abs(x + w - o.x) < tol) return { x: o.x - w, y: o.y, mode: "before", target: o.id, group: g };
+      }
+  // O bloco onde o elemento já está vem primeiro, e o segura numa área maior.
+  const left = gs.find((g) => g.id === keep.left);
+  const order = [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group && g !== left)];
+  const areaOf = (g) => ({ top: Math.min(g.y, ...g.covers.map((c) => c.y)), bottom: Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H)) });
+  for (const g of order) {
+    const inside = g.id === keep.group;
+    const pad = inside ? magnet * 2 : magnet;
+    const { top, bottom } = areaOf(g);
+    if (y + h <= top - pad || y >= bottom + pad) continue;
+    const end = g.x + g.w;
+    if (x + w / 2 > end) {
+      if (!visual(b) || x > end + pad) continue;
+      return { x: end, y: g.last.y, mode: "after", target: g.last.id, group: g };
     }
-    for (const g of gs) {
-      if (!g.blocks.length) continue;
-      const cx = x + w / 2;
-      const overRow = y + VIS_H > g.y + VIS_H * 0.2 && y < g.y + VIS_H * 0.6;
-      if (overRow && cx > g.x && cx < g.x + g.w) return { x: Math.max(g.x, x), y: g.y - height(b), mode: "cover", target: g.id, group: g };
-    }
-  } else {
-    for (const g of gs) {
-      if (!g.blocks.length) continue;
-      const cx = x + w / 2;
-      const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
-      const overRow = y + AUD_H > g.y + g.h * 0.4 && y < g.y + g.h + AUD_H * (lanes + 0.8);
-      const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
-      if (overRow && cx > g.x && cx < g.x + g.w) return { x: Math.max(g.x, x), y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
-    }
+    if (inside && x < g.x - tol) return { ...free(), left: g.id };
+    if (x + w <= g.x) continue;
+    const at = Math.max(g.x, Math.min(x, end - w));
+    if (visual(b)) return { x: at, y: g.y - height(b), mode: "cover", target: g.id, group: g };
+    const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
+    const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
+    return { x: at, y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
   }
-  return { x, y, mode: null };
+  // Quem saiu pela esquerda só volta a ser puxado depois de sair de cima do bloco.
+  const stillOver = left && x + w > left.x && x < left.x + left.w;
+  return stillOver ? { ...free(), left: left.id } : free();
 }
 
 /** Move um bloco para onde o snap() mandou, abrindo espaço se encaixou no meio. */
