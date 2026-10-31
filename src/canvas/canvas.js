@@ -890,6 +890,8 @@ vp.addEventListener("contextmenu", (e) => {
   finMenu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
   finMenu.querySelector("button").focus();
 });
+// O menu abre com o botão ainda apertado; no "auto", soltar o botão já o fecharia.
+window.addEventListener("pointerdown", (e) => finMenu.contains(e.target) || closeFinMenu(), true);
 finMenu.addEventListener("click", (e) => {
   const down = e.target.closest("[data-down]")?.dataset.down;
   if (down === undefined) return;
@@ -931,7 +933,7 @@ vp.addEventListener(
 );
 
 vp.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 && e.button !== 1) return;
+  if ((e.button !== 0 && e.button !== 1) || (e.button === 0 && e.ctrlKey)) return;
   // Sem isso o navegador começa a arrastar texto selecionado e cancela o gesto.
   e.preventDefault();
   const t = e.target;
@@ -1102,6 +1104,7 @@ vp.addEventListener("pointerdown", (e) => {
 });
 
 window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeFinMenu();
   if (e.target.closest("input, textarea, [popover]")) return;
   const mod = e.ctrlKey || e.metaKey;
   if ((e.key === "Delete" || e.key === "Backspace") && sel.type) removeSelection();
