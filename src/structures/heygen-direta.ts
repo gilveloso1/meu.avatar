@@ -44,6 +44,8 @@ export const SOURCES: Option[] = [
 
 /** Opção da lista de vozes clonadas que abre os campos para clonar uma voz nova. */
 export const NEW_CLONE = "nova";
+/** Na lista de vozes clonadas, a voz de um avatar: `avatar:<id>`. */
+export const AVATAR_VOICE = "avatar:";
 export const MAX_CLONE_NAME = 64;
 
 /** Marca, no valor da voz pronta, que ela aceita o sotaque pt-BR (voice_settings.locale). */
@@ -70,6 +72,7 @@ export const HEYGEN_DIRECT: Structure = {
     const ratios = model?.supported_aspect_ratios ?? [d.aspectRatio];
     const voices = lists.voices?.length ? lists.voices : VOICES;
     const clones = [...(lists.clones ?? []), { value: NEW_CLONE, label: "Clonar uma voz nova" }];
+    const consent: Record<string, string[]> = { fonte: ["clonada"], clone: [NEW_CLONE, ...(lists.newClones ?? [])] };
     return [
       {
         title: "Fala",
@@ -79,7 +82,7 @@ export const HEYGEN_DIRECT: Structure = {
           { kind: "select", name: "clone", label: "Voz clonada", options: clones, value: clones[0]!.value, showIf: { fonte: ["clonada"] } },
           { kind: "audio", name: "amostra", label: "Gravação da voz", supporting: "MP3 ou WAV, 1 a 3 min de fala limpa.", showIf: newClone },
           { kind: "text", name: "nome_voz", label: "Nome da voz", maxLength: MAX_CLONE_NAME, placeholder: "Ex.: Minha voz", supporting: "Para achar a voz na lista depois.", showIf: newClone },
-          { kind: "checkbox", name: "consentimento", label: "A voz é minha ou tenho autorização para cloná-la.", showIf: newClone },
+          { kind: "checkbox", name: "consentimento", label: "A voz é minha ou tenho autorização para cloná-la.", showIf: consent },
           {
             kind: "textarea",
             name: "fala",
@@ -153,6 +156,7 @@ export const HEYGEN_DIRECT: Structure = {
       } else {
         const known = lists.clones?.find((c) => c.value === clone);
         if (!known) throw new InputError(ERROS.vozClonada);
+        if (lists.newClones?.includes(clone) && values("consentimento") !== "sim") throw new InputError(ERROS.consentimentoVoz);
         voiceLabel = known.label;
       }
     }
