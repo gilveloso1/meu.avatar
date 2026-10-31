@@ -299,7 +299,7 @@ picos cortados e o vídeo idêntico byte a byte ao original.
 
 ## Exportação dos projetos
 
-O contêiner `Exporter` (`container/Dockerfile.exportar`, `standard-4`) é separado do
+O contêiner `Exporter` (`container/Dockerfile.exportar`, `standard-3`) é separado do
 de áudio: imagem só com ffmpeg, dorme 30 s depois do último pedido. Regras do R2
 (uma vez só, para os arquivos não se acumularem):
 
@@ -351,9 +351,9 @@ Em todas as rodadas, as 50 emendas com `x-crc32` igual ao CRC-32 do arquivo e, e
 versões por rodada, 480 quadros, vídeo e som com 16,000 s e decodificação até o fim sem
 erro. O tempo dos trechos acompanha os núcleos; o das emendas quase não (é cópia e AAC).
 
-Recomendação: `standard-3`. Custa cerca de 30% menos que o `standard-4` e leva 11 s a
+Escolhido: `standard-3`. Custa cerca de 30% menos que o `standard-4` e leva 11 s a
 mais nas 50 versões (45 s contra 34 s); 8 GiB sobram. O `standard-2` custa quase o mesmo
-que o `standard-3` e demora quase o dobro. O `wrangler.jsonc` ainda diz `standard-4`.
+que o `standard-3` e demora quase o dobro.
 
 ## Primeira publicação
 
