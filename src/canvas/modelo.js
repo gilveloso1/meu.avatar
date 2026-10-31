@@ -123,11 +123,11 @@ export function groups(project) {
     if (g) g.covers.push(c);
     else out.push({ id: c.id, blocks: [c], x: c.x, y: c.y, w: width(c), covers: [], audios: [] });
   }
-  // Som somado: em faixas de AUD_H embaixo do grupo, até MAX_FAIXAS (a primeira
-  // encosta no grupo; uma faixa que fica vazia não solta as de baixo).
-  const lane = (a, g) => (a.y - g.y - g.h) / AUD_H;
+  // Som somado: em faixas de AUD_H logo abaixo da imagem, até MAX_FAIXAS. A primeira é a do som
+  // da sequência, onde cabe som embaixo de quem não tem (uma faixa vazia não solta as de baixo).
+  const lane = (a, g) => (a.y - g.y - VIS_H) / AUD_H;
   for (const a of blocks.filter((b) => !visual(b))) {
-    const g = out.find((g) => g.blocks.length && overlaps(a, g) && lane(a, g) > -0.01 && lane(a, g) < MAX_FAIXAS && near(Math.round(lane(a, g)) * AUD_H, a.y - g.y - g.h));
+    const g = out.find((g) => g.blocks.length && overlaps(a, g) && lane(a, g) > -0.01 && lane(a, g) < MAX_FAIXAS && near(Math.round(lane(a, g)) * AUD_H, a.y - g.y - VIS_H));
     if (g) g.audios.push(a);
     else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   }
@@ -385,9 +385,17 @@ export function snap(project, id, x, y, tol, keep = {}) {
     }
     // Som vai sempre para a área de som, e também corre até a própria ponta sair da sequência.
     if (x > end - (inside ? EPS * 2 : tol) || x + w <= start + (inside ? EPS * 2 : tol)) continue;
-    const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
-    const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
-    return { x, y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
+    // A faixa mais perto do mouse que tenha espaço; a de baixo do tudo está sempre livre.
+    const base = g.y + VIS_H;
+    const taken = [
+      ...g.blocks.filter(linked).map((o) => ({ track: 0, x0: o.x, x1: o.x + width(o) })),
+      ...g.audios.map((a) => ({ track: Math.round((a.y - base) / AUD_H), x0: a.x, x1: a.x + width(a) })),
+    ];
+    const next = taken.length ? Math.max(...taken.map((t) => t.track)) + 1 : 0;
+    const want = Math.min(Math.max(Math.round((y - base) / AUD_H), 0), next);
+    const free = (track) => !taken.some((t) => t.track === track && overlapX(x, x + w, t.x0, t.x1));
+    const tracks = Array.from({ length: next + 1 }, (_, i) => i).sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || a - b);
+    return { x, y: base + tracks.find(free) * AUD_H, mode: "audio", target: g.id, group: g };
   }
   return free();
 }

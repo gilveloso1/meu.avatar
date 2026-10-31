@@ -180,6 +180,25 @@ test("som também expande o bloco nos dois lados, e sai sem trepidar", () => {
   assert.equal(M.groups(q).find((g) => g.id === "a").w, 460);
 });
 
+test("som sobe para a faixa de cima quando há espaço, e nunca fica sobre outro", () => {
+  const b = (id, x, y, dur = 5, kind = "audio", extra = {}) => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, ...extra });
+  const q = { blocks: [b("v", 0, 0, 5, "video"), b("i", 200, 0, 5, "image"), b("m", 0, 136, 2), b("s", 240, 176, 2)], finals: [], edges: [] };
+  const y = (x, top) => M.snap(q, "s", x, top, 16, { group: "v", mode: "audio" }).y;
+  // Embaixo da imagem não há som: a primeira faixa está livre ali.
+  assert.equal(y(240, 96), 96);
+  // Embaixo do vídeo, a primeira tem o som dele: desce para a mais perto com espaço.
+  assert.equal(y(100, 96), 136);
+  // Sobre "m" não fica: vai para a seguinte.
+  assert.equal(y(40, 96), 176);
+  assert.equal(y(40, 136), 176);
+  // O mouse pode escolher uma faixa de baixo.
+  assert.equal(y(100, 176), 176);
+  const sobe = M.dropBlock(q, "s", M.snap(q, "s", 240, 96, 16, { group: "v", mode: "audio" }));
+  const g = M.groups(sobe)[0];
+  assert.deepEqual(g.audios.map((a) => a.id).sort(), ["m", "s"]);
+  assert.equal(g.bottom, 176);
+});
+
 test("cada tipo vai para a sua área, venha de onde vier", () => {
   const q = dois();
   const video = M.snap(q, "n", 100, 110, 16);
