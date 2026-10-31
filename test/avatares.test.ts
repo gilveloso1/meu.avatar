@@ -129,7 +129,7 @@ describe("vídeo com avatar ou arquivo solto", () => {
     const id = await criar(session, { nome: "Camila", video: video!.id });
     const [asset] = await db().assetsByAvatar(id);
     expect(asset).toMatchObject({ kind: "video", source_video: video!.id });
-    expect(await (await env.MIDIA.get(asset!.key))!.text()).toBe("mp4");
+    expect(asset!.key).toBe(`videos/${video!.id}.mp4`);
   });
 
   it("vídeo de outra pessoa ou que não existe não entra no avatar novo", async () => {
@@ -144,8 +144,8 @@ describe("vídeo com avatar ou arquivo solto", () => {
     expect(await db().assetsByAvatar(id)).toHaveLength(0);
   });
 
-  it("Salvar no avatar copia o vídeo; a pessoa só salva nos avatares dela", async () => {
-    const session = await cookie();
+  /** Um vídeo pronto salvo num avatar novo. */
+  async function vinculado(session: string) {
     const id = await criar(session, { nome: "Camila" });
     const api = new FakeVideoApi();
     await call(postForm("/modelo/wan", { estilo: "selfie", idioma: "pt-BR", fala: FALA }, { cookie: session }), api);
@@ -154,8 +154,37 @@ describe("vídeo com avatar ou arquivo solto", () => {
     await db().updateVideo(video!.id, { status: "completed", video_key: `videos/${video!.id}.mp4` });
     expect((await call(postForm(`/videos/${video!.id}/salvar-avatar`, { avatar: id }, { cookie: session }), api)).status).toBe(303);
     const [asset] = await db().assetsByAvatar(id);
-    expect(asset).toMatchObject({ kind: "video", source_video: video!.id });
-    expect(asset!.key).not.toBe(video!.video_key);
-    expect((await call(postForm(`/videos/${video!.id}/salvar-avatar`, { avatar: id }, { cookie: await memberCookie() }), api)).status).toBe(404);
+    return { id, api, video: (await db().videoById(video!.id))!, asset: asset! };
+  }
+  const abrir = (path: string, session: string) => call(new Request(`${SITE}${path}`, { headers: { cookie: session } }));
+
+  it("Salvar no avatar liga o vídeo sem copiar; a pessoa só salva nos avatares dela", async () => {
+    const session = await cookie();
+    const { id, api, video, asset } = await vinculado(session);
+    expect(asset).toMatchObject({ kind: "video", source_video: video.id, key: video.video_key, size: 3 });
+    const { objects } = await env.MIDIA.list({ prefix: `avatares-ativos/${id}/` });
+    expect(objects).toHaveLength(0);
+    expect(await (await abrir(`/avatares/${id}/arquivos/${asset.id}/ver`, session)).text()).toContain("Vídeo vinculado");
+    expect((await call(postForm(`/videos/${video.id}/salvar-avatar`, { avatar: id }, { cookie: await memberCookie() }), api)).status).toBe(404);
+  });
+
+  it("o ativo vinculado mostra a versão que vale do vídeo", async () => {
+    const session = await cookie();
+    const { id, video, asset } = await vinculado(session);
+    const editado = `videos/${video.id}.editado.mp4`;
+    await env.MIDIA.put(editado, "editado");
+    await db().updateVideo(video.id, { edited_key: editado });
+    expect(await (await abrir(`/avatares/${id}/arquivos/${asset.id}`, session)).text()).toBe("editado");
+  });
+
+  it("apagar o ativo vinculado ou o avatar não apaga o vídeo", async () => {
+    const session = await cookie();
+    const { id, video, asset } = await vinculado(session);
+    expect((await call(postForm(`/avatares/${id}/arquivos/${asset.id}/apagar`, {}, { cookie: session }))).status).toBe(303);
+    expect(await db().assetsByAvatar(id)).toHaveLength(0);
+    expect(await env.MIDIA.head(video.video_key!)).not.toBeNull();
+    const outro = await vinculado(session);
+    expect((await call(postForm(`/avatares/${outro.id}/apagar`, {}, { cookie: session }))).status).toBe(303);
+    expect(await env.MIDIA.head(outro.video.video_key!)).not.toBeNull();
   });
 });

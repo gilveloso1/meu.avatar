@@ -19,7 +19,7 @@
  * da página só roda com o nonce da CSP.
  */
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
-import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video, VideoStatus } from "../db";
+import { ASSET_PREFIX, type AssetKind, type Avatar, type AvatarAsset, type Db, type Project, type User, type Video, type VideoStatus } from "../db";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -206,11 +206,12 @@ export class Site {
       if (assetAction === "/ver" && !post) return this.assetPage(user, avatar, asset);
       if (assetAction === "/apagar" && !post) return this.deleteAssetPage(user, avatar, asset);
       if (assetAction === "/apagar" && post) {
-        await this.media.delete(asset.key);
+        // O ativo vinculado só some da lista: o vídeo continua nos Vídeos.
+        if (asset.key.startsWith(ASSET_PREFIX)) await this.media.delete(asset.key);
         await this.db.deleteAsset(asset.id);
         return redirect(`/avatares/${avatar.id}`);
       }
-      if (!assetAction && !post) return this.object(request, asset.key, "private, max-age=86400", url.searchParams.has("baixar") ? asset.name.replace(/[^\w.-]+/g, "-") : undefined);
+      if (!assetAction && !post) return this.object(request, await this.assetFile(asset), "private, max-age=86400", url.searchParams.has("baixar") ? asset.name.replace(/[^\w.-]+/g, "-") : undefined);
     }
     return new Response("não encontrado", { status: 404 });
   }
@@ -328,7 +329,7 @@ ${error ? snackbar(error) : ""}`;
     const photoId = await take(photo, "imagem");
     const voiceId = await take(voice, "audio");
     await this.db.updateAvatar(avatar.id, { name, description, photo_asset: photoId ?? avatar.photo_asset, voice_asset: voiceId ?? avatar.voice_asset });
-    if (pending) await this.copyVideo(pending, avatar.id);
+    if (pending) await this.linkVideo(pending, avatar.id);
     return redirect(`/avatares/${avatar.id}`);
   }
 
@@ -342,7 +343,7 @@ ${error ? snackbar(error) : ""}`;
       { icon: "folder_open", term: "Tipo", value: ASSET_LABELS[asset.kind] },
       ...(role ? [{ icon: "star", term: "Uso", value: role }] : []),
       { icon: "download", term: "Tamanho", value: formatBytes(asset.size) },
-      { icon: "schedule", term: "Origem", value: asset.source_video ? "Salvo de um vídeo" : "Enviado" },
+      { icon: "schedule", term: "Origem", value: asset.source_video ? "Vídeo vinculado" : "Enviado" },
       { icon: "calendar_today", term: "Criado em", value: formatDate(asset.created_at) },
     ];
     const body = `
@@ -414,7 +415,7 @@ ${error ? snackbar(error) : ""}`;
   /** Guarda o arquivo no R2 como ativo do avatar e devolve o id. */
   private async storeAsset(avatarId: string, file: File, kind: AssetKind): Promise<string> {
     const id = crypto.randomUUID();
-    const key = `avatares-ativos/${avatarId}/${id}`;
+    const key = `${ASSET_PREFIX}${avatarId}/${id}`;
     await this.media.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
     await this.db.insertAsset({ id, avatar_id: avatarId, kind, key, name: file.name.slice(0, 200) || "arquivo", type: file.type, size: file.size, source_video: null });
     return id;
@@ -426,7 +427,7 @@ ${error ? snackbar(error) : ""}`;
     if (!saving) return new Response("não encontrado", { status: 404 });
     const avatar = await this.db.avatarById(String((await request.formData()).get("avatar") ?? ""));
     if (!avatar || avatar.user_id !== user.id) return new Response("não encontrado", { status: 404 });
-    await this.copyVideo(saving, avatar.id);
+    await this.linkVideo(saving, avatar.id);
     return redirect(`/avatares/${avatar.id}`);
   }
 
@@ -440,15 +441,15 @@ ${error ? snackbar(error) : ""}`;
     return key && head ? { video, structure, key, size: head.size } : null;
   }
 
-  /** Copia o vídeo para os ativos do avatar: a cópia continua aqui mesmo que o vídeo seja apagado. */
-  private async copyVideo(saving: SavableVideo, avatarId: string): Promise<void> {
-    const object = await this.media.get(saving.key);
-    if (!object) throw new Error(`O vídeo ${saving.video.id} não está no R2.`);
-    const id = crypto.randomUUID();
-    const key = `avatares-ativos/${avatarId}/${id}`;
-    const bytes = await object.arrayBuffer();
-    await this.media.put(key, bytes, { httpMetadata: { contentType: "video/mp4" } });
-    await this.db.insertAsset({ id, avatar_id: avatarId, kind: "video", key, name: videoAssetName(saving), type: "video/mp4", size: bytes.byteLength, source_video: saving.video.id });
+  /** Liga o vídeo aos ativos do avatar, sem copiar o arquivo. */
+  private async linkVideo(saving: SavableVideo, avatarId: string): Promise<void> {
+    await this.db.insertAsset({ id: crypto.randomUUID(), avatar_id: avatarId, kind: "video", key: saving.key, name: videoAssetName(saving), type: "video/mp4", size: saving.size, source_video: saving.video.id });
+  }
+
+  /** O arquivo do ativo: o enviado ou, se vinculado, a versão que vale do vídeo. */
+  private async assetFile(asset: AvatarAsset): Promise<string> {
+    const video = asset.source_video ? await this.db.videoById(asset.source_video) : null;
+    return (video && (video.edited_key ?? video.processed_key ?? video.video_key)) || asset.key;
   }
 
   /** Tela inicial: um card por estrutura que a pessoa pode usar; a busca filtra pelo nome. */
@@ -1523,7 +1524,7 @@ function assetLibrary(assets: AvatarAsset[], o: { key: string; avatar?: Avatar; 
           <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(a.name)}</span><span class="vrow__support">${esc(formatDate(a.created_at))}</span></span>
           <span class="vrow__status vrow__status--done" role="cell"><span class="icon">${ASSET_ICONS[a.kind]}</span>${ASSET_LABELS[a.kind]}</span>
           <span role="cell">${formatBytes(a.size)}</span>
-          <span class="vrow__wide" role="cell">${a.source_video ? "Salvo de um vídeo" : "Enviado"}</span>
+          <span class="vrow__wide" role="cell">${a.source_video ? "Vídeo vinculado" : "Enviado"}</span>
           <span class="vrow__wide" role="cell">${a.id === avatar?.photo_asset ? "Principal" : a.id === avatar?.voice_asset ? "Voz" : "—"}</span>
           <span role="cell">${esc(formatDate(a.created_at))}</span>
         </a>`,
