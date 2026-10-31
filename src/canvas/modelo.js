@@ -131,6 +131,26 @@ export function groups(project) {
     if (g) g.audios.push(a);
     else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   }
+  // Quem passou da sequência e encosta só no que também passou (o som, por exemplo) segue no bloco.
+  for (let found = true; found; ) {
+    found = false;
+    for (const g of out.filter((g) => g.blocks.length)) {
+      const edge = [...g.blocks, ...g.covers, ...g.audios];
+      const lo = Math.min(...edge.map((b) => b.x));
+      const hi = Math.max(...edge.map((b) => b.x + width(b)));
+      const stray = out.find((o) => {
+        const [b] = o.blocks.length ? o.blocks : o.audios;
+        if (o === g || o.blocks.length > 1 || o.covers.length || (o.blocks.length && o.audios.length) || !overlapX(b.x, b.x + width(b), lo, hi)) return false;
+        return visual(b) ? restsOn(b, g.y) : Math.round(lane(b, g)) >= 0 && Math.round(lane(b, g)) < MAX_FAIXAS && near(Math.round(lane(b, g)) * AUD_H, b.y - g.y - VIS_H);
+      });
+      if (!stray) continue;
+      if (stray.blocks.length) g.covers.push(stray.blocks[0]);
+      else g.audios.push(stray.audios[0]);
+      out.splice(out.indexOf(stray), 1);
+      found = true;
+      break;
+    }
+  }
   for (const g of out) {
     // O bloco vai de onde começa a onde acaba o que está nele: qualquer elemento pode passar da
     // sequência, nos dois lados (seqX e seq guardam onde ela começa e acaba).
@@ -355,6 +375,14 @@ export function snap(project, id, x, y, tol, keep = {}) {
     if (y + h <= top - pad || y >= g.bottom + pad) continue;
     const start = g.seqX;
     const end = g.seq;
+    // O limite de correr é o do bloco inteiro, contando o que já passou da sequência.
+    const lo = g.x;
+    const hi = g.x + g.w;
+    const edges = [lo, hi, ...[...g.blocks, ...g.covers, ...g.audios].flatMap((o) => [o.x, o.x + width(o)])];
+    const stick = () => {
+      const at = nearestEdge(x, w, edges, tol);
+      return at < hi - EPS * 2 && at + w > lo + EPS * 2 ? at : x;
+    };
     const beside = { x: end, y: g.last.y, mode: "after", target: g.last.id, group: g };
     if (visual(b)) {
       // O centro do elemento decide: acima da linha, ele apoia em cima; abaixo, entra na sequência.
@@ -362,12 +390,12 @@ export function snap(project, id, x, y, tol, keep = {}) {
         // Corre até a própria ponta sair da sequência, e o bloco cresce junto. Pela direita,
         // passou disso, desce para o lado; pela esquerda, sai do bloco. Entrar pede um pouco mais
         // que sair, para a borda não piscar.
-        if (x > end - EPS * 2 - (inside && keep.mode === "after" ? tol : 0)) {
-          if (x > end + pad) continue;
+        if (x > hi - EPS * 2 - (inside && keep.mode === "after" ? tol : 0)) {
+          if (x > hi + pad) continue;
           return beside;
         }
-        if (x + w <= start + (inside ? EPS * 2 : tol)) continue;
-        return { x, y: g.y - VIS_H, mode: "cover", target: g.id, group: g };
+        if (x + w <= lo + (inside ? EPS * 2 : tol)) continue;
+        return { x: stick(), y: g.y - VIS_H, mode: "cover", target: g.id, group: g };
       }
       // Vídeo e imagem vão para a área de vídeo, venham de onde vierem; o som vai junto.
       // Na sequência, o lugar muda só na metade de cada elemento: não abre e fecha a cada emenda.
@@ -384,7 +412,8 @@ export function snap(project, id, x, y, tol, keep = {}) {
       return { x: start - w, y: g.y, mode: "before", target: g.first.id, group: g };
     }
     // Som vai sempre para a área de som, e também corre até a própria ponta sair da sequência.
-    if (x > end - (inside ? EPS * 2 : tol) || x + w <= start + (inside ? EPS * 2 : tol)) continue;
+    if (x > hi - (inside ? EPS * 2 : tol) || x + w <= lo + (inside ? EPS * 2 : tol)) continue;
+    const at = stick();
     // A faixa mais perto do mouse que tenha espaço; a de baixo do tudo está sempre livre.
     const base = g.y + VIS_H;
     const taken = [
@@ -393,11 +422,29 @@ export function snap(project, id, x, y, tol, keep = {}) {
     ];
     const next = taken.length ? Math.max(...taken.map((t) => t.track)) + 1 : 0;
     const want = Math.min(Math.max(Math.round((y - base) / AUD_H), 0), next);
-    const free = (track) => !taken.some((t) => t.track === track && overlapX(x, x + w, t.x0, t.x1));
+    const free = (track) => !taken.some((t) => t.track === track && overlapX(at, at + w, t.x0, t.x1));
     const tracks = Array.from({ length: next + 1 }, (_, i) => i).sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || a - b);
-    return { x, y: base + tracks.find(free) * AUD_H, mode: "audio", target: g.id, group: g };
+    return { x: at, y: base + tracks.find(free) * AUD_H, mode: "audio", target: g.id, group: g };
+  }
+  if (visual(b)) return free();
+  // Som solto encosta em outro som solto: mesma linha, ponta com ponta.
+  const solos = project.blocks.filter((o) => o.id !== id && !visual(o) && Math.abs(o.y - y) < AUD_H);
+  for (const o of solos) {
+    const edges = [o.x, o.x + width(o)];
+    const at = nearestEdge(x, w, edges, tol);
+    if (at !== x) return { x: at, y: o.y, mode: null };
   }
   return free();
+}
+
+/** A posição que encosta uma ponta do elemento na ponta mais perto, dentro da mira. */
+function nearestEdge(x, w, edges, tol) {
+  let best = x;
+  let gap = tol;
+  for (const e of edges)
+    for (const at of [e, e - w])
+      if (Math.abs(at - x) < gap) (gap = Math.abs(at - x)), (best = at);
+  return best;
 }
 
 /** Move um bloco para onde o snap() mandou, abrindo espaço se encaixou no meio. */

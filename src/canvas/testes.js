@@ -77,7 +77,7 @@ const dois = () => {
 test("o bloco puxa o elemento ao entrar na área, sem precisar ir ao meio", () => {
   const q = dois();
   const em = M.snap(q, "n", 10, -90 - 40, 16);
-  assert.deepEqual([em.mode, em.x, em.y], ["cover", 10, -M.VIS_H]);
+  assert.deepEqual([em.mode, em.x, em.y], ["cover", 0, -M.VIS_H]);
   assert.equal(M.snap(q, "n", 10, -500, 16).mode, null);
   const som = M.snap(q, "s", 100, 96 + 30, 16);
   assert.deepEqual([som.mode, som.y], ["audio", 96]);
@@ -197,6 +197,30 @@ test("som sobe para a faixa de cima quando há espaço, e nunca fica sobre outro
   const g = M.groups(sobe)[0];
   assert.deepEqual(g.audios.map((a) => a.id).sort(), ["m", "s"]);
   assert.equal(g.bottom, 176);
+});
+
+test("todo elemento é magnético: encosta nas pontas dos outros", () => {
+  const b = (id, x, y, dur = 2, kind = "audio") => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, audio: "none" });
+  const q = { blocks: [b("v", 0, 0, 10, "image"), b("m", 0, 96), b("c", 40, -96, 2, "image"), b("s", 900, 900), b("n", 900, 1200, 2, "image"), b("l", 2000, 500), b("r", 2100, 900)], finals: [], edges: [] };
+  const som = (x) => M.snap(q, "s", x, 96, 16, { group: "v", mode: "audio" });
+  assert.deepEqual([som(90).x, som(90).y], [80, 96]);
+  assert.equal(M.snap(q, "n", 130, -96, 16, { group: "v", mode: "cover" }).x, 120);
+  const encosta = M.snap(q, "s", 2090, 510, 16);
+  assert.deepEqual([encosta.x, encosta.y, encosta.mode], [2080, 500, null]);
+  assert.equal(M.snap(q, "s", 2000, 700, 16).y, 700);
+});
+
+test("vídeo corre até o limite do bloco inteiro, contando o som que passou, e continua nele", () => {
+  const b = (id, x, y, dur, kind) => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, audio: "none" });
+  const q = { blocks: [b("v", 0, 0, 5, "image"), b("m", 100, 96, 10, "audio"), b("n", 900, 900, 2, "image")], finals: [], edges: [] };
+  const keep = { group: "v", mode: "cover" };
+  const s = M.snap(q, "n", 450, -96, 16, keep);
+  assert.deepEqual([s.mode, s.x], ["cover", 450]);
+  assert.equal(M.snap(q, "n", 510, -96, 16, keep).mode, "after");
+  const o = M.dropBlock(q, "n", s);
+  const g = M.groups(o).find((g) => g.id === "v");
+  assert.deepEqual(g.covers.map((c) => c.id), ["n"]);
+  assert.equal(g.w, 530);
 });
 
 test("cada tipo vai para a sua área, venha de onde vier", () => {
