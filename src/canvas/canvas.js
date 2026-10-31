@@ -397,8 +397,8 @@ function render({ side = true } = {}) {
 
 /** As variações de um Final: em lista até 3 colunas, em números depois, com a escolhida em cima. */
 function variantList(vs, active) {
-  const style = M.variantLabel(vs.length);
-  const rows = Math.min(vs.length, M.VARIANT_ROWS);
+  const { rows, cols } = M.variantShape(vs.length);
+  const style = M.variantLabel(cols);
   const bar = active ? `<span class="fin__bar" style="--p:${player.duration ? player.t / player.duration : 0}"></span>` : "";
   const label = (i) => (style === "full" ? M.versionName(i) : `V. ${i + 1}`);
   const glyph = (i) => (active && i === versionIdx && player.playing ? "pause" : "play_arrow");

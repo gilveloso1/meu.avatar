@@ -126,28 +126,38 @@ test("o Final exporta na resolução e no formato escolhidos (e lê o tamanho de
   assert.deepEqual(M.output({ size: "1080x1920" }), { resolution: "1080p", format: "9:16", width: 1080, height: 1920 });
 });
 
-test("o card Final escreve o nome inteiro até 2 colunas, V. com 3 e só o número depois", () => {
-  assert.deepEqual([1, 5, 10, 11, 15, 16, 50, 200].map(M.variantLabel), ["full", "full", "full", "short", "short", "number", "number", "number"]);
+test("o card Final fecha o retângulo quando dá, com até 6 linhas e 8 colunas", () => {
+  const forma = (n) => { const s = M.variantShape(n); return `${s.rows}x${s.cols}`; };
+  assert.deepEqual([1, 6, 8, 9, 10, 12, 14, 15, 16, 18, 20, 24, 30, 36, 48].map(forma), ["1x1", "6x1", "4x2", "3x3", "5x2", "6x2", "2x7", "5x3", "4x4", "6x3", "5x4", "6x4", "6x5", "6x6", "6x8"]);
+  assert.deepEqual([7, 11, 22, 47].map(forma), ["6x2", "6x2", "6x4", "6x8"]);
+  for (let n = 1; n <= M.MAX_VERSOES; n++) {
+    const s = M.variantShape(n);
+    assert.ok(s.rows <= 6 && s.cols <= 8 && s.rows * s.cols >= n, `${n}`);
+  }
 });
 
-test("cada Final tem até 50 variações, e o que passa disso só avisa", () => {
+test("o card escreve o nome inteiro até 2 colunas, V. com 3 e só o número depois", () => {
+  assert.deepEqual([1, 2, 3, 4, 8].map(M.variantLabel), ["full", "full", "short", "number", "number"]);
+});
+
+test("cada Final tem até 48 variações, e o que passa disso só avisa", () => {
   const bloco = (id, y) => ({ id, kind: "image", name: id, src: "a", dur: 5, tin: 0, tout: 5, x: 0, y, mute: false, vol: 1, tone: 1 });
-  const ganchos = Array.from({ length: 51 }, (_, i) => `g${i}`);
+  const ganchos = Array.from({ length: 49 }, (_, i) => `g${i}`);
   const p = { blocks: ganchos.map((id, i) => bloco(id, i * 400)), finals: [{ id: "final", x: 900, y: 0 }], edges: ganchos.map((id) => ({ id: `e-${id}`, from: id, to: "final" })) };
-  assert.equal(M.versions(p, "final").length, 50);
+  assert.equal(M.versions(p, "final").length, 48);
   assert.equal(M.overLimit(p, "final"), true);
-  assert.equal(M.exportWork(p, "final").versoes.length, 50);
+  assert.equal(M.exportWork(p, "final").versoes.length, 48);
   p.edges.pop();
   assert.equal(M.overLimit(p, "final"), false);
 });
 
-test("a ligação que passa de 50 variações é recusada; as outras, não", () => {
+test("a ligação que passa de 48 variações é recusada; as outras, não", () => {
   const bloco = (id, y) => ({ id, kind: "image", name: id, src: "a", dur: 5, tin: 0, tout: 5, x: 0, y, mute: false, vol: 1, tone: 1 });
-  const ganchos = Array.from({ length: 52 }, (_, i) => `g${i}`);
+  const ganchos = Array.from({ length: 50 }, (_, i) => `g${i}`);
   const liga = (ids) => ids.map((id) => ({ id: `e-${id}`, from: id, to: "final" }));
   const com = (ids) => ({ blocks: ganchos.map((id, i) => bloco(id, i * 400)), finals: [{ id: "final", x: 900, y: 0 }], edges: liga(ids) });
-  assert.equal(M.passesLimit(com(ganchos.slice(0, 49)), com(ganchos.slice(0, 50))), false);
-  assert.equal(M.passesLimit(com(ganchos.slice(0, 50)), com(ganchos.slice(0, 51))), true);
-  assert.equal(M.passesLimit(com(ganchos.slice(0, 51)), com(ganchos.slice(0, 52))), true);
-  assert.equal(M.passesLimit(com(ganchos.slice(0, 51)), com(ganchos.slice(0, 51))), false);
+  assert.equal(M.passesLimit(com(ganchos.slice(0, 47)), com(ganchos.slice(0, 48))), false);
+  assert.equal(M.passesLimit(com(ganchos.slice(0, 48)), com(ganchos.slice(0, 49))), true);
+  assert.equal(M.passesLimit(com(ganchos.slice(0, 49)), com(ganchos.slice(0, 50))), true);
+  assert.equal(M.passesLimit(com(ganchos.slice(0, 49)), com(ganchos.slice(0, 49))), false);
 });

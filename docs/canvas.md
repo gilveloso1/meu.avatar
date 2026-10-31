@@ -85,14 +85,15 @@ menos custo.
   (bloco, grupo ou variação) mostra a Prévia; a aba escolhida fica lembrada.
 - **Variações no card Final**: cada caminho até o Final é uma variação, numerada na
   ordem das ligações ("Variação 2", o mesmo nome no arquivo exportado; o número muda
-  se as ligações mudarem). O card cresce para o lado: até 5 linhas por coluna. Com 1
-  ou 2 colunas (até 10), "Variação 1"; com 3 (até 15), "V. 11"; depois só o número,
-  com a escolhida numa linha em cima. Tocar numa variação toca na Prévia, sem sair do
+  se as ligações mudarem). O card tem até 6 linhas e 8 colunas e usa o maior
+  número de linhas que fecha o retângulo (8 = 4 × 2, 15 = 5 × 3, 24 = 6 × 4); sem isso,
+  6 linhas e a última coluna incompleta. Com 1 ou 2 colunas, "Variação 1"; com 3,
+  "V. 13"; com 4 ou mais, só o número, com a escolhida numa linha em cima. Tocar numa variação toca na Prévia, sem sair do
   canvas, e destaca os blocos e as linhas dela, apagando o resto; o destaque fica
   depois de pausar e sai ao clicar fora do Final. As setas ← e → passam de uma para
-  outra, com o Final escolhido. Cada Final tem até 50 variações, o mesmo limite de uma
+  outra, com o Final escolhido. Cada Final tem até 48 variações, o mesmo limite de uma
   exportação: a ligação que passaria disso é recusada, com um aviso. Projeto antigo com
-  mais ligações mostra as 50 primeiras e o aviso no card.
+  mais ligações mostra as 48 primeiras e o aviso no card.
   Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).

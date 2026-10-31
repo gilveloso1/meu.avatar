@@ -33,7 +33,7 @@ export const MAX_FAIXAS = 8;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
 /** Quantas variações cada bloco final tem; é também o que uma exportação monta de uma vez. */
-export const MAX_VERSOES = 50;
+export const MAX_VERSOES = 48;
 export const TONES = 6;
 /** Resolução e formato do vídeo exportado (nos Ajustes do Final), os mesmos dos modelos. */
 export const RESOLUTIONS = ["480p", "720p", "1080p"];
@@ -178,11 +178,19 @@ export function passesLimit(before, after) {
 /** O nome de uma variação na tela e no arquivo, pela posição dela no Final. */
 export const versionName = (i) => `Variação ${i + 1}`;
 
-/** Quantas variações cabem em cada coluna do card Final: ele cresce para o lado, não para baixo. */
-export const VARIANT_ROWS = 5;
+/** O card Final tem até 6 linhas e 8 colunas: 48 é o limite, e se divide por quase tudo. */
+const VARIANT_ROWS = 6;
+const VARIANT_COLS = 8;
 
-/** Como o card escreve cada variação: "Variação 1" até 2 colunas, "V. 11" com 3, só o número depois. */
-export const variantLabel = (n) => (n <= 2 * VARIANT_ROWS ? "full" : n <= 3 * VARIANT_ROWS ? "short" : "number");
+/** Linhas e colunas do card Final: o maior número de linhas que fecha o retângulo; sem isso, 6. */
+export function variantShape(n) {
+  if (n <= VARIANT_ROWS) return { rows: n, cols: 1 };
+  for (let rows = VARIANT_ROWS; rows > 1; rows--) if (n % rows === 0 && n / rows <= VARIANT_COLS) return { rows, cols: n / rows };
+  return { rows: VARIANT_ROWS, cols: Math.ceil(n / VARIANT_ROWS) };
+}
+
+/** Como o card escreve cada variação: "Variação 1" até 2 colunas, "V. 13" com 3, só o número depois. */
+export const variantLabel = (cols) => (cols <= 2 ? "full" : cols === 3 ? "short" : "number");
 
 /**
  * Linha do tempo de uma versão: o que toca, quando e de onde do arquivo.
