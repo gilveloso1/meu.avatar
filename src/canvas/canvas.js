@@ -568,7 +568,7 @@ function renameProject(value) {
 /* O nome na barra superior: um clique troca o título por um campo; sair dele salva, Esc desiste. */
 const barTitle = $(".top-app-bar__title");
 if (PROJETO && barTitle) {
-  barTitle.innerHTML = `<button class="title-edit interactive" type="button" aria-label="Mudar o nome do projeto" title="Mudar o nome do projeto"><span class="title-edit__text"></span><span class="icon" aria-hidden="true">edit</span></button><input class="title-edit__input" maxlength="120" aria-label="Nome do projeto" hidden>`;
+  barTitle.innerHTML = `<button class="title-edit interactive" type="button" aria-label="Mudar o nome do projeto" title="Mudar o nome do projeto"><span class="title-edit__text"></span></button><input class="title-edit__input" maxlength="120" aria-label="Nome do projeto" hidden>`;
   const open = $(".title-edit", barTitle);
   const input = $(".title-edit__input", barTitle);
   $(".title-edit__text", barTitle).textContent = projectName;

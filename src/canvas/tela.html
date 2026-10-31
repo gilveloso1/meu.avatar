@@ -131,11 +131,10 @@ body { min-height: 0; overflow: hidden; }
 /* A variação escolhida: o caminho dela fica, e o resto do canvas apaga. */
 #world.has-path :is(.blk, .gframe, .gtab):not(.is-path), #world.has-path .wire:not(.is-path, .wire--temp) { opacity: 0.3; }
 
-/* Nome do projeto na barra superior: parece o título, com o lápis; o campo fica no mesmo lugar. */
-.title-edit { display: flex; align-items: center; gap: 8px; max-width: 100%; margin-left: -8px; padding: 4px 8px; border: 0; border-radius: var(--md-sys-shape-corner-small); background: none; color: inherit; font: inherit; letter-spacing: inherit; }
+/* Nome do projeto na barra superior: parece o título; o campo fica no mesmo lugar. */
+.title-edit { display: flex; align-items: center; max-width: 100%; margin-left: -8px; padding: 4px 8px; border: 0; border-radius: var(--md-sys-shape-corner-small); background: none; color: inherit; font: inherit; letter-spacing: inherit; }
 .title-edit[hidden] { display: none; }
 .title-edit__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.title-edit .icon { flex: none; font-size: 20px; color: var(--md-sys-color-on-surface-variant); }
 .title-edit__input { width: min(100%, 360px); height: 40px; margin-left: -8px; padding: 0 6px; border: 2px solid var(--md-sys-color-primary); border-radius: var(--md-sys-shape-corner-small); outline: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; }
 
 /* Barra de ferramentas flutuante do M3 Expressive: 64 px, cantos inteiros, surface-container,
