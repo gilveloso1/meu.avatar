@@ -118,7 +118,12 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
     (primary sobre secondary-container, 4 px, 4 px de folga). Indeterminado até haver
     andamento; com `--determinate` e `--progress` (0 a 1), mostra o andamento e o ponto de
     parada. Toda ação demorada mostra retorno no clique, antes da resposta do servidor.
-    Hoje só a exportação usa o determinado; as outras esperas migram num PR próprio.
+    Hoje só a exportação usa o determinado; o envio do canvas usa o indeterminado no snackbar.
+  - Indicador circular no botão: `.spinner` (SVG e CSS), o padrão para ação de botão que espera
+    o servidor. Centralizado, na cor do texto do botão, sem trilha, 24 px com traço de 2,4 px (a
+    proporção de 40 e 4 px do M3); o botão mantém a largura e a cor cheia (a opacidade de
+    desativado cairia abaixo de 3:1). Vem sozinho em todo `POST` de `.button`, `.fab` e
+    `.avatar-option` (`SCRIPT`). Em lista, só no item tocado, à direita, nunca em todos.
   - Snackbar: inverse-surface, inverse-on-surface e ação em inverse-primary.
 
 ## Telas aprovadas (out/2026)
