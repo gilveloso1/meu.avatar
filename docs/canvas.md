@@ -63,11 +63,13 @@ menos custo.
   saída. Puxar a linha solta a ponta mais perto: num ponto ela liga de novo, no vazio ela
   some. Clique na linha e Delete apaga. `linkProblem` (`modelo.js`) recusa ligar um grupo a
   ele mesmo, repetir uma ligação, fechar um círculo e passar do limite de variações.
-- **Encaixe magnético**: o elemento que entra na área de um bloco é puxado: visual para cima
-  dele, som para baixo; à direita, o encaixe é magnético também. Com o botão apertado, ele
-  corre dentro do bloco até o limite do que há lá. Passou do fim, fica ao lado; passou do
-  começo, sai do bloco. O bloco o segura numa área maior, para a borda não piscar. As
-  emendas de dentro e o começo do bloco continuam com a mira fina. Alt solta sem encaixar.
+- **Encaixe magnético**: o elemento que entra na área de um bloco é puxado. Quem decide o
+  lugar é o centro do elemento: acima da fileira, ele apoia em cima; na fileira, entra na
+  sequência, e o lugar só muda na metade de cada elemento; som vai para baixo. Em cima, ele
+  corre até a própria ponta sair do bloco, que cresce e toca até o fim dele (o fundo é
+  preto); depois desce para o lado. Passou do começo, sai do bloco e só volta a ser puxado
+  depois de sair de cima dele. O bloco o segura numa área maior e a linha entre em cima e
+  na fileira muda para quem já está lá, para nada piscar. Alt solta sem encaixar.
 - **Nome dos blocos**: Bloco 1, Bloco 2, na ordem em que os elementos entraram; muda nos
   Ajustes (`project.names`, pelo id do primeiro elemento), e vazio volta ao número.
 - **Área e prévia**: o grupo ganha um retângulo tracejado em volta de tudo o

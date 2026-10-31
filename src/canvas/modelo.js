@@ -35,6 +35,9 @@ const COL_GAP = 140;
 const ROW_GAP = 110;
 // O ímã do bloco alcança MAGNET vezes a mira fina do encaixe.
 const MAGNET = 3;
+// Até onde da fileira o centro do elemento conta como "em cima"; mais baixo para quem já está lá.
+const ROW_LINE = 0.25;
+const ROW_LINE_HELD = 0.5;
 const FINAL_HEAD = 92;
 const FINAL_ROW = 38;
 const LANE_ABOVE = 70;
@@ -129,6 +132,9 @@ export function groups(project) {
     else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   }
   for (const g of out) {
+    // O bloco vai até onde acaba o que está nele: quem está em cima pode passar do fim da sequência.
+    g.seq = g.x + g.w;
+    g.w = Math.max(g.w, ...g.covers.map((c) => c.x + width(c) - g.x));
     g.dur = g.w / PX;
     g.first = g.blocks[0] ?? g.audios[0];
     g.last = g.blocks[g.blocks.length - 1] ?? g.audios[0];
@@ -309,38 +315,53 @@ export function snap(project, id, x, y, tol, keep = {}) {
   const b = project.blocks.find((o) => o.id === id);
   const w = width(b);
   const h = height(b);
+  const cx = x + w / 2;
+  const cy = y + h / 2;
   const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) }).filter((g) => g.blocks.length);
   const magnet = tol * MAGNET;
   const free = () => ({ x, y, mode: null });
-  if (visual(b))
-    // Nas emendas de dentro e antes do primeiro, a mira é fina; depois do último, é o ímã.
-    for (const g of gs)
-      for (const o of g.blocks) {
-        if (Math.abs(y - o.y) > VIS_H / 2) continue;
-        if (o !== g.last && Math.abs(x - (o.x + width(o))) < tol) return { x: o.x + width(o), y: o.y, mode: "after", target: o.id, group: g };
-        if (o === g.first && Math.abs(x + w - o.x) < tol) return { x: o.x - w, y: o.y, mode: "before", target: o.id, group: g };
-      }
   // O bloco onde o elemento já está vem primeiro, e o segura numa área maior.
   const left = gs.find((g) => g.id === keep.left);
   const order = [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group && g !== left)];
-  const areaOf = (g) => ({ top: Math.min(g.y, ...g.covers.map((c) => c.y)), bottom: Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H)) });
   for (const g of order) {
     const inside = g.id === keep.group;
     const pad = inside ? magnet * 2 : magnet;
-    const { top, bottom } = areaOf(g);
+    const top = Math.min(g.y, ...g.covers.map((c) => c.y));
+    const bottom = Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
     if (y + h <= top - pad || y >= bottom + pad) continue;
-    const end = g.x + g.w;
-    if (x + w / 2 > end) {
-      if (!visual(b) || x > end + pad) continue;
-      return { x: end, y: g.last.y, mode: "after", target: g.last.id, group: g };
+    const end = g.seq;
+    const beside = { x: end, y: g.last.y, mode: "after", target: g.last.id, group: g };
+    if (visual(b)) {
+      // O centro do elemento decide: acima da linha, ele apoia em cima; abaixo, entra na sequência.
+      if (cy < g.y + VIS_H * (inside && keep.mode === "cover" ? ROW_LINE_HELD : ROW_LINE)) {
+        // Corre até a própria ponta sair do bloco, que cresce junto; passou, desce para o lado.
+        if (x > end - EPS * 2 - (inside && keep.mode === "after" ? tol : 0)) {
+          if (x > end + pad) continue;
+          return beside;
+        }
+        if (inside && x < g.x - tol) return { ...free(), left: g.id };
+        if (x + w <= g.x) continue;
+        return { x: Math.max(g.x, x), y: g.y - h, mode: "cover", target: g.id, group: g };
+      }
+      // Na sequência, o lugar muda só na metade de cada elemento: não abre e fecha a cada emenda.
+      const at = g.blocks.findIndex((o) => cx < o.x + width(o) / 2);
+      if (at < 0) {
+        if (x > end + pad) continue;
+        return beside;
+      }
+      if (at > 0) {
+        const o = g.blocks[at - 1];
+        return { x: o.x + width(o), y: o.y, mode: "after", target: o.id, group: g };
+      }
+      if (x + w < g.x - pad) continue;
+      return { x: g.x - w, y: g.y, mode: "before", target: g.first.id, group: g };
     }
+    if (cy < g.y + g.h / 2 || cx > end) continue;
     if (inside && x < g.x - tol) return { ...free(), left: g.id };
     if (x + w <= g.x) continue;
-    const at = Math.max(g.x, Math.min(x, end - w));
-    if (visual(b)) return { x: at, y: g.y - height(b), mode: "cover", target: g.id, group: g };
     const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
     const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
-    return { x: at, y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
+    return { x: Math.max(g.x, Math.min(x, end - w)), y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
   }
   // Quem saiu pela esquerda só volta a ser puxado depois de sair de cima do bloco.
   const stillOver = left && x + w > left.x && x < left.x + left.w;

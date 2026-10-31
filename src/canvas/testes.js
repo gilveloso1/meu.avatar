@@ -45,7 +45,7 @@ test("exportar faz cada grupo uma vez só: 6 versões saem de 6 trechos", () => 
 test("encaixar no meio abre espaço; encurtar puxa o que vem depois", () => {
   const novo = { id: "n", kind: "video", name: "N", src: "", dur: 2, tin: 0, tout: 2, x: 0, y: 600, mute: false, vol: 1 };
   let q = { ...p, blocks: [...p.blocks, novo] };
-  const s = M.snap(q, "n", 721, 200, 12);
+  const s = M.snap(q, "n", 690, 200, 12);
   assert.equal(s.mode, "after");
   assert.equal(s.target, "corpo");
   q = M.dropBlock(q, "n", s);
@@ -59,7 +59,7 @@ test("encaixar no meio abre espaço; encurtar puxa o que vem depois", () => {
 test("vídeo solto por cima vira cobertura; áudio embaixo soma o som", () => {
   const novo = { id: "c", kind: "video", name: "C", src: "", dur: 2, tin: 0, tout: 2, x: 600, y: 180, mute: false, vol: 1 };
   const q = { ...p, blocks: [...p.blocks, novo] };
-  const s = M.snap(q, "c", 600, 180, 12);
+  const s = M.snap(q, "c", 600, 60, 12);
   assert.equal(s.mode, "cover");
   assert.equal(s.y, 192 - M.height(novo));
   const a = { id: "a", kind: "audio", name: "A", src: "", dur: 5, tin: 0, tout: 5, x: 30, y: 250, mute: false, vol: 1 };
@@ -86,10 +86,11 @@ test("com o botão apertado, o elemento corre dentro do bloco até o limite", ()
   const q = dois();
   const keep = { group: "a" };
   assert.equal(M.snap(q, "n", 120, -96, 16, keep).x, 120);
-  // Do lado direito, para no fim do que há dentro.
-  assert.equal(M.snap(q, "n", 330, -96, 16, keep).x, 320);
-  // Passou do fim: fica ao lado.
-  const fora = M.snap(q, "n", 400, -96, 16, keep);
+  // Passa do fim do que há embaixo enquanto a ponta dele ainda está no bloco.
+  const passando = M.snap(q, "n", 390, -96, 16, { ...keep, mode: "cover" });
+  assert.deepEqual([passando.mode, passando.x], ["cover", 390]);
+  // A ponta saiu: desce para o lado.
+  const fora = M.snap(q, "n", 400, -96, 16, { ...keep, mode: "cover" });
   assert.deepEqual([fora.mode, fora.x, fora.y, fora.target], ["after", 400, 0, "b"]);
 });
 
@@ -101,6 +102,44 @@ test("pela esquerda o elemento sai do bloco e não é puxado de volta enquanto e
   assert.deepEqual([ainda.mode, ainda.left], [null, "a"]);
   const longe = M.snap(q, "n", -200, -96, 16, { left: "a" });
   assert.deepEqual([longe.mode, longe.left], [null, undefined]);
+});
+
+test("o elemento de cima que passa do fim expande o bloco e toca até o fim dele", () => {
+  const q = dois();
+  const n = q.blocks.find((b) => b.id === "n");
+  Object.assign(n, { x: 380, y: -M.VIS_H });
+  const g = M.groups(q).find((g) => g.id === "a");
+  assert.deepEqual([g.w, g.dur, g.seq], [460, 11.5, 400]);
+  const tl = M.timeline([g]);
+  assert.equal(tl.duration, 11.5);
+  assert.equal(tl.items.find((i) => i.block === g.covers[0]).len, 2);
+});
+
+test("na fileira, o lugar só muda na metade de cada elemento, sem piscar nas emendas", () => {
+  const q = dois();
+  const lugar = (x) => {
+    const s = M.snap(q, "n", x, 0, 16, { group: "a", mode: "after" });
+    return [s.mode, s.target];
+  };
+  const antes = [];
+  for (let x = 60; x <= 300; x += 5) antes.push(lugar(x).join());
+  assert.equal(new Set(antes).size, 2);
+  assert.equal(antes.lastIndexOf("after,a") < antes.indexOf("after,b") || antes.indexOf("after,b") < 0, true);
+  assert.deepEqual(lugar(-30), ["before", "a"]);
+  assert.deepEqual(lugar(150), ["after", "a"]);
+  assert.deepEqual(lugar(300), ["after", "b"]);
+});
+
+test("mexer devagar na fronteira entre em cima e na fileira não fica trocando", () => {
+  const q = dois();
+  let keep = { group: "a", mode: "cover" };
+  const trocas = [];
+  for (const y of [-40, -34, -36, -30, -34, -28]) {
+    const s = M.snap(q, "n", 100, y, 16, keep);
+    trocas.push(s.mode);
+    keep = { group: s.group?.id, mode: s.mode };
+  }
+  assert.equal(new Set(trocas).size, 1);
 });
 
 test("o encaixe à direita é magnético", () => {
