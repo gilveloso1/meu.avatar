@@ -35,8 +35,10 @@ let projectName = PROJETO?.name ?? "";
 let view = { x: 80, y: 120, z: 0.8 };
 let sel = { type: "final", id: "final" };
 let versionIdx = 0;
-// O que a prévia toca: null (a versão escolhida no Final), um grupo ou um bloco.
+// O que a prévia toca: null (a variação escolhida no Final), um grupo ou um bloco.
 let preview = null;
+// O Final cuja variação escolhida está destacada no canvas.
+let litFinal = null;
 const undo = [];
 const redo = [];
 
@@ -55,6 +57,7 @@ const player = new Player(pv.stage, {
     pv.slider.max = d;
     pv.slider.value = t;
     pv.slider.style.setProperty("--p", `${d ? (t / d) * 100 : 0}%`);
+    chrome.querySelector(".fin__bar")?.style.setProperty("--p", String(d ? t / d : 0));
     playhead(t);
   },
   onEnd: () => {
@@ -92,12 +95,11 @@ function loadPreview() {
     }
   }
   if (!v && !tl) {
-    const f = project.finals[0] && (sel.type === "final" ? project.finals.find((f) => f.id === sel.id) : project.finals[0]);
+    const f = previewFinal();
     const vs = f ? M.versions(project, f.id, gs) : [];
     if (vs.length) {
-      versionIdx = Math.min(versionIdx, vs.length - 1);
       v = vs[versionIdx];
-      title = `Versão ${versionIdx + 1}: ${M.versionName(v)}`;
+      title = M.versionName(versionIdx);
     }
   }
   tl ??= v ? M.timeline(v) : { duration: 0, items: [] };
@@ -109,7 +111,10 @@ function loadPreview() {
   setPlayIcon();
 }
 
-/** Linha de reprodução sobre o bloco ou o grupo que a prévia toca (na versão, não aparece). */
+/** O Final de onde vem a variação da prévia. */
+const previewFinal = () => (sel.type === "final" && project.finals.find((f) => f.id === sel.id)) || project.finals[0];
+
+/** Linha de reprodução sobre o bloco ou o grupo que a prévia toca (na variação, não aparece). */
 const head = document.createElement("div");
 head.className = "playhead";
 head.innerHTML = `<span class="playhead__knob"></span>`;
@@ -134,6 +139,25 @@ function playhead(t) {
   const pad = 4 / Math.max(1, view.z);
   if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - pad / 4}px`, top: `${box.y - pad}px`, height: `${box.h + 2 * pad}px` });
 }
+/** Tocar numa variação do Final: destaca o caminho e toca; a que já está na prévia pausa ou continua. */
+function pickVariant(id, i) {
+  const same = !preview && previewFinal()?.id === id && versionIdx === i;
+  litFinal = id;
+  sel = { type: "final", id };
+  if (same && player.playing) {
+    player.pause();
+    setPlayIcon();
+    return render();
+  }
+  if (!same) {
+    versionIdx = i;
+    return playNow(null);
+  }
+  setTab("previa");
+  player.play();
+  setPlayIcon();
+  render();
+}
 function playNow(p) {
   // Tocar algo mostra a Prévia.
   setTab("previa");
@@ -147,8 +171,7 @@ function playNow(p) {
 
 /** O quadro da prévia tem o formato do Final (o escolhido, ou o primeiro). */
 function frameRatio() {
-  const f = (sel.type === "final" && project.finals.find((f) => f.id === sel.id)) || project.finals[0];
-  const out = M.output(f);
+  const out = M.output(previewFinal());
   $("#pv-stage").style.setProperty("--ar", String(out.width / out.height));
 }
 
@@ -258,6 +281,13 @@ function applyView() {
 function render({ side = true } = {}) {
   const gs = M.groups(project);
   const idx = M.groupIndex(gs);
+  const pf = previewFinal();
+  const pvs = pf ? M.versions(project, pf.id, gs) : [];
+  versionIdx = Math.max(0, Math.min(versionIdx, pvs.length - 1));
+  // O destaque sai ao clicar fora do Final dele.
+  if (sel.type !== "final" || sel.id !== litFinal) litFinal = null;
+  const path = (litFinal && pvs[versionIdx]) || null;
+  world.classList.toggle("has-path", !!path);
 
   // Blocos: mantém os elementos (a miniatura não pisca ao arrastar).
   const seen = new Set();
@@ -286,7 +316,7 @@ function render({ side = true } = {}) {
     }
     const g = idx.get(b.id);
     const role = g?.covers.includes(b) ? "cover" : g?.audios.includes(b) && !g.soloAudio ? "under" : "";
-    el.className = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""}`;
+    el.className = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""} ${path?.includes(g) ? "is-path" : ""}`;
     Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${M.width(b)}px`, height: `${M.height(b)}px` });
     const tipo = { video: "video", image: "imagem", audio: "audio" }[b.kind];
     el.style.setProperty("--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
@@ -319,8 +349,9 @@ function render({ side = true } = {}) {
       const gPlaying = player.playing && preview?.type === "group" && preview.id === g.id;
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
       const bottom = groupBottom(g);
-      html += `<div class="gframe ${isSel ? "is-sel" : ""}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
-      html += `<div class="gtab ${isSel ? "is-sel" : ""}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o grupo"}" title="${gPlaying ? "Pausar" : "Tocar o grupo"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
+      const onPath = path?.includes(g) ? "is-path" : "";
+      html += `<div class="gframe ${isSel ? "is-sel" : ""} ${onPath}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
+      html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o grupo"}" title="${gPlaying ? "Pausar" : "Tocar o grupo"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
     }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
@@ -334,9 +365,10 @@ function render({ side = true } = {}) {
     html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2}px;top:${cy}px" aria-label="${playing ? "Pausar" : "Tocar o bloco"}" title="${playing ? "Pausar" : "Tocar o bloco"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
   }
   for (const f of project.finals) {
-    const n = M.versions(project, f.id, gs).length;
+    const vs = M.versions(project, f.id, gs);
+    const n = vs.length;
     const isSel = sel.type === "final" && sel.id === f.id;
-    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "versão" : "versões"}</small></span></div>`;
+    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
     html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
   chrome.innerHTML = html;
@@ -350,7 +382,9 @@ function render({ side = true } = {}) {
     const b = f ? { x: f.x, y: f.y + 40 } : { x: l.to.x - PORT_OUT, y: l.to.y + (l.to.soloAudio ? M.AUD_H : M.VIS_H) / 2 };
     const d = curve(a, b);
     const on = sel.type === "edge" && sel.id === l.edge.id;
-    svg += `<path class="wire ${on ? "is-sel" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
+    const pos = path?.indexOf(l.from) ?? -1;
+    const onPath = pos >= 0 && (pos === path.length - 1 ? f?.id === litFinal : path[pos + 1] === l.to);
+    svg += `<path class="wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
   }
   wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d=""/>`;
 
@@ -359,6 +393,26 @@ function render({ side = true } = {}) {
   loadPreview();
   $("#undo").disabled = !undo.length;
   $("#redo").disabled = !redo.length;
+}
+
+/** As variações de um Final: em lista até 3 colunas, em números depois, com a escolhida em cima. */
+function variantList(vs, active) {
+  const style = M.variantLabel(vs.length);
+  const rows = Math.min(vs.length, M.VARIANT_ROWS);
+  const bar = active ? `<span class="fin__bar" style="--p:${player.duration ? player.t / player.duration : 0}"></span>` : "";
+  const label = (i) => (style === "full" ? M.versionName(i) : `V. ${i + 1}`);
+  const glyph = (i) => (active && i === versionIdx && player.playing ? "pause" : "play_arrow");
+  const lead = (i) => `<span class="icon" aria-hidden="true">${glyph(i)}</span>`;
+  const time = (v) => `<span class="xlist__trail">${fmt(M.timeline(v).duration)}</span>`;
+  const item = (v, i) => {
+    const on = active && i === versionIdx;
+    const attrs = `class="xlist__item interactive" type="button" data-variant="${i}" aria-label="${M.versionName(i)}" aria-current="${on}"`;
+    if (style === "number") return `<button ${attrs}>${i + 1}</button>`;
+    return `<button ${attrs}>${lead(i)}<span class="xlist__text">${label(i)}</span>${time(v)}${on ? bar : ""}</button>`;
+  };
+  const cur = active ? versionIdx : 0;
+  const now = style === "number" ? `<button class="xlist__item interactive" type="button" data-variant="${cur}" aria-label="${M.versionName(cur)}">${lead(cur)}<span class="xlist__text">${M.versionName(cur)}</span>${time(vs[cur])}${bar}</button>` : "";
+  return `<div class="fin__body">${now}<div class="fin__list fin__list--${style}" style="--rows:${rows}">${vs.map(item).join("")}</div></div>`;
 }
 
 const curve = (a, b) => {
@@ -382,10 +436,8 @@ function renderSide(gs) {
   if (sel.type === "final") {
     const vs = M.versions(project, sel.id, gs);
     title = "Final";
-    h += `<section class="viewer__section"><h3 class="viewer__title">Versões</h3><p class="sheet-hint">${vs.length ? `${vs.length} ${vs.length === 1 ? "versão sai" : "versões saem"} das linhas que chegam aqui.` : "Ligue um grupo ao Final para ter versões."}</p>${vs.length > M.MAX_EXPORTAR && PROJETO ? `<p class="sheet-hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}`;
-    h += `<div class="xlist">${vs
-      .map((v, i) => `<button class="xlist__item interactive" type="button" data-version="${i}" aria-current="${i === versionIdx && !preview}"><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(M.versionName(v))}</span><span class="xlist__trail">${fmt(M.timeline(v).duration)}</span></button>`)
-      .join("")}</div>${CONFIG.exportacao?.status === "done" ? btn("text", 'data-export="last"', "download", "Último exportado") : ""}</section>`;
+    if (!vs.length) h += `<p class="sheet-hint">Ligue um grupo ao Final para ter variações.</p>`;
+    if (CONFIG.exportacao?.status === "done") h += btn("text", 'data-export="last"', "download", "Último exportado");
     const out = M.output(project.finals.find((f) => f.id === sel.id));
     // Os mesmos campos dos modelos: Resolução em botões conectados, Formato no campo de seleção.
     h += `<section class="viewer__section"><h3 class="viewer__title">Vídeo exportado</h3>
@@ -396,7 +448,7 @@ function renderSide(gs) {
         (o) => `<option value="${o.value}"${o.value === out.format ? " selected" : ""}>${o.value}</option>`,
       ).join("")}</select><label class="text-field__label" for="f-format">Formato</label><span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
         <p class="text-field__supporting" id="f-format-ajuda"><span>${M.FORMATS.find((o) => o.value === out.format).description}</span><span>${out.width} × ${out.height}</span></p></div></section>`;
-    if (vs.length && PROJETO) actions += btn("outlined", 'data-export="one"', "download", "Exportar esta") + btn("filled", `data-export="all"${vs.length > M.MAX_EXPORTAR ? " disabled" : ""}`, "download", `Exportar ${vs.length}`);
+    if (vs.length && PROJETO) actions += btn("outlined", 'data-export="one"', "download", `Exportar V. ${versionIdx + 1}`) + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
     title = { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
@@ -419,7 +471,7 @@ function renderSide(gs) {
     }
   } else if (sel.type === "edge") {
     title = "Linha";
-    h += `<p class="sheet-hint">Liga um grupo ao seguinte. Cada caminho até o Final é uma versão.</p>`;
+    h += `<p class="sheet-hint">Liga um grupo ao seguinte. Cada caminho até o Final é uma variação.</p>`;
     actions = btn("text", 'data-act="del"', "delete", "Excluir linha");
   } else {
     if (PROJETO) {
@@ -445,15 +497,6 @@ function showActions() {
 
 sideActions.addEventListener("click", (e) => side.onclickAction(e));
 side.onclickAction = (e) => {
-  const v = e.target.closest("[data-version]");
-  if (v) {
-    versionIdx = +v.dataset.version;
-    preview = null;
-    render();
-    setTab("previa");
-    player.play();
-    setPlayIcon();
-  }
   const ex = e.target.closest("[data-export]");
   if (ex) {
     if (ex.dataset.export === "last") showExport(CONFIG.exportacao);
@@ -751,7 +794,11 @@ function fit() {
     view = { x: r.width * 0.8 - 90 - f.x, y: r.height / 2 - 40 - f.y, z: 1 };
     return applyView();
   }
-  for (const f of project.finals) xs.push(f.x, f.x + 180), ys.push(f.y, f.y + 80);
+  for (const f of project.finals) {
+    const el = chrome.querySelector(`.fin[data-final="${f.id}"]`);
+    xs.push(f.x, f.x + (el?.offsetWidth ?? 180));
+    ys.push(f.y, f.y + (el?.offsetHeight ?? 80));
+  }
   if (!xs.length) return;
   const x0 = Math.min(...xs);
   const y0 = Math.min(...ys);
@@ -883,6 +930,8 @@ vp.addEventListener("pointerdown", (e) => {
     window.addEventListener("pointercancel", end);
     return;
   }
+  const variant = t.closest("[data-variant]");
+  if (variant) return pickVariant(variant.closest(".fin").dataset.final, +variant.dataset.variant);
   const playEl = t.closest("[data-play-block], [data-play-group]");
   if (playEl) {
     const p = playEl.dataset.playBlock ? { type: "block", id: playEl.dataset.playBlock } : { type: "group", id: playEl.dataset.playGroup };
@@ -954,8 +1003,10 @@ vp.addEventListener("pointerdown", (e) => {
       const from = g.last.id;
       const dup = M.links(project).some((l) => l.from.id === gid && (l.to === to || l.to.id === idx.get(to)?.id));
       if (dup) return;
-      project = structuredClone(project);
-      project.edges.push({ id: M.newId("e"), from, to });
+      const next = structuredClone(project);
+      next.edges.push({ id: M.newId("e"), from, to });
+      if (M.passesLimit(project, next)) return toast(CONFIG.erros?.exportarLimite ?? "");
+      project = next;
     };
   } else if (tab) {
     const gid = tab.dataset.group;
@@ -988,7 +1039,7 @@ vp.addEventListener("pointerdown", (e) => {
   } else if (fin) {
     const id = fin.dataset.final;
     const f0 = base.finals.find((f) => f.id === id);
-    if (sel.id !== id) versionIdx = 0;
+    if (sel.type === "final" && sel.id !== id) versionIdx = 0;
     sel = { type: "final", id };
     preview = null;
     render();
@@ -1029,6 +1080,10 @@ window.addEventListener("keydown", (e) => {
   else if (mod && e.key.toLowerCase() === "y") step(redo, undo);
   else if (mod && e.key.toLowerCase() === "d") e.preventDefault(), duplicate();
   else if (e.key === " " && !e.repeat) e.preventDefault(), pv.play.click();
+  else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && sel.type === "final" && !preview && !e.target.closest(".text-field--select")) {
+    const i = versionIdx + (e.key === "ArrowLeft" ? -1 : 1);
+    if (i >= 0 && i < M.versions(project, sel.id).length) e.preventDefault(), pickVariant(sel.id, i);
+  }
   else return;
 });
 

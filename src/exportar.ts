@@ -9,7 +9,7 @@
  * fechar, o agendamento termina. Um passo só roda uma vez por causa do claim do banco.
  */
 import { Container, getContainer } from "@cloudflare/containers";
-import { type ExportWork, exportWork, MAX_EXPORTAR } from "./canvas/modelo.js";
+import { type ExportWork, exportWork } from "./canvas/modelo.js";
 import type { Db, ExportRow, Project, Role } from "./db";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
@@ -88,7 +88,7 @@ const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map((b) => b.toSt
 
 /** Nome do arquivo baixado: "01-gancho-1-corpo-cta-a.mp4", sem acento nem caractere estranho. */
 export function fileName(index: number, nome: string): string {
-  const slug = nome.normalize("NFD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 80);
+  const slug = nome.normalize("NFD").replace(/\p{M}/gu, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 80);
   return `${String(index + 1).padStart(2, "0")}${slug ? `-${slug}` : ""}.mp4`;
 }
 
@@ -109,7 +109,6 @@ export class Exports {
       console.error("Projeto ilegível na exportação", project.id, err);
     }
     if (!work?.versoes.length) throw new InputError(ERROS.exportarSemVersao);
-    if (work.versoes.length > MAX_EXPORTAR) throw new InputError(ERROS.exportarLimite(MAX_EXPORTAR));
     const id = crypto.randomUUID();
     const trechos: ExportPlan["trechos"] = [];
     for (const t of work.trechos) trechos.push(await this.segmentPlan(project, role, work.largura, work.altura, t));

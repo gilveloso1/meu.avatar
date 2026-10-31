@@ -6,5 +6,5 @@ export interface ExportWork {
   trechos: { duracao: number; itens: ExportItem[] }[];
   versoes: { nome: string; trechos: number[] }[];
 }
-export const MAX_EXPORTAR: number;
+export const MAX_VERSOES: number;
 export function exportWork(project: unknown, finalId: string, pick?: number[]): ExportWork | null;

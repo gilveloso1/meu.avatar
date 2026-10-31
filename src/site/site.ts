@@ -27,7 +27,7 @@ import { canUse, type Defaults, estimate, type Field, type Option, prices, type 
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
-import { MAX_EXPORTAR } from "../canvas/modelo.js";
+import { MAX_VERSOES } from "../canvas/modelo.js";
 import { type ExportPlan, type Exports, fileName, zipFits } from "../exportar";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
@@ -541,7 +541,7 @@ ${error ? snackbar(error) : ""}`;
     });
     const body = `
 <main class="page" id="conteudo">
-  ${pageHead("Projetos", cards.length, "Monte várias versões dos seus vídeos num canvas.", fab("add", "Novo projeto", { post: "/projetos" }))}
+  ${pageHead("Projetos", cards.length, "Monte várias variações dos seus vídeos num canvas.", fab("add", "Novo projeto", { post: "/projetos" }))}
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : q ? emptyState("search", "Nenhum projeto encontrado", `Nada com “${q}” no nome.`) : emptyState("video_library", "Nenhum projeto ainda", "Toque em Novo projeto para começar.")}
 </main>`;
     return html(page(`Projetos · ${SITE_NAME}`, body, { bar: { user, tab: "projetos", search: { action: "/projetos", label: "Pesquisar projetos", q } } }));
@@ -593,7 +593,7 @@ ${error ? snackbar(error) : ""}`;
         grandeVideo: ERROS.canvasArquivoGrande(MAX_VIDEO_BYTES / 1024 / 1024),
         nome: ERROS.projetoNome,
         exportar: ERROS.exportarFalhou,
-        exportarLimite: ERROS.exportarLimite(MAX_EXPORTAR),
+        exportarLimite: ERROS.exportarLimite(MAX_VERSOES),
       },
     };
     const actions = `<button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
