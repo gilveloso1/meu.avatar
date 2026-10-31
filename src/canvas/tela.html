@@ -65,15 +65,11 @@ body { min-height: 0; overflow: hidden; }
 .blk.is-mute .blk__media { opacity: 0.38; }
 /* Áudio vinculado: faixa de 40 px embaixo da imagem, na cor e no tom do vídeo, com a onda dele. */
 /* A onda vai de borda a borda do bloco: o x dela é o mesmo tempo do vídeo (o corte de agora). */
-/* A faixa recorta a onda nos cantos de baixo do bloco (os mesmos cantos dele). */
-.blk__link { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 40px; overflow: hidden; border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; background: color-mix(in srgb, var(--on) 10%, transparent); pointer-events: none; }
+/* O som do vídeo fica na área de som, na faixa dele; puxar por ela muda a faixa. */
+.blk__link { display: none; position: absolute; left: 0; right: 0; top: var(--link-top); height: 40px; overflow: hidden; border-radius: var(--md-sys-shape-corner-small); background: color-mix(in srgb, var(--on) 10%, var(--c)); box-shadow: var(--el1); cursor: ns-resize; }
 .blk__wave { position: absolute; inset: 4px 0; background: var(--on); opacity: 0.55; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .blk.is-linked .blk__link { display: block; }
-.blk.is-linked .blk__media { bottom: 40px; }
 .blk.is-linked.is-mute .blk__wave { opacity: 0.2; }
-/* Quem está em cima leva a faixa de som para a área de som do bloco. */
-.blk--cover.is-linked .blk__media { bottom: 4px; }
-.blk--cover.is-linked .blk__link { top: var(--link-top); bottom: auto; border-radius: var(--md-sys-shape-corner-small); background: color-mix(in srgb, var(--on) 10%, var(--c)); pointer-events: auto; }
 .blk--audio { border-radius: var(--md-sys-shape-corner-small); }
 .blk--audio .blk__label { height: 20px; }
 .blk--audio .blk__media { left: 0; right: 0; top: 18px; bottom: 2px; border-radius: 0 0 6px 6px; background: var(--on); opacity: 0.45; mix-blend-mode: normal; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }

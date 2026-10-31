@@ -132,11 +132,12 @@ export class Player {
   show() {
     const t = Math.min(this.t, this.duration - 0.001);
     for (const layer of [0, 1]) {
-      const cur = this.items.find((i) => i.layer === layer && t >= i.start && t < i.start + i.len);
+      // Na mesma camada, vale quem está na trilha mais alta: é o último da lista.
+      const cur = this.items.findLast((i) => i.layer === layer && t >= i.start && t < i.start + i.len);
       const ready = cur && (cur.el.tagName === "IMG" ? cur.el.complete : cur.el.readyState >= READY && !cur.el.seeking);
       if (ready) this.shown[layer] = cur;
-      // A cobertura some quando acaba o trecho dela (por baixo há sempre a base).
-      if (!cur && layer === 1) this.shown[1] = null;
+      // Sem ninguém naquele instante, a camada fica vazia (no fundo há sempre o preto).
+      if (!cur) this.shown[layer] = null;
     }
     for (const i of this.items) {
       if (i.el.tagName === "AUDIO") continue;

@@ -63,20 +63,23 @@ menos custo.
   saída. Puxar a linha solta a ponta mais perto: num ponto ela liga de novo, no vazio ela
   some. Clique na linha e Delete apaga. `linkProblem` (`modelo.js`) recusa ligar um grupo a
   ele mesmo, repetir uma ligação, fechar um círculo e passar do limite de variações.
-- **Duas áreas no bloco**: vídeo em cima (a sequência e, acima dela, quem está por cima) e som
-  embaixo (o som da sequência, os somados e o de quem está por cima, em `coverSounds`). O tipo
-  do elemento decide a área: vídeo e imagem nunca vão para a de som, e som nunca vai para a
-  de vídeo. Vídeo com som leva o som junto, alinhado e vinculado. `upgrade` acerta projetos
-  antigos, em que o som de quem estava por cima ficava entre a imagem e a sequência.
-- **Encaixe magnético**: o elemento que entra na área de um bloco é puxado. Quem decide o
-  lugar é o centro do elemento: acima da fileira, ele apoia em cima; na fileira, entra na
-  sequência, e o lugar só muda na metade de cada elemento; som vai para a faixa mais perto do mouse que tenha espaço, sem ficar sobre outro, inclusive embaixo de imagem ou vídeo sem som. Em cima, ele
-  corre até a própria ponta sair do bloco inteiro (contando o que já passou da sequência), nos
-  dois lados, e o bloco cresce junto; som faz o mesmo. Elementos encostam magneticamente nas
-  pontas uns dos outros (o
-  fundo é preto onde não há sequência). Pela direita, depois disso desce para o lado; pela
-  esquerda, sai do bloco. O bloco o segura numa área maior e a linha entre em cima e
-  na fileira muda para quem já está lá, para nada piscar. Alt solta sem encaixar.
+- **Trilhas**: todo elemento segue as mesmas regras (`snap`, `trackIn`, `freeTrack` em
+  `modelo.js`); só a área muda. Vídeo, imagem e, no futuro, legenda ficam na área de vídeo, com
+  a trilha 0 embaixo e as outras subindo; sons ficam na área de som, com a trilha 0 em cima e
+  as outras descendo. Uma trilha pode ter um elemento ou vários, e nada se sobrepõe nela: o
+  elemento vai para a trilha livre mais perto do mouse, e a seguinte à última está sempre livre.
+  Qualquer elemento é puxado pelo ímã, corre até a própria ponta sair do bloco, que cresce
+  junto, e encosta nas pontas dos outros. Passou da direita, fica ao lado, na primeira trilha;
+  passou da esquerda, sai do bloco. O bloco o segura numa área maior e, perto da trilha onde
+  está, ele fica nela, para nada piscar. Alt solta sem encaixar. O tempo de cada elemento vem
+  só da posição dele; quem está em trilha mais alta fica por cima.
+- **Som do vídeo**: vai na área de som (`g.sounds`), anda junto com o vídeo e pode mudar de
+  faixa puxando por ele (`lane`, `setLane`). Se a faixa pedida estiver ocupada, fica na mais
+  perto com lugar. `upgrade` acerta projetos antigos, em que o som de quem estava por cima
+  ficava entre a imagem e a sequência.
+- **Exceções, e por quê**: só som tem limite de faixas (`MAX_FAIXAS`, a exportação soma todos);
+  som solto não tem área de vídeo, então o conector dele fica na altura dele; a prévia junta as
+  trilhas de vídeo acima da primeira numa camada, porque cada uma cobre a imagem inteira.
 - **Arrasto leve**: cada arrasto desenha no máximo uma vez por quadro, sem o painel (ele vem
   ao soltar). Sem mudança no lugar do elemento, nada é desenhado; cada elemento, as portas e
   as linhas só tocam a página se algo deles mudou.

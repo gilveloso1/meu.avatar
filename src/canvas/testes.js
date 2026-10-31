@@ -42,242 +42,144 @@ test("exportar faz cada grupo uma vez só: 6 versões saem de 6 trechos", () => 
   assert.equal(M.exportWork(p, "nada"), null);
 });
 
-test("encaixar no meio abre espaço; encurtar puxa o que vem depois", () => {
-  const novo = { id: "n", kind: "video", name: "N", src: "", dur: 2, tin: 0, tout: 2, x: 0, y: 600, mute: false, vol: 1 };
-  let q = { ...p, blocks: [...p.blocks, novo] };
-  const s = M.snap(q, "n", 690, 200, 12);
-  assert.equal(s.mode, "after");
-  assert.equal(s.target, "corpo");
-  q = M.dropBlock(q, "n", s);
-  assert.equal(q.blocks.find((b) => b.id === "produto").x, 800);
-  assert.equal(M.groups(q).find((g) => g.id === "corpo").dur, 12);
-  q = M.trim(q, "corpo", "r", -1);
-  assert.equal(q.blocks.find((b) => b.id === "n").x, 680);
-  assert.equal(q.blocks.find((b) => b.id === "produto").x, 760);
+const el = (id, x, y, dur = 5, kind = "image", extra = {}) => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, audio: "none", ...extra });
+const faixa = (id, x, track = 0, dur = 2) => el(id, x, M.VIS_H + track * M.AUD_H, dur, "audio");
+const base = (...extra) => ({ blocks: [el("a", 0, 0), el("b", 200, 0), ...extra], finals: [], edges: [] });
+const dentro = { group: "a", track: 0 };
+// Todo elemento segue as mesmas regras: cada caso roda para a área de vídeo e para a de som.
+const areas = [
+  { nome: "vídeo", novo: () => el("n", 2000, 2000, 2), acima: (t) => -t * M.VIS_H, ocupa: (id, x, t, d) => el(id, x, -t * M.VIS_H, d) },
+  { nome: "som", novo: () => el("n", 2000, 2000, 2, "audio"), acima: (t) => M.VIS_H + t * M.AUD_H, ocupa: (id, x, t, d) => faixa(id, x, t, d) },
+];
+const pilha = (a, ...extra) => (a.nome === "vídeo" ? base(a.novo(), ...extra) : base(a.novo(), faixa("m", 0, 0, 10), ...extra));
+
+for (const a of areas) {
+  test(`${a.nome}: é puxado ao chegar perto e fica na sua área, venha de onde vier`, () => {
+    for (const y of [a.nome === "som" ? -30 : -100, 130, a.acima(0)]) assert.equal(M.snap(pilha(a), "n", 100, y, 16).mode, a.nome === "vídeo" ? "video" : "sound");
+    assert.equal(M.snap(pilha(a), "n", 100, -700, 16).mode, null);
+  });
+
+  test(`${a.nome}: na mesma trilha nunca fica sobre outro; vai para a livre mais perto`, () => {
+    const q = pilha(a);
+    const t0 = a.nome === "vídeo" ? 0 : 0;
+    const s = M.snap(q, "n", 100, a.acima(t0), 16, dentro);
+    assert.equal(s.track, 1);
+    assert.equal(s.y, a.acima(1));
+  });
+
+  test(`${a.nome}: sobe para uma trilha nova e divide a trilha com quem não sobrepõe`, () => {
+    const q = pilha(a, a.ocupa("o", 0, 1, 2));
+    assert.equal(M.snap(q, "n", 120, a.acima(1), 16, { ...dentro, track: 1 }).track, 1);
+    assert.equal(M.snap(q, "n", 40, a.acima(1), 16, { ...dentro, track: 1 }).track, 2);
+    assert.equal(M.snap(q, "n", 40, a.acima(2), 16, { ...dentro, track: 2 }).track, 2);
+  });
+
+  test(`${a.nome}: corre até a ponta sair do bloco, que cresce nos dois lados`, () => {
+    const q = pilha(a);
+    const fim = M.groups(q).find((g) => g.id === "a");
+    const hi = fim.x + fim.w;
+    const passa = M.snap(q, "n", hi - 10, a.acima(1), 16, { ...dentro, track: 1 });
+    assert.equal(passa.x, hi - 10);
+    const g = M.groups(M.dropBlock(q, "n", passa)).find((g) => g.id === "a");
+    assert.equal(g.w, hi + 70);
+    const esq = M.snap(q, "n", -70, a.acima(1), 16, { ...dentro, track: 1 });
+    assert.equal(esq.x, -70);
+    const h = M.groups(M.dropBlock(q, "n", esq)).find((g) => g.id === "a");
+    assert.deepEqual([h.x, h.w], [-70, hi + 70]);
+  });
+
+  test(`${a.nome}: passou da direita, fica ao lado na primeira trilha; da esquerda, sai`, () => {
+    const q = pilha(a);
+    const g = M.groups(q).find((g) => g.id === "a");
+    const hi = g.x + g.w;
+    const lado = M.snap(q, "n", hi + 10, a.acima(1), 16, { ...dentro, track: 1 });
+    assert.deepEqual([lado.x, lado.track], [hi, 0]);
+    const encosta = M.snap(q, "n", -85, a.acima(1), 16, { ...dentro, track: 1 });
+    assert.equal(encosta.x, -80);
+    assert.equal(M.snap(q, "n", -130, a.acima(1), 16, dentro).mode, null);
+  });
+
+  test(`${a.nome}: encosta magneticamente na ponta dos outros`, () => {
+    const q = pilha(a, a.ocupa("o", 120, 1, 1));
+    assert.equal(M.snap(q, "n", 35, a.acima(1), 16, { ...dentro, track: 1 }).x, 40);
+    assert.equal(M.snap(q, "n", 170, a.acima(1), 16, { ...dentro, track: 1 }).x, 160);
+  });
+
+  test(`${a.nome}: mexer devagar na fronteira entre trilhas não troca de trilha`, () => {
+    const q = pilha(a, a.ocupa("o", 0, 1, 1));
+    const step = Math.abs(a.acima(1) - a.acima(0));
+    let keep = { ...dentro, track: 1 };
+    const trilhas = [];
+    for (const f of [0.45, 0.5, 0.55, 0.45, 0.6, 0.5]) {
+      const s = M.snap(q, "n", 300, a.acima(1) + (a.nome === "vídeo" ? 1 : -1) * step * f * 0.5, 16, keep);
+      trilhas.push(s.track);
+      keep = { group: s.group?.id, track: s.track };
+    }
+    assert.equal(new Set(trilhas).size, 1);
+  });
+}
+
+test("encurtar puxa quem vem encostado depois, em qualquer trilha", () => {
+  const q = base(faixa("m", 0, 0, 3), faixa("o", 120, 0, 3), el("c", 0, -M.VIS_H, 2), el("d", 80, -M.VIS_H, 2));
+  const r = M.trim(q, "a", "r", -1);
+  assert.equal(r.blocks.find((b) => b.id === "b").x, 160);
+  assert.equal(M.trim(q, "m", "r", -1).blocks.find((b) => b.id === "o").x, 80);
+  assert.equal(M.trim(q, "c", "r", -1).blocks.find((b) => b.id === "d").x, 40);
 });
 
-test("vídeo solto por cima vira cobertura; áudio embaixo soma o som", () => {
-  const novo = { id: "c", kind: "video", name: "C", src: "", dur: 2, tin: 0, tout: 2, x: 600, y: 180, mute: false, vol: 1 };
-  const q = { ...p, blocks: [...p.blocks, novo] };
-  const s = M.snap(q, "c", 600, 60, 12);
-  assert.equal(s.mode, "cover");
-  assert.equal(s.y, 192 - M.VIS_H);
-  const a = { id: "a", kind: "audio", name: "A", src: "", dur: 5, tin: 0, tout: 5, x: 30, y: 250, mute: false, vol: 1 };
-  const q2 = { ...p, blocks: [...p.blocks, a] };
-  assert.equal(M.snap(q2, "a", 30, 2000, 12).mode, null);
-  assert.equal(M.snap(q2, "a", 450, 100, 12).mode, "audio");
-  assert.equal(M.snap(q2, "a", 450, 250, 12).mode, "audio");
-});
-
-const dois = () => {
-  const b = (id, x, y, dur = 5, kind = "image") => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1 });
-  return { blocks: [b("a", 0, 0), b("b", 200, 0), b("n", 2000, 2000, 2), b("s", 2000, 3000, 2, "audio")], finals: [], edges: [] };
-};
-
-test("o bloco puxa o elemento ao entrar na área, sem precisar ir ao meio", () => {
-  const q = dois();
-  const em = M.snap(q, "n", 10, -90 - 40, 16);
-  assert.deepEqual([em.mode, em.x, em.y], ["cover", 0, -M.VIS_H]);
-  assert.equal(M.snap(q, "n", 10, -500, 16).mode, null);
-  const som = M.snap(q, "s", 100, 96 + 30, 16);
-  assert.deepEqual([som.mode, som.y], ["audio", 96]);
-});
-
-test("com o botão apertado, o elemento corre dentro do bloco até o limite", () => {
-  const q = dois();
-  const keep = { group: "a" };
-  assert.equal(M.snap(q, "n", 120, -96, 16, keep).x, 120);
-  // Passa do fim do que há embaixo enquanto a ponta dele ainda está no bloco.
-  const passando = M.snap(q, "n", 390, -96, 16, { ...keep, mode: "cover" });
-  assert.deepEqual([passando.mode, passando.x], ["cover", 390]);
-  // A ponta saiu: desce para o lado.
-  const fora = M.snap(q, "n", 400, -96, 16, { ...keep, mode: "cover" });
-  assert.deepEqual([fora.mode, fora.x, fora.y, fora.target], ["after", 400, 0, "b"]);
-});
-
-test("pela esquerda o elemento corre até a própria ponta sair, e então sai do bloco", () => {
-  const q = dois();
-  const keep = { group: "a", mode: "cover" };
-  const passando = M.snap(q, "n", -70, -96, 16, keep);
-  assert.deepEqual([passando.mode, passando.x], ["cover", -70]);
-  assert.equal(M.snap(q, "n", -79, -96, 16, keep).mode, null);
-  // Na borda, voltar pede um pouco mais que sair.
-  assert.equal(M.snap(q, "n", -70, -96, 16).mode, null);
-  assert.equal(M.snap(q, "n", -60, -96, 16).mode, "cover");
-});
-
-test("o elemento de cima que passa do começo expande o bloco e empurra a sequência no tempo", () => {
-  const q = dois();
-  Object.assign(q.blocks.find((b) => b.id === "n"), { x: -40, y: -M.VIS_H });
+test("elemento em qualquer trilha toca no seu tempo; a mais alta fica por último", () => {
+  const q = base(el("c", 40, -M.VIS_H, 2), el("d", 80, -2 * M.VIS_H, 2), faixa("m", -40, 0, 2));
   const g = M.groups(q).find((g) => g.id === "a");
-  assert.deepEqual([g.x, g.w, g.seqX, g.seq, g.dur], [-40, 440, 0, 400, 11]);
   const tl = M.timeline([g]);
   assert.equal(tl.duration, 11);
-  assert.deepEqual(tl.items.filter((i) => i.layer === 0).map((i) => i.start), [1, 6]);
-  assert.equal(tl.items.find((i) => i.layer === 1).start, 0);
-  const areas = [["a", -40, 440]];
-  assert.deepEqual(M.groups(M.moveGroup(q, "a", 100, 0)).filter((o) => o.id === "a").map((o) => [o.id, o.x, o.w]), areas.map(([i, x, w]) => [i, x + 100, w]));
+  const de = (id) => tl.items.find((i) => i.block.id === id);
+  assert.deepEqual(["m", "a", "b", "c", "d"].map((id) => de(id).start), [0, 1, 6, 2, 3]);
+  assert.deepEqual(tl.items.filter((i) => i.layer === 1).map((i) => i.block.id), ["c", "d"]);
 });
 
-test("o elemento de cima que passa do fim expande o bloco e toca até o fim dele", () => {
-  const q = dois();
-  const n = q.blocks.find((b) => b.id === "n");
-  Object.assign(n, { x: 380, y: -M.VIS_H });
-  const g = M.groups(q).find((g) => g.id === "a");
-  assert.deepEqual([g.w, g.dur, g.seq], [460, 11.5, 400]);
-  const tl = M.timeline([g]);
-  assert.equal(tl.duration, 11.5);
-  assert.equal(tl.items.find((i) => i.block === g.covers[0]).len, 2);
-});
-
-test("na fileira, o lugar só muda na metade de cada elemento, sem piscar nas emendas", () => {
-  const q = dois();
-  const lugar = (x) => {
-    const s = M.snap(q, "n", x, 0, 16, { group: "a", mode: "after" });
-    return [s.mode, s.target];
-  };
-  const antes = [];
-  for (let x = 60; x <= 300; x += 5) antes.push(lugar(x).join());
-  assert.equal(new Set(antes).size, 2);
-  assert.equal(antes.lastIndexOf("after,a") < antes.indexOf("after,b") || antes.indexOf("after,b") < 0, true);
-  assert.deepEqual(lugar(-30), ["before", "a"]);
-  assert.deepEqual(lugar(150), ["after", "a"]);
-  assert.deepEqual(lugar(300), ["after", "b"]);
-});
-
-test("mexer devagar na fronteira entre em cima e na fileira não fica trocando", () => {
-  const q = dois();
-  let keep = { group: "a", mode: "cover" };
-  const trocas = [];
-  for (const y of [-40, -34, -36, -30, -34, -28]) {
-    const s = M.snap(q, "n", 100, y, 16, keep);
-    trocas.push(s.mode);
-    keep = { group: s.group?.id, mode: s.mode };
-  }
-  assert.equal(new Set(trocas).size, 1);
-});
-
-test("som também expande o bloco nos dois lados, e sai sem trepidar", () => {
-  const q = dois();
-  const keep = { group: "a", mode: "audio" };
-  const som = q.blocks.find((b) => b.id === "s");
-  // Do lado esquerdo: um movimento por vez, sem alternar entre preso e solto.
-  let k = { ...keep };
-  const modos = [];
-  for (let x = 60; x >= -90; x -= 5) {
-    const s = M.snap(q, "s", x, 110, 16, k);
-    modos.push(s.mode);
-    k = { group: s.group?.id, mode: s.mode };
-  }
-  assert.equal(modos.lastIndexOf("audio"), modos.indexOf(null) - 1);
-  assert.equal(M.snap(q, "s", -70, 110, 16, keep).x, -70);
-  assert.equal(M.snap(q, "s", 390, 110, 16, keep).x, 390);
-  assert.equal(M.snap(q, "s", 400, 110, 16, keep).mode, null);
-  Object.assign(som, { x: -40, y: 96 });
-  const g = M.groups(q).find((g) => g.id === "a");
-  assert.deepEqual([g.x, g.w, g.seqX, g.seq], [-40, 440, 0, 400]);
-  Object.assign(som, { x: 380, y: 96 });
-  assert.equal(M.groups(q).find((g) => g.id === "a").w, 460);
-});
-
-test("som sobe para a faixa de cima quando há espaço, e nunca fica sobre outro", () => {
-  const b = (id, x, y, dur = 5, kind = "audio", extra = {}) => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, ...extra });
-  const q = { blocks: [b("v", 0, 0, 5, "video"), b("i", 200, 0, 5, "image"), b("m", 0, 136, 2), b("s", 240, 176, 2)], finals: [], edges: [] };
-  const y = (x, top) => M.snap(q, "s", x, top, 16, { group: "v", mode: "audio" }).y;
-  // Embaixo da imagem não há som: a primeira faixa está livre ali.
-  assert.equal(y(240, 96), 96);
-  // Embaixo do vídeo, a primeira tem o som dele: desce para a mais perto com espaço.
-  assert.equal(y(100, 96), 136);
-  // Sobre "m" não fica: vai para a seguinte.
-  assert.equal(y(40, 96), 176);
-  assert.equal(y(40, 136), 176);
-  // O mouse pode escolher uma faixa de baixo.
-  assert.equal(y(100, 176), 176);
-  const sobe = M.dropBlock(q, "s", M.snap(q, "s", 240, 96, 16, { group: "v", mode: "audio" }));
-  const g = M.groups(sobe)[0];
-  assert.deepEqual(g.audios.map((a) => a.id).sort(), ["m", "s"]);
-  assert.equal(g.bottom, 176);
-});
-
-test("todo elemento é magnético: encosta nas pontas dos outros", () => {
-  const b = (id, x, y, dur = 2, kind = "audio") => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, audio: "none" });
-  const q = { blocks: [b("v", 0, 0, 10, "image"), b("m", 0, 96), b("c", 40, -96, 2, "image"), b("s", 900, 900), b("n", 900, 1200, 2, "image"), b("l", 2000, 500), b("r", 2100, 900)], finals: [], edges: [] };
-  const som = (x) => M.snap(q, "s", x, 96, 16, { group: "v", mode: "audio" });
-  assert.deepEqual([som(90).x, som(90).y], [80, 96]);
-  assert.equal(M.snap(q, "n", 130, -96, 16, { group: "v", mode: "cover" }).x, 120);
-  const encosta = M.snap(q, "s", 2090, 510, 16);
-  assert.deepEqual([encosta.x, encosta.y, encosta.mode], [2080, 500, null]);
-  assert.equal(M.snap(q, "s", 2000, 700, 16).y, 700);
-});
-
-test("vídeo corre até o limite do bloco inteiro, contando o som que passou, e continua nele", () => {
-  const b = (id, x, y, dur, kind) => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, audio: "none" });
-  const q = { blocks: [b("v", 0, 0, 5, "image"), b("m", 100, 96, 10, "audio"), b("n", 900, 900, 2, "image")], finals: [], edges: [] };
-  const keep = { group: "v", mode: "cover" };
-  const s = M.snap(q, "n", 450, -96, 16, keep);
-  assert.deepEqual([s.mode, s.x], ["cover", 450]);
-  assert.equal(M.snap(q, "n", 510, -96, 16, keep).mode, "after");
-  const o = M.dropBlock(q, "n", s);
-  const g = M.groups(o).find((g) => g.id === "v");
-  assert.deepEqual(g.covers.map((c) => c.id), ["n"]);
-  assert.equal(g.w, 530);
-});
-
-test("som encostado no som que está no bloco expande o bloco, dos dois lados", () => {
-  const b = (id, x, y, dur, kind = "audio") => ({ id, kind, name: id, src: id, dur, tin: 0, tout: dur, x, y, mute: false, vol: 1, tone: 1, audio: "none" });
-  const q = { blocks: [b("v", 0, 0, 5, "image"), b("m", 100, 96, 5), b("s", 900, 900, 2)], finals: [], edges: [] };
-  const direita = M.snap(q, "s", 310, 100, 16);
-  assert.deepEqual([direita.x, direita.y], [300, 96]);
-  assert.deepEqual([M.groups(M.dropBlock(q, "s", direita))[0].x, M.groups(M.dropBlock(q, "s", direita))[0].w], [0, 380]);
-  const r = { ...q, blocks: q.blocks.map((o) => (o.id === "m" ? { ...o, x: -60 } : o)) };
-  const esquerda = M.snap(r, "s", -150, 100, 16);
-  assert.deepEqual([esquerda.x, esquerda.y], [-140, 96]);
-  const g = M.groups(M.dropBlock(r, "s", esquerda))[0];
-  assert.deepEqual([g.x, g.w, g.audios.length], [-140, 340, 2]);
-  assert.equal(M.groups(M.dropBlock(q, "s", { x: 500, y: 96 })).length, 2);
-});
-
-test("cada tipo vai para a sua área, venha de onde vier", () => {
-  const q = dois();
-  const video = M.snap(q, "n", 100, 110, 16);
-  assert.deepEqual([video.mode, video.y], ["after", 0]);
-  const som = M.snap(q, "s", 100, -60, 16);
-  assert.deepEqual([som.mode, som.y], ["audio", 96]);
-});
-
-test("quem está em cima leva o som para a área de som, depois dos somados", () => {
-  const v = (id, x, y, audio = "linked", kind = "video") => ({ id, kind, name: id, src: id, dur: 5, tin: 0, tout: 5, x, y, mute: false, vol: 1, tone: 1, audio });
-  const q = { blocks: [v("a", 0, 0), v("b", 200, 0), v("c1", 0, -M.VIS_H), v("c2", 100, -M.VIS_H), v("c3", 300, -M.VIS_H), v("som", 0, 136, undefined, "audio")], finals: [], edges: [] };
+test("som do vídeo fica na faixa pedida, sem sobrepor, e anda junto com ele", () => {
+  const v = (id, x, y, lane) => el(id, x, y, 5, "video", { audio: "linked", ...(lane === undefined ? {} : { lane }) });
+  const q = { blocks: [v("a", 0, 0), v("c", 40, -M.VIS_H), v("d", 300, -M.VIS_H, 1), faixa("m", 200, 0, 5)], finals: [], edges: [] };
   const g = M.groups(q)[0];
-  assert.deepEqual(g.covers.map((c) => c.id), ["c1", "c2", "c3"]);
-  assert.deepEqual(g.coverSounds.map((s) => [s.block.id, s.y]), [["c1", 176], ["c2", 216], ["c3", 176]]);
-  assert.equal(g.bottom, 256);
-  const tl = M.timeline([g]);
-  assert.ok(tl.items.filter((i) => i.layer === 1).every((i) => M.sounds(i.block)));
+  assert.deepEqual(g.sounds.map((s) => [s.block.id, s.track]), [["a", 0], ["c", 1], ["d", 1]]);
+  assert.equal(g.bottom, M.VIS_H + 2 * M.AUD_H);
+  const mudou = M.setLane(q, "a", M.VIS_H + 2 * M.AUD_H + 5);
+  assert.deepEqual(M.groups(mudou)[0].sounds.map((s) => [s.block.id, s.track]), [["a", 2], ["c", 1], ["d", 1]]);
+  const o = M.moveGroup(mudou, "a", 100, 50);
+  assert.equal(M.groups(o)[0].sounds[0].y, 50 + M.VIS_H + 2 * M.AUD_H);
 });
 
-test("projeto antigo: a faixa de quem está em cima sai do meio e nada mais muda", () => {
-  const v = (id, x, y) => ({ id, kind: "video", name: id, src: id, dur: 5, tin: 0, tout: 5, x, y, mute: false, vol: 1, tone: 1 });
+test("elementos soltos alinhados por acaso não viram trilhas de um bloco", () => {
+  const q = { blocks: [el("a", 0, 0), el("b", 0, 192), el("c", 0, 384)], finals: [], edges: [] };
+  assert.equal(M.groups(q).length, 3);
+});
+
+test("desvincular põe o som na faixa dele como áudio comum, e vincular de novo não mexe na cópia", () => {
+  const { project: q, audioId } = M.unlinkAudio(p, "corpo");
+  const a = q.blocks.find((b) => b.id === audioId);
+  const v = q.blocks.find((b) => b.id === "corpo");
+  assert.equal(M.sounds(v), false);
+  assert.equal(a.y, v.y + M.VIS_H);
+  assert.deepEqual(M.groups(q).find((g) => g.id === "corpo").audios.map((b) => b.id).sort(), [audioId, "musica"].sort());
+  assert.deepEqual([a.tin, a.tout, a.kind], [0, 8, "audio"]);
+  const r = M.relinkVideo(q, "corpo");
+  assert.equal(M.linked(r.blocks.find((b) => b.id === "corpo")), true);
+  assert.deepEqual(r.blocks.find((b) => b.id === audioId), a);
+  assert.equal(M.doubledSound(r), true);
+  const { project: s2, videoId } = M.audioToVideo(r, audioId);
+  const nv = s2.blocks.find((b) => b.id === videoId);
+  assert.deepEqual([nv.kind, nv.name, nv.audio], ["video", "Corpo", "linked"]);
+  assert.equal(M.audioToVideo(s2, "musica").videoId, null);
+});
+
+test("projeto antigo: quem estava por cima sobe para a trilha certa", () => {
+  const v = (id, x, y) => el(id, x, y, 5, "video", { audio: "linked" });
   const q = { blocks: [v("a", 0, 0), v("c", 40, -136), v("solto", 0, 900)], finals: [], edges: [] };
-  assert.deepEqual(M.groups(q).map((g) => g.covers.map((c) => c.id)), [["c"], []].sort((a, b) => b.length - a.length));
+  assert.deepEqual(M.groups(q).find((g) => g.id === "a").covers.map((c) => c.id), ["c"]);
   const o = M.upgrade(q);
   assert.equal(o.blocks.find((b) => b.id === "c").y, -M.VIS_H);
   assert.equal(o.blocks.find((b) => b.id === "solto").y, 900);
   assert.deepEqual(M.groups(o).find((g) => g.id === "a").covers.map((c) => c.id), ["c"]);
-  assert.deepEqual(M.upgrade(o).blocks, o.blocks);
-});
-
-test("o encaixe à direita é magnético", () => {
-  const q = dois();
-  assert.equal(M.snap(q, "n", 440, 0, 16).mode, "after");
-  assert.equal(M.snap(q, "n", 440, 0, 16).x, 400);
-  assert.equal(M.snap(q, "n", 460, 0, 16).mode, null);
-});
-
-test("o bloco segura o elemento numa área maior, sem piscar na borda", () => {
-  const q = dois();
-  assert.equal(M.snap(q, "n", 100, -96 - 50, 16).mode, null);
-  assert.equal(M.snap(q, "n", 100, -96 - 50, 16, { group: "a" }).mode, "cover");
 });
 
 test("os blocos se chamam Bloco 1, Bloco 2, e aceitam nome próprio", () => {
@@ -294,51 +196,6 @@ test("os blocos se chamam Bloco 1, Bloco 2, e aceitam nome próprio", () => {
 test("linha em ciclo não trava", () => {
   const q = { ...p, edges: [...p.edges, { id: "x", from: "ctaa", to: "g1" }] };
   assert.equal(M.versions(q, "final").length, 6);
-});
-
-test("vídeo com áudio vinculado é mais alto e a música fica embaixo da faixa dele", () => {
-  const corpo = M.groups(p).find((g) => g.id === "corpo");
-  assert.equal(corpo.h, M.VIS_H + M.LINK_H);
-  assert.deepEqual(corpo.audios.map((b) => b.id), ["musica"]);
-  assert.deepEqual(corpo.covers.map((b) => b.id), ["broll"]);
-});
-
-test("desvincular: o som vira um bloco de áudio logo embaixo e a música desce", () => {
-  const { project: q, audioId } = M.unlinkAudio(p, "corpo");
-  const g = M.groups(q).find((g) => g.id === "corpo");
-  const a = q.blocks.find((b) => b.id === audioId);
-  const v = q.blocks.find((b) => b.id === "corpo");
-  assert.equal(v.audio, "unlinked");
-  assert.equal(M.sounds(v), false);
-  assert.equal(g.h, M.VIS_H);
-  assert.equal(a.y, v.y + M.VIS_H);
-  assert.equal(q.blocks.find((b) => b.id === "musica").y, a.y + M.AUD_H);
-  assert.deepEqual(g.audios.map((b) => b.id).sort(), [audioId, "musica"].sort());
-  assert.deepEqual([a.tin, a.tout, a.kind], [0, 8, "audio"]);
-});
-
-test("vincular de novo: o vídeo volta a tocar o próprio som e a cópia não muda", () => {
-  const { project: q, audioId } = M.unlinkAudio(p, "corpo");
-  const copia = q.blocks.find((b) => b.id === audioId);
-  const r = M.relinkVideo(q, "corpo");
-  const v = r.blocks.find((b) => b.id === "corpo");
-  assert.equal(M.linked(v), true);
-  assert.deepEqual(r.blocks.find((b) => b.id === audioId), { ...copia, y: copia.y + M.LINK_H });
-  assert.equal(M.doubledSound(r), true);
-  // A cópia de áudio vira vídeo de novo, sem mexer no vídeo original.
-  const { project: s2, videoId } = M.audioToVideo(r, audioId);
-  const nv = s2.blocks.find((b) => b.id === videoId);
-  assert.deepEqual([nv.kind, nv.name, nv.audio, nv.tin, nv.tout], ["video", "Corpo", "linked", 0, 8]);
-  assert.deepEqual(s2.blocks.find((b) => b.id === "corpo"), v);
-  assert.equal(M.audioToVideo(s2, "musica").videoId, null);
-});
-
-test("a faixa que fica vazia fecha e a música continua no grupo", () => {
-  const { project: q, audioId } = M.unlinkAudio(p, "corpo");
-  const { project: r } = M.audioToVideo(q, audioId);
-  const g = M.groups(r).find((g) => g.id === "corpo");
-  assert.deepEqual(g.audios.map((b) => b.id), ["musica"]);
-  assert.equal(r.blocks.find((b) => b.id === "musica").y, g.y + g.h);
 });
 
 test("o Final exporta na resolução e no formato escolhidos (e lê o tamanho de antes)", () => {
