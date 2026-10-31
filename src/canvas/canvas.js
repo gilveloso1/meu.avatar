@@ -582,8 +582,8 @@ async function importFiles(files, at) {
   let y = at.y;
   for (const file of files) {
     try {
+      if (PROJETO) toast(`Enviando ${file.name}…`, true);
       const local = await probe(file);
-      if (PROJETO) toast(`Enviando ${file.name}…`);
       const sent = await upload(file);
       // O arquivo do navegador (blob:) só serviu para medir: no site fica o do servidor.
       if (sent) URL.revokeObjectURL(local.src);
@@ -631,6 +631,8 @@ $("#lib-list")?.addEventListener("click", async (e) => {
   const item = e.target.closest("[data-lib]");
   if (!item || item.dataset.adding) return;
   item.dataset.adding = "1";
+  item.classList.add("is-busy");
+  item.insertAdjacentHTML("beforeend", `<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.8"/></svg>`);
   const v = CONFIG.videos[+item.dataset.lib];
   try {
     const dur = await probeUrl(v.src);
@@ -652,6 +654,8 @@ $("#lib-list")?.addEventListener("click", async (e) => {
     toast(CONFIG.erros?.video ?? "");
   }
   delete item.dataset.adding;
+  item.classList.remove("is-busy");
+  item.querySelector(".spinner").remove();
 });
 
 function probeUrl(src) {
@@ -824,12 +828,14 @@ function failExport(msg) {
   toast(msg ?? "");
 }
 
-function toast(msg) {
+/** Com `busy`, o aviso fica na tela com a barra até o próximo aviso. */
+function toast(msg, busy = false) {
   const t = $("#toast");
   $("#toast-text").textContent = msg;
   t.hidden = false;
+  $("#toast-progress").hidden = !busy;
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => (t.hidden = true), 4000);
+  if (!busy) toast.t = setTimeout(() => (t.hidden = true), 4000);
 }
 
 /* ---------- gestos ---------- */

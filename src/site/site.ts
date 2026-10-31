@@ -920,7 +920,7 @@ ${error ? snackbar(error) : ""}`;
     const avatar = v.image_key?.startsWith("avatares/") ? `<img class="viewer__avatar" src="/midia/${esc(v.image_key)}" alt="Foto do avatar">` : "";
     const info = `
         <div class="viewer__panel" data-tab-panel="info">
-          ${editing ? `<section class="viewer__card qe-busy" role="status"><h2 class="qe-result__title">Editando o vídeo</h2><div class="linear-progress" aria-label="Editando o vídeo"></div><p class="qe-result__note">Fica pronto em 1 a 2 min.</p></section>` : ""}
+          ${editing ? `<section class="viewer__card qe-busy" role="status"><h2 class="qe-result__title">Editando o vídeo</h2><div class="linear-progress" role="progressbar" aria-label="Editando o vídeo"></div><p class="qe-result__note">Fica pronto em 1 a 2 min.</p></section>` : ""}
           ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
           <section class="viewer__section">
             <div class="viewer__section-head"><h2 class="viewer__title">Texto</h2>${v.prompt ? `<button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button>` : ""}</div>
@@ -1864,7 +1864,28 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }
  * da página do modelo que se recolhem (lembrados no navegador). Com vídeo na fila,
  * atualiza a página de tempos em tempos (a prévia da edição rápida tem o seu, PREVIEW_SCRIPT).
  */
+/** Indicador circular dos botões ocupados (.spinner, em style.ts). */
+const SPINNER = `<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.8"/></svg>`;
+
 const SCRIPT = `(() => {
+  const SPINNER = '${SPINNER}';
+  const setBusy = (el) => { el.classList.add("is-busy"); el.setAttribute("aria-busy", "true"); el.insertAdjacentHTML("beforeend", SPINNER); };
+  // Todo envio mostra retorno no clique. Desativar fica para depois do envio: botão desativado
+  // não vai no formulário, e o do avatar leva a escolha. Em lista, só o item tocado gira.
+  document.addEventListener("submit", (e) => {
+    const b = e.submitter;
+    if (e.defaultPrevented || !b || e.target.method !== "post" || !b.matches(".button, .fab, .avatar-option")) return;
+    setBusy(b);
+    const group = b.matches(".avatar-option") ? [...b.closest("dialog").querySelectorAll(".avatar-option")] : [b];
+    setTimeout(() => { for (const o of group) { o.disabled = true; o.dataset.busyOff = ""; } });
+  });
+  // Voltar pelo navegador restaura a página como estava: os botões voltam ao normal.
+  addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    for (const o of document.querySelectorAll("[data-busy-off]")) { o.disabled = false; delete o.dataset.busyOff; }
+    for (const o of document.querySelectorAll(".is-busy")) { o.classList.remove("is-busy"); o.removeAttribute("aria-busy"); o.querySelector(".spinner").remove(); }
+  });
+
   const bar = document.querySelector("[data-app-bar]");
   if (bar) {
     const onScroll = () => bar.classList.toggle("is-scrolled", window.scrollY > 0);
@@ -2171,7 +2192,7 @@ const SCRIPT = `(() => {
     b.closest("dialog").close();
   });
 
-  for (const input of document.querySelectorAll("[data-auto-submit]")) input.addEventListener("change", () => { if (input.files.length) input.form.submit(); });
+  for (const input of document.querySelectorAll("[data-auto-submit]")) input.addEventListener("change", () => { if (input.files.length) { setBusy(input.closest(".fab")); input.form.submit(); } });
 
   const f = document.querySelector("[data-composer]");
   let dirty = false;
@@ -2283,8 +2304,6 @@ const SCRIPT = `(() => {
       });
       v.src = URL.createObjectURL(file);
     });
-
-    f.addEventListener("submit", () => { f.querySelector("[type=submit]").disabled = true; });
   }
 
   // Vídeo na fila: confere de novo de tempos em tempos, sem perder o que está sendo
@@ -2315,6 +2334,7 @@ const SCRIPT = `(() => {
  * quadro-chave a cada 10 s): é o que deixa a prévia fluida também no iPhone.
  */
 const PREVIEW_SCRIPT = `(() => {
+  const SPINNER = '${SPINNER}';
   const planParts = ${String(planParts)};
   const qe = document.querySelector("[data-quick-edit]");
   if (!qe) return;
@@ -2550,7 +2570,12 @@ const PREVIEW_SCRIPT = `(() => {
   // Abrir a edição rápida só mostra as escolhas; a prévia começa no "Gerar prévia" e,
   // pronta, toca pela barra do player (o botão não vira um segundo tocar).
   const generate = qe.querySelector("[data-qe-preview]");
-  const setGenerate = (icon, label, disabled) => { generate.firstElementChild.textContent = icon; generate.lastElementChild.textContent = label; generate.disabled = disabled; };
+  const setGenerate = (icon, label, disabled, busy) => {
+    generate.querySelector(".spinner")?.remove();
+    generate.firstElementChild.textContent = icon; generate.lastElementChild.textContent = label; generate.disabled = disabled;
+    generate.classList.toggle("is-busy", !!busy); generate.toggleAttribute("aria-busy", !!busy);
+    if (busy) generate.firstElementChild.insertAdjacentHTML("afterend", SPINNER);
+  };
   const hint = qe.querySelector("[data-qe-hint]");
   const HINT = hint.textContent;
   let stale = false;
@@ -2561,7 +2586,7 @@ const PREVIEW_SCRIPT = `(() => {
     setGenerate("auto_awesome", "Gerar prévia", false);
   });
   generate.addEventListener("click", async () => {
-    setGenerate("hourglass_top", "Gerando prévia…", true);
+    setGenerate("hourglass_top", "Gerando prévia…", true, true);
     controls.hidden = false;
     player.classList.add("is-previewing");
     // O som da prévia sai pelo Web Audio: no iPhone, assim ele toca mesmo com o modo silencioso.
@@ -2630,7 +2655,6 @@ const PREVIEW_SCRIPT = `(() => {
       const p = planParts(silences, buf.duration, cfg.pauses[form.elements.pausa.value], cfg.cameras[form.elements.camera.value], R);
       input.value = p.length ? JSON.stringify(p) : "";
     }
-    qe.querySelector("[type=submit]").disabled = true;
   });
 })();`;
 

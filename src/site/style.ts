@@ -765,8 +765,26 @@ a.frame { display: block; }
   box-shadow: 0 0 0 4px var(--progress-gap);
   animation: linear-progress 1.8s var(--md-sys-motion-easing-standard) infinite;
 }
+.linear-progress[hidden] { display: none; }
 .linear-progress--determinate::before { width: calc(var(--progress, 0) * 100%); min-width: 4px; animation: none; transition: width var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard); }
 .linear-progress--determinate::after { content: ""; position: absolute; top: 0; right: 0; width: 4px; height: 4px; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); }
+/* --- Indicador circular no botão (M3): centralizado, na cor do texto, sem trilha. 40 px e traço
+   de 4 px no padrão, na mesma proporção aqui. O botão ocupado mantém a largura e a cor cheia:
+   a opacidade de desativado deixaria o indicador abaixo do contraste de 3:1. ------------- */
+.is-busy { pointer-events: none; cursor: default; }
+.button.is-busy, .fab.is-busy { -webkit-text-fill-color: transparent; }
+.button.is-busy:disabled { opacity: 1; }
+.spinner {
+  position: absolute; inset: 0; width: 24px; height: 24px; margin: auto;
+  fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round;
+  animation: spinner-turn 1.4s linear infinite;
+}
+.spinner circle { stroke-dasharray: 46 22; animation: spinner-arc 1.4s ease-in-out infinite; }
+/* Em lista, só o item tocado mostra o indicador, à direita, e o texto fica. */
+.avatar-option .spinner { position: static; flex: none; margin: 0 8px 0 auto; }
+.xlist__item .spinner { position: static; flex: none; margin: 0; }
+@keyframes spinner-turn { to { transform: rotate(360deg); } }
+@keyframes spinner-arc { 0% { stroke-dasharray: 10 58; } 50% { stroke-dasharray: 46 22; } 100% { stroke-dasharray: 10 58; stroke-dashoffset: -68; } }
 @keyframes linear-progress { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 
 /* --- Snackbar ------------------------------------------------------------------------ */
@@ -783,6 +801,8 @@ a.frame { display: block; }
 }
 .snackbar[hidden] { display: none; }
 .snackbar__text { flex: 1 1 220px; padding: 8px 0; overflow-wrap: anywhere; }
+.snackbar .linear-progress { --progress-gap: var(--md-sys-color-inverse-surface); flex: 1 0 100%; margin: 0 8px 6px 0; background: var(--md-sys-color-secondary); }
+.snackbar .linear-progress::before { background: var(--md-sys-color-inverse-primary); }
 .snackbar .button--text { color: var(--md-sys-color-inverse-primary); margin-left: auto; }
 @keyframes snackbar-in { from { transform: translateY(16px); opacity: 0; } }
 
@@ -807,6 +827,8 @@ a.frame { display: block; }
 .dialog__actions { display: flex; justify-content: flex-end; gap: 8px; }
 .dialog__start { margin-right: auto; }
 .avatar-option { display: flex; align-items: center; gap: 16px; width: 100%; padding: 8px; border: 0; border-radius: 16px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.avatar-option:disabled { opacity: 0.38; cursor: default; }
+.avatar-option.is-busy { opacity: 1; }
 .avatar-option__text { display: flex; flex-direction: column; min-width: 0; }
 
 /* Avatares: a capa do card tem o tamanho do ícone dos cards de Modelos. */
