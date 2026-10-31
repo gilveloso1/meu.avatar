@@ -129,3 +129,14 @@ test("o Final exporta na resolução e no formato escolhidos (e lê o tamanho de
 test("o card Final escreve o nome inteiro até 2 colunas, V. com 3 e só o número depois", () => {
   assert.deepEqual([1, 5, 10, 11, 15, 16, 50, 200].map(M.variantLabel), ["full", "full", "full", "short", "short", "number", "number", "number"]);
 });
+
+test("cada Final tem até 50 variações, e o que passa disso só avisa", () => {
+  const bloco = (id, y) => ({ id, kind: "image", name: id, src: "a", dur: 5, tin: 0, tout: 5, x: 0, y, mute: false, vol: 1, tone: 1 });
+  const ganchos = Array.from({ length: 51 }, (_, i) => `g${i}`);
+  const p = { blocks: ganchos.map((id, i) => bloco(id, i * 400)), finals: [{ id: "final", x: 900, y: 0 }], edges: ganchos.map((id) => ({ id: `e-${id}`, from: id, to: "final" })) };
+  assert.equal(M.versions(p, "final").length, 50);
+  assert.equal(M.overLimit(p, "final"), true);
+  assert.equal(M.exportWork(p, "final").versoes.length, 50);
+  p.edges.pop();
+  assert.equal(M.overLimit(p, "final"), false);
+});

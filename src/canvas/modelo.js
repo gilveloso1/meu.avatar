@@ -32,9 +32,8 @@ export const LINK_H = 40;
 export const MAX_FAIXAS = 8;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
-export const MAX_VERSOES = 200;
-/** Quantas versões uma exportação monta de uma vez. */
-export const MAX_EXPORTAR = 50;
+/** Quantas variações cada bloco final tem; é também o que uma exportação monta de uma vez. */
+export const MAX_VERSOES = 50;
 export const TONES = 6;
 /** Resolução e formato do vídeo exportado (nos Ajustes do Final), os mesmos dos modelos. */
 export const RESOLUTIONS = ["480p", "720p", "1080p"];
@@ -150,12 +149,12 @@ export function links(project, gs = groups(project)) {
 }
 
 /** Versões que chegam a um bloco final: uma lista de grupos cada. */
-export function versions(project, finalId, gs = groups(project)) {
+export function versions(project, finalId, gs = groups(project), max = MAX_VERSOES) {
   const ls = links(project, gs);
   const preds = (node) => ls.filter((l) => l.to === node).map((l) => l.from);
   const res = [];
   const walk = (g, tail, seen) => {
-    if (res.length >= MAX_VERSOES) return;
+    if (res.length >= max) return;
     const ps = preds(g).filter((p) => !seen.has(p));
     if (!ps.length) return void res.push([g, ...tail]);
     for (const p of new Set(ps)) walk(p, [g, ...tail], new Set([...seen, p]));
@@ -163,6 +162,9 @@ export function versions(project, finalId, gs = groups(project)) {
   for (const g of new Set(preds(finalId))) walk(g, [], new Set([g]));
   return res;
 }
+
+/** Se as linhas que chegam a este Final dão mais variações do que ele tem. */
+export const overLimit = (project, finalId, gs) => versions(project, finalId, gs, MAX_VERSOES + 1).length > MAX_VERSOES;
 
 /** O nome de uma variação na tela e no arquivo, pela posição dela no Final. */
 export const versionName = (i) => `Variação ${i + 1}`;

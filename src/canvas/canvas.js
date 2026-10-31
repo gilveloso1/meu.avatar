@@ -368,7 +368,7 @@ function render({ side = true } = {}) {
     const vs = M.versions(project, f.id, gs);
     const n = vs.length;
     const isSel = sel.type === "final" && sel.id === f.id;
-    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview) : ""}${n > M.MAX_EXPORTAR && PROJETO ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
+    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
     html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
   chrome.innerHTML = html;
@@ -437,7 +437,6 @@ function renderSide(gs) {
     const vs = M.versions(project, sel.id, gs);
     title = "Final";
     if (!vs.length) h += `<p class="sheet-hint">Ligue um grupo ao Final para ter variações.</p>`;
-    if (vs.length > M.MAX_EXPORTAR && PROJETO) h += `<p class="sheet-hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>`;
     if (CONFIG.exportacao?.status === "done") h += btn("text", 'data-export="last"', "download", "Último exportado");
     const out = M.output(project.finals.find((f) => f.id === sel.id));
     // Os mesmos campos dos modelos: Resolução em botões conectados, Formato no campo de seleção.
@@ -449,7 +448,7 @@ function renderSide(gs) {
         (o) => `<option value="${o.value}"${o.value === out.format ? " selected" : ""}>${o.value}</option>`,
       ).join("")}</select><label class="text-field__label" for="f-format">Formato</label><span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
         <p class="text-field__supporting" id="f-format-ajuda"><span>${M.FORMATS.find((o) => o.value === out.format).description}</span><span>${out.width} × ${out.height}</span></p></div></section>`;
-    if (vs.length && PROJETO) actions += btn("outlined", 'data-export="one"', "download", `Exportar V. ${versionIdx + 1}`) + btn("filled", `data-export="all"${vs.length > M.MAX_EXPORTAR ? " disabled" : ""}`, "download", `Exportar ${vs.length}`);
+    if (vs.length && PROJETO) actions += btn("outlined", 'data-export="one"', "download", `Exportar V. ${versionIdx + 1}`) + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
     title = { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];

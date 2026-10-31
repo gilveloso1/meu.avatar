@@ -90,7 +90,8 @@ menos custo.
   com a escolhida numa linha em cima. Tocar numa variação toca na Prévia, sem sair do
   canvas, e destaca os blocos e as linhas dela, apagando o resto; o destaque fica
   depois de pausar e sai ao clicar fora do Final. As setas ← e → passam de uma para
-  outra, com o Final escolhido. Acima de 50, o aviso do limite de exportar aparece no card.
+  outra, com o Final escolhido. Cada Final tem até 50 variações, o mesmo limite de uma
+  exportação: as ligações a mais ficam de fora, com um aviso no card.
   Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).

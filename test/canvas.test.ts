@@ -334,16 +334,15 @@ describe("exportar projetos", () => {
     };
   };
 
-  it("exporta até 50 versões e recusa mais que isso", async () => {
+  it("cada Final exporta até 50 variações, mesmo com mais ligações", async () => {
     const admin = await cookie();
     const fake = new FakeExportApi();
     const ok = await com(fake, `/projetos/${await projeto(admin, muitas(10))}/exportar`, admin, { final: "final" });
     expect([ok.status, ((await ok.json()) as Estado).total]).toEqual([201, 15 + 50]);
     const id = await projeto(admin, muitas(11));
-    const demais = await com(fake, `/projetos/${id}/exportar`, admin, { final: "final" });
-    expect([demais.status, await demais.text()]).toEqual([400, ERROS.exportarLimite(50)]);
-    expect((await com(fake, `/projetos/${id}/exportar`, admin, { final: "final", versoes: [0] })).status).toBe(201);
-    expect(await env.DB.prepare("SELECT count(*) n FROM exports WHERE total > 65").first("n")).toBe(0);
+    const mais = await com(fake, `/projetos/${id}/exportar`, admin, { final: "final" });
+    expect([mais.status, ((await mais.json()) as Estado).versoes.length <= 50]).toEqual([201, true]);
+    expect((await env.DB.prepare("SELECT plan FROM exports ORDER BY rowid DESC LIMIT 1").first<{ plan: string }>())!.plan.match(/"nome"/g)!.length).toBe(50);
   });
 
   it("sem versão ou sem contêiner, avisa com a frase do catálogo", async () => {
