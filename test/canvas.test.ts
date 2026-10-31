@@ -259,6 +259,21 @@ describe("exportar projetos", () => {
     expect(view.getUint32(segundo, true)).toBe(0x04034b50);
   });
 
+  it("sem caber num ZIP, as versões saem uma a uma", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const st = await exportar(fake, id, admin);
+    const row = await new Db(env.DB).exportById(st.id);
+    const plan = JSON.parse(row!.plan) as { versoes: { tamanho: number }[] };
+    plan.versoes[0]!.tamanho = 2 ** 32;
+    await env.DB.prepare("UPDATE exports SET plan = ? WHERE id = ?").bind(JSON.stringify(plan), st.id).run();
+    const agora = (await (await com(fake, `/projetos/${id}/exportacoes/${st.id}`, admin)).json()) as Estado;
+    expect([agora.zip, agora.versoes.length]).toEqual([null, 2]);
+    expect((await com(fake, st.zip!, admin)).status).toBe(404);
+    expect((await com(fake, agora.versoes[0]!.href, admin)).status).toBe(200);
+  });
+
   it("depois de três tentativas, a exportação falha com a frase do catálogo", async () => {
     const admin = await cookie();
     const id = await projeto(admin);

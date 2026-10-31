@@ -206,9 +206,11 @@ function save() {
     try {
       const res = await fetch(PROJETO.salvar, { method: "POST", headers: { "content-type": "application/json" }, body });
       if (!res.ok) throw new Error(String(res.status));
+      return true;
     } catch {
       if (sentName) nameDirty = true;
       toast(CONFIG.erros?.salvar ?? "");
+      return false;
     }
   });
   return saving;
@@ -765,7 +767,7 @@ function showExport(st) {
   exportNow = st.status === "running" ? st : null;
   const done = st.status === "done";
   $("#dlg-title").textContent = done ? (st.versoes.length === 1 ? "Vídeo pronto" : `${st.versoes.length} vídeos prontos`) : "Exportando";
-  $("#dlg-text").textContent = st.erro ?? (done ? "Disponíveis por 24 horas. Baixe para guardar." : st.total ? `Montando: ${st.feitos} de ${st.total}. Feche para continuar editando.` : "Preparando a exportação.");
+  $("#dlg-text").textContent = st.erro ?? (done ? `Disponíveis por 24 horas. ${st.versoes.length > 1 && !st.zip ? "Juntos passam do limite do ZIP: baixe um por vez." : "Baixe para guardar."}` : st.total ? `Montando: ${st.feitos} de ${st.total}. Feche para continuar editando.` : "Preparando a exportação.");
   const bar = $("#dlg-progress");
   bar.hidden = done || !!st.erro;
   // Sem nenhum passo pronto, o indeterminado mostra que está andando; depois, o andamento.
@@ -806,8 +808,8 @@ async function startExport(finalId, versoes) {
   // O diálogo abre no clique, antes de qualquer resposta do servidor.
   showExport({ status: "running", feitos: 0, total: 0, versoes: [], zip: null, erro: null });
   try {
-    // A exportação usa o projeto salvo: manda o que ainda não foi.
-    await save();
+    // A exportação usa o projeto salvo: manda o que ainda não foi e, sem salvar, não exporta.
+    if (!(await save())) return failExport(CONFIG.erros?.salvar);
     const res = await fetch(PROJETO.exportar, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ final: finalId, versoes }) });
     if (!res.ok) return failExport(res.status === 400 ? await res.text() : CONFIG.erros?.exportar);
     await followExport(await res.json());
