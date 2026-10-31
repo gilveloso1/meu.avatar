@@ -1,5 +1,7 @@
 /** Miniaturas dos blocos: um quadro do vídeo, a própria imagem ou a onda do áudio. */
 const cache = new Map();
+// O quadro aparece com 64 px no bloco, 512 px com o zoom de 800%: 720 px ficam nítidos (sem aumentar o vídeo).
+const FRAME_H = 720;
 
 export function thumb(block) {
   const key = `${block.kind}:${block.src}`;
@@ -24,10 +26,10 @@ function frame(src) {
       "seeked",
       () => {
         const c = document.createElement("canvas");
-        c.height = 96;
-        c.width = Math.round((96 * v.videoWidth) / v.videoHeight);
+        c.height = Math.min(FRAME_H, v.videoHeight);
+        c.width = Math.round((c.height * v.videoWidth) / v.videoHeight);
         c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-        resolve(c.toDataURL("image/jpeg", 0.7));
+        resolve(c.toDataURL("image/jpeg", 0.8));
       },
       { once: true },
     );

@@ -108,6 +108,8 @@ menos custo.
   nítida de perto. "Ver tudo" volta. Com zoom, sombras, contornos, linhas, a linha
   de reprodução e o botão de tocar mantêm o tamanho da tela; a onda fica dentro dos
   cantos do bloco.
+- **Miniaturas**: o quadro do vídeo sai com até 720 px de altura, nítido no zoom de 800%;
+  a imagem usa o próprio arquivo.
 - **Onda do som**: sem ícone, de borda a borda do bloco, no corte de agora (o x da
   onda é o mesmo tempo do vídeo), para cortar vendo onde a fala começa e termina.
 - **Prévia sem tela preta**: cada trecho é um vídeo empilhado no quadro (o
