@@ -793,7 +793,7 @@ ${
         id: "usar-avatar",
         title: "Usar um avatar",
         avatars,
-        item: (a, content) => `<button class="avatar-option interactive" type="button" data-avatar-pick="${a.id}" data-avatar-cover="/avatares/${a.id}/arquivos/${esc(a.cover!)}" data-avatar-name="${esc(a.name)}">${content}</button>`,
+        item: (a, content) => `<button class="avatar-option interactive" type="button" data-avatar-pick="${a.id}" data-avatar-cover="/avatares/${a.id}/arquivos/${esc(a.cover!)}" data-avatar-name="${esc(a.name)}"${a.voice_asset ? ` data-avatar-voice="avatar:${a.id}"` : ""}>${content}</button>`,
       })
     : ""
 }
@@ -2189,6 +2189,13 @@ const SCRIPT = `(() => {
     form.querySelector("[data-preview]").replaceChildren(img);
     form.querySelector("[data-image-name]").textContent = b.dataset.avatarName;
     form.querySelector("[data-image-hint]").textContent = "Avatar";
+    // Avatar com voz: já deixa a voz dele escolhida, onde a voz clonada existe.
+    const clone = form.elements.clone, voice = b.dataset.avatarVoice;
+    if (clone && voice && [...clone.options].some((o) => o.value === voice)) {
+      form.elements.fonte.value = "clonada";
+      clone.value = voice;
+      clone.dispatchEvent(new Event("change", { bubbles: true }));
+    }
     b.closest("dialog").close();
   });
 

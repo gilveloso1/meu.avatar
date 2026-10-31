@@ -94,6 +94,8 @@ no D1 local.
 | 2 | Meu áudio (gravação de 6,76 s) | 6,8 s | US$ 0,2593 | `9b5f5fa7-8d5b-4852-aa6f-683eb305634a` |
 | 3 | Voz clonada (Camila, com autorização dela) | 6,1 s | US$ 0,2332 | `cf00562b-6dd9-459d-ba2c-1b044028e8d5` |
 
+- **Voz do avatar (31/10/2026, no ar):** clonada da gravação do avatar no primeiro uso; o
+  vídeo de 2 s ficou pronto 2 min depois do pedido, por US$ 0,0955 (`b09ad48c`).
 - **Funcionou de ponta a ponta nas três vozes:** pedido, vídeo salvo no R2,
   duração e limpeza na HeyGen. O vídeo fica pronto em cerca de 1 minuto.
 - **Voz clonada:** a voz estava pronta na primeira conferência, 3,5 min depois

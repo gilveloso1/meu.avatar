@@ -32,7 +32,8 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
 2. **Tela Avatares** (feito): guarda os ativos de cada avatar (fotos, vídeos,
    áudios) e não depende de nenhum modelo. Os modelos geram por arquivo solto
    ou por avatar (`videos.avatar_id`), e "Salvar no avatar" leva o vídeo pronto
-   para os ativos. Falta: usar a voz do avatar ao gerar, gerar um vídeo real
+   para os ativos. A voz do avatar entra na lista de vozes clonadas e é clonada no primeiro uso.
+   Falta: gerar um vídeo real
    com avatar e voltar ao formulário do modelo depois de criar um avatar por
    "Usar um avatar".
 3. **Modelo de imagem** (um card em "Modelos"): gera a imagem inicial, por

@@ -165,6 +165,71 @@ describe("HeyGen direta: gerar", () => {
     expect(heygen.speeches[1]).toEqual({ voiceId: voice!.provider_voice_id, text: "Segundo vídeo." });
   });
 
+  /** Um avatar com gravação de voz, direto no banco e no R2. */
+  async function avatarComVoz(user_id: number, gravacao = new TextEncoder().encode("gravacao-do-avatar")) {
+    const id = crypto.randomUUID(), voz = crypto.randomUUID(), key = `avatares-ativos/${id}/${voz}`;
+    const agora = new Date().toISOString();
+    await env.DB.prepare("INSERT INTO avatars (id, user_id, name, voice_asset, created_at, updated_at) VALUES (?, ?, 'Marina', ?, ?, ?)").bind(id, user_id, voz, agora, agora).run();
+    await env.MIDIA.put(key, gravacao);
+    await db().insertAsset({ id: voz, avatar_id: id, kind: "audio", key, name: "voz.mp3", type: "audio/mpeg", size: gravacao.byteLength, source_video: null });
+    return { id, voz, valor: `avatar:${id}` };
+  }
+  const dono = async () => (await env.DB.prepare("SELECT id FROM users LIMIT 1").first<{ id: number }>())!.id;
+
+  it("a voz do avatar entra na lista, pede consentimento, é clonada uma vez só e fica pronta para os próximos", async () => {
+    await useHeyGen();
+    const heygen = new FakeHeyGenApi();
+    const session = await cookie();
+    const { valor, voz } = await avatarComVoz(await dono());
+    expect(await page(heygen, session)).toContain("Voz de Marina");
+    const envia = (fields: Record<string, string | File>) => call(postForm("/modelo/heygen", fields, { cookie: session }), new FakeVideoApi(), null, heygen);
+    expect(await (await envia({ fonte: "clonada", clone: valor, fala: FALA, imagem: foto() })).text()).toContain(ERROS.consentimentoVoz.replace(/ /g, " "));
+    expect(heygen.clones).toHaveLength(0);
+
+    await envia({ fonte: "clonada", clone: valor, consentimento: "sim", fala: FALA, imagem: foto() });
+    expect(heygen.clones).toHaveLength(1);
+    expect(heygen.assets.find((a) => a.id === heygen.clones[0]!.assetId)!.text).toBe("gravacao-do-avatar");
+    const voice = (await db().voiceByAsset(voz))!;
+    expect(voice).toMatchObject({ name: "Voz de Marina", status: "PENDING" });
+    heygen.cloneStatuses.set(voice.provider_voice_id, { status: "ACTIVE" });
+    await createStudio({ ...env, SITE_URL: SITE }, { api: new FakeVideoApi(), heygen }).voiceNext();
+    expect(heygen.videos).toHaveLength(1);
+
+    // Já clonada: sem consentimento de novo, sem clonar de novo e sem repetir na lista.
+    const depois = await page(heygen, session);
+    expect(depois.match(/Voz de Marina/g)!.length).toBe(1);
+    expect(depois).not.toContain(`value="${voice.id}"`);
+    await envia({ fonte: "clonada", clone: valor, fala: "Segundo vídeo.", imagem: foto() });
+    expect([heygen.clones.length, heygen.videos.length]).toEqual([1, 2]);
+  });
+
+  it("trocar a gravação do avatar clona a voz de novo", async () => {
+    await useHeyGen();
+    const heygen = new FakeHeyGenApi();
+    const session = await cookie();
+    const { id, valor, voz } = await avatarComVoz(await dono());
+    await call(postForm("/modelo/heygen", { fonte: "clonada", clone: valor, consentimento: "sim", fala: FALA, imagem: foto() }, { cookie: session }), new FakeVideoApi(), null, heygen);
+    const nova = crypto.randomUUID(), key = `avatares-ativos/${id}/${nova}`;
+    await env.MIDIA.put(key, "outra-gravacao");
+    await db().insertAsset({ id: nova, avatar_id: id, kind: "audio", key, name: "nova.mp3", type: "audio/mpeg", size: 14, source_video: null });
+    await env.DB.prepare("UPDATE avatars SET voice_asset = ? WHERE id = ?").bind(nova, id).run();
+    await call(postForm("/modelo/heygen", { fonte: "clonada", clone: valor, consentimento: "sim", fala: FALA, imagem: foto() }, { cookie: session }), new FakeVideoApi(), null, heygen);
+    expect(heygen.clones).toHaveLength(2);
+    expect(await db().voiceByAsset(voz)).not.toBeNull();
+    expect((await db().voiceByAsset(nova))!.name).toBe("Voz de Marina");
+  });
+
+  it("voz do avatar de outra pessoa não entra", async () => {
+    await useHeyGen();
+    const heygen = new FakeHeyGenApi();
+    const session = await cookie();
+    const outro = await env.DB.prepare("INSERT INTO users (email, name, role, password_hash, created_at) VALUES ('outra@exemplo.com', 'Outra', 'member', NULL, ?) RETURNING id").bind(new Date().toISOString()).first<{ id: number }>();
+    const { valor } = await avatarComVoz(outro!.id);
+    expect(await page(heygen, session)).not.toContain(valor);
+    const res = await call(postForm("/modelo/heygen", { fonte: "clonada", clone: valor, consentimento: "sim", fala: FALA, imagem: foto() }, { cookie: session }), new FakeVideoApi(), null, heygen);
+    expect([res.status, heygen.clones.length]).toEqual([400, 0]);
+  });
+
   it("se a clonagem falhar, o vídeo falha", async () => {
     await useHeyGen();
     const heygen = new FakeHeyGenApi();

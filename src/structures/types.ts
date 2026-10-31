@@ -145,6 +145,8 @@ export interface HeyGenPlan {
 export interface Lists {
   voices?: Option[];
   clones?: Option[];
+  /** Vozes de avatar da lista acima que ainda serão clonadas: pedem o consentimento. */
+  newClones?: string[];
 }
 
 export interface Structure {

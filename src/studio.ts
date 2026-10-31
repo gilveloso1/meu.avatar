@@ -7,7 +7,7 @@ import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
 import { canUse, InputError, type Lists, onPlatform, structureById, type Structure, type Values, videoPlatform } from "./structures";
 import { HEYGEN_AVATAR } from "./structures/heygen";
-import { HEYGEN_MODEL, NEW_CLONE, PRICE_PER_SECOND, voiceOptions } from "./structures/heygen-direta";
+import { AVATAR_VOICE, HEYGEN_MODEL, MAX_CLONE_NAME, NEW_CLONE, PRICE_PER_SECOND, voiceOptions } from "./structures/heygen-direta";
 import {
   aspectLabel,
   chainPrompt,
@@ -125,8 +125,18 @@ export class Studio {
         console.error("Não deu para listar as vozes da HeyGen", err);
       }
     }
-    const clones = (await this.db.voicesByUser(userId)).map((v) => ({ value: v.id, label: v.status === "ACTIVE" ? v.name : `${v.name} (preparando)` }));
-    return { voices: voiceOptions(voicesCache?.voices ?? []), clones };
+    const voices = await this.db.voicesByUser(userId);
+    const label = (v: Voice, name = v.name) => (v.status === "ACTIVE" ? name : `${name} (preparando)`);
+    const clones = voices.filter((v) => !v.asset_id).map((v) => ({ value: v.id, label: label(v) }));
+    // A voz de cada avatar entra na mesma lista; a que ainda não existe é clonada no primeiro uso.
+    const newClones: string[] = [];
+    for (const avatar of await this.db.avatarsWithVoice(userId)) {
+      const value = `${AVATAR_VOICE}${avatar.id}`, name = `Voz de ${avatar.name}`;
+      const voice = voices.find((v) => v.asset_id === avatar.voice_asset);
+      if (!voice) newClones.push(value);
+      clones.push({ value, label: voice ? label(voice, name) : name });
+    }
+    return { voices: voiceOptions(voicesCache?.voices ?? []), clones, newClones };
   }
 
   model(id: string): Promise<VideoModel> {
@@ -441,9 +451,23 @@ export class Studio {
     const built = structure.build(input.values, image !== null, HEYGEN_MODEL, null, lists);
     const plan = built.heygen!;
     const audio = plan.source === "audio" ? checkAudio(input.audio, ERROS.audioFala) : null;
-    const sample = plan.clone === NEW_CLONE ? checkAudio(input.sample, ERROS.amostraVoz) : null;
+    let sample = plan.clone === NEW_CLONE ? checkAudio(input.sample, ERROS.amostraVoz) : null;
     let voice: Voice | null = null;
-    if (plan.clone && plan.clone !== NEW_CLONE) {
+    let cloneName = plan.cloneName;
+    let cloneAsset: string | null = null;
+    if (plan.clone?.startsWith(AVATAR_VOICE)) {
+      const avatar = await this.db.avatarById(plan.clone.slice(AVATAR_VOICE.length));
+      const asset = avatar?.voice_asset && avatar.user_id === input.user.id ? await this.db.asset(avatar.id, avatar.voice_asset) : null;
+      if (!asset) throw new InputError(ERROS.vozClonada);
+      voice = await this.db.voiceByAsset(asset.id);
+      if (!voice) {
+        const object = await this.media.get(asset.key);
+        if (!object) throw new InputError(ERROS.vozClonada);
+        sample = checkAudio(new File([await object.arrayBuffer()], asset.name, { type: asset.type }), ERROS.amostraVoz);
+        cloneName = `Voz de ${avatar!.name}`.slice(0, MAX_CLONE_NAME);
+        cloneAsset = asset.id;
+      }
+    } else if (plan.clone && plan.clone !== NEW_CLONE) {
       voice = await this.db.voiceById(plan.clone);
       if (!voice || voice.user_id !== input.user.id || voice.status === "FAILED") throw new InputError(ERROS.vozClonada);
     }
@@ -496,8 +520,8 @@ export class Studio {
       if (plan.source === "clonada") {
         if (sample) {
           const assetId = await upload(await sample.file.arrayBuffer(), sample.file.type, `voz.${sample.ext}`);
-          const providerId = await heygen.cloneVoice(plan.cloneName!, assetId);
-          voice = await this.db.insertVoice({ id: crypto.randomUUID(), user_id: input.user.id, name: plan.cloneName!, provider_voice_id: providerId, status: "PENDING" });
+          const providerId = await heygen.cloneVoice(cloneName!, assetId);
+          voice = await this.db.insertVoice({ id: crypto.randomUUID(), user_id: input.user.id, name: cloneName!, provider_voice_id: providerId, status: "PENDING", asset_id: cloneAsset });
         }
         const waiting = JSON.stringify({ ...parseSettings(video.settings), heygen_assets: assets.join(","), voice_row: voice!.id, voice: voice!.name, heygen_request: JSON.stringify(body) });
         if (voice!.status !== "ACTIVE") return (await this.db.updateVideo(id, { prep_status: "voz", settings: waiting }))!;
