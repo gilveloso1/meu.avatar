@@ -863,6 +863,7 @@ $("#arrange").onclick = () => {
 };
 
 const ZOOM_MIN = 0.15;
+const FIT_Y = 88;
 // Até 800%: dá para ver a onda do som de perto para cortar.
 const ZOOM_MAX = 8;
 // Cada giro da roda vale no máximo isto, e o gesto de pinça, que manda valores pequenos, não muda.
@@ -924,7 +925,7 @@ function fit() {
   zoomGoal = null;
   const xs = [];
   const ys = [];
-  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - FRAME_PAD - 40, b.y + M.height(b) + FRAME_PAD);
+  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y, b.y + M.height(b));
   const r = vp.getBoundingClientRect();
   // Canvas vazio: o aviso do começo fica no meio; o Final, à direita dele.
   if (!project.blocks.length && project.finals.length) {
@@ -942,7 +943,8 @@ function fit() {
   const y0 = Math.min(...ys);
   const w = Math.max(...xs) - x0;
   const h = Math.max(...ys) - y0;
-  view.z = Math.min(1.2, (r.width - 80) / w, (r.height - 100) / h);
+  // Centralizado, com folga para a barra de baixo (80 px) igual em cima e embaixo.
+  view.z = Math.min(1.2, (r.width - 80) / w, (r.height - 2 * FIT_Y) / h);
   view.x = (r.width - w * view.z) / 2 - x0 * view.z;
   view.y = (r.height - h * view.z) / 2 - y0 * view.z;
   applyView();
