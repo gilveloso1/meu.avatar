@@ -796,13 +796,24 @@ $("#reset")?.addEventListener("click", () => {
 $("#zoom-in").onclick = () => zoomAt(1.2);
 $("#zoom-out").onclick = () => zoomAt(1 / 1.2);
 $("#fit").onclick = () => fit();
+$("#arrange").onclick = () => {
+  const before = project;
+  project = M.arrange(project);
+  commit(before);
+  render();
+  fit();
+};
 
 const ZOOM_MIN = 0.15;
-// Até 2000%: dá para ver a onda do som de perto para cortar.
-const ZOOM_MAX = 20;
+// Até 800%: dá para ver a onda do som de perto para cortar.
+const ZOOM_MAX = 8;
+// Cada giro da roda vale no máximo isto, e o gesto de pinça, que manda valores pequenos, não muda.
+const WHEEL_MAX = 30;
+const WHEEL_SPEED = 0.007;
 
 /** Dois cliques num bloco: amplia até ele ocupar a largura do canvas (a proporção não muda). */
 function zoomToBlock(b) {
+  zoomGoal = null;
   const r = vp.getBoundingClientRect();
   const w = M.width(b);
   const h = M.height(b);
@@ -819,6 +830,25 @@ vp.addEventListener("dblclick", (e) => {
   if (b) zoomToBlock(b);
 });
 
+/** Zoom da roda: anda até o alvo em alguns quadros, em vez de saltar. */
+let zoomGoal = null;
+function smoothZoom(k, cx, cy) {
+  const running = !!zoomGoal;
+  zoomGoal = { z: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, (zoomGoal?.z ?? view.z) * k)), cx, cy };
+  if (!running) requestAnimationFrame(zoomStep);
+}
+function zoomStep() {
+  if (!zoomGoal) return;
+  const k = zoomGoal.z / view.z;
+  if (Math.abs(k - 1) < 0.002) {
+    zoomAt(k, zoomGoal.cx, zoomGoal.cy);
+    zoomGoal = null;
+    return;
+  }
+  zoomAt(k ** 0.3, zoomGoal.cx, zoomGoal.cy);
+  requestAnimationFrame(zoomStep);
+}
+
 function zoomAt(k, cx, cy) {
   const r = vp.getBoundingClientRect();
   cx ??= r.left + r.width / 2;
@@ -833,6 +863,7 @@ function zoomAt(k, cx, cy) {
 }
 
 function fit() {
+  zoomGoal = null;
   const xs = [];
   const ys = [];
   for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - FRAME_PAD - 40, b.y + M.height(b) + FRAME_PAD);
@@ -971,7 +1002,7 @@ vp.addEventListener(
   (e) => {
     e.preventDefault();
     closeFinMenu();
-    if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+    if (e.ctrlKey || e.metaKey) smoothZoom(Math.exp(-Math.max(-WHEEL_MAX, Math.min(WHEEL_MAX, e.deltaY)) * WHEEL_SPEED), e.clientX, e.clientY);
     else {
       view.x -= e.deltaX;
       view.y -= e.deltaY;

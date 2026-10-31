@@ -174,3 +174,23 @@ test("a linha está na variação que passa por ela até o Final", () => {
   const fim = ls.find((l) => l.to === "final");
   assert.equal(vs.filter((v) => M.linkOn(fim, v, "final")).length, vs.filter((v) => v.at(-1) === fim.from).length);
 });
+
+test("organizar põe cada grupo depois do que vem antes, sem mudar as variações", () => {
+  const p = M.sample((f) => f);
+  const antes = M.versions(p, "final").map((v) => v.map((g) => g.name));
+  const o = M.arrange(p);
+  const gs = M.groups(o);
+  assert.deepEqual(M.versions(o, "final", gs).map((v) => v.map((g) => g.name)).sort(), [...antes].sort());
+  assert.equal(gs.length, M.groups(p).length);
+  for (const l of M.links(o, gs)) assert.ok(typeof l.to === "string" ? o.finals[0].x > l.from.x + l.from.w : l.to.x > l.from.x + l.from.w);
+  // Outra vez não muda nada.
+  assert.deepEqual(M.arrange(o).blocks, o.blocks);
+  assert.notEqual(p.blocks[0], o.blocks[0]);
+});
+
+test("organizar aguenta laço nas ligações e projeto vazio", () => {
+  const bloco = (id, y) => ({ id, kind: "image", name: id, src: "a", dur: 5, tin: 0, tout: 5, x: 0, y, mute: false, vol: 1, tone: 1 });
+  const p = { blocks: [bloco("a", 0), bloco("b", 400)], finals: [{ id: "final", x: 0, y: 0 }], edges: [{ id: "1", from: "a", to: "b" }, { id: "2", from: "b", to: "a" }] };
+  assert.equal(M.groups(M.arrange(p)).length, 2);
+  assert.deepEqual(M.arrange({ blocks: [], finals: [], edges: [] }).blocks, []);
+});
