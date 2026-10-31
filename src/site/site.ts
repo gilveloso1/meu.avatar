@@ -28,7 +28,7 @@ import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { MAX_EXPORTAR } from "../canvas/modelo.js";
-import { type ExportPlan, type Exports, fileName } from "../exportar";
+import { type ExportPlan, type Exports, fileName, zipFits } from "../exportar";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
 
@@ -638,7 +638,7 @@ ${CANVAS_BODY}
     if (row.status !== "done") return new Response("não encontrado", { status: 404 });
     if (row.expires_at <= new Date().toISOString()) return new Response(ERROS.exportarExpirou, { status: 410 });
     const plan = JSON.parse(row.plan) as ExportPlan;
-    if (download === "todas.zip") return this.exports.zip(plan);
+    if (download === "todas.zip") return zipFits(plan) ? this.exports.zip(plan) : new Response("não encontrado", { status: 404 });
     const index = parseInt(download, 10);
     const version = plan.versoes[index];
     return version ? this.object(request, version.chave, "private, no-store", fileName(index, version.nome)) : new Response("não encontrado", { status: 404 });

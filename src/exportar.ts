@@ -24,6 +24,8 @@ const MAX_TRIES = 3;
 /** Quanto o agendamento trabalha por rodada. */
 const CRON_BUDGET_MS = 45_000;
 const START_TIMEOUT_MS = 120_000;
+/** Um ZIP comum guarda tamanhos em 32 bits: acima disso, o arquivo sairia corrompido. */
+const MAX_ZIP_BYTES = 0xffffffff;
 
 export class Exporter extends Container {
   defaultPort = 8080;
@@ -264,15 +266,14 @@ export class Exports {
       total: row.total,
       erro: row.status === "failed" ? ERROS.exportarFalhou : null,
       versoes: ready ? plan.versoes.map((v, i) => ({ nome: v.nome, href: `${base}/${i}.mp4` })) : [],
-      zip: ready && plan.versoes.length > 1 ? `${base}/todas.zip` : null,
+      zip: ready && plan.versoes.length > 1 && zipFits(plan) ? `${base}/todas.zip` : null,
     };
   }
 
   /** Todas as versões num ZIP sem compressão (vídeo não comprime), montado em fluxo aqui mesmo. */
   zip(plan: ExportPlan): Response {
-    const files = plan.versoes.map((v, i) => ({ key: v.chave, size: v.tamanho!, crc: v.crc!, name: new TextEncoder().encode(fileName(i, v.nome)) }));
-    let total = 22;
-    for (const f of files) total += 30 + 46 + 2 * f.name.byteLength + f.size;
+    const files = zipFiles(plan);
+    const total = zipSize(files);
     const { readable, writable } = new FixedLengthStream(total);
     const pump = async () => {
       const central: Uint8Array[] = [];
@@ -314,6 +315,10 @@ export class Exports {
     return new Response(readable, { headers: { "content-type": "application/zip", "content-length": String(total), "content-disposition": 'attachment; filename="meu-avatar-videos.zip"', "cache-control": "private, no-store" } });
   }
 }
+
+const zipFiles = (plan: ExportPlan) => plan.versoes.map((v, i) => ({ key: v.chave, size: v.tamanho!, crc: v.crc!, name: new TextEncoder().encode(fileName(i, v.nome)) }));
+const zipSize = (files: ReturnType<typeof zipFiles>) => files.reduce((total, f) => total + 30 + 46 + 2 * f.name.byteLength + f.size, 22);
+export const zipFits = (plan: ExportPlan) => zipSize(zipFiles(plan)) <= MAX_ZIP_BYTES;
 
 /** Cabeçalho local (30 bytes) ou central (46 bytes) de um arquivo sem compressão, com o nome em UTF-8. */
 function zipHeader(signature: number, f: { size: number; crc: number; name: Uint8Array }, offset: number): Uint8Array {
