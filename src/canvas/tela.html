@@ -133,6 +133,8 @@ body { min-height: 0; overflow: hidden; }
 
 /* Nome do projeto na barra superior: parece o título; o campo fica no mesmo lugar. */
 .title-edit { display: flex; align-items: center; max-width: 100%; margin-left: -8px; padding: 4px 8px; border: 0; border-radius: var(--md-sys-shape-corner-small); background: none; color: inherit; font: inherit; letter-spacing: inherit; }
+/* O título do site corta o que passa dele: aqui o campo e o botão saem 8 px à esquerda. */
+.top-app-bar__title:has(.title-edit) { overflow: visible; }
 .title-edit[hidden] { display: none; }
 .title-edit__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title-edit__input { width: min(100%, 360px); height: 40px; margin-left: -8px; padding: 0 6px; border: 2px solid var(--md-sys-color-primary); border-radius: var(--md-sys-shape-corner-small); outline: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; }
