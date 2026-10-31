@@ -380,7 +380,7 @@ function renderSide(gs) {
   if (sel.type === "final") {
     const vs = M.versions(project, sel.id, gs);
     title = "Final";
-    h += `<section class="viewer__section"><h3 class="viewer__title">Versões</h3><p class="sheet-hint">${vs.length ? `${vs.length} ${vs.length === 1 ? "versão sai" : "versões saem"} das linhas que chegam aqui.` : "Ligue um grupo ao Final para ter versões."}</p>`;
+    h += `<section class="viewer__section"><h3 class="viewer__title">Versões</h3><p class="sheet-hint">${vs.length ? `${vs.length} ${vs.length === 1 ? "versão sai" : "versões saem"} das linhas que chegam aqui.` : "Ligue um grupo ao Final para ter versões."}</p>${vs.length > M.MAX_EXPORTAR && PROJETO ? `<p class="sheet-hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}`;
     h += `<div class="xlist">${vs
       .map((v, i) => `<button class="xlist__item interactive" type="button" data-version="${i}" aria-current="${i === versionIdx && !preview}"><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(M.versionName(v))}</span><span class="xlist__trail">${fmt(M.timeline(v).duration)}</span></button>`)
       .join("")}</div>${CONFIG.exportacao?.status === "done" ? btn("text", 'data-export="last"', "download", "Último exportado") : ""}</section>`;
@@ -394,7 +394,7 @@ function renderSide(gs) {
         (o) => `<option value="${o.value}"${o.value === out.format ? " selected" : ""}>${o.value}</option>`,
       ).join("")}</select><label class="text-field__label" for="f-format">Formato</label><span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
         <p class="text-field__supporting" id="f-format-ajuda"><span>${M.FORMATS.find((o) => o.value === out.format).description}</span><span>${out.width} × ${out.height}</span></p></div></section>`;
-    if (vs.length && PROJETO) actions += btn("outlined", 'data-export="one"', "download", "Exportar esta") + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
+    if (vs.length && PROJETO) actions += btn("outlined", 'data-export="one"', "download", "Exportar esta") + btn("filled", `data-export="all"${vs.length > M.MAX_EXPORTAR ? " disabled" : ""}`, "download", `Exportar ${vs.length}`);
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
     title = { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];

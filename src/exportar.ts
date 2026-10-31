@@ -9,7 +9,7 @@
  * fechar, o agendamento termina. Um passo só roda uma vez por causa do claim do banco.
  */
 import { Container, getContainer } from "@cloudflare/containers";
-import { type ExportWork, exportWork } from "./canvas/modelo.js";
+import { type ExportWork, exportWork, MAX_EXPORTAR } from "./canvas/modelo.js";
 import type { Db, ExportRow, Project, Role } from "./db";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
@@ -103,6 +103,7 @@ export class Exports {
       console.error("Projeto ilegível na exportação", project.id, err);
     }
     if (!work?.versoes.length) throw new InputError(ERROS.exportarSemVersao);
+    if (work.versoes.length > MAX_EXPORTAR) throw new InputError(ERROS.exportarLimite(MAX_EXPORTAR));
     const id = crypto.randomUUID();
     const trechos: ExportPlan["trechos"] = [];
     for (const t of work.trechos) trechos.push(await this.segmentPlan(project, role, work.largura, work.altura, t));

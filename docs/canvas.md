@@ -128,7 +128,7 @@ menos custo.
   quadro, como na prévia, a 30 quadros por segundo. Um passo por vez: a tela chama o
   próximo assim que o anterior acaba; se ela fechar, o agendamento termina. Bloco só
   entra com vídeo que a pessoa pode usar ou arquivo do próprio projeto. Os vídeos ficam
-  24 horas em `exportacoes/<id>/`, um a um ou em ZIP sem compressão, montado no Worker.
+  24 horas em `exportacoes/<id>/`; cada exportação vai até 50 versões (`MAX_EXPORTAR`), um a um ou em ZIP sem compressão, montado no Worker.
 - Código em `src/canvas/` (tela.html, canvas.js, modelo.js, player.js,
   miniaturas.js); `npm run canvas` gera `src/site/canvas.ts`, que o Worker usa. A
   página do canvas libera `data:` nas imagens e `blob:` no fetch (miniaturas e a

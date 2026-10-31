@@ -313,8 +313,13 @@ npx wrangler r2 bucket lifecycle add meu-avatar exportacoes-2d exportacoes/ --ex
 
 Teste sem o contêiner (precisa de ffmpeg): `python3 container/exportar.py trecho
 plano.json saida.mkv arquivo...` e `python3 container/exportar.py emendar saida.mp4
-trecho.mkv...`. Falta medir a velocidade no `standard-4`; se sobrar folga, o
-`standard-3` custa menos.
+trecho.mkv...`.
+
+Medido no Mac (31/10/2026), sem o contêiner: 50 versões de 16 s em 1080p, com vídeo
+real (5 ganchos × corpo × 10 CTAs, 55 s de conteúdo único): 37 s com 4 threads na
+codificação (14 s nos trechos, 23 s nas emendas, 0,5 s cada), 56 MB de trechos, 16 MB por
+versão, ZIP de 798 MB. Não vale como número da Cloudflare: falta repetir na imagem, com
+`docker run --cpus 4 --memory 12g`, sem a rede. Se sobrar folga, o `standard-3` custa menos.
 
 ## Primeira publicação
 

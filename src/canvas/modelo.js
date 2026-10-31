@@ -33,6 +33,8 @@ export const MAX_FAIXAS = 8;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
 export const MAX_VERSOES = 200;
+/** Quantas versões uma exportação monta de uma vez. */
+export const MAX_EXPORTAR = 50;
 export const TONES = 6;
 /** Resolução e formato do vídeo exportado (nos Ajustes do Final), os mesmos dos modelos. */
 export const RESOLUTIONS = ["480p", "720p", "1080p"];

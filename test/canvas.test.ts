@@ -276,6 +276,30 @@ describe("exportar projetos", () => {
     await expect(new Exports(new Db(env.DB), env.MIDIA, new FakeExportApi()).start(project, "member", "final")).rejects.toThrow(ERROS.exportarArquivo);
   });
 
+  /** 5 ganchos × 10 CTAs = 50 versões; com 11 CTAs, 55. */
+  const muitas = (ctas: number) => {
+    const src = `/videos/${VIDEO}.mp4`;
+    const ganchos = Array.from({ length: 5 }, (_, i) => bloco(`g${i}`, src, 0, i * 300));
+    const fins = Array.from({ length: ctas }, (_, i) => bloco(`c${i}`, src, 400, i * 300, (i + 1) / 100));
+    return {
+      blocks: [...ganchos, ...fins],
+      finals: [{ id: "final", x: 900, y: 0 }],
+      edges: [...ganchos.flatMap((g) => fins.map((c) => ({ id: `${g.id}${c.id}`, from: g.id, to: c.id }))), ...fins.map((c) => ({ id: c.id, from: c.id, to: "final" }))],
+    };
+  };
+
+  it("exporta até 50 versões e recusa mais que isso", async () => {
+    const admin = await cookie();
+    const fake = new FakeExportApi();
+    const ok = await com(fake, `/projetos/${await projeto(admin, muitas(10))}/exportar`, admin, { final: "final" });
+    expect([ok.status, ((await ok.json()) as Estado).total]).toEqual([201, 15 + 50]);
+    const id = await projeto(admin, muitas(11));
+    const demais = await com(fake, `/projetos/${id}/exportar`, admin, { final: "final" });
+    expect([demais.status, await demais.text()]).toEqual([400, ERROS.exportarLimite(50)]);
+    expect((await com(fake, `/projetos/${id}/exportar`, admin, { final: "final", versoes: [0] })).status).toBe(201);
+    expect(await env.DB.prepare("SELECT count(*) n FROM exports WHERE total > 65").first("n")).toBe(0);
+  });
+
   it("sem versão ou sem contêiner, avisa com a frase do catálogo", async () => {
     const admin = await cookie();
     const id = await projeto(admin);
