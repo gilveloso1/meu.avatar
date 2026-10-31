@@ -26,6 +26,21 @@ test("a linha do tempo põe o b-roll no segundo certo e corta a música no fim d
   assert.deepEqual([mus.start, mus.len], [3, 10]);
 });
 
+test("exportar faz cada grupo uma vez só: 6 versões saem de 6 trechos", () => {
+  const w = M.exportWork(p, "final");
+  assert.equal(w.versoes.length, 6);
+  assert.equal(w.trechos.length, 6);
+  assert.deepEqual([w.largura, w.altura], [720, 1280]);
+  assert.equal(w.versoes[0].nome, "Gancho 1 → Corpo + Produto → CTA A");
+  assert.equal(new Set(w.versoes.map((v) => v.trechos[1])).size, 1);
+  const corpo = w.trechos[w.versoes[0].trechos[1]];
+  assert.equal(corpo.duracao, 10);
+  const broll = corpo.itens.find((i) => i.camada === "cobertura");
+  assert.deepEqual([broll.entra, broll.dura, broll.volume], [2, 3, 0]);
+  assert.deepEqual(M.exportWork(p, "final", [1, 99]).versoes.map((v) => v.nome), ["Gancho 2 → Corpo + Produto → CTA A"]);
+  assert.equal(M.exportWork(p, "nada"), null);
+});
+
 test("encaixar no meio abre espaço; encurtar puxa o que vem depois", () => {
   const novo = { id: "n", kind: "video", name: "N", src: "", dur: 2, tin: 0, tout: 2, x: 0, y: 600, mute: false, vol: 1 };
   let q = { ...p, blocks: [...p.blocks, novo] };

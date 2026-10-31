@@ -193,22 +193,42 @@ export function timeline(version) {
   return { duration: t, items };
 }
 
-/** O que iria para o contêiner montar com ffmpeg. */
-export function exportPlan(version) {
-  const tl = timeline(version);
+/**
+ * O que o contêiner monta para um Final: cada grupo vira um trecho, feito uma vez
+ * só, e cada versão é a lista dos trechos dela. O Worker roda isto sobre o projeto
+ * salvo (src/exportar.ts). pick: os índices das versões; sem ele, todas.
+ */
+export function exportWork(project, finalId, pick) {
+  const final = project.finals.find((f) => f.id === finalId);
+  if (!final) return null;
+  const gs = groups(project);
+  const all = versions(project, finalId, gs);
+  const chosen = pick ? pick.map((i) => all[i]).filter(Boolean) : all;
+  const { width: largura, height: altura } = output(final);
+  const tipo = { video: "video", image: "imagem", audio: "audio" };
   const camada = { 0: "base", 1: "cobertura", audio: "audio" };
-  return {
-    versao: versionName(version),
-    duracao: +tl.duration.toFixed(2),
-    trechos: tl.items.map((i) => ({
-      camada: camada[i.layer],
-      arquivo: i.block.name,
-      entra: +i.start.toFixed(2),
-      dura: +i.len.toFixed(2),
-      corte_inicio: +i.tin.toFixed(2),
-      volume: sounds(i.block) ? i.block.vol : 0,
-    })),
+  const trechos = [];
+  const seen = new Map();
+  const trecho = (g) => {
+    if (!seen.has(g)) {
+      seen.set(g, trechos.length);
+      const tl = timeline([g]);
+      trechos.push({
+        duracao: +tl.duration.toFixed(3),
+        itens: tl.items.map((i) => ({
+          tipo: tipo[i.block.kind],
+          camada: camada[i.layer],
+          src: i.block.src,
+          entra: +i.start.toFixed(3),
+          dura: +i.len.toFixed(3),
+          corte: +i.tin.toFixed(3),
+          volume: sounds(i.block) ? i.block.vol : 0,
+        })),
+      });
+    }
+    return seen.get(g);
   };
+  return { largura, altura, trechos, versoes: chosen.map((v) => ({ nome: versionName(v), trechos: v.map(trecho) })) };
 }
 
 /* ---------- Edição (funções puras: devolvem um projeto novo) ---------- */

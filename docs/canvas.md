@@ -31,7 +31,7 @@ menos custo.
 ## Regras
 
 - Só os originais (blocos) ficam no banco. As variações não são salvas: são
-  montadas na exportação. Para usar uma variação como bloco, a pessoa importa
+  montadas na exportação e ficam 24 horas para baixar. Para usar uma variação como bloco, a pessoa importa
   o vídeo exportado.
 - Montar não chama modelo de vídeo: é ffmpeg no contêiner (custo quase zero).
   Gerar um bloco segue as estruturas de `src/structures/`, com o custo antes.
@@ -119,8 +119,16 @@ menos custo.
   site ficou em `window.mdSelect` para servir também a campos postos depois.
 - Cada projeto é só de quem o criou: de outra pessoa, nada abre, salva, recebe
   arquivo ou apaga (testes em `test/canvas.test.ts`).
-- Tabelas `projects` e `project_files` (migration 0010). Os vídeos exportados não
-  ficam no banco: são baixados (próxima etapa).
+- Tabelas `projects` e `project_files` (migration 0010).
+- **Exportar** (`src/exportar.ts`, `container/exportar.py`, tabela `exports`, migration
+  0013): o Worker lê o projeto **salvo** e monta o plano com `exportWork` (`modelo.js`).
+  Cada grupo vira um trecho (H.264 sem B-frames e FLAC), guardado em
+  `trechos/<hash>.mkv` pelo conteúdo: grupo igual não é refeito, nem entre exportações.
+  Cada versão é a emenda dos trechos: vídeo copiado, só o som vira AAC. A imagem cobre o
+  quadro, como na prévia, a 30 quadros por segundo. Um passo por vez: a tela chama o
+  próximo assim que o anterior acaba; se ela fechar, o agendamento termina. Bloco só
+  entra com vídeo que a pessoa pode usar ou arquivo do próprio projeto. Os vídeos ficam
+  24 horas em `exportacoes/<id>/`, um a um ou em ZIP sem compressão, montado no Worker.
 - Código em `src/canvas/` (tela.html, canvas.js, modelo.js, player.js,
   miniaturas.js); `npm run canvas` gera `src/site/canvas.ts`, que o Worker usa. A
   página do canvas libera `data:` nas imagens e `blob:` no fetch (miniaturas e a
@@ -132,6 +140,4 @@ menos custo.
 - **Timeline embaixo do canvas, com zoom**, para o vídeo ou o áudio escolhido:
   cortar vendo a onda e os quadros de perto (a próxima etapa da edição fina).
 
-- **Exportar de verdade**: o contêiner monta cada versão com ffmpeg, no tamanho
-  escolhido, e a pessoa baixa; o vídeo não fica salvo.
 - Esboço da tela no canvas de design, para aprovar.

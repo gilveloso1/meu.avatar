@@ -1,0 +1,9 @@
+# Contêiner que monta os vídeos dos projetos (container/exportar.py): só ffmpeg
+# estático e Python, para subir rápido. Antes do build: ./baixar-binarios.sh.
+FROM mirror.gcr.io/library/python:3.12-slim-bookworm
+WORKDIR /app
+COPY ffmpeg /usr/local/bin/
+COPY exportar.py /app/
+RUN chmod +x /usr/local/bin/ffmpeg
+EXPOSE 8080
+CMD ["python3", "/app/exportar.py"]

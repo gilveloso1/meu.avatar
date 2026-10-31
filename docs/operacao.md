@@ -297,6 +297,25 @@ Teste local da imagem (25/10/2026), com os limites do tipo "basic"
 87 s; resultado igual ao E2 aprovado (correlação 1,000), −13,9 LUFS, sem
 picos cortados e o vídeo idêntico byte a byte ao original.
 
+## Exportação dos projetos
+
+O contêiner `Exporter` (`container/Dockerfile.exportar`, `standard-4`) é separado do
+de áudio: imagem só com ffmpeg, dorme 30 s depois do último pedido. Regras do R2
+(uma vez só, para os arquivos não se acumularem):
+
+```bash
+npx wrangler r2 bucket lifecycle add meu-avatar trechos-30d trechos/ --expire-days 30 < /dev/null
+```
+
+```bash
+npx wrangler r2 bucket lifecycle add meu-avatar exportacoes-2d exportacoes/ --expire-days 2 < /dev/null
+```
+
+Teste sem o contêiner (precisa de ffmpeg): `python3 container/exportar.py trecho
+plano.json saida.mkv arquivo...` e `python3 container/exportar.py emendar saida.mp4
+trecho.mkv...`. Falta medir a velocidade no `standard-4`; se sobrar folga, o
+`standard-3` custa menos.
+
 ## Primeira publicação
 
 ```bash

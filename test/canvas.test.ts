@@ -1,8 +1,10 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { ERROS } from "../src/erros";
 import { MAX_IMAGE_BYTES } from "../src/studio";
-import { call, cookie, FakeVideoApi, memberCookie, SITE } from "./helpers";
+import { Db } from "../src/db";
+import { Exports } from "../src/exportar";
+import { call, cookie, FakeExportApi, FakeVideoApi, memberCookie, SITE } from "./helpers";
 
 const get = async (path: string, session?: string) => call(new Request(`${SITE}${path}`, { headers: session === undefined ? {} : { cookie: session } }), new FakeVideoApi());
 const post = (path: string, session: string, body: BodyInit | null = null, headers: Record<string, string> = {}) =>
@@ -13,7 +15,7 @@ async function videos() {
   const now = new Date().toISOString();
   const insert = (id: string, status: string, key: string | null) =>
     env.DB.prepare(
-      "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES (?, ?, ?, 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)",
+      "INSERT OR IGNORE INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES (?, ?, ?, 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)",
     )
       .bind(id, status, "Oi, gente! Hoje eu vou mostrar meu produto favorito.", key, now, now)
       .run();
@@ -139,5 +141,182 @@ describe("projetos do canvas", () => {
 
   it("as outras páginas continuam sem data: nas imagens", async () => {
     expect((await get("/", await cookie())).headers.get("content-security-policy")).toContain("img-src 'self' blob:;");
+  });
+});
+
+describe("exportar projetos", () => {
+  // O R2 dos testes não zera sozinho, e trecho igual é reaproveitado.
+  beforeEach(async () => {
+    const { objects } = await env.MIDIA.list({ prefix: "trechos/" });
+    if (objects.length) await env.MIDIA.delete(objects.map((o) => o.key));
+  });
+
+  const VIDEO = "11111111-1111-4111-8111-111111111111";
+  const bloco = (id: string, src: string, x: number, y: number, tin = 0) => ({ id, kind: "video", name: id, src, dur: 4, tin, tout: 4, x, y, mute: false, vol: 1, tone: 1, audio: "linked" });
+  /** Dois ganchos ligados a um corpo: 2 versões de 3 trechos. */
+  const dados = (src = `/videos/${VIDEO}.mp4`) => ({
+    blocks: [bloco("g1", src, 0, 0), bloco("g2", src, 0, 300, 1), bloco("corpo", src, 400, 0, 2)],
+    finals: [{ id: "final", x: 900, y: 0, resolution: "720p", format: "9:16" }],
+    edges: [
+      { id: "e1", from: "g1", to: "corpo" },
+      { id: "e2", from: "g2", to: "corpo" },
+      { id: "e3", from: "corpo", to: "final" },
+    ],
+  });
+  const com = (exporter: FakeExportApi, path: string, session: string, body?: unknown, method = body === undefined ? "GET" : "POST") =>
+    call(new Request(`${SITE}${path}`, { method, body: body === undefined ? null : JSON.stringify(body), headers: { origin: SITE, cookie: session } }), new FakeVideoApi(), null, null, exporter);
+  async function projeto(session: string, data: unknown = dados()) {
+    await videos();
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array(1000));
+    const id = await novo(session);
+    expect((await post(`/projetos/${id}/salvar`, session, JSON.stringify({ data }))).status).toBe(204);
+    return id;
+  }
+  type Estado = { id: string; status: string; feitos: number; total: number; versoes: { nome: string; href: string }[]; zip: string | null; erro: string | null };
+  /** Pede e chama os passos, como a tela faz. */
+  async function exportar(fake: FakeExportApi, id: string, session: string, body: unknown = { final: "final" }): Promise<Estado> {
+    const res = await com(fake, `/projetos/${id}/exportar`, session, body);
+    expect(res.status).toBe(201);
+    let st = (await res.json()) as Estado;
+    for (let i = 0; st.status === "running" && i < 20; i++) st = (await (await com(fake, `/projetos/${id}/exportacoes/${st.id}`, session, {})).json()) as Estado;
+    return st;
+  }
+
+  it("cada grupo é feito uma vez e as versões saem da emenda", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const st = await exportar(fake, id, admin);
+    expect(st.status).toBe("done");
+    expect([fake.segments.length, fake.joins.length]).toEqual([3, 2]);
+    expect(st.versoes.map((v) => v.nome)).toEqual(["g1 → corpo", "g2 → corpo"]);
+    expect(JSON.parse(fake.segments[0]!.plan)).toMatchObject({ largura: 720, altura: 1280, duracao: 4, itens: [{ tipo: "video", arquivo: 0, volume: 1 }] });
+    expect(fake.segments[0]!.sizes.slice(1)).toEqual([1000]);
+    const mp4 = await com(fake, st.versoes[1]!.href, admin);
+    expect([mp4.status, await mp4.text(), mp4.headers.get("content-disposition")]).toEqual([200, "mp4ok", 'attachment; filename="02-g2-corpo.mp4"']);
+  });
+
+  it("exportar de novo reaproveita os trechos; só uma versão faz só a emenda dela", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    await exportar(new FakeExportApi(), id, admin);
+    const fake = new FakeExportApi();
+    const st = await exportar(fake, id, admin, { final: "final", versoes: [1] });
+    expect(st.versoes.map((v) => v.nome)).toEqual(["g2 → corpo"]);
+    expect([fake.segments.length, fake.joins.length, st.zip]).toEqual([0, 1, null]);
+  });
+
+  it("o ZIP traz as versões com os tamanhos certos", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const st = await exportar(fake, id, admin);
+    const res = await com(fake, st.zip!, admin);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(bytes.byteLength).toBe(Number(res.headers.get("content-length")));
+    const view = new DataView(bytes.buffer);
+    expect(view.getUint32(0, true)).toBe(0x04034b50);
+    const fim = bytes.byteLength - 22;
+    expect([view.getUint32(fim, true), view.getUint16(fim + 10, true)]).toEqual([0x06054b50, 2]);
+    const central = view.getUint32(fim + 16, true);
+    expect(view.getUint32(central, true)).toBe(0x02014b50);
+    expect(view.getUint32(central + 20, true)).toBe(5);
+    expect(view.getUint32(central + 16, true)).toBe(123);
+    const nome = view.getUint16(central + 28, true);
+    expect(new TextDecoder().decode(bytes.slice(central + 46, central + 46 + nome))).toBe("01-g1-corpo.mp4");
+    const segundo = view.getUint32(central + 46 + nome + 42, true);
+    expect(view.getUint32(segundo, true)).toBe(0x04034b50);
+  });
+
+  it("depois de três tentativas, a exportação falha com a frase do catálogo", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    fake.fail = "ffmpeg quebrou";
+    const st = await exportar(fake, id, admin);
+    expect([st.status, st.erro, st.versoes]).toEqual(["failed", ERROS.exportarFalhou, []]);
+    expect(JSON.stringify(st)).not.toContain("ffmpeg");
+  });
+
+  it("o agendamento termina o que a tela deixou pela metade", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const { id: eid } = (await (await com(fake, `/projetos/${id}/exportar`, admin, { final: "final" })).json()) as Estado;
+    await new Exports(new Db(env.DB), env.MIDIA, fake).next();
+    expect(((await (await com(fake, `/projetos/${id}/exportacoes/${eid}`, admin)).json()) as Estado).status).toBe("done");
+  });
+
+  it("dois pedidos juntos não fazem o mesmo passo", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const { id: eid } = (await (await com(fake, `/projetos/${id}/exportar`, admin, { final: "final" })).json()) as Estado;
+    await env.DB.prepare("UPDATE exports SET claimed_at = ? WHERE id = ?").bind(new Date().toISOString(), eid).run();
+    const st = (await (await com(fake, `/projetos/${id}/exportacoes/${eid}`, admin, {})).json()) as Estado;
+    expect([st.status, st.feitos, fake.segments.length]).toEqual(["running", 0, 0]);
+  });
+
+  it("recusa bloco com arquivo de outro projeto, de fora ou que não existe", async () => {
+    const admin = await cookie();
+    const outro = await novo(admin);
+    const arquivo = ((await (await post(`/projetos/${outro}/arquivos`, admin, new Uint8Array([1]), { "content-type": "video/mp4" })).json()) as { src: string }).src;
+    for (const src of [arquivo, "https://outro.site/x.mp4", "/midia/videos/segredo.mp4", `/videos/${"9".repeat(8)}-9999-4999-8999-${"9".repeat(12)}.mp4`]) {
+      const id = await projeto(admin, dados(src));
+      const res = await com(new FakeExportApi(), `/projetos/${id}/exportar`, admin, { final: "final" });
+      expect([res.status, await res.text()]).toEqual([400, ERROS.exportarArquivo]);
+    }
+  });
+
+  it("vídeo de um modelo que a pessoa não pode usar não entra", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    await env.DB.prepare("UPDATE videos SET structure = 'seedance'").run();
+    const project = (await new Db(env.DB).projectById(id))!;
+    await expect(new Exports(new Db(env.DB), env.MIDIA, new FakeExportApi()).start(project, "member", "final")).rejects.toThrow(ERROS.exportarArquivo);
+  });
+
+  it("sem versão ou sem contêiner, avisa com a frase do catálogo", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const semFinal = await com(new FakeExportApi(), `/projetos/${id}/exportar`, admin, { final: "nada" });
+    expect([semFinal.status, await semFinal.text()]).toEqual([400, ERROS.exportarSemVersao]);
+    const res = await call(new Request(`${SITE}/projetos/${id}/exportar`, { method: "POST", body: "{}", headers: { origin: SITE, cookie: admin } }), new FakeVideoApi());
+    expect([res.status, await res.text()]).toEqual([400, ERROS.exportarIndisponivel]);
+  });
+
+  it("exportação de outra pessoa não abre, não anda e não baixa", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const st = await exportar(fake, id, admin);
+    const dela = await novo(admin);
+    expect((await com(fake, `/projetos/${dela}/exportacoes/${st.id}`, admin)).status).toBe(404);
+    expect((await com(fake, `/projetos/${dela}/exportacoes/${st.id}/0.mp4`, admin)).status).toBe(404);
+    const dono = await env.DB.prepare("INSERT INTO users (email, name, role, password_hash, created_at) VALUES ('outro@exemplo.com', 'Outro', 'member', NULL, ?) RETURNING id").bind(new Date().toISOString()).first<{ id: number }>();
+    await env.DB.prepare("UPDATE projects SET user_id = ? WHERE id = ?").bind(dono!.id, id).run();
+    expect((await com(fake, st.versoes[0]!.href, admin)).status).toBe(404);
+    expect((await com(fake, `/projetos/${id}/exportar`, admin, { final: "final" })).status).toBe(404);
+    expect((await com(fake, `/projetos/${id}/exportacoes/${st.id}`, admin, {})).status).toBe(404);
+  });
+
+  it("depois de 24 horas o arquivo não baixa mais, e a tela sabe", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const st = await exportar(fake, id, admin);
+    await env.DB.prepare("UPDATE exports SET expires_at = '2020-01-01T00:00:00.000Z'").run();
+    const res = await com(fake, st.versoes[0]!.href, admin);
+    expect([res.status, await res.text()]).toEqual([410, ERROS.exportarExpirou]);
+    expect(((await (await com(fake, `/projetos/${id}/exportacoes/${st.id}`, admin)).json()) as Estado).status).toBe("expired");
+  });
+
+  it("quem não é administrador não exporta; o canvas retoma a última", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const { id: eid } = (await (await com(fake, `/projetos/${id}/exportar`, admin, { final: "final" })).json()) as Estado;
+    expect(config(await (await get(`/canvas/${id}`, admin)).text()).exportacao).toMatchObject({ id: eid, status: "running" });
+    expect((await com(fake, `/projetos/${id}/exportar`, await memberCookie(), { final: "final" })).status).toBe(404);
   });
 });

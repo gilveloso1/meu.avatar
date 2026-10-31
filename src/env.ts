@@ -1,4 +1,5 @@
 import type { AudioFixer } from "./audio";
+import type { Exporter } from "./exportar";
 
 export interface Env {
   DB: D1Database;
@@ -12,6 +13,8 @@ export interface Env {
   HEYGEN_API_KEY?: string;
   /** Contêiner que trata o áudio (src/audio.ts). Sem ele, o vídeo fica como veio do modelo. */
   AUDIO?: DurableObjectNamespace<AudioFixer>;
+  /** Contêiner que monta os vídeos dos projetos (src/exportar.ts). Sem ele, o Exportar avisa que está indisponível. */
+  EXPORTAR?: DurableObjectNamespace<Exporter>;
   /** Custo do bcrypt das senhas; padrão 12 (os testes usam 4, para ir rápido). */
   BCRYPT_COST?: string;
   /** Endereço público do Worker, sem barra no fim: vira o callback_url e a URL das fotos. */

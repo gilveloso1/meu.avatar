@@ -6,7 +6,7 @@
  * { amostra: true } (o protótipo, com o exemplo) ou, no site, { videos: [...] }
  * (os vídeos prontos de quem usa: id, name, src, when), projeto ({ id, name,
  * data, salvar, arquivos }: o que está salvo e para onde salvar e enviar
- * arquivos) e limites ({ imagem, video }, em bytes); e as frases de erro em
+ * arquivos, exportar), exportacao (a última, para retomar) e limites ({ imagem, video }, em bytes); e as frases de erro em
  * erros, que vêm do catálogo src/erros.ts.
  */
 import * as M from "./modelo.js";
@@ -383,7 +383,7 @@ function renderSide(gs) {
     h += `<section class="viewer__section"><h3 class="viewer__title">Versões</h3><p class="sheet-hint">${vs.length ? `${vs.length} ${vs.length === 1 ? "versão sai" : "versões saem"} das linhas que chegam aqui.` : "Ligue um grupo ao Final para ter versões."}</p>`;
     h += `<div class="xlist">${vs
       .map((v, i) => `<button class="xlist__item interactive" type="button" data-version="${i}" aria-current="${i === versionIdx && !preview}"><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(M.versionName(v))}</span><span class="xlist__trail">${fmt(M.timeline(v).duration)}</span></button>`)
-      .join("")}</div></section>`;
+      .join("")}</div>${CONFIG.exportacao?.status === "done" ? btn("text", 'data-export="last"', "download", "Último exportado") : ""}</section>`;
     const out = M.output(project.finals.find((f) => f.id === sel.id));
     // Os mesmos campos dos modelos: Resolução em botões conectados, Formato no campo de seleção.
     h += `<section class="viewer__section"><h3 class="viewer__title">Vídeo exportado</h3>
@@ -394,7 +394,7 @@ function renderSide(gs) {
         (o) => `<option value="${o.value}"${o.value === out.format ? " selected" : ""}>${o.value}</option>`,
       ).join("")}</select><label class="text-field__label" for="f-format">Formato</label><span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
         <p class="text-field__supporting" id="f-format-ajuda"><span>${M.FORMATS.find((o) => o.value === out.format).description}</span><span>${out.width} × ${out.height}</span></p></div></section>`;
-    if (vs.length) actions = btn("outlined", 'data-export="one"', "download", "Exportar esta") + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
+    if (vs.length && PROJETO) actions += btn("outlined", 'data-export="one"', "download", "Exportar esta") + btn("filled", 'data-export="all"', "download", `Exportar ${vs.length}`);
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
     title = { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
@@ -454,12 +454,8 @@ side.onclickAction = (e) => {
   }
   const ex = e.target.closest("[data-export]");
   if (ex) {
-    const vs = M.versions(project, sel.id);
-    const list = ex.dataset.export === "all" ? vs : [vs[versionIdx]];
-    const out = M.output(project.finals.find((f) => f.id === sel.id));
-    $("#dlg-body").textContent = JSON.stringify(list.map((v) => ({ resolucao: out.resolution, formato: out.format, largura: out.width, altura: out.height, ...M.exportPlan(v) })), null, 2);
-    $("#dlg-title").textContent = list.length === 1 ? "Exportar 1 versão" : `Exportar ${list.length} versões`;
-    $("#dlg").showModal();
+    if (ex.dataset.export === "last") showExport(CONFIG.exportacao);
+    else startExport(sel.id, ex.dataset.export === "all" ? undefined : [versionIdx]);
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "del") removeSelection();
@@ -539,7 +535,10 @@ function onSideInput(t0) {
   // Não redesenha o painel enquanto digita ou arrasta (perderia o foco), só o resto.
   render({ side: t.id === "f-mute" });
 }
-$("#dlg-close").onclick = () => $("#dlg").close();
+$("#dlg-close").onclick = () => {
+  exportHidden = true;
+  $("#dlg").close();
+};
 
 /* ---------- ações ---------- */
 
@@ -758,6 +757,54 @@ function fit() {
   applyView();
 }
 
+/* ---------- exportar (no site: o servidor monta; a tela chama um passo depois do outro) ---------- */
+
+let exportHidden = false;
+function showExport(st) {
+  const done = st.status === "done";
+  $("#dlg-title").textContent = done ? (st.versoes.length === 1 ? "Vídeo pronto" : `${st.versoes.length} vídeos prontos`) : "Exportando";
+  $("#dlg-text").textContent = st.erro ?? (done ? "Disponíveis por 24 horas. Baixe para guardar." : `Montando: ${st.feitos} de ${st.total}. Pode continuar editando.`);
+  $("#dlg-progress").hidden = done || !!st.erro;
+  $("#dlg-list").innerHTML = st.versoes
+    .map((v, i) => `<a class="xlist__item interactive" href="${esc(v.href)}" download><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(v.nome)}</span><span class="icon" aria-hidden="true">download</span></a>`)
+    .join("");
+  const zip = $("#dlg-zip");
+  zip.hidden = !st.zip;
+  if (st.zip) zip.href = st.zip;
+  // Quem fechou o diálogo continua editando; ele só volta quando ficar pronto.
+  if (!$("#dlg").open && (!exportHidden || st.status !== "running")) $("#dlg").showModal();
+}
+
+async function followExport(st) {
+  const url = `${PROJETO.exportar.replace(/\/exportar$/, "/exportacoes")}/${st.id}`;
+  showExport(st);
+  while (st.status === "running") {
+    const before = st.feitos;
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" } });
+    if (!res.ok) throw new Error(String(res.status));
+    st = await res.json();
+    showExport(st);
+    // Sem avanço: outro pedido está no passo; espera um pouco antes de perguntar de novo.
+    if (st.status === "running" && st.feitos === before) await new Promise((r) => setTimeout(r, 1500));
+  }
+  CONFIG.exportacao = st;
+  if (st.status === "done") render();
+}
+
+async function startExport(finalId, versoes) {
+  exportHidden = false;
+  // A exportação usa o projeto salvo: manda o que ainda não foi.
+  await save();
+  try {
+    const res = await fetch(PROJETO.exportar, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ final: finalId, versoes }) });
+    if (!res.ok) return toast(res.status === 400 ? await res.text() : (CONFIG.erros?.exportar ?? ""));
+    await followExport(await res.json());
+  } catch {
+    if ($("#dlg").open) $("#dlg").close();
+    toast(CONFIG.erros?.exportar ?? "");
+  }
+}
+
 function toast(msg) {
   const t = $("#toast");
   $("#toast-text").textContent = msg;
@@ -963,4 +1010,5 @@ window.addEventListener("keydown", (e) => {
 applyView();
 render();
 requestAnimationFrame(fit);
+if (CONFIG.exportacao?.status === "running") followExport(CONFIG.exportacao).catch(() => toast(CONFIG.erros?.exportar ?? ""));
 window.canvasDebug = { get project() { return project; }, get view() { return view; } };

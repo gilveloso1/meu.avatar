@@ -40,7 +40,8 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
   script de verdade, em módulos sem biblioteca em `src/canvas/` (tela, modelo,
   prévia). `npm run canvas` junta tudo em `src/site/canvas.ts` (gerado; não edite
   à mão) e `npm run teste:canvas` roda os testes do modelo. Como funciona e o que
-  foi decidido: [docs/canvas.md](docs/canvas.md).
+  foi decidido: [docs/canvas.md](docs/canvas.md). A exportação dos projetos fica em
+  `src/exportar.ts` e `container/exportar.py`.
 
 ## Reaproveitar componentes
 
