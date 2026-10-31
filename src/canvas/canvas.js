@@ -1217,12 +1217,12 @@ vp.addEventListener("pointerdown", (e) => {
     sel = { type: "block", id };
     preview = { type: "block", id };
     render();
-    // O bloco que segura o elemento neste arrasto, e o de onde ele acabou de sair.
+    // O bloco que segura o elemento neste arrasto.
     let keep = {};
     onMove = (ev) => {
       const d = dW(ev);
       const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + d.y, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + d.y, 16 / view.z, keep);
-      keep = { group: s.group?.id, left: s.left, mode: s.mode };
+      keep = { group: s.group?.id, mode: s.mode };
       project = M.dropBlock(base, id, s);
       $("#snapinfo").textContent = SNAP[s.mode] ?? "";
       blockEls.get(id)?.classList.add("is-drag");

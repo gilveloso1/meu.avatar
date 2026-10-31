@@ -66,9 +66,9 @@ menos custo.
 - **Encaixe magnético**: o elemento que entra na área de um bloco é puxado. Quem decide o
   lugar é o centro do elemento: acima da fileira, ele apoia em cima; na fileira, entra na
   sequência, e o lugar só muda na metade de cada elemento; som vai para baixo. Em cima, ele
-  corre até a própria ponta sair do bloco, que cresce e toca até o fim dele (o fundo é
-  preto); depois desce para o lado. Passou do começo, sai do bloco e só volta a ser puxado
-  depois de sair de cima dele. O bloco o segura numa área maior e a linha entre em cima e
+  corre até a própria ponta sair da sequência, nos dois lados, e o bloco cresce junto (o
+  fundo é preto onde não há sequência). Pela direita, depois disso desce para o lado; pela
+  esquerda, sai do bloco. O bloco o segura numa área maior e a linha entre em cima e
   na fileira muda para quem já está lá, para nada piscar. Alt solta sem encaixar.
 - **Nome dos blocos**: Bloco 1, Bloco 2, na ordem em que os elementos entraram; muda nos
   Ajustes (`project.names`, pelo id do primeiro elemento), e vazio volta ao número.

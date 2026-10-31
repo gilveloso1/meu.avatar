@@ -132,9 +132,12 @@ export function groups(project) {
     else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   }
   for (const g of out) {
-    // O bloco vai até onde acaba o que está nele: quem está em cima pode passar do fim da sequência.
+    // O bloco vai de onde começa a onde acaba o que está nele: quem está em cima pode passar da
+    // sequência, nos dois lados (seqX e seq guardam onde ela começa e acaba).
+    g.seqX = g.x;
     g.seq = g.x + g.w;
-    g.w = Math.max(g.w, ...g.covers.map((c) => c.x + width(c) - g.x));
+    g.x = Math.min(g.x, ...g.covers.map((c) => c.x));
+    g.w = Math.max(g.seq, ...g.covers.map((c) => c.x + width(c))) - g.x;
     g.dur = g.w / PX;
     g.first = g.blocks[0] ?? g.audios[0];
     g.last = g.blocks[g.blocks.length - 1] ?? g.audios[0];
@@ -243,7 +246,8 @@ export function timeline(version) {
   const items = [];
   let t = 0;
   for (const g of version) {
-    let at = t;
+    // Quem está em cima pode começar antes da sequência.
+    let at = t + (g.seqX - g.x) / PX;
     for (const b of g.blocks) {
       items.push({ block: b, layer: 0, start: at, len: len(b), tin: b.tin });
       at += len(b);
@@ -321,27 +325,28 @@ export function snap(project, id, x, y, tol, keep = {}) {
   const magnet = tol * MAGNET;
   const free = () => ({ x, y, mode: null });
   // O bloco onde o elemento já está vem primeiro, e o segura numa área maior.
-  const left = gs.find((g) => g.id === keep.left);
-  const order = [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group && g !== left)];
+  const order = [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group)];
   for (const g of order) {
     const inside = g.id === keep.group;
     const pad = inside ? magnet * 2 : magnet;
     const top = Math.min(g.y, ...g.covers.map((c) => c.y));
     const bottom = Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
     if (y + h <= top - pad || y >= bottom + pad) continue;
+    const start = g.seqX;
     const end = g.seq;
     const beside = { x: end, y: g.last.y, mode: "after", target: g.last.id, group: g };
     if (visual(b)) {
       // O centro do elemento decide: acima da linha, ele apoia em cima; abaixo, entra na sequência.
       if (cy < g.y + VIS_H * (inside && keep.mode === "cover" ? ROW_LINE_HELD : ROW_LINE)) {
-        // Corre até a própria ponta sair do bloco, que cresce junto; passou, desce para o lado.
+        // Corre até a própria ponta sair da sequência, e o bloco cresce junto. Pela direita,
+        // passou disso, desce para o lado; pela esquerda, sai do bloco. Entrar pede um pouco mais
+        // que sair, para a borda não piscar.
         if (x > end - EPS * 2 - (inside && keep.mode === "after" ? tol : 0)) {
           if (x > end + pad) continue;
           return beside;
         }
-        if (inside && x < g.x - tol) return { ...free(), left: g.id };
-        if (x + w <= g.x) continue;
-        return { x: Math.max(g.x, x), y: g.y - h, mode: "cover", target: g.id, group: g };
+        if (x + w <= start + (inside ? EPS * 2 : tol)) continue;
+        return { x, y: g.y - h, mode: "cover", target: g.id, group: g };
       }
       // Na sequência, o lugar muda só na metade de cada elemento: não abre e fecha a cada emenda.
       const at = g.blocks.findIndex((o) => cx < o.x + width(o) / 2);
@@ -353,19 +358,16 @@ export function snap(project, id, x, y, tol, keep = {}) {
         const o = g.blocks[at - 1];
         return { x: o.x + width(o), y: o.y, mode: "after", target: o.id, group: g };
       }
-      if (x + w < g.x - pad) continue;
-      return { x: g.x - w, y: g.y, mode: "before", target: g.first.id, group: g };
+      if (x + w < start - pad) continue;
+      return { x: start - w, y: g.y, mode: "before", target: g.first.id, group: g };
     }
     if (cy < g.y + g.h / 2 || cx > end) continue;
-    if (inside && x < g.x - tol) return { ...free(), left: g.id };
-    if (x + w <= g.x) continue;
+    if ((inside && x < start - tol) || x + w <= start) continue;
     const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
     const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
-    return { x: Math.max(g.x, Math.min(x, end - w)), y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
+    return { x: Math.max(start, Math.min(x, end - w)), y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
   }
-  // Quem saiu pela esquerda só volta a ser puxado depois de sair de cima do bloco.
-  const stillOver = left && x + w > left.x && x < left.x + left.w;
-  return stillOver ? { ...free(), left: left.id } : free();
+  return free();
 }
 
 /** Move um bloco para onde o snap() mandou, abrindo espaço se encaixou no meio. */

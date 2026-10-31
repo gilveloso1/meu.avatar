@@ -94,14 +94,28 @@ test("com o botão apertado, o elemento corre dentro do bloco até o limite", ()
   assert.deepEqual([fora.mode, fora.x, fora.y, fora.target], ["after", 400, 0, "b"]);
 });
 
-test("pela esquerda o elemento sai do bloco e não é puxado de volta enquanto estiver em cima", () => {
+test("pela esquerda o elemento corre até a própria ponta sair, e então sai do bloco", () => {
   const q = dois();
-  const saiu = M.snap(q, "n", -40, -96, 16, { group: "a" });
-  assert.deepEqual([saiu.mode, saiu.left], [null, "a"]);
-  const ainda = M.snap(q, "n", -30, -96, 16, { left: "a" });
-  assert.deepEqual([ainda.mode, ainda.left], [null, "a"]);
-  const longe = M.snap(q, "n", -200, -96, 16, { left: "a" });
-  assert.deepEqual([longe.mode, longe.left], [null, undefined]);
+  const keep = { group: "a", mode: "cover" };
+  const passando = M.snap(q, "n", -70, -96, 16, keep);
+  assert.deepEqual([passando.mode, passando.x], ["cover", -70]);
+  assert.equal(M.snap(q, "n", -79, -96, 16, keep).mode, null);
+  // Na borda, voltar pede um pouco mais que sair.
+  assert.equal(M.snap(q, "n", -70, -96, 16).mode, null);
+  assert.equal(M.snap(q, "n", -60, -96, 16).mode, "cover");
+});
+
+test("o elemento de cima que passa do começo expande o bloco e empurra a sequência no tempo", () => {
+  const q = dois();
+  Object.assign(q.blocks.find((b) => b.id === "n"), { x: -40, y: -M.VIS_H });
+  const g = M.groups(q).find((g) => g.id === "a");
+  assert.deepEqual([g.x, g.w, g.seqX, g.seq, g.dur], [-40, 440, 0, 400, 11]);
+  const tl = M.timeline([g]);
+  assert.equal(tl.duration, 11);
+  assert.deepEqual(tl.items.filter((i) => i.layer === 0).map((i) => i.start), [1, 6]);
+  assert.equal(tl.items.find((i) => i.layer === 1).start, 0);
+  const areas = [["a", -40, 440]];
+  assert.deepEqual(M.groups(M.moveGroup(q, "a", 100, 0)).filter((o) => o.id === "a").map((o) => [o.id, o.x, o.w]), areas.map(([i, x, w]) => [i, x + 100, w]));
 });
 
 test("o elemento de cima que passa do fim expande o bloco e toca até o fim dele", () => {
