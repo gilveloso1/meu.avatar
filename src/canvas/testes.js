@@ -17,7 +17,7 @@ test("o exemplo tem 3 ganchos, o corpo e 2 CTAs: 6 versões", () => {
   assert.deepEqual(vs[0].map((g) => g.name), ["Gancho 1", "Corpo + Produto", "CTA A"]);
 });
 
-test("a linha do tempo põe o b-roll no segundo certo e corta a música no fim do grupo", () => {
+test("a linha do tempo põe o b-roll e a música no segundo certo", () => {
   const v = M.versions(p, "final")[0];
   const tl = M.timeline(v);
   assert.equal(tl.duration, 16);
@@ -155,6 +155,29 @@ test("mexer devagar na fronteira entre em cima e na fileira não fica trocando",
     keep = { group: s.group?.id, mode: s.mode };
   }
   assert.equal(new Set(trocas).size, 1);
+});
+
+test("som também expande o bloco nos dois lados, e sai sem trepidar", () => {
+  const q = dois();
+  const keep = { group: "a", mode: "audio" };
+  const som = q.blocks.find((b) => b.id === "s");
+  // Do lado esquerdo: um movimento por vez, sem alternar entre preso e solto.
+  let k = { ...keep };
+  const modos = [];
+  for (let x = 60; x >= -90; x -= 5) {
+    const s = M.snap(q, "s", x, 110, 16, k);
+    modos.push(s.mode);
+    k = { group: s.group?.id, mode: s.mode };
+  }
+  assert.equal(modos.lastIndexOf("audio"), modos.indexOf(null) - 1);
+  assert.equal(M.snap(q, "s", -70, 110, 16, keep).x, -70);
+  assert.equal(M.snap(q, "s", 390, 110, 16, keep).x, 390);
+  assert.equal(M.snap(q, "s", 400, 110, 16, keep).mode, null);
+  Object.assign(som, { x: -40, y: 96 });
+  const g = M.groups(q).find((g) => g.id === "a");
+  assert.deepEqual([g.x, g.w, g.seqX, g.seq], [-40, 440, 0, 400]);
+  Object.assign(som, { x: 380, y: 96 });
+  assert.equal(M.groups(q).find((g) => g.id === "a").w, 460);
 });
 
 test("cada tipo vai para a sua área, venha de onde vier", () => {

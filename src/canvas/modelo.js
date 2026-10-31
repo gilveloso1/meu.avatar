@@ -132,12 +132,13 @@ export function groups(project) {
     else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   }
   for (const g of out) {
-    // O bloco vai de onde começa a onde acaba o que está nele: quem está em cima pode passar da
+    // O bloco vai de onde começa a onde acaba o que está nele: qualquer elemento pode passar da
     // sequência, nos dois lados (seqX e seq guardam onde ela começa e acaba).
     g.seqX = g.x;
     g.seq = g.x + g.w;
-    g.x = Math.min(g.x, ...g.covers.map((c) => c.x));
-    g.w = Math.max(g.seq, ...g.covers.map((c) => c.x + width(c))) - g.x;
+    const extra = [...g.covers, ...g.audios];
+    g.x = Math.min(g.x, ...extra.map((c) => c.x));
+    g.w = Math.max(g.seq, ...extra.map((c) => c.x + width(c))) - g.x;
     g.dur = g.w / PX;
     // Área de som: o som da sequência, os somados e, por último, o som de quem está em cima.
     const soundTop = Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
@@ -382,12 +383,11 @@ export function snap(project, id, x, y, tol, keep = {}) {
       if (x + w < start - pad) continue;
       return { x: start - w, y: g.y, mode: "before", target: g.first.id, group: g };
     }
-    // Som vai sempre para a área de som.
-    if (cx > end) continue;
-    if ((inside && x < start - tol) || x + w <= start) continue;
+    // Som vai sempre para a área de som, e também corre até a própria ponta sair da sequência.
+    if (x > end - (inside ? EPS * 2 : tol) || x + w <= start + (inside ? EPS * 2 : tol)) continue;
     const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
     const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
-    return { x: Math.max(start, Math.min(x, end - w)), y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
+    return { x, y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
   }
   return free();
 }
