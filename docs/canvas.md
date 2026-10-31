@@ -125,9 +125,9 @@ menos custo.
 - **Do computador**: o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
   `project_files`), com os limites do site (imagem 10 MB, vídeo e áudio 50 MB), e o
   bloco usa o endereço de lá; não some ao recarregar.
-- **Ajustes do Final**: um card com Variações e Duração, depois Vídeo exportado,
+- **Ajustes do Final**: um card com Variações e Duração, depois Qualidade e formato,
   a última exportação e, presos embaixo, Baixar a variação escolhida e Baixar todas (os
-  mesmos nomes do menu). **Vídeo exportado**: os mesmos campos dos modelos:
+  mesmos nomes do menu). **Qualidade e formato**: os mesmos campos dos modelos:
   Resolução (480p, 720p, 1080p, em botões conectados) e Formato (9:16, 16:9, 1:1,
   4:3, 3:4, no campo de seleção do site, com a explicação e o tamanho em pixels
   embaixo). O lado menor é o da resolução (720p em 16:9 = 1280 × 720). O quadro da

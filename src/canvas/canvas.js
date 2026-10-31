@@ -449,7 +449,7 @@ function renderSide(gs) {
     h += vs.length ? `<div class="viewer__card"><div>${row("movie", "Variações", vs.length)}${row("schedule", "Duração", dur)}</div></div>` : `<p class="sheet-hint">Ligue um grupo ao Final para ter variações.</p>`;
     const out = M.output(project.finals.find((f) => f.id === sel.id));
     // Os mesmos campos dos modelos: Resolução em botões conectados, Formato no campo de seleção.
-    h += `<section class="viewer__section"><h3 class="viewer__title">Vídeo exportado</h3>
+    h += `<section class="viewer__section"><h3 class="viewer__title">Qualidade e formato</h3>
       <div class="segmented-field"><span class="segmented-field__label">Resolução</span><div class="segmented-button sheet-segmented" role="radiogroup" aria-label="Resolução">${M.RESOLUTIONS.map(
         (r) => `<label class="segmented-button__segment interactive"><input type="radio" name="f-resolution" value="${r}"${r === out.resolution ? " checked" : ""}><span class="icon segmented-button__check" aria-hidden="true">check</span><span>${r}</span></label>`,
       ).join("")}</div></div>
