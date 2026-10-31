@@ -87,14 +87,14 @@ function loadPreview() {
   let tl = null;
   if (preview?.type === "group") {
     const g = gs.find((g) => g.id === preview.id);
-    if (g) (v = [g]), (title = `Grupo: ${g.name}`);
+    if (g) (v = [g]), (title = g.label);
   }
   if (preview?.type === "block") {
     const b = project.blocks.find((b) => b.id === preview.id);
     if (b) {
       // Só o bloco, do corte dele: sem o que está por cima nem o som somado.
       tl = { duration: M.len(b), items: [{ block: b, layer: b.kind === "audio" ? "audio" : 0, start: 0, len: M.len(b), tin: b.tin }] };
-      title = `Bloco: ${b.name}`;
+      title = b.name;
     }
   }
   if (!v && !tl) {
@@ -121,6 +121,7 @@ const previewFinal = () => (sel.type === "final" && project.finals.find((f) => f
 const head = document.createElement("div");
 head.className = "playhead";
 head.innerHTML = `<span class="playhead__knob"></span>`;
+world.append(head);
 let headBox = null;
 function playhead(t) {
   let box = null;
@@ -342,6 +343,17 @@ function applyView() {
   scheduleSharp();
 }
 
+/** No arrasto, desenha no máximo uma vez por quadro, sem o painel (ele vem ao soltar). */
+let drawing = 0;
+function renderSoon() {
+  drawing ||= requestAnimationFrame(() => {
+    drawing = 0;
+    render({ side: false });
+  });
+}
+let chromeHtml = null;
+let wiresHtml = null;
+
 function render({ side = true } = {}) {
   const gs = M.groups(project);
   const idx = M.groupIndex(gs);
@@ -379,7 +391,12 @@ function render({ side = true } = {}) {
     }
     const g = idx.get(b.id);
     const role = g?.covers.includes(b) ? "cover" : g?.audios.includes(b) && !g.soloAudio ? "under" : "";
-    el.className = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""} ${path?.includes(g) ? "is-path" : ""}`;
+    const look = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""} ${path?.includes(g) ? "is-path" : ""}${el.classList.contains("is-drag") ? " is-drag" : ""}`;
+    // Só mexe no elemento se algo mudou: arrastar um bloco não redesenha os outros.
+    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}`;
+    if (el.drawn === state) continue;
+    el.drawn = state;
+    el.className = look;
     Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${M.width(b)}px`, height: `${M.height(b)}px` });
     const tipo = { video: "video", image: "imagem", audio: "audio" }[b.kind];
     el.style.setProperty("--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
@@ -401,13 +418,13 @@ function render({ side = true } = {}) {
     const top = Math.min(g.y, ...g.covers.map((c) => c.y));
     const rowH = g.soloAudio ? M.AUD_H : M.VIS_H;
     const isSel = sel.type === "group" && sel.id === g.id;
-    if (g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio)) {
+    if (M.hasArea(g)) {
       const gPlaying = player.playing && preview?.type === "group" && preview.id === g.id;
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
       const bottom = groupBottom(g);
       const onPath = path?.includes(g) ? "is-path" : "";
       html += `<div class="gframe ${isSel ? "is-sel" : ""} ${onPath}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
-      html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.name)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o grupo"}" title="${gPlaying ? "Pausar" : "Tocar o grupo"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
+      html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.label)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o bloco"}" title="${gPlaying ? "Pausar" : "Tocar o bloco"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
     }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
@@ -418,7 +435,7 @@ function render({ side = true } = {}) {
     const w = M.width(sb);
     const cy = sb.kind === "audio" ? sb.y + M.AUD_H / 2 : sb.y + 28 + (M.VIS_H - 32) / 2;
     const playing = player.playing && preview?.type === "block" && preview.id === sb.id;
-    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2}px;top:${cy}px" aria-label="${playing ? "Pausar" : "Tocar o bloco"}" title="${playing ? "Pausar" : "Tocar o bloco"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
+    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2}px;top:${cy}px" aria-label="${playing ? "Pausar" : "Tocar"}" title="${playing ? "Pausar" : "Tocar"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
   }
   for (const f of project.finals) {
     const vs = M.versions(project, f.id, gs);
@@ -427,8 +444,7 @@ function render({ side = true } = {}) {
     html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview, selectionIn(f.id, gs, idx)) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
     html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
-  chrome.innerHTML = html;
-  world.append(head);
+  if (html !== chromeHtml) chrome.innerHTML = chromeHtml = html;
 
   // Linhas.
   let svg = "";
@@ -440,7 +456,12 @@ function render({ side = true } = {}) {
     const onPath = path && M.linkOn(l, path, litFinal);
     svg += `<path class="wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
   }
-  wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d=""/>`;
+  // A linha sendo puxada fica fora disto: é só o atributo dela que muda.
+  if (svg !== wiresHtml) {
+    wiresHtml = svg;
+    const temp = $("#wire-temp")?.getAttribute("d") ?? "";
+    wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d="${temp}"/>`;
+  }
 
   if (side) renderSide(gs);
   frameRatio();
@@ -499,7 +520,7 @@ function renderSide(gs) {
     const durs = vs.map((v) => M.timeline(v).duration);
     const [least, most] = [Math.min(...durs), Math.max(...durs)];
     const dur = least === most ? fmt(most) : `${fmt(least).replace(" s", "")} a ${fmt(most)}`;
-    h += vs.length ? `<div class="viewer__card"><div>${row("movie", "Variações", vs.length)}${row("schedule", "Duração", dur)}</div></div>` : `<p class="sheet-hint">Ligue um grupo ao Final para ter variações.</p>`;
+    h += vs.length ? `<div class="viewer__card"><div>${row("movie", "Variações", vs.length)}${row("schedule", "Duração", dur)}</div></div>` : `<p class="sheet-hint">Ligue um bloco ao Final para ter variações.</p>`;
     const out = M.output(project.finals.find((f) => f.id === sel.id));
     // Os mesmos campos dos modelos: Resolução em botões conectados, Formato no campo de seleção.
     h += `<section class="viewer__section"><h3 class="viewer__title">Qualidade e formato</h3>
@@ -530,13 +551,14 @@ function renderSide(gs) {
   } else if (sel.type === "group") {
     const g = gs.find((g) => g.id === sel.id);
     if (g) {
-      title = "Grupo";
-      h += `<div class="viewer__card"><p class="qe-result__title">${esc(g.name)}</p><div>${row("schedule", "Duração", fmt(g.dur))}${row("movie", "Em sequência", g.blocks.length)}${row("layers", "Por cima", g.covers.length)}${row("music_note", "Som somado", g.audios.length)}</div></div>`;
-      actions = btn("text", 'data-act="del"', "delete", "Excluir grupo");
+      title = "Bloco";
+      if (M.hasArea(g)) h += field("f-group", "Nome", g.label, 'maxlength="60"');
+      h += `<div class="viewer__card"><div>${row("schedule", "Duração", fmt(g.dur))}${row("movie", "Em sequência", g.blocks.length)}${row("layers", "Por cima", g.covers.length)}${row("music_note", "Som somado", g.audios.length)}</div></div>`;
+      actions = btn("text", 'data-act="del"', "delete", "Excluir bloco");
     }
   } else if (sel.type === "edge") {
     title = "Linha";
-    h += `<p class="sheet-hint">Liga um grupo ao seguinte. Cada caminho até o Final é uma variação.</p>`;
+    h += `<p class="sheet-hint">Liga um bloco ao seguinte. Cada caminho até o Final é uma variação.</p>`;
     actions = btn("text", 'data-act="del"', "delete", "Excluir linha");
   } else {
     if (PROJETO) {
@@ -585,7 +607,7 @@ side.onclickAction = (e) => {
     project = M.relinkVideo(project, sel.id);
     commit(before);
     render();
-    toast(M.doubledSound(project) ? "Este grupo tem o som duas vezes: o do vídeo e o da cópia." : "O vídeo voltou a tocar o próprio som.");
+    toast(M.doubledSound(project) ? "Este bloco tem o som duas vezes: o do vídeo e o da cópia." : "O vídeo voltou a tocar o próprio som.");
   }
   if (act === "tovideo") {
     const before = project;
@@ -658,6 +680,12 @@ function onSideInput(t0) {
     if (help) help.innerHTML = `<span>${M.FORMATS.find((o) => o.value === out.format).description}</span><span>${out.width} × ${out.height}</span>`;
     frameRatio();
     return;
+  }
+  if (t0.id === "f-group") {
+    const before = project;
+    project = M.renameGroup(project, M.groups(project).find((g) => g.id === sel.id), t0.value);
+    commit(before);
+    return render({ side: false });
   }
   if (sel.type !== "block") return;
   const before = project;
@@ -1188,7 +1216,7 @@ vp.addEventListener("pointerdown", (e) => {
     sel = { type: "block", id };
     onMove = (ev) => {
       project = M.trim(base, id, trimEl.dataset.trim, dW(ev).x / M.PX);
-      render();
+      renderSoon();
     };
   } else if (port) {
     const drag = linkDrag({ out: port.classList.contains("port--out"), group: port.dataset.group, final: port.dataset.final });
@@ -1202,7 +1230,7 @@ vp.addEventListener("pointerdown", (e) => {
     onMove = (ev) => {
       const d = dW(ev);
       project = M.moveGroup(base, gid, d.x, d.y);
-      render();
+      renderSoon();
     };
   } else if (blk) {
     const id = blk.dataset.id;
@@ -1210,17 +1238,26 @@ vp.addEventListener("pointerdown", (e) => {
     sel = { type: "block", id };
     preview = { type: "block", id };
     render();
+    // O bloco que segura o elemento neste arrasto.
+    let keep = {};
+    let placed = "";
     onMove = (ev) => {
       const d = dW(ev);
-      const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + d.y, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + d.y, 16 / view.z);
+      const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + d.y, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + d.y, 16 / view.z, keep);
+      keep = { group: s.group?.id, mode: s.mode };
+      // O mouse anda, mas o elemento pode estar parado no encaixe: nada a redesenhar.
+      const at = `${s.x}|${s.y}|${s.mode}|${s.target}`;
+      if (at === placed) return;
+      placed = at;
       project = M.dropBlock(base, id, s);
       $("#snapinfo").textContent = SNAP[s.mode] ?? "";
       blockEls.get(id)?.classList.add("is-drag");
-      render();
+      renderSoon();
     };
     onUp = () => {
       $("#snapinfo").textContent = "";
       blockEls.get(id)?.classList.remove("is-drag");
+      if (moved) render();
     };
   } else if (fin) {
     const id = fin.dataset.final;
@@ -1233,7 +1270,7 @@ vp.addEventListener("pointerdown", (e) => {
       const d = dW(ev);
       project = structuredClone(base);
       Object.assign(project.finals.find((f) => f.id === id), { x: f0.x + d.x, y: f0.y + d.y });
-      render();
+      renderSoon();
     };
   } else if (hit) {
     // Puxar a linha solta a ponta mais perto: cair num ponto liga de novo; no vazio, ela some.
@@ -1264,6 +1301,8 @@ vp.addEventListener("pointerdown", (e) => {
     onMove?.(ev);
   };
   const up = (ev) => {
+    cancelAnimationFrame(drawing);
+    drawing = 0;
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", up);
     window.removeEventListener("pointercancel", up);

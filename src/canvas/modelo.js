@@ -33,6 +33,11 @@ export const MAX_FAIXAS = 8;
 // Organizar: a área do grupo (20 px em volta) e a aba dele (40 px) cabem nas folgas; o Final, na dele.
 const COL_GAP = 140;
 const ROW_GAP = 110;
+// O ímã do bloco alcança MAGNET vezes a mira fina do encaixe.
+const MAGNET = 3;
+// Até onde da fileira o centro do elemento conta como "em cima"; mais baixo para quem já está lá.
+const ROW_LINE = 0.25;
+const ROW_LINE_HELD = 0.5;
 const FINAL_HEAD = 92;
 const FINAL_ROW = 38;
 const LANE_ABOVE = 70;
@@ -127,12 +132,39 @@ export function groups(project) {
     else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
   }
   for (const g of out) {
+    // O bloco vai de onde começa a onde acaba o que está nele: quem está em cima pode passar da
+    // sequência, nos dois lados (seqX e seq guardam onde ela começa e acaba).
+    g.seqX = g.x;
+    g.seq = g.x + g.w;
+    g.x = Math.min(g.x, ...g.covers.map((c) => c.x));
+    g.w = Math.max(g.seq, ...g.covers.map((c) => c.x + width(c))) - g.x;
     g.dur = g.w / PX;
     g.first = g.blocks[0] ?? g.audios[0];
     g.last = g.blocks[g.blocks.length - 1] ?? g.audios[0];
     g.name = g.blocks.length ? g.blocks.map((b) => b.name).join(" + ") : g.audios[0].name;
   }
+  // Bloco é o que tem a área tracejada: numerado na ordem em que os elementos entraram no canvas.
+  const firstIndex = (g) => Math.min(...members(g).map((b) => blocks.indexOf(b)));
+  const framed = out.filter(hasArea).sort((a, b) => firstIndex(a) - firstIndex(b));
+  framed.forEach((g, i) => (g.number = i + 1));
+  for (const g of out) {
+    const own = members(g).map((b) => project.names?.[b.id]).find(Boolean);
+    g.label = own ?? (g.number ? `Bloco ${g.number}` : g.name);
+  }
   return out;
+}
+
+const members = (g) => [...g.blocks, ...g.covers, ...g.audios];
+/** Se o grupo tem a área tracejada: mais de um elemento em sequência, por cima ou de som somado. */
+export const hasArea = (g) => g.blocks.length > 1 || g.covers.length > 0 || (g.audios.length > 0 && !g.soloAudio);
+
+/** Dá nome a um bloco; vazio volta ao "Bloco 1". O nome fica no primeiro elemento dele. */
+export function renameGroup(project, group, name) {
+  const p = clone(project);
+  p.names = { ...p.names };
+  for (const b of members(group)) delete p.names[b.id];
+  if (name.trim()) p.names[members(group)[0].id] = name.trim();
+  return p;
 }
 
 export function groupIndex(gs) {
@@ -214,7 +246,8 @@ export function timeline(version) {
   const items = [];
   let t = 0;
   for (const g of version) {
-    let at = t;
+    // Quem está em cima pode começar antes da sequência.
+    let at = t + (g.seqX - g.x) / PX;
     for (const b of g.blocks) {
       items.push({ block: b, layer: 0, start: at, len: len(b), tin: b.tin });
       at += len(b);
@@ -282,34 +315,61 @@ const clone = (p) => structuredClone(p);
  * grupo por cima (visual) ou entra embaixo dele (áudio). tol em unidades do
  * canvas. Devolve { x, y, mode, target } (mode null: solto, sem encaixe).
  */
-export function snap(project, id, x, y, tol) {
+export function snap(project, id, x, y, tol, keep = {}) {
   const b = project.blocks.find((o) => o.id === id);
   const w = width(b);
-  const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) });
-  const bases = gs.flatMap((g) => g.blocks.map((o) => ({ o, g })));
-  if (visual(b)) {
-    for (const { o, g } of bases) {
-      if (Math.abs(y - o.y) > VIS_H / 2) continue;
-      if (Math.abs(x - (o.x + width(o))) < tol) return { x: o.x + width(o), y: o.y, mode: "after", target: o.id, group: g };
-      if (Math.abs(x + w - o.x) < tol && o === g.first) return { x: o.x - w, y: o.y, mode: "before", target: o.id, group: g };
+  const h = height(b);
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) }).filter((g) => g.blocks.length);
+  const magnet = tol * MAGNET;
+  const free = () => ({ x, y, mode: null });
+  // O bloco onde o elemento já está vem primeiro, e o segura numa área maior.
+  const order = [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group)];
+  for (const g of order) {
+    const inside = g.id === keep.group;
+    const pad = inside ? magnet * 2 : magnet;
+    const top = Math.min(g.y, ...g.covers.map((c) => c.y));
+    const bottom = Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
+    if (y + h <= top - pad || y >= bottom + pad) continue;
+    const start = g.seqX;
+    const end = g.seq;
+    const beside = { x: end, y: g.last.y, mode: "after", target: g.last.id, group: g };
+    if (visual(b)) {
+      // O centro do elemento decide: acima da linha, ele apoia em cima; abaixo, entra na sequência.
+      if (cy < g.y + VIS_H * (inside && keep.mode === "cover" ? ROW_LINE_HELD : ROW_LINE)) {
+        // Corre até a própria ponta sair da sequência, e o bloco cresce junto. Pela direita,
+        // passou disso, desce para o lado; pela esquerda, sai do bloco. Entrar pede um pouco mais
+        // que sair, para a borda não piscar.
+        if (x > end - EPS * 2 - (inside && keep.mode === "after" ? tol : 0)) {
+          if (x > end + pad) continue;
+          return beside;
+        }
+        if (x + w <= start + (inside ? EPS * 2 : tol)) continue;
+        return { x, y: g.y - h, mode: "cover", target: g.id, group: g };
+      }
+      // Vídeo e imagem não têm lugar embaixo do bloco: abaixo da fileira, seguem livres.
+      if (cy > g.y + g.h) continue;
+      // Na sequência, o lugar muda só na metade de cada elemento: não abre e fecha a cada emenda.
+      const at = g.blocks.findIndex((o) => cx < o.x + width(o) / 2);
+      if (at < 0) {
+        if (x > end + pad) continue;
+        return beside;
+      }
+      if (at > 0) {
+        const o = g.blocks[at - 1];
+        return { x: o.x + width(o), y: o.y, mode: "after", target: o.id, group: g };
+      }
+      if (x + w < start - pad) continue;
+      return { x: start - w, y: g.y, mode: "before", target: g.first.id, group: g };
     }
-    for (const g of gs) {
-      if (!g.blocks.length) continue;
-      const cx = x + w / 2;
-      const overRow = y + VIS_H > g.y + VIS_H * 0.2 && y < g.y + VIS_H * 0.6;
-      if (overRow && cx > g.x && cx < g.x + g.w) return { x: Math.max(g.x, x), y: g.y - height(b), mode: "cover", target: g.id, group: g };
-    }
-  } else {
-    for (const g of gs) {
-      if (!g.blocks.length) continue;
-      const cx = x + w / 2;
-      const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
-      const overRow = y + AUD_H > g.y + g.h * 0.4 && y < g.y + g.h + AUD_H * (lanes + 0.8);
-      const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
-      if (overRow && cx > g.x && cx < g.x + g.w) return { x: Math.max(g.x, x), y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
-    }
+    if (cy < g.y + g.h / 2 || cx > end) continue;
+    if ((inside && x < start - tol) || x + w <= start) continue;
+    const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
+    const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
+    return { x: Math.max(start, Math.min(x, end - w)), y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
   }
-  return { x, y, mode: null };
+  return free();
 }
 
 /** Move um bloco para onde o snap() mandou, abrindo espaço se encaixou no meio. */
