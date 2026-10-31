@@ -704,14 +704,26 @@ export class Studio {
     if (!this.audio) return null;
     const video = await this.db.nextWithoutFace();
     if (!video) return null;
+    return this.db.updateVideo(video.id, { face: await this.detectFace((video.processed_key ?? video.video_key)!) });
+  }
+
+  /** Agendamento: acha o rosto de uma imagem de avatar, para a miniatura enquadrar como a dos vídeos. */
+  async findNextAssetFace(): Promise<void> {
+    if (!this.audio) return;
+    const asset = await this.db.nextAssetWithoutFace();
+    if (asset) await this.db.updateAssetFace(asset.id, await this.detectFace(asset.key));
+  }
+
+  /** O rosto do arquivo, em JSON; {} se não achou. */
+  private async detectFace(key: string): Promise<string> {
     let face: Face | Record<string, never> = {};
     try {
-      const original = await this.media.get((video.processed_key ?? video.video_key)!);
-      if (original) face = await this.audio.face(await original.arrayBuffer());
+      const file = await this.media.get(key);
+      if (file) face = await this.audio!.face(await file.arrayBuffer());
     } catch (err) {
-      console.error("Falha ao achar o rosto (agendamento)", video.id, err);
+      console.error("Falha ao achar o rosto (agendamento)", key, err);
     }
-    return this.db.updateVideo(video.id, { face: JSON.stringify(face) });
+    return JSON.stringify(face);
   }
 
   /** Agendamento: faz a edição rápida do próximo vídeo da fila, a partir da versão com o áudio tratado, se houver. */

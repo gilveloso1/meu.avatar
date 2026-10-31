@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
 import { ERROS } from "../src/erros";
-import { call, cookie, FakeHeyGenApi, FakeVideoApi, memberCookie, postForm, SITE } from "./helpers";
+import { Studio } from "../src/studio";
+import { call, cookie, FakeAudioApi, FakeHeyGenApi, FakeVideoApi, memberCookie, postForm, SITE } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const db = () => new Db(env.DB);
@@ -185,6 +186,23 @@ describe("vídeo com avatar ou arquivo solto", () => {
     await env.DB.exec((await import("../migrations/0014_assets_gerados.sql?raw")).default.replace(/--.*\n/g, "").replace(/\s+/g, " "));
     const keys = (await db().assetsByAvatar(id)).map((a) => a.key).sort();
     expect(keys).toEqual(["avatares-ativos/foto", video.video_key]);
+  });
+
+  it("a capa do avatar enquadra o rosto achado pelo agendamento", async () => {
+    const session = await cookie();
+    const id = await criar(session, { nome: "Camila" });
+    const f = new FormData();
+    f.set("arquivo", new File(["mp4-falso"], "rosto.png", { type: "image/png" }));
+    expect((await call(new Request(`${SITE}/avatares/${id}/arquivos`, { method: "POST", body: f, headers: { origin: SITE, cookie: session } }))).status).toBe(303);
+    const antes = await (await abrir("/avatares", session)).text();
+    expect(antes).toContain('data-face="0.5,0.35"');
+    const audio = new FakeAudioApi();
+    const studio = new Studio(db(), env.MIDIA, new FakeVideoApi(), { siteUrl: SITE }, audio);
+    await studio.findNextAssetFace();
+    await studio.findNextAssetFace();
+    expect(audio.faces).toBe(1);
+    expect(await (await abrir("/avatares", session)).text()).toContain('data-face="0.46,0.44"');
+    expect(await (await abrir(`/avatares/${id}`, session)).text()).toContain('data-face="0.46,0.44"');
   });
 
   it("apagar o ativo gerado ou o avatar não apaga o vídeo", async () => {
