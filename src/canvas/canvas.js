@@ -272,8 +272,6 @@ function groupAt(pt) {
   });
 }
 const groupBottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AUD_H));
-// As portas ficam um pouco fora do grupo, para não cobrir as alças de corte.
-const PORT_OUT = 14;
 const blockEls = new Map();
 
 /* ---------- onda do som: a leve no bloco, a nítida só no que está à vista com zoom alto ---------- */
@@ -434,9 +432,10 @@ function render({ side = true } = {}) {
 
   // Linhas.
   let svg = "";
+  const boxes = M.wireBoxes(project, gs);
   for (const l of M.links(project, gs)) {
     const f = typeof l.to === "string" ? project.finals.find((f) => f.id === l.to) : null;
-    const d = curve(outPoint(l.from), f ? finalPoint(f) : inPoint(l.to));
+    const d = M.linkPath(l, project, boxes);
     const on = sel.type === "edge" && sel.id === l.edge.id;
     const onPath = path && M.linkOn(l, path, litFinal);
     svg += `<path class="wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
@@ -479,14 +478,7 @@ function variantList(vs, active, part) {
   return `<div class="fin__body">${now}<div class="fin__list fin__list--${style}" style="--rows:${rows}">${vs.map(item).join("")}</div></div>`;
 }
 
-const outPoint = (g) => ({ x: g.x + g.w + PORT_OUT, y: g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) / 2 });
-const inPoint = (g) => ({ x: g.x - PORT_OUT, y: g.y + (g.soloAudio ? M.AUD_H : M.VIS_H) / 2 });
-const finalPoint = (f) => ({ x: f.x, y: f.y + 40 });
-
-const curve = (a, b) => {
-  const k = Math.max(40, Math.abs(b.x - a.x) / 2);
-  return `M${a.x},${a.y} C${a.x + k},${a.y} ${b.x - k},${b.y} ${b.x},${b.y}`;
-};
+const { PORT_OUT, outPoint, inPoint, finalPoint, curve } = M;
 
 /* ---------- painel ---------- */
 
@@ -872,6 +864,7 @@ $("#arrange").onclick = () => {
 };
 
 const ZOOM_MIN = 0.15;
+const FIT_Y = 88;
 // Até 800%: dá para ver a onda do som de perto para cortar.
 const ZOOM_MAX = 8;
 // Cada giro da roda vale no máximo isto, e o gesto de pinça, que manda valores pequenos, não muda.
@@ -933,7 +926,7 @@ function fit() {
   zoomGoal = null;
   const xs = [];
   const ys = [];
-  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y - FRAME_PAD - 40, b.y + M.height(b) + FRAME_PAD);
+  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y, b.y + M.height(b));
   const r = vp.getBoundingClientRect();
   // Canvas vazio: o aviso do começo fica no meio; o Final, à direita dele.
   if (!project.blocks.length && project.finals.length) {
@@ -951,7 +944,8 @@ function fit() {
   const y0 = Math.min(...ys);
   const w = Math.max(...xs) - x0;
   const h = Math.max(...ys) - y0;
-  view.z = Math.min(1.2, (r.width - 80) / w, (r.height - 100) / h);
+  // Centralizado, com folga para a barra de baixo (80 px) igual em cima e embaixo.
+  view.z = Math.min(1.2, (r.width - 80) / w, (r.height - 2 * FIT_Y) / h);
   view.x = (r.width - w * view.z) / 2 - x0 * view.z;
   view.y = (r.height - h * view.z) / 2 - y0 * view.z;
   applyView();
