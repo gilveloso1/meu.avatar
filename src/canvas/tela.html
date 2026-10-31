@@ -305,7 +305,7 @@ a.xlist__item { color: inherit; text-decoration: none; }
 <dialog class="dialog library-dialog" id="dlg" aria-labelledby="dlg-title">
   <h3 id="dlg-title">Exportar</h3>
   <p id="dlg-text" role="status"></p>
-  <div class="linear-progress" id="dlg-progress" aria-label="Exportando"></div>
+  <div class="linear-progress" id="dlg-progress" role="progressbar" aria-label="Exportando" aria-valuemin="0" aria-valuemax="100"></div>
   <div class="xlist" id="dlg-list"></div>
   <div class="dialog__actions">
     <button class="button button--text interactive" type="button" id="dlg-close">Fechar</button>

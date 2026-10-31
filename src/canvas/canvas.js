@@ -760,11 +760,19 @@ function fit() {
 /* ---------- exportar (no site: o servidor monta; a tela chama um passo depois do outro) ---------- */
 
 let exportHidden = false;
+let exportNow = null;
 function showExport(st) {
+  exportNow = st.status === "running" ? st : null;
   const done = st.status === "done";
   $("#dlg-title").textContent = done ? (st.versoes.length === 1 ? "Vídeo pronto" : `${st.versoes.length} vídeos prontos`) : "Exportando";
-  $("#dlg-text").textContent = st.erro ?? (done ? "Disponíveis por 24 horas. Baixe para guardar." : `Montando: ${st.feitos} de ${st.total}. Feche para continuar editando.`);
-  $("#dlg-progress").hidden = done || !!st.erro;
+  $("#dlg-text").textContent = st.erro ?? (done ? "Disponíveis por 24 horas. Baixe para guardar." : st.total ? `Montando: ${st.feitos} de ${st.total}. Feche para continuar editando.` : "Preparando a exportação.");
+  const bar = $("#dlg-progress");
+  bar.hidden = done || !!st.erro;
+  // Sem nenhum passo pronto, o indeterminado mostra que está andando; depois, o andamento.
+  bar.classList.toggle("linear-progress--determinate", st.feitos > 0);
+  bar.style.setProperty("--progress", st.total ? st.feitos / st.total : 0);
+  if (st.feitos > 0) bar.setAttribute("aria-valuenow", Math.round((st.feitos / st.total) * 100));
+  else bar.removeAttribute("aria-valuenow");
   $("#dlg-list").innerHTML = st.versoes
     .map((v, i) => `<a class="xlist__item interactive" href="${esc(v.href)}" download><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(v.nome)}</span><span class="icon" aria-hidden="true">download</span></a>`)
     .join("");
@@ -793,16 +801,25 @@ async function followExport(st) {
 
 async function startExport(finalId, versoes) {
   exportHidden = false;
-  // A exportação usa o projeto salvo: manda o que ainda não foi.
-  await save();
+  // Outra já em andamento: mostra ela, em vez de começar de novo.
+  if (exportNow) return showExport(exportNow);
+  // O diálogo abre no clique, antes de qualquer resposta do servidor.
+  showExport({ status: "running", feitos: 0, total: 0, versoes: [], zip: null, erro: null });
   try {
+    // A exportação usa o projeto salvo: manda o que ainda não foi.
+    await save();
     const res = await fetch(PROJETO.exportar, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ final: finalId, versoes }) });
-    if (!res.ok) return toast(res.status === 400 ? await res.text() : (CONFIG.erros?.exportar ?? ""));
+    if (!res.ok) return failExport(res.status === 400 ? await res.text() : CONFIG.erros?.exportar);
     await followExport(await res.json());
   } catch {
-    if ($("#dlg").open) $("#dlg").close();
-    toast(CONFIG.erros?.exportar ?? "");
+    failExport(CONFIG.erros?.exportar);
   }
+}
+
+function failExport(msg) {
+  exportNow = null;
+  if ($("#dlg").open) $("#dlg").close();
+  toast(msg ?? "");
 }
 
 function toast(msg) {
