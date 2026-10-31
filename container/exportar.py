@@ -21,6 +21,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 FPS = 30
 TAXA = 48000
+# O mesmo volume do resto do site (tratar.sh, editar.py): sem isso, um gancho baixo seguido de
+# um corpo alto dá um salto na emenda. Abaixo de SILENCIO, não há o que medir.
+LUFS = -14
+SILENCIO = -60
 LIMITE = 4 * 1024 * 1024 * 1024  # 4 GB: até 200 trechos numa emenda
 MAX_LADO = 1920
 
@@ -56,7 +60,7 @@ def filtros(plano, arquivos):
     quadros = max(1, round(duracao * FPS))
     # O som tem a duração exata dos quadros: é o que mantém a emenda em sincronia.
     exata = quadros / FPS
-    entradas, grafo, sons = [], [f"color=c=black:s={w}x{h}:r={FPS}:d={exata:.6f},format=yuv420p[base]"], []
+    entradas, grafo, sons, volumes = [], [f"color=c=black:s={w}x{h}:r={FPS}:d={exata:.6f},format=yuv420p[base]"], [], []
     atual = "base"
     itens = plano.get("itens")
     if not isinstance(itens, list):
@@ -101,6 +105,7 @@ def filtros(plano, arquivos):
                 f"asetpts=PTS-STARTPTS,volume={volume:.4f},adelay={atraso}:all=1[s{n}]"
             )
             sons.append(f"[s{n}]")
+            volumes.append(volume)
     grafo.append(f"[{atual}]trim=end_frame={quadros},setpts=PTS-STARTPTS[v]")
     silencio = f"anullsrc=r={TAXA}:cl=stereo:d={exata:.6f}"
     if sons:
@@ -109,11 +114,12 @@ def filtros(plano, arquivos):
         grafo.append(f"[mudo]{''.join(sons)}amix=inputs={len(sons) + 1}:duration=longest:normalize=0,alimiter=limit=0.97:level=0,atrim=end={exata:.6f}[a]")
     else:
         grafo.append(f"{silencio}[a]")
-    return entradas, ";".join(grafo), quadros
+    # O bloco mais alto diz o nível do trecho: som baixado de propósito continua baixo.
+    return entradas, ";".join(grafo), quadros, min(max(volumes, default=1), 1)
 
 
 def trecho(plano, saida, arquivos):
-    entradas, grafo, quadros = filtros(plano, arquivos)
+    entradas, grafo, quadros, nivel = filtros(plano, arquivos)
     ffmpeg(
         "-y", *entradas, "-filter_complex", grafo, "-map", "[v]", "-map", "[a]", "-frames:v", str(quadros),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-profile:v", "high",
@@ -121,6 +127,26 @@ def trecho(plano, saida, arquivos):
         # O FLAC na mesma profundidade em todos: o decodificador não aceita trocar no meio.
         "-bf", "0", "-g", str(FPS * 2), "-r", str(FPS), "-c:a", "flac", "-sample_fmt", "s16", "-ar", str(TAXA), "-ac", "2", "-f", "matroska", saida,
     )
+    nivelar(saida, nivel)
+
+
+def nivelar(caminho, nivel):
+    """Leva o som do trecho a LUFS, vezes o nível, só com ganho e limitador, sem mexer na imagem."""
+    r = subprocess.run(
+        ["ffmpeg", "-nostdin", "-hide_banner", "-i", caminho, "-af", f"loudnorm=I={LUFS}:print_format=json", "-vn", "-f", "null", "-"],
+        capture_output=True, text=True, check=True, timeout=300,
+    )
+    log = r.stderr
+    medido = float(json.loads(log[log.rindex("{"):log.rindex("}") + 1])["input_i"])
+    if not math.isfinite(medido) or medido < SILENCIO:
+        return
+    temp = caminho + ".temp"
+    ffmpeg(
+        "-y", "-i", caminho, "-map", "0:v", "-map", "0:a", "-c:v", "copy",
+        "-af", f"volume={LUFS - medido + 20 * math.log10(nivel):.2f}dB,alimiter=limit=0.84:level=0", "-c:a", "flac", "-sample_fmt", "s16",
+        "-ar", str(TAXA), "-ac", "2", "-f", "matroska", temp,
+    )
+    os.replace(temp, caminho)
 
 
 def emendar(saida, trechos):

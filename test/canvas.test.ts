@@ -381,6 +381,18 @@ describe("exportar projetos", () => {
     expect(((await (await com(fake, `/projetos/${id}/exportacoes/${st.id}`, admin)).json()) as Estado).status).toBe("expired");
   });
 
+  it("o agendamento apaga só as exportações vencidas há mais de uma semana", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const st = await exportar(fake, id, admin);
+    const nova = await exportar(fake, id, admin);
+    await env.DB.prepare("UPDATE exports SET expires_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").bind(st.id).run();
+    await new Exports(new Db(env.DB), env.MIDIA, fake).next();
+    expect(await new Db(env.DB).exportById(st.id)).toBeNull();
+    expect(await new Db(env.DB).exportById(nova.id)).not.toBeNull();
+  });
+
   it("quem não é administrador não exporta; o canvas retoma a última", async () => {
     const admin = await cookie();
     const id = await projeto(admin);

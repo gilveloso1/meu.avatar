@@ -13,8 +13,9 @@ simples, e paga por ele: ganha dinheiro com os vídeos, criando audiência
 ou fazendo anúncios no estilo UGC para marcas DTC. Ver "Direção" no `CLAUDE.md`. A ordem abaixo ainda é
 a anterior e será revista com o dono por essa direção.
 
-Novo, ainda sem lugar na ordem: **canvas de edição**, montar vários vídeos
-com blocos e conexões (ver [canvas.md](canvas.md)).
+**Canvas de edição** (ver [canvas.md](canvas.md)): no ar para o administrador, com a
+exportação de até 50 versões. Falta a timeline embaixo do canvas e abrir para todos, depois
+de definir o limite de uso e o custo do contêiner por pessoa.
 
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 
