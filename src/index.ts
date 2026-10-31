@@ -116,7 +116,7 @@ export default {
     // Depois de buscar os prontos, trata o áudio de um vídeo da fila e faz uma edição rápida pedida.
     await studio.treatNextAudio();
     await studio.editNext();
-    // E acha o rosto de um vídeo pronto e de uma imagem de avatar, para as miniaturas enquadrarem.
+    // E acha o rosto de um vídeo pronto e de um ativo de avatar, para as miniaturas enquadrarem.
     await studio.findNextFace();
     await studio.findNextAssetFace();
     // A exportação anda pela tela; o que ela deixou pela metade termina aqui.

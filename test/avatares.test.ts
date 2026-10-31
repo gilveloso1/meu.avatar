@@ -205,6 +205,16 @@ describe("vídeo com avatar ou arquivo solto", () => {
     expect(await (await abrir(`/avatares/${id}`, session)).text()).toContain('data-face="0.46,0.44"');
   });
 
+  it("o vídeo na lista de ativos enquadra o rosto, como a imagem", async () => {
+    const session = await cookie();
+    const { id, asset } = await vinculado(session);
+    await env.MIDIA.put(asset.key, "mp4-falso");
+    const audio = new FakeAudioApi();
+    await new Studio(db(), env.MIDIA, new FakeVideoApi(), { siteUrl: SITE }, audio).findNextAssetFace();
+    expect(audio.faces).toBe(1);
+    expect(await (await abrir(`/avatares/${id}`, session)).text()).toMatch(/<video data-src="[^"]+" data-face="0\.46,0\.44"/);
+  });
+
   it("apagar o ativo gerado ou o avatar não apaga o vídeo", async () => {
     const session = await cookie();
     const { id, video, asset } = await vinculado(session);

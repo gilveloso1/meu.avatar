@@ -1511,7 +1511,7 @@ function assetLibrary(assets: AvatarAsset[], o: { key: string; avatar?: Avatar; 
     a.kind === "imagem"
       ? faceImage(src(a), a.face)
       : a.kind === "video"
-        ? `<video data-src="${src(a)}" preload="metadata" muted playsinline tabindex="-1"></video>`
+        ? `<video data-src="${src(a)}" data-face="${facePoint(a.face).join(",")}" preload="metadata" muted playsinline tabindex="-1"></video>`
         : `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--tertiary" aria-hidden="true"><span class="icon">mic</span></span></span>`;
   return library({
     key: o.key,
@@ -1966,15 +1966,16 @@ const SCRIPT = `(() => {
     fit();
   }
 
-  // Imagens cortadas no rosto: os olhos a 40% da altura e no meio da largura, como em thumbPosition.
-  for (const img of document.querySelectorAll("img[data-face]")) {
+  // Ativos cortados no rosto: os olhos a 40% da altura e no meio da largura, como em thumbPosition.
+  for (const el of document.querySelectorAll("[data-face]")) {
     const place = () => {
-      const [fx, fy] = img.dataset.face.split(",").map(Number);
+      const [fx, fy] = el.dataset.face.split(",").map(Number);
       const pct = (r, f, target) => (r > 1 ? Math.min(100, Math.max(0, ((r * f - target) / (r - 1)) * 100)) : 50);
-      const ratio = img.naturalHeight / img.naturalWidth;
-      img.style.objectPosition = pct(1 / ratio, fx, 0.5) + "% " + pct(ratio, fy, 0.4) + "%";
+      const ratio = (el.naturalHeight || el.videoHeight) / (el.naturalWidth || el.videoWidth);
+      el.style.objectPosition = pct(1 / ratio, fx, 0.5) + "% " + pct(ratio, fy, 0.4) + "%";
     };
-    if (img.complete && img.naturalWidth) place(); else img.addEventListener("load", place, { once: true });
+    if (el.naturalWidth || el.videoWidth) place();
+    else el.addEventListener(el.tagName === "VIDEO" ? "loadedmetadata" : "load", place, { once: true });
   }
 
   // Miniaturas: o vídeo só baixa quando aparece na tela (a vista escondida não baixa nada).
