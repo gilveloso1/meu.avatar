@@ -801,7 +801,6 @@ $("#arrange").onclick = () => {
   project = M.arrange(project);
   commit(before);
   render();
-  fit();
 };
 
 const ZOOM_MIN = 0.15;
