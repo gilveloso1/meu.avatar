@@ -71,6 +71,9 @@ body { min-height: 0; overflow: hidden; }
 .blk.is-linked .blk__link { display: block; }
 .blk.is-linked .blk__media { bottom: 40px; }
 .blk.is-linked.is-mute .blk__wave { opacity: 0.2; }
+/* Quem está em cima leva a faixa de som para a área de som do bloco. */
+.blk--cover.is-linked .blk__media { bottom: 4px; }
+.blk--cover.is-linked .blk__link { top: var(--link-top); bottom: auto; border-radius: var(--md-sys-shape-corner-small); background: color-mix(in srgb, var(--on) 10%, var(--c)); pointer-events: auto; }
 .blk--audio { border-radius: var(--md-sys-shape-corner-small); }
 .blk--audio .blk__label { height: 20px; }
 .blk--audio .blk__media { left: 0; right: 0; top: 18px; bottom: 2px; border-radius: 0 0 6px 6px; background: var(--on); opacity: 0.45; mix-blend-mode: normal; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
@@ -98,6 +101,9 @@ body { min-height: 0; overflow: hidden; }
 /* Área do grupo: retângulo tracejado (contorno outline, cantos grandes), em primary quando escolhido. */
 .gframe { position: absolute; border: var(--line) dashed var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-large); pointer-events: none; }
 .gframe.is-sel { border-color: var(--md-sys-color-primary); }
+/* As duas áreas do bloco: a linha entre vídeo e som e o ícone de cada uma, na margem da área. */
+.gsplit { position: absolute; height: 1px; background: var(--md-sys-color-outline-variant); pointer-events: none; }
+.garea { position: absolute; font-size: 16px; color: var(--md-sys-color-on-surface-variant); pointer-events: none; }
 .gtab__play { width: 24px; height: 24px; margin: 0 -8px 0 0; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: none; color: var(--md-sys-color-primary); }
 .gtab__play .icon { font-size: 18px; }
 .gtab.is-sel .gtab__play { color: inherit; }

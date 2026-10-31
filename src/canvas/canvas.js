@@ -31,6 +31,7 @@ const emptyProject = () => ({ blocks: [], finals: [], edges: [] });
 const PROJETO = CONFIG.projeto ?? null;
 const valid = (d) => d && Array.isArray(d.blocks) && Array.isArray(d.finals) && Array.isArray(d.edges);
 let project = valid(PROJETO?.data) ? PROJETO.data : CONFIG.amostra ? M.sample((f) => `midia/${f}`) : emptyProject();
+project = M.upgrade(project);
 // O canvas vazio começa sem Final (projetos antigos já vinham com um).
 if (PROJETO && !project.blocks.length) project = { ...project, finals: [] };
 let projectName = PROJETO?.name ?? "";
@@ -272,7 +273,7 @@ function groupAt(pt) {
     return pt.x >= g.x - FRAME_PAD && pt.x <= g.x + g.w + FRAME_PAD && pt.y >= top && pt.y <= groupBottom(g) + FRAME_PAD;
   });
 }
-const groupBottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AUD_H));
+const groupBottom = (g) => g.bottom;
 const blockEls = new Map();
 
 /* ---------- onda do som: a leve no bloco, a nítida só no que está à vista com zoom alto ---------- */
@@ -393,11 +394,14 @@ function render({ side = true } = {}) {
     const role = g?.covers.includes(b) ? "cover" : g?.audios.includes(b) && !g.soloAudio ? "under" : "";
     const look = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""} ${path?.includes(g) ? "is-path" : ""}${el.classList.contains("is-drag") ? " is-drag" : ""}`;
     // Só mexe no elemento se algo mudou: arrastar um bloco não redesenha os outros.
-    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}`;
+    // O som de quem está em cima fica na área de som, longe da imagem.
+    const coverSound = g?.coverSounds.find((s) => s.block === b);
+    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${coverSound?.y}`;
     if (el.drawn === state) continue;
     el.drawn = state;
     el.className = look;
-    Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${M.width(b)}px`, height: `${M.height(b)}px` });
+    Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${M.width(b)}px`, height: `${role === "cover" ? M.VIS_H : M.height(b)}px` });
+    if (coverSound) el.style.setProperty("--link-top", `${coverSound.y - b.y}px`);
     const tipo = { video: "video", image: "imagem", audio: "audio" }[b.kind];
     el.style.setProperty("--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
     el.style.setProperty("--on", `var(--bloco-${tipo}-on)`);
@@ -425,6 +429,13 @@ function render({ side = true } = {}) {
       const onPath = path?.includes(g) ? "is-path" : "";
       html += `<div class="gframe ${isSel ? "is-sel" : ""} ${onPath}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
       html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.label)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o bloco"}" title="${gPlaying ? "Pausar" : "Tocar o bloco"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
+    }
+    // As duas áreas do bloco: vídeo em cima, som embaixo.
+    if (M.hasArea(g) && g.bottom > g.y + M.VIS_H) {
+      const side = g.x - FRAME_PAD;
+      html += `<div class="gsplit" style="left:${side}px;top:${g.y + M.VIS_H}px;width:${g.w + 2 * FRAME_PAD}px"></div>`;
+      html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${top + 4}px">movie</span>`;
+      html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${g.y + M.VIS_H + 12}px">music_note</span>`;
     }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;

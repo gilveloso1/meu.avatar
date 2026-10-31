@@ -63,9 +63,14 @@ menos custo.
   saída. Puxar a linha solta a ponta mais perto: num ponto ela liga de novo, no vazio ela
   some. Clique na linha e Delete apaga. `linkProblem` (`modelo.js`) recusa ligar um grupo a
   ele mesmo, repetir uma ligação, fechar um círculo e passar do limite de variações.
+- **Duas áreas no bloco**: vídeo em cima (a sequência e, acima dela, quem está por cima) e som
+  embaixo (o som da sequência, os somados e o de quem está por cima, em `coverSounds`). O tipo
+  do elemento decide a área: vídeo e imagem nunca vão para a de som, e som nunca vai para a
+  de vídeo. Vídeo com som leva o som junto, alinhado e vinculado. `upgrade` acerta projetos
+  antigos, em que o som de quem estava por cima ficava entre a imagem e a sequência.
 - **Encaixe magnético**: o elemento que entra na área de um bloco é puxado. Quem decide o
   lugar é o centro do elemento: acima da fileira, ele apoia em cima; na fileira, entra na
-  sequência, e o lugar só muda na metade de cada elemento; som vai para baixo. Vídeo e imagem abaixo da fileira seguem livres. Em cima, ele
+  sequência, e o lugar só muda na metade de cada elemento; som vai para a área de som. Em cima, ele
   corre até a própria ponta sair da sequência, nos dois lados, e o bloco cresce junto (o
   fundo é preto onde não há sequência). Pela direita, depois disso desce para o lado; pela
   esquerda, sai do bloco. O bloco o segura numa área maior e a linha entre em cima e

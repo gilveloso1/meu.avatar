@@ -61,10 +61,11 @@ test("vídeo solto por cima vira cobertura; áudio embaixo soma o som", () => {
   const q = { ...p, blocks: [...p.blocks, novo] };
   const s = M.snap(q, "c", 600, 60, 12);
   assert.equal(s.mode, "cover");
-  assert.equal(s.y, 192 - M.height(novo));
+  assert.equal(s.y, 192 - M.VIS_H);
   const a = { id: "a", kind: "audio", name: "A", src: "", dur: 5, tin: 0, tout: 5, x: 30, y: 250, mute: false, vol: 1 };
   const q2 = { ...p, blocks: [...p.blocks, a] };
   assert.equal(M.snap(q2, "a", 30, 2000, 12).mode, null);
+  assert.equal(M.snap(q2, "a", 450, 100, 12).mode, "audio");
   assert.equal(M.snap(q2, "a", 450, 250, 12).mode, "audio");
 });
 
@@ -156,11 +157,34 @@ test("mexer devagar na fronteira entre em cima e na fileira não fica trocando",
   assert.equal(new Set(trocas).size, 1);
 });
 
-test("vídeo ou imagem que chega por baixo não é empurrado para os lados", () => {
+test("cada tipo vai para a sua área, venha de onde vier", () => {
   const q = dois();
-  const s = M.snap(q, "n", 100, 110, 16);
-  assert.deepEqual([s.mode, s.x, s.y], [null, 100, 110]);
-  assert.equal(M.snap(q, "n", 100, 10, 16).mode, "after");
+  const video = M.snap(q, "n", 100, 110, 16);
+  assert.deepEqual([video.mode, video.y], ["after", 0]);
+  const som = M.snap(q, "s", 100, -60, 16);
+  assert.deepEqual([som.mode, som.y], ["audio", 96]);
+});
+
+test("quem está em cima leva o som para a área de som, depois dos somados", () => {
+  const v = (id, x, y, audio = "linked", kind = "video") => ({ id, kind, name: id, src: id, dur: 5, tin: 0, tout: 5, x, y, mute: false, vol: 1, tone: 1, audio });
+  const q = { blocks: [v("a", 0, 0), v("b", 200, 0), v("c1", 0, -M.VIS_H), v("c2", 100, -M.VIS_H), v("c3", 300, -M.VIS_H), v("som", 0, 136, undefined, "audio")], finals: [], edges: [] };
+  const g = M.groups(q)[0];
+  assert.deepEqual(g.covers.map((c) => c.id), ["c1", "c2", "c3"]);
+  assert.deepEqual(g.coverSounds.map((s) => [s.block.id, s.y]), [["c1", 176], ["c2", 216], ["c3", 176]]);
+  assert.equal(g.bottom, 256);
+  const tl = M.timeline([g]);
+  assert.ok(tl.items.filter((i) => i.layer === 1).every((i) => M.sounds(i.block)));
+});
+
+test("projeto antigo: a faixa de quem está em cima sai do meio e nada mais muda", () => {
+  const v = (id, x, y) => ({ id, kind: "video", name: id, src: id, dur: 5, tin: 0, tout: 5, x, y, mute: false, vol: 1, tone: 1 });
+  const q = { blocks: [v("a", 0, 0), v("c", 40, -136), v("solto", 0, 900)], finals: [], edges: [] };
+  assert.deepEqual(M.groups(q).map((g) => g.covers.map((c) => c.id)), [["c"], []].sort((a, b) => b.length - a.length));
+  const o = M.upgrade(q);
+  assert.equal(o.blocks.find((b) => b.id === "c").y, -M.VIS_H);
+  assert.equal(o.blocks.find((b) => b.id === "solto").y, 900);
+  assert.deepEqual(M.groups(o).find((g) => g.id === "a").covers.map((c) => c.id), ["c"]);
+  assert.deepEqual(M.upgrade(o).blocks, o.blocks);
 });
 
 test("o encaixe à direita é magnético", () => {

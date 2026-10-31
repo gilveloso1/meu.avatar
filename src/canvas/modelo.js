@@ -89,7 +89,7 @@ export function groups(project) {
   const vis = blocks.filter(visual);
   // Visual encostado no topo de outro visual é cobertura, não base.
   const isCover = (b) =>
-    vis.some((o) => o !== b && near(b.y + height(b), o.y) && overlapX(b.x, b.x + width(b), o.x, o.x + width(o)));
+    vis.some((o) => o !== b && restsOn(b, o.y) && overlapX(b.x, b.x + width(b), o.x, o.x + width(o)));
   const covers = vis.filter(isCover);
   const bases = vis.filter((b) => !covers.includes(b));
 
@@ -119,7 +119,7 @@ export function groups(project) {
   for (const g of out) g.h = Math.max(...g.blocks.map(height));
   const overlaps = (b, g) => overlapX(b.x, b.x + width(b), g.x, g.x + g.w);
   for (const c of covers) {
-    const g = out.find((g) => near(g.y, c.y + height(c)) && overlaps(c, g));
+    const g = out.find((g) => restsOn(c, g.y) && overlaps(c, g));
     if (g) g.covers.push(c);
     else out.push({ id: c.id, blocks: [c], x: c.x, y: c.y, w: width(c), covers: [], audios: [] });
   }
@@ -139,6 +139,16 @@ export function groups(project) {
     g.x = Math.min(g.x, ...g.covers.map((c) => c.x));
     g.w = Math.max(g.seq, ...g.covers.map((c) => c.x + width(c))) - g.x;
     g.dur = g.w / PX;
+    // Área de som: o som da sequência, os somados e, por último, o som de quem está em cima.
+    const soundTop = Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
+    const ends = [];
+    g.coverSounds = [...g.covers].filter(linked).sort((a, b) => a.x - b.x).map((block) => {
+      let lane = ends.findIndex((end) => end <= block.x + EPS);
+      if (lane < 0) lane = ends.length;
+      ends[lane] = block.x + width(block);
+      return { block, y: soundTop + lane * LINK_H };
+    });
+    g.bottom = soundTop + ends.length * LINK_H;
     g.first = g.blocks[0] ?? g.audios[0];
     g.last = g.blocks[g.blocks.length - 1] ?? g.audios[0];
     g.name = g.blocks.length ? g.blocks.map((b) => b.name).join(" + ") : g.audios[0].name;
@@ -152,6 +162,17 @@ export function groups(project) {
     g.label = own ?? (g.number ? `Bloco ${g.number}` : g.name);
   }
   return out;
+}
+
+/** Quem está em cima apoia só a imagem; projetos antigos guardavam a faixa de som junto. */
+const restsOn = (b, y) => near(b.y + VIS_H, y) || near(b.y + height(b), y);
+
+/** Projeto antigo: o som de quem está em cima ficava entre a imagem e a sequência. */
+export function upgrade(project) {
+  const p = clone(project);
+  const gs = groups(p);
+  for (const g of gs) for (const c of g.covers) if (linked(c) && near(c.y + height(c), g.y)) p.blocks.find((b) => b.id === c.id).y = g.y - VIS_H;
+  return p;
 }
 
 const members = (g) => [...g.blocks, ...g.covers, ...g.audios];
@@ -330,8 +351,7 @@ export function snap(project, id, x, y, tol, keep = {}) {
     const inside = g.id === keep.group;
     const pad = inside ? magnet * 2 : magnet;
     const top = Math.min(g.y, ...g.covers.map((c) => c.y));
-    const bottom = Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
-    if (y + h <= top - pad || y >= bottom + pad) continue;
+    if (y + h <= top - pad || y >= g.bottom + pad) continue;
     const start = g.seqX;
     const end = g.seq;
     const beside = { x: end, y: g.last.y, mode: "after", target: g.last.id, group: g };
@@ -346,10 +366,9 @@ export function snap(project, id, x, y, tol, keep = {}) {
           return beside;
         }
         if (x + w <= start + (inside ? EPS * 2 : tol)) continue;
-        return { x, y: g.y - h, mode: "cover", target: g.id, group: g };
+        return { x, y: g.y - VIS_H, mode: "cover", target: g.id, group: g };
       }
-      // Vídeo e imagem não têm lugar embaixo do bloco: abaixo da fileira, seguem livres.
-      if (cy > g.y + g.h) continue;
+      // Vídeo e imagem vão para a área de vídeo, venham de onde vierem; o som vai junto.
       // Na sequência, o lugar muda só na metade de cada elemento: não abre e fecha a cada emenda.
       const at = g.blocks.findIndex((o) => cx < o.x + width(o) / 2);
       if (at < 0) {
@@ -363,7 +382,8 @@ export function snap(project, id, x, y, tol, keep = {}) {
       if (x + w < start - pad) continue;
       return { x: start - w, y: g.y, mode: "before", target: g.first.id, group: g };
     }
-    if (cy < g.y + g.h / 2 || cx > end) continue;
+    // Som vai sempre para a área de som.
+    if (cx > end) continue;
     if ((inside && x < start - tol) || x + w <= start) continue;
     const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
     const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
@@ -417,7 +437,7 @@ function finalSize(n) {
 
 /** O que as linhas devem evitar: as áreas dos grupos e os Finais. */
 export function wireBoxes(project, gs = groups(project)) {
-  const boxes = gs.map((g) => ({ node: g, x0: g.x, x1: g.x + g.w, y0: Math.min(g.y, ...g.covers.map((c) => c.y)), y1: Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H)) }));
+  const boxes = gs.map((g) => ({ node: g, x0: g.x, x1: g.x + g.w, y0: Math.min(g.y, ...g.covers.map((c) => c.y)), y1: g.bottom }));
   for (const f of project.finals) {
     const { w, h } = finalSize(versions(project, f.id, gs).length);
     boxes.push({ node: f.id, x0: f.x, x1: f.x + w, y0: f.y, y1: f.y + h });
@@ -469,7 +489,7 @@ export function arrange(project) {
   const col = (node) => (typeof node === "string" ? lastCol : column.get(node));
   const finalH = (f) => finalSize(versions(p, f.id, gs).length).h;
   const top = (g) => Math.min(g.y, ...g.covers.map((c) => c.y));
-  const bottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
+  const bottom = (g) => g.bottom;
   // Altura do elemento e do conector dentro dele; o Final entra pelo id, como nas ligações.
   const size = (n) => (typeof n === "string" ? { h: finalH(p.finals.find((f) => f.id === n)), port: 40 } : { h: bottom(n) - top(n), port: portY(n) - top(n) });
 
