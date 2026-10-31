@@ -91,7 +91,8 @@ menos custo.
   canvas, e destaca os blocos e as linhas dela, apagando o resto; o destaque fica
   depois de pausar e sai ao clicar fora do Final. As setas ← e → passam de uma para
   outra, com o Final escolhido. Cada Final tem até 50 variações, o mesmo limite de uma
-  exportação: as ligações a mais ficam de fora, com um aviso no card.
+  exportação: a ligação que passaria disso é recusada, com um aviso. Projeto antigo com
+  mais ligações mostra as 50 primeiras e o aviso no card.
   Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).

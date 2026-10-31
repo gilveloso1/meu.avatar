@@ -1003,8 +1003,10 @@ vp.addEventListener("pointerdown", (e) => {
       const from = g.last.id;
       const dup = M.links(project).some((l) => l.from.id === gid && (l.to === to || l.to.id === idx.get(to)?.id));
       if (dup) return;
-      project = structuredClone(project);
-      project.edges.push({ id: M.newId("e"), from, to });
+      const next = structuredClone(project);
+      next.edges.push({ id: M.newId("e"), from, to });
+      if (M.passesLimit(project, next)) return toast(CONFIG.erros?.exportarLimite ?? "");
+      project = next;
     };
   } else if (tab) {
     const gid = tab.dataset.group;

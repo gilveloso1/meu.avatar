@@ -140,3 +140,14 @@ test("cada Final tem até 50 variações, e o que passa disso só avisa", () => 
   p.edges.pop();
   assert.equal(M.overLimit(p, "final"), false);
 });
+
+test("a ligação que passa de 50 variações é recusada; as outras, não", () => {
+  const bloco = (id, y) => ({ id, kind: "image", name: id, src: "a", dur: 5, tin: 0, tout: 5, x: 0, y, mute: false, vol: 1, tone: 1 });
+  const ganchos = Array.from({ length: 52 }, (_, i) => `g${i}`);
+  const liga = (ids) => ids.map((id) => ({ id: `e-${id}`, from: id, to: "final" }));
+  const com = (ids) => ({ blocks: ganchos.map((id, i) => bloco(id, i * 400)), finals: [{ id: "final", x: 900, y: 0 }], edges: liga(ids) });
+  assert.equal(M.passesLimit(com(ganchos.slice(0, 49)), com(ganchos.slice(0, 50))), false);
+  assert.equal(M.passesLimit(com(ganchos.slice(0, 50)), com(ganchos.slice(0, 51))), true);
+  assert.equal(M.passesLimit(com(ganchos.slice(0, 51)), com(ganchos.slice(0, 52))), true);
+  assert.equal(M.passesLimit(com(ganchos.slice(0, 51)), com(ganchos.slice(0, 51))), false);
+});

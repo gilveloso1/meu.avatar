@@ -166,6 +166,15 @@ export function versions(project, finalId, gs = groups(project), max = MAX_VERSO
 /** Se as linhas que chegam a este Final dão mais variações do que ele tem. */
 export const overLimit = (project, finalId, gs) => versions(project, finalId, gs, MAX_VERSOES + 1).length > MAX_VERSOES;
 
+/** Se a mudança leva algum Final a passar do limite, ou a passar ainda mais: quem liga é recusado. */
+export function passesLimit(before, after) {
+  const count = (p, id) => versions(p, id, groups(p), 20 * MAX_VERSOES).length;
+  return after.finals.some((f) => {
+    const n = count(after, f.id);
+    return n > MAX_VERSOES && n > count(before, f.id);
+  });
+}
+
 /** O nome de uma variação na tela e no arquivo, pela posição dela no Final. */
 export const versionName = (i) => `Variação ${i + 1}`;
 
