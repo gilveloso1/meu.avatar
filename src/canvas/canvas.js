@@ -869,6 +869,34 @@ async function startExport(finalId, versoes) {
   }
 }
 
+/* ---------- menu do card Final ---------- */
+
+const finMenu = $("#fin-menu");
+const closeFinMenu = () => finMenu.matches(":popover-open") && finMenu.hidePopover();
+const finItem = (down, text) => `<button class="menu__item interactive" type="button" role="menuitem" data-down="${down}"><span class="icon" aria-hidden="true">download</span>${text}</button>`;
+// Botão direito no card: a variação do clique; fora de uma, a escolhida. Não muda o que está na prévia.
+vp.addEventListener("contextmenu", (e) => {
+  const fin = e.target.closest(".fin");
+  const n = fin && PROJETO ? M.versions(project, fin.dataset.final).length : 0;
+  if (!n) return;
+  e.preventDefault();
+  const el = e.target.closest("[data-variant]");
+  const i = el ? +el.dataset.variant : fin.dataset.final === previewFinal()?.id ? versionIdx : 0;
+  finMenu.dataset.final = fin.dataset.final;
+  finMenu.innerHTML = finItem(i, `Baixar ${M.versionName(i)}`) + (n > 1 ? finItem("all", `Baixar todas (${n})`) : "");
+  finMenu.showPopover();
+  const r = finMenu.getBoundingClientRect();
+  finMenu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
+  finMenu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+  finMenu.querySelector("button").focus();
+});
+finMenu.addEventListener("click", (e) => {
+  const down = e.target.closest("[data-down]")?.dataset.down;
+  if (down === undefined) return;
+  closeFinMenu();
+  startExport(finMenu.dataset.final, down === "all" ? undefined : [+down]);
+});
+
 function failExport(msg) {
   exportNow = null;
   if ($("#dlg").open) $("#dlg").close();
@@ -891,6 +919,7 @@ vp.addEventListener(
   "wheel",
   (e) => {
     e.preventDefault();
+    closeFinMenu();
     if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
     else {
       view.x -= e.deltaX;
@@ -1073,7 +1102,7 @@ vp.addEventListener("pointerdown", (e) => {
 });
 
 window.addEventListener("keydown", (e) => {
-  if (e.target.closest("input, textarea")) return;
+  if (e.target.closest("input, textarea, [popover]")) return;
   const mod = e.ctrlKey || e.metaKey;
   if ((e.key === "Delete" || e.key === "Backspace") && sel.type) removeSelection();
   else if (mod && e.key.toLowerCase() === "z") step(e.shiftKey ? redo : undo, e.shiftKey ? undo : redo);
