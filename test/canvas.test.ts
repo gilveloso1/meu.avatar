@@ -184,6 +184,13 @@ describe("exportar projetos", () => {
     return st;
   }
 
+  it("o canvas leva os dados do projeto para os Ajustes", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const page = await (await com(new FakeExportApi(), `/canvas/${id}`, admin)).text();
+    expect(page).toMatch(/"criado":"\d\d\/\d\d[^"]*","modificado":"\d\d\/\d\d[^"]*","autor":"[^"]+"/);
+  });
+
   it("cada grupo é feito uma vez e as versões saem da emenda", async () => {
     const admin = await cookie();
     const id = await projeto(admin);

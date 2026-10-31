@@ -121,7 +121,9 @@ menos custo.
 - **Canvas de um projeto** (`/canvas/<id>`; `/canvas` sozinho leva à lista): a barra
   tem o nome do projeto, Bloco final, Do computador e Seus vídeos. Salva sozinho
   pouco depois de cada mudança (`POST /projetos/<id>/salvar`, o canvas em JSON, até
-  1 MB); se falhar, um aviso. O nome muda nos Ajustes, sem nada escolhido.
+  1 MB); se falhar, um aviso. O nome muda na barra superior (um clique no título; sair do campo salva, Esc desiste) ou
+  nos Ajustes, sem nada escolhido, onde também ficam os dados do projeto: criado em,
+  modificado em, criado por, blocos e variações.
 - **Do computador**: o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
   `project_files`), com os limites do site (imagem 10 MB, vídeo e áudio 50 MB), e o
   bloco usa o endereço de lá; não some ao recarregar.
