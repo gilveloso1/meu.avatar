@@ -14,10 +14,12 @@ import type { Db, ExportRow, Project, Role } from "./db";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
 
+/** Passado o prazo dos arquivos, a linha fica mais um pouco: a tela mostra que expirou. */
+const EXPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 /** Quanto os vídeos prontos ficam para baixar. Os trechos saem pela regra de ciclo de vida do R2. */
 const EXPORT_TTL_MS = 24 * 60 * 60 * 1000;
 /** Muda quando container/exportar.py passa a gerar trechos diferentes: os antigos não servem mais. */
-const SEGMENT_VERSION = "3";
+const SEGMENT_VERSION = "4";
 /** Um passo que ficou sem resposta (Worker caiu) pode ser retomado depois disso. */
 const STALE_MS = 15 * 60 * 1000;
 const MAX_TRIES = 3;
@@ -246,7 +248,8 @@ export class Exports {
   }
 
   /** Termina, aos poucos, o que a tela deixou pela metade. */
-  async next(): Promise<void> {
+  async next(now = new Date()): Promise<void> {
+    await this.db.deleteOldExports(new Date(now.getTime() - EXPORT_KEEP_MS).toISOString());
     const end = Date.now() + CRON_BUDGET_MS;
     const staleBefore = new Date(Date.now() - STALE_MS).toISOString();
     for (const id of await this.db.openExports(staleBefore)) {

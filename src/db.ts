@@ -592,6 +592,10 @@ export class Db {
     return this.d1.prepare("UPDATE exports SET status = ?, error = ?, claimed_at = NULL WHERE id = ? RETURNING *").bind(status, error, id).first<ExportRow>();
   }
 
+  async deleteOldExports(expiredBefore: string): Promise<void> {
+    await this.d1.prepare("DELETE FROM exports WHERE expires_at < ?").bind(expiredBefore).run();
+  }
+
   async openExports(staleBefore: string): Promise<string[]> {
     const rows = await this.d1
       .prepare("SELECT id FROM exports WHERE status = 'running' AND (claimed_at IS NULL OR claimed_at < ?) ORDER BY created_at LIMIT 5")

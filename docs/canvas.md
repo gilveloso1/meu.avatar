@@ -126,7 +126,8 @@ menos custo.
   `trechos/<hash>.mkv` pelo conteúdo: grupo igual não é refeito, nem entre exportações. A versão também: mesma lista de
   trechos, mesmo arquivo, em `exportacoes/versoes/<hash>.mp4`, reaproveitado por 24 horas;
   exportar sem mudar nada não chama o contêiner. Mudou o que os trechos geram: suba
-  `SEGMENT_VERSION` (`src/exportar.ts`).
+  `SEGMENT_VERSION` (`src/exportar.ts`). Cada trecho sai em −14 LUFS, como o resto do site,
+  com ganho e limitador: a mistura dentro do grupo é a que a pessoa fez; o nível do grupo, não.
   Cada versão é a emenda dos trechos: vídeo copiado, só o som vira AAC. A imagem cobre o
   quadro, como na prévia, a 30 quadros por segundo. Um passo por vez: a tela chama o
   próximo assim que o anterior acaba; se ela fechar, o agendamento termina. Bloco só

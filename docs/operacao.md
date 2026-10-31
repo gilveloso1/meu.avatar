@@ -290,7 +290,10 @@ está no ar (28/10/2026):
 npx wrangler deploy --containers-rollout=none < /dev/null
 ```
 
-Mudou algo em `container/`: aí precisa do `npm run deploy` com o Docker rodando.
+Mudou algo em `container/`: aí precisa do `npm run deploy` com o Docker rodando, no
+ambiente cloud **Meu Avatar** (o padrão da conta é outro projeto: escolha sempre este). Depois
+do deploy, confira que o digest da imagem mudou (`npx wrangler containers info <id>`): uma
+versão nova do Worker não prova que o contêiner foi trocado.
 
 Teste local da imagem (25/10/2026), com os limites do tipo "basic"
 (`docker run --cpus 0.25 --memory 1g`): vídeo de 25 s em 720p tratado em

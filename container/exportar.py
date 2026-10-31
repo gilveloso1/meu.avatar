@@ -21,6 +21,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 FPS = 30
 TAXA = 48000
+# O mesmo volume do resto do site (tratar.sh, editar.py): sem isso, um gancho baixo seguido de
+# um corpo alto dá um salto na emenda. Abaixo de SILENCIO, não há o que medir.
+LUFS = -14
+SILENCIO = -60
 LIMITE = 4 * 1024 * 1024 * 1024  # 4 GB: até 200 trechos numa emenda
 MAX_LADO = 1920
 
@@ -121,6 +125,26 @@ def trecho(plano, saida, arquivos):
         # O FLAC na mesma profundidade em todos: o decodificador não aceita trocar no meio.
         "-bf", "0", "-g", str(FPS * 2), "-r", str(FPS), "-c:a", "flac", "-sample_fmt", "s16", "-ar", str(TAXA), "-ac", "2", "-f", "matroska", saida,
     )
+    volume(saida)
+
+
+def volume(caminho):
+    """Leva o som do trecho a LUFS, só com ganho e limitador, sem mexer na imagem."""
+    r = subprocess.run(
+        ["ffmpeg", "-nostdin", "-hide_banner", "-i", caminho, "-af", f"loudnorm=I={LUFS}:print_format=json", "-vn", "-f", "null", "-"],
+        capture_output=True, text=True, check=True, timeout=300,
+    )
+    log = r.stderr
+    medido = float(json.loads(log[log.rindex("{"):log.rindex("}") + 1])["input_i"])
+    if not math.isfinite(medido) or medido < SILENCIO:
+        return
+    temp = caminho + ".temp"
+    ffmpeg(
+        "-y", "-i", caminho, "-map", "0:v", "-map", "0:a", "-c:v", "copy",
+        "-af", f"volume={LUFS - medido:.2f}dB,alimiter=limit=0.84:level=0", "-c:a", "flac", "-sample_fmt", "s16",
+        "-ar", str(TAXA), "-ac", "2", "-f", "matroska", temp,
+    )
+    os.replace(temp, caminho)
 
 
 def emendar(saida, trechos):
