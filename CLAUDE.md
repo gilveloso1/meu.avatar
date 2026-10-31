@@ -193,7 +193,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   criar no clique). "Salvar no avatar" fica abaixo de Detalhes e abre o diálogo com busca;
   o Novo avatar desse diálogo leva o vídeo junto (`?video=`), salvo com o avatar. O avatar
   só guarda arquivo do que foi enviado a ele; vídeo salvo é um vínculo (como no canvas),
-  sem cópia no R2, e usa a versão que vale do vídeo. A tela do ativo é a mesma para os dois.
+  sem cópia no R2, e usa a versão que vale do vídeo. Regra única: `source_video` vazio quer
+  dizer que o arquivo é do avatar. A tela do ativo é a mesma para os dois; a Origem diz
+  "Vídeo gerado", "Vídeo enviado", "Imagem enviada" ou "Áudio enviado".
 - Barra superior: a marca é o ícone de rosto (`face`, o mesmo da foto do
   avatar) e o nome, sem cara de botão (sem camada de estado no hover). Sair fica
   só no menu do perfil. Não há rodapé.

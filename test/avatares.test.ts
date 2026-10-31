@@ -164,11 +164,11 @@ describe("vídeo com avatar ou arquivo solto", () => {
     expect(asset).toMatchObject({ kind: "video", source_video: video.id, key: video.video_key, size: 3 });
     const { objects } = await env.MIDIA.list({ prefix: `avatares-ativos/${id}/` });
     expect(objects).toHaveLength(0);
-    expect(await (await abrir(`/avatares/${id}/arquivos/${asset.id}/ver`, session)).text()).toContain("Vídeo vinculado");
+    expect(await (await abrir(`/avatares/${id}/arquivos/${asset.id}/ver`, session)).text()).toContain("Vídeo gerado");
     expect((await call(postForm(`/videos/${video.id}/salvar-avatar`, { avatar: id }, { cookie: await memberCookie() }), api)).status).toBe(404);
   });
 
-  it("o ativo vinculado mostra a versão que vale do vídeo", async () => {
+  it("o ativo gerado mostra a versão que vale do vídeo", async () => {
     const session = await cookie();
     const { id, video, asset } = await vinculado(session);
     const editado = `videos/${video.id}.editado.mp4`;
@@ -177,7 +177,17 @@ describe("vídeo com avatar ou arquivo solto", () => {
     expect(await (await abrir(`/avatares/${id}/arquivos/${asset.id}`, session)).text()).toBe("editado");
   });
 
-  it("apagar o ativo vinculado ou o avatar não apaga o vídeo", async () => {
+  it("a migration aponta a cópia antiga para o vídeo e o arquivo enviado não muda", async () => {
+    const session = await cookie();
+    const { id, video, asset } = await vinculado(session);
+    await env.DB.prepare("UPDATE avatar_assets SET key = 'avatares-ativos/copia' WHERE id = ?").bind(asset.id).run();
+    await db().insertAsset({ id: crypto.randomUUID(), avatar_id: id, kind: "imagem", key: "avatares-ativos/foto", name: "foto", type: "image/png", size: 1, source_video: null });
+    await env.DB.exec((await import("../migrations/0014_assets_gerados.sql?raw")).default.replace(/--.*\n/g, "").replace(/\s+/g, " "));
+    const keys = (await db().assetsByAvatar(id)).map((a) => a.key).sort();
+    expect(keys).toEqual(["avatares-ativos/foto", video.video_key]);
+  });
+
+  it("apagar o ativo gerado ou o avatar não apaga o vídeo", async () => {
     const session = await cookie();
     const { id, video, asset } = await vinculado(session);
     expect((await call(postForm(`/avatares/${id}/arquivos/${asset.id}/apagar`, {}, { cookie: session }))).status).toBe(303);
