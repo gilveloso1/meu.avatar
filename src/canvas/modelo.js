@@ -336,9 +336,10 @@ export function moveGroup(project, groupId, dx, dy) {
   return p;
 }
 
-/* Linhas: reta na altura de saída e a curva só no último trecho, para não cortar as colunas do meio. */
+/* Linhas: curva suave; a que passaria sobre um elemento vai reta na altura de saída e curva no fim. */
 export const PORT_OUT = 14;
-const WIRE_BEND = 110;
+const WIRE_BEND = 120;
+const WIRE_PAD = 8;
 const portY = (g) => g.y + (g.soloAudio ? AUD_H : VIS_H) / 2;
 export const outPoint = (g) => ({ x: g.x + g.w + PORT_OUT, y: portY(g) });
 export const inPoint = (g) => ({ x: g.x - PORT_OUT, y: portY(g) });
@@ -347,10 +348,46 @@ export function curve(a, b) {
   const k = Math.max(40, Math.abs(b.x - a.x) / 2);
   return `M${a.x},${a.y} C${a.x + k},${a.y} ${b.x - k},${b.y} ${b.x},${b.y}`;
 }
-export function wirePath(a, b) {
-  if (b.x - a.x <= WIRE_BEND) return curve(a, b);
+/** Tamanho aproximado do card Final com n variações (o de verdade é medido na tela). */
+function finalSize(n) {
+  const { rows, cols } = variantShape(Math.max(n, 1));
+  const label = variantLabel(cols);
+  return { w: Math.max(180, 32 + cols * (label === "full" ? 166 : label === "short" ? 106 : 38)), h: n ? FINAL_HEAD + rows * FINAL_ROW : 80 };
+}
+
+/** O que as linhas devem evitar: as áreas dos grupos e os Finais. */
+export function wireBoxes(project, gs = groups(project)) {
+  const boxes = gs.map((g) => ({ node: g, x0: g.x, x1: g.x + g.w, y0: Math.min(g.y, ...g.covers.map((c) => c.y)), y1: Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H)) }));
+  for (const f of project.finals) {
+    const { w, h } = finalSize(versions(project, f.id, gs).length);
+    boxes.push({ node: f.id, x0: f.x, x1: f.x + w, y0: f.y, y1: f.y + h });
+  }
+  return boxes;
+}
+
+/** Se a curva suave passa por cima de uma caixa. */
+function curveHits(a, b, boxes) {
+  const k = Math.max(40, Math.abs(b.x - a.x) / 2);
+  for (let i = 1; i < 40; i++) {
+    const t = i / 40;
+    const u = 1 - t;
+    const x = u ** 3 * a.x + 3 * u * u * t * (a.x + k) + 3 * u * t * t * (b.x - k) + t ** 3 * b.x;
+    const y = u ** 3 * a.y + 3 * u * u * t * a.y + 3 * u * t * t * b.y + t ** 3 * b.y;
+    if (boxes.some((o) => x >= o.x0 - WIRE_PAD && x <= o.x1 + WIRE_PAD && y >= o.y0 - WIRE_PAD && y <= o.y1 + WIRE_PAD)) return true;
+  }
+  return false;
+}
+
+/** O desenho de uma ligação: a curva suave; se ela passa sobre algo, reta na saída e curva no fim. */
+export function linkPath(l, project, boxes) {
+  const f = typeof l.to === "string" ? project.finals.find((o) => o.id === l.to) : null;
+  const a = outPoint(l.from);
+  const b = f ? finalPoint(f) : inPoint(l.to);
+  const others = boxes.filter((o) => o.node !== l.from && o.node !== l.to);
+  if (b.x - a.x <= WIRE_BEND || !curveHits(a, b, others)) return curve(a, b);
   const x = b.x - WIRE_BEND;
-  return `M${a.x},${a.y} L${x},${a.y} C${x + WIRE_BEND / 2},${a.y} ${b.x - WIRE_BEND / 2},${b.y} ${b.x},${b.y}`;
+  const k = WIRE_BEND * 0.6;
+  return `M${a.x},${a.y} L${x},${a.y} C${x + k},${a.y} ${b.x - k},${b.y} ${b.x},${b.y}`;
 }
 
 /**
@@ -370,7 +407,7 @@ export function arrange(project) {
     for (const l of ls) if (typeof l.to !== "string") column.set(l.to, Math.max(column.get(l.to), Math.min(column.get(l.from) + 1, gs.length)));
   const lastCol = Math.max(...column.values()) + 1;
   const col = (node) => (typeof node === "string" ? lastCol : column.get(node));
-  const finalH = (f) => FINAL_HEAD + variantShape(versions(p, f.id, gs).length).rows * FINAL_ROW;
+  const finalH = (f) => finalSize(versions(p, f.id, gs).length).h;
   const top = (g) => Math.min(g.y, ...g.covers.map((c) => c.y));
   const bottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
   // Altura do elemento e do conector dentro dele; o Final entra pelo id, como nas ligações.

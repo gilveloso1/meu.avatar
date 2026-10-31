@@ -432,9 +432,10 @@ function render({ side = true } = {}) {
 
   // Linhas.
   let svg = "";
+  const boxes = M.wireBoxes(project, gs);
   for (const l of M.links(project, gs)) {
     const f = typeof l.to === "string" ? project.finals.find((f) => f.id === l.to) : null;
-    const d = M.wirePath(outPoint(l.from), f ? finalPoint(f) : inPoint(l.to));
+    const d = M.linkPath(l, project, boxes);
     const on = sel.type === "edge" && sel.id === l.edge.id;
     const onPath = path && M.linkOn(l, path, litFinal);
     svg += `<path class="wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;

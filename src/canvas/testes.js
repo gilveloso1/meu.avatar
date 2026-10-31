@@ -208,13 +208,12 @@ function wirePoints(d) {
 /** Quantas linhas passam sobre um grupo ou Final que não é ponta delas. */
 function wiresOverBlocks(p) {
   const gs = M.groups(p);
+  const boxes = M.wireBoxes(p, gs);
   let hits = 0;
   for (const l of M.links(p, gs)) {
-    const f = typeof l.to === "string" ? p.finals.find((o) => o.id === l.to) : null;
-    const pts = wirePoints(M.wirePath(M.outPoint(l.from), f ? M.finalPoint(f) : M.inPoint(l.to)));
-    const boxes = gs.filter((g) => g !== l.from && g !== l.to).map((g) => ({ x0: g.x, x1: g.x + g.w, y0: Math.min(g.y, ...g.covers.map((c) => c.y)), y1: Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AUD_H)) }));
-    for (const o of p.finals) if (o !== f) boxes.push({ x0: o.x, x1: o.x + 180, y0: o.y, y1: o.y + 200 });
-    if (boxes.some((b) => pts.some(([x, y]) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1))) hits++;
+    const pts = wirePoints(M.linkPath(l, p, boxes));
+    const others = boxes.filter((o) => o.node !== l.from && o.node !== l.to);
+    if (others.some((b) => pts.some(([x, y]) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1))) hits++;
   }
   return hits;
 }
@@ -257,6 +256,18 @@ test("com o gancho da ligação longa em cima, o outro ainda alinha com o corpo"
   assert.equal(y("g1"), y("c"));
   assert.equal(y("g2"), M.finalPoint(o.finals[0]).y);
   assert.equal(wiresOverBlocks(o), 0);
+});
+
+test("a linha é uma curva suave, e só vai reta quando passaria sobre um elemento", () => {
+  const p = { blocks: [peca("a", 0, 0), peca("b", 0, 1400)], finals: [], edges: [{ id: "1", from: "a", to: "b" }] };
+  const caminho = (q) => {
+    const gs = M.groups(q);
+    return M.linkPath(M.links(q, gs)[0], q, M.wireBoxes(q, gs));
+  };
+  assert.ok(!caminho(p).includes("L"));
+  assert.ok(!caminho({ ...p, blocks: [...p.blocks, peca("longe", 900, 700)] }).includes("L"));
+  const q = { ...p, blocks: [...p.blocks, peca("meio", 0, 700)] };
+  assert.ok(caminho(q).includes("L"));
 });
 
 test("organizar considera coberturas e som embaixo", () => {

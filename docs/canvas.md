@@ -112,7 +112,8 @@ menos custo.
   longa, na altura dela. Quem atravessa uma coluna reserva a altura ali, e ninguém fica em
   cima. O teste confere, em vários formatos de projeto, que nenhuma linha passa sobre um
   elemento. Desfazer volta tudo.
-- **Linhas**: seguem retas na altura da saída e fazem a curva nos últimos 110 px.
+- **Linhas**: curva suave. A que passaria sobre um elemento segue reta na altura da saída e
+  faz a curva nos últimos 120 px (`linkPath`, `modelo.js`).
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).
   O zoom vai até 800%. "Ver tudo" volta. Com zoom, sombras, contornos, linhas, a linha
