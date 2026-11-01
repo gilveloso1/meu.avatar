@@ -6,7 +6,7 @@ import { type InputReference, validate, type VideoApi, type VideoJob, type Video
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
 import { canUse, InputError, type Lists, onPlatform, structureById, type Structure, type Values, videoPlatform } from "./structures";
-import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
+import { HEYGEN_AVATAR } from "./structures/heygen";
 import { AVATAR_VOICE, HEYGEN_MODEL, MAX_CLONE_NAME, NEW_CLONE, PRICE_PER_SECOND, voiceOptions } from "./structures/heygen-direta";
 import {
   aspectLabel,
@@ -144,14 +144,10 @@ export class Studio {
       return saved.voices;
     }
     try {
-      const listed = await this.heygen!.voices();
-      // A Kore e a Orus não vêm na listagem: as vozes do OpenRouter são buscadas pelo id.
-      const missing = VOICES.filter((v) => !listed.some((l) => l.voice_id === v.value));
-      const found = await Promise.allSettled(missing.map((v) => this.heygen!.voice(v.value)));
-      voicesCache = { at: Date.now(), voices: [...listed, ...found.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []))] };
+      voicesCache = { at: Date.now(), voices: await this.heygen!.voices() };
       await this.db.setVoiceCatalog(voicesCache);
     } catch (err) {
-      // Sem o catálogo, vale o último guardado ou as vozes que o OpenRouter mostra (também são da HeyGen).
+      // Sem o catálogo, vale o último guardado ou as vozes de reserva (DIRECT_VOICES).
       console.error("Não deu para listar as vozes da HeyGen", err);
       return voicesCache?.voices ?? saved?.voices ?? [];
     }

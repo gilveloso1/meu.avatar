@@ -14,7 +14,7 @@ const mp3 = (text = "fala") => new File([new TextEncoder().encode(text)], "fala.
 const db = () => new Db(env.DB);
 beforeEach(async () => {
   resetVoiceCache();
-  await env.DB.prepare("DELETE FROM config WHERE key = 'vozes.heygen'").run();
+  await env.DB.prepare("DELETE FROM config WHERE key = 'vozes.heygen.listadas'").run();
 });
 const useHeyGen = () => db().setPlatform("heygen");
 
@@ -56,16 +56,17 @@ describe("HeyGen: plataforma pelo banco", () => {
       { voice_id: "en2", name: "Joe", language: "en", gender: "male", support_locale: false },
       { voice_id: "tr1", name: "Ada", language: "Turkey", gender: "female", support_locale: false },
       { voice_id: "pt1", name: "Lucilene", language: "Portuguese", gender: "female", support_locale: false },
+      { voice_id: "m1", name: "Lea", language: "Multilingual", gender: "female", support_locale: false },
       { voice_id: "x1", name: "Sem", language: "", gender: "unknown", support_locale: false },
     ];
     const html = await page(api);
     const select = html.slice(html.indexOf("data-voice-language"), html.indexOf("</select>", html.indexOf("data-voice-language")));
     const options = [...select.matchAll(/<option value="([^"]*)"(?: selected)?>([^<]+)</g)].map((m) => m[2]);
-    expect(options.slice(0, 2)).toEqual(["Português (1)", "Multilíngue (2)"]);
-    expect(options).toContain("Inglês (4)");
+    expect(options.slice(0, 2)).toEqual(["Português (1)", "Multilíngue (1)"]);
+    expect(options).toContain("Inglês (2)");
     expect(options).toContain("Turco (1)");
     expect(options.at(-2)).toBe("Sem idioma definido (1)");
-    expect(options.at(-1)).toBe("Todos os idiomas (11)");
+    expect(options.at(-1)).toBe("Todos os idiomas (6)");
     expect(html).toContain('name="voz" value="pt1"');
     expect(html).not.toContain("data-voice=");
   });
@@ -73,13 +74,14 @@ describe("HeyGen: plataforma pelo banco", () => {
   it("a lista traz só o idioma pedido, e Português não mistura Multilíngue", async () => {
     await useHeyGen();
     const api = new FakeHeyGenApi();
+    api.catalog = [...api.catalog, { voice_id: "m1", name: "Lea", language: "Multilingual", gender: "female", support_locale: false, preview_audio_url: "https://files.heygen.ai/voz/lea.mp3" }];
     const pt = await (await list(api, "idioma=Portugu%C3%AAs")).text();
     expect(pt).toContain('data-name="Ana"');
-    expect(pt).not.toContain('data-name="Kore"');
+    expect(pt).not.toContain('data-name="Lea"');
     const multi = await (await list(api, "idioma=Multil%C3%ADngue")).text();
-    expect(multi).toContain('data-voice-play="/vozes/previa/80441555167a467e967ab9487d844a30"');
+    expect(multi).toContain('data-voice-play="/vozes/previa/m1"');
     expect(multi).not.toContain('data-name="Ana"');
-    expect(await (await list(api, "idioma=&busca=kor")).text()).toContain('data-name="Kore"');
+    expect(await (await list(api, "idioma=&busca=le")).text()).toContain('data-name="Lea"');
     expect(await (await list(api, "idioma=Portugu%C3%AAs&genero=male")).text()).toContain('data-name="Rui"');
   });
 
@@ -92,8 +94,20 @@ describe("HeyGen: plataforma pelo banco", () => {
     expect(first.match(/data-voice="/g)).toHaveLength(50);
     const rest = await (await list(api, "idioma=Ingl%C3%AAs&de=50")).text();
     expect(rest).not.toContain("data-voice-more");
-    expect(rest.match(/data-voice="/g)).toHaveLength(12);
+    expect(rest.match(/data-voice="/g)).toHaveLength(10);
     expect((await list(api, "idioma=", await memberCookie())).status).toBe(404);
+  });
+
+  it("voz fora da listagem da HeyGen não aparece: a API direta recusa o vídeo", async () => {
+    await useHeyGen();
+    const api = new FakeHeyGenApi();
+    const kore = VOICES[0]!;
+    expect(await (await list(api, "idioma=&busca=kore")).text()).not.toContain("data-voice=");
+    expect((await post(api, { fala: FALA, voz: kore.value, imagem: foto() })).status).toBe(400);
+    api.catalog = [];
+    resetVoiceCache();
+    await env.DB.prepare("DELETE FROM config WHERE key = 'vozes.heygen.listadas'").run();
+    expect(await (await list(api, "idioma=")).text()).not.toContain(kore.value);
   });
 
   it("guarda o catálogo no banco: a instância nova não pede à HeyGen de novo", async () => {

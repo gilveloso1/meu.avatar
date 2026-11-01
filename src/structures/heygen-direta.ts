@@ -73,15 +73,18 @@ function languageName(language: string): string {
 const languageRank = (language: string) => (language === "Português" ? 0 : language === "Multilíngue" ? 1 : language === NO_LANGUAGE ? 3 : 2);
 
 /**
- * As vozes do catálogo como opções; as que o OpenRouter mostra (também são da HeyGen) ficam
- * sempre na lista, com o idioma delas. Sem catálogo, são só elas.
+ * Reserva sem o catálogo: as vozes do OpenRouter que vêm na listagem da HeyGen. As outras têm amostra,
+ * mas a API direta pode recusar o vídeo (Kore e Orus falharam com TTS_VOICE_UNAVAILABLE_ERR).
  */
+const LISTED_IDS = new Set(["246cdbf530954380a62109f3107fce0d", "707365599f8545d5b6ce7a32a20e9c93"]);
+export const DIRECT_VOICES = VOICES.filter((v) => LISTED_IDS.has(v.value));
+
+/** As vozes da listagem da HeyGen como opções. Voz fora dela não entra: não dá para garantir o vídeo. */
 export function voiceOptions(voices: { voice_id: string; name: string; language: string; gender: string; support_locale: boolean; preview_audio_url?: string | null }[]): VoiceOption[] {
-  if (!voices.length) return VOICES;
+  if (!voices.length) return DIRECT_VOICES;
   const gender = (g: string) => (g === "female" ? "feminina" : g === "male" ? "masculina" : "");
-  const known = new Map(VOICES.map((v) => [v.value, v]));
   const catalog = voices.map((v): VoiceOption => {
-    const language = known.get(v.voice_id)?.language ?? languageName(v.language);
+    const language = languageName(v.language);
     return {
       value: v.voice_id + (v.support_locale ? LOCALE_MARK : ""),
       label: [v.name, gender(v.gender), language.toLowerCase()].filter(Boolean).join(" · "),
@@ -91,10 +94,7 @@ export function voiceOptions(voices: { voice_id: string; name: string; language:
       preview: Boolean(v.preview_audio_url),
     };
   });
-  const ids = new Set(voices.map((v) => v.voice_id));
-  return [...catalog, ...VOICES.filter((v) => !ids.has(v.value))].sort(
-    (a, b) => languageRank(a.language) - languageRank(b.language) || a.language.localeCompare(b.language, "pt") || a.name.localeCompare(b.name, "pt"),
-  );
+  return catalog.sort((a, b) => languageRank(a.language) - languageRank(b.language) || a.language.localeCompare(b.language, "pt") || a.name.localeCompare(b.name, "pt"));
 }
 
 const onlyText = { fonte: ["pronta", "clonada"] };
@@ -109,7 +109,7 @@ export const HEYGEN_DIRECT: Structure = {
   sections(model, d, lists = {}) {
     const resolutions = model?.supported_resolutions ?? ["720p"];
     const ratios = model?.supported_aspect_ratios ?? [d.aspectRatio];
-    const voices = lists.voices?.length ? lists.voices : VOICES;
+    const voices = lists.voices?.length ? lists.voices : DIRECT_VOICES;
     const clones = [...(lists.clones ?? []), { value: NEW_CLONE, label: "Clonar uma voz nova" }];
     const consent: Record<string, string[]> = { fonte: ["clonada"], clone: [NEW_CLONE, ...(lists.newClones ?? [])] };
     return [
@@ -176,7 +176,7 @@ export const HEYGEN_DIRECT: Structure = {
     let locale: string | null = null;
     let voiceLabel: string | null = null;
     if (source === "pronta") {
-      const voices = lists.voices?.length ? lists.voices : VOICES;
+      const voices = lists.voices?.length ? lists.voices : DIRECT_VOICES;
       const voice = voices.find((v) => v.value === values("voz"));
       if (!voice) throw new InputError(ERROS.voz);
       voiceId = voice.value.replace(LOCALE_MARK, "");
