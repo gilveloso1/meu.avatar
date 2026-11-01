@@ -60,6 +60,12 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) |
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida |
+
+Nas duas, `src` aceita também o `href` de uma exportação pronta deste projeto: é como o agente
+confere o que exportou.
+
+| Rota | O que faz |
+|---|---|
 | `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas) |
 | `POST /projetos/<id>/exportar` `{final, versoes?}` | Começa a exportação |
 | `POST /projetos/<id>/exportacoes/<e>` | Faz o próximo passo; sem isso, o agendamento termina |
@@ -89,6 +95,9 @@ recusado. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
 | `som` | `bloco`, `volume` (0 a 4), `mudo` | Volume do bloco |
 | `final` | `id`, `resolucao`, `formato`, `velocidade` | Muda um Final; sem `id`, cria outro. A velocidade vale para todas as variações dele |
 | `organizar` | | O mesmo Organizar da tela |
+
+Em `adicionar` e `dividir`, `rotulo: "nome"` permite citar o bloco como `"@nome"` nos comandos
+seguintes do mesmo lote, sem esperar a resposta.
 
 O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, como na tela.
 A resposta traz `criados`, com os ids novos na ordem dos comandos.

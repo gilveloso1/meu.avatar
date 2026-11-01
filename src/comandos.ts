@@ -48,8 +48,11 @@ const texto = (v: unknown): string | null => (typeof v === "string" && v.trim() 
 export async function aplicar(original: CanvasProject, comandos: Comando[], ctx: Contexto): Promise<{ project: CanvasProject; criados: string[] }> {
   let project = upgrade(original);
   const criados: string[] = [];
-  for (const [i, c] of comandos.entries()) {
+  const rotulos = new Map<string, string>();
+  for (const [i, bruto] of comandos.entries()) {
     const falha = (codigo: string) => new ComandoError(codigo, i);
+    const c = comRotulos(bruto, rotulos, falha);
+    const antesDeCriar = criados.length;
     switch (c.tipo) {
       case "adicionar": {
         const f = await ctx.fonte(c);
@@ -137,8 +140,25 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
       default:
         throw falha("comando_desconhecido");
     }
+    if (typeof bruto.rotulo === "string" && criados.length > antesDeCriar) rotulos.set(bruto.rotulo, criados[antesDeCriar]!);
   }
   return { project, criados };
+}
+
+const CAMPOS_DE_BLOCO = ["bloco", "depois", "antes", "sobre", "de", "para"];
+
+/** Num lote, "@nome" é o bloco que um comando anterior criou com rotulo: "nome". */
+function comRotulos(c: Comando, rotulos: Map<string, string>, falha: (c: string) => ComandoError): Comando {
+  const troca = (v: unknown) => {
+    if (typeof v !== "string" || !v.startsWith("@")) return v;
+    const id = rotulos.get(v.slice(1));
+    if (!id) throw falha("rotulo_desconhecido");
+    return id;
+  };
+  const novo = { ...c };
+  for (const campo of CAMPOS_DE_BLOCO) if (campo in novo) novo[campo] = troca(novo[campo]);
+  if (Array.isArray(novo.ids)) novo.ids = novo.ids.map(troca);
+  return novo;
 }
 
 /** Bloco novo: depois de outro, sobre um grupo (imagem por cima ou som embaixo) ou numa linha nova. */

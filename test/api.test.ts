@@ -281,6 +281,37 @@ describe("edição fina", () => {
     expect(lido.avisos).toEqual(r.avisos);
   });
 
+  it("rotulo: um comando cita o bloco criado antes no mesmo lote", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" },
+      { tipo: "adicionar", video: VIDEO2, fim: 2, depois: "@a", rotulo: "b" },
+      { tipo: "dividir", bloco: "@a", em: 2, rotulo: "a2" },
+      { tipo: "cortar", bloco: "@a2", fim: 3 },
+      { tipo: "velocidade", bloco: "@b", velocidade: 2 },
+    ]);
+    expect(r.criados).toHaveLength(3);
+    expect(r.grupos).toHaveLength(1);
+    expect(r.grupos[0]!.duracao).toBe(4);
+    expect(await (await comandos(id, r.revisao, [{ tipo: "cortar", bloco: "@nada", fim: 1 }])).json()).toEqual({ erro: "rotulo_desconhecido", comando: 0 });
+  });
+
+  it("o agente vê o vídeo exportado, e só o do próprio projeto", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const outro = await novo();
+    await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }]);
+    const fake = new FakeExportApi();
+    let e = await (await api(`/projetos/${id}/exportar`, admin, { final: "final" }, fake)).json<{ id: string; status: string; versoes: { href: string }[] }>();
+    for (let i = 0; i < 5 && e.status !== "done"; i++) e = await (await api(`/projetos/${id}/exportacoes/${e.id}`, admin, {}, fake)).json();
+    const href = e.versoes[0]!.href;
+    const q = await api(`/api/v1/projetos/${id}/quadros?src=${href}&instantes=1`, admin, undefined, fake);
+    expect(q.status).toBe(200);
+    await q.arrayBuffer();
+    expect((await api(`/api/v1/projetos/${outro.id}/quadros?src=${href}&instantes=1`, admin, undefined, fake)).status).toBe(404);
+    expect((await api(`/api/v1/projetos/${id}/quadros?src=/projetos/${id}/exportacoes/${crypto.randomUUID()}/0.mp4&instantes=1`, admin, undefined, fake)).status).toBe(404);
+  });
+
   it("quadros e silêncios só de arquivo que a conta pode usar", async () => {
     await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
     const { id } = await novo();
