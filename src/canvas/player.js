@@ -135,9 +135,10 @@ export class Player {
     const at = (layer) => this.items.findLast((i) => i.layer === layer && !i.el.error && t >= i.start && t < i.start + i.len);
     const ready = (i) => (i.el.tagName === "IMG" ? i.el.complete : i.el.readyState >= READY && !i.el.seeking);
     const top = at(1);
-    // A de cima ainda sem imagem: fica o que estava, senão a de baixo aparece por um instante.
-    if (top && !ready(top)) return;
     const base = at(0);
+    // Quem deve aparecer ainda sem imagem: fica o que estava, senão outra coisa pisca na tela.
+    const front = top ?? base;
+    if (front && !ready(front)) return;
     this.shown[1] = top ?? null;
     // Sem ninguém naquele instante, a camada fica vazia (no fundo há sempre o preto).
     if (!base) this.shown[0] = null;
