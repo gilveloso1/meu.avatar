@@ -31,6 +31,8 @@ export const AUD_H = 40;
 // Faixa do áudio vinculado, embaixo da imagem do vídeo.
 export const LINK_H = 40;
 export const MAX_FAIXAS = 8;
+/** Menos que isso é arredondamento, não buraco (um quadro a 30 fps). */
+const GAP_MIN = 0.034;
 // Organizar: a área do grupo (20 px em volta) e a aba dele (40 px) cabem nas folgas; o Final, na dele.
 const COL_GAP = 140;
 const ROW_GAP = 110;
@@ -297,6 +299,22 @@ export function timeline(version, rate = 1) {
     t += g.dur;
   }
   return { duration: t / rate, items };
+}
+
+/**
+ * Onde o grupo não tem vídeo de base, em segundos a partir do começo dele: o que sobra,
+ * porque uma cobertura ou um som passa do fim da sequência, sai sobre o fundo preto.
+ */
+export function baseGaps(g) {
+  const gaps = [];
+  let at = 0;
+  for (const b of g.blocks) {
+    const from = (b.x - g.x) / PX;
+    if (from - at > GAP_MIN) gaps.push([+at.toFixed(3), +from.toFixed(3)]);
+    at = Math.max(at, from + len(b));
+  }
+  if (g.dur - at > GAP_MIN) gaps.push([+at.toFixed(3), +g.dur.toFixed(3)]);
+  return gaps;
 }
 
 /** Quanto o Final acelera todas as variações dele. */

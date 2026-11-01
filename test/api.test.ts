@@ -271,6 +271,16 @@ describe("edição fina", () => {
     expect(r.grupos[0]!.duracao).toBeLessThan(9);
   });
 
+  it("avisa quando a cobertura passa do fim do vídeo de base", async () => {
+    const { id, a, v } = await dois();
+    const c = await lote(id, v.revisao, [{ tipo: "adicionar", video: VIDEO2, fim: 6, sobre: a, em: 0, semSom: true }]);
+    expect((c as unknown as { avisos: unknown[] }).avisos).toEqual([]);
+    const r = await (await comandos(id, c.revisao, [{ tipo: "velocidade", bloco: a, velocidade: 2 }])).json<{ avisos: unknown[] }>();
+    expect(r.avisos).toEqual([{ tipo: "sem_video_de_base", grupo: a, de: 4, ate: 6, segundos: 2 }]);
+    const lido = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ avisos: unknown[] }>();
+    expect(lido.avisos).toEqual(r.avisos);
+  });
+
   it("quadros e silêncios só de arquivo que a conta pode usar", async () => {
     await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
     const { id } = await novo();

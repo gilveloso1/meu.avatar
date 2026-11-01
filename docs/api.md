@@ -65,6 +65,11 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `POST /projetos/<id>/exportacoes/<e>` | Faz o próximo passo; sem isso, o agendamento termina |
 | `GET /projetos/<id>/exportacoes/<e>` | Estado e endereços para baixar |
 
+`avisos`, em `ver_projeto` e na resposta dos comandos, aponta o que está aceito mas sairá errado.
+Hoje há um: `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),
+quando uma cobertura ou um som passa do fim da sequência ou há um buraco nela. Aquele trecho sai
+sobre o fundo preto, salvo se uma cobertura opaca o preencher.
+
 Erro: `{"erro": "<código>"}`, com `comando` (a posição no lote) quando um comando é
 recusado. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
 

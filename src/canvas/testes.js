@@ -463,3 +463,10 @@ test("relay: encosta a sequência e leva junto quem a cobre", () => {
   assert.equal(p.blocks[1].x, 40);
   assert.equal(p.blocks[2].x, 60);
 });
+
+test("baseGaps: acha o fim sem base e o buraco na sequência, e ignora arredondamento", () => {
+  const b = (x, tout) => ({ id: `b${x}`, kind: "video", x, tin: 0, tout });
+  assert.deepEqual(M.baseGaps({ x: 0, dur: 5, blocks: [b(0, 3)] }), [[3, 5]]);
+  assert.deepEqual(M.baseGaps({ x: 0, dur: 5, blocks: [b(0, 2), b(120, 2)] }), [[2, 3]]);
+  assert.deepEqual(M.baseGaps({ x: 0, dur: 3.01, blocks: [b(0, 3)] }), []);
+});
