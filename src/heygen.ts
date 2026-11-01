@@ -4,6 +4,8 @@
 // docs/modelos/heygen-avatar-iv.md). Só usa fetch: roda no Worker.
 
 export const HEYGEN_API = "https://api.heygen.com";
+/** Teto de páginas do catálogo de vozes (100 vozes por página). */
+const MAX_VOICE_PAGES = 40;
 
 /** Arquivo que vai para a HeyGen: um asset já enviado. */
 export type HeyGenSource = { type: "asset_id"; asset_id: string };
@@ -44,6 +46,8 @@ export interface HeyGenVoice {
   language: string;
   gender: string;
   support_locale: boolean;
+  /** Amostra curta da voz. */
+  preview_audio_url?: string | null;
 }
 
 export type CloneStatus = { status: "PENDING" | "ACTIVE" | "FAILED"; failure_reason?: string | null };
@@ -54,8 +58,10 @@ export interface HeyGenApi {
   createVideo(body: HeyGenVideoRequest): Promise<{ video_id: string }>;
   getVideo(id: string): Promise<HeyGenVideo>;
   download(url: string): Promise<ArrayBuffer>;
-  /** Vozes prontas em português (as multilíngues também falam português). */
+  /** Todas as vozes prontas do catálogo. */
   voices(): Promise<HeyGenVoice[]>;
+  /** Uma voz pelo id: a listagem deixa de fora algumas vozes públicas, como a Kore. */
+  voice(id: string): Promise<HeyGenVoice>;
   /** Clone instantâneo a partir de um áudio já enviado; devolve o id da voz (fica PENDING). */
   cloneVoice(name: string, assetId: string): Promise<string>;
   cloneStatus(voiceId: string): Promise<CloneStatus>;
@@ -65,6 +71,15 @@ export interface HeyGenApi {
   deleteVideo(id: string): Promise<void>;
   /** Apaga um arquivo enviado (foto, áudio, gravação da voz). */
   deleteAsset(id: string): Promise<void>;
+}
+
+/** Só o que o site usa (o catálogo fica no banco). Amostra com endereço assinado (X-Amz) já venceu ou vai vencer. */
+function savedVoice(v: HeyGenVoice): HeyGenVoice {
+  const url = v.preview_audio_url;
+  return {
+    voice_id: v.voice_id, name: v.name.trim(), language: v.language, gender: v.gender.toLowerCase(), support_locale: Boolean(v.support_locale),
+    preview_audio_url: url?.startsWith("https://") && !url.includes("X-Amz-") ? url : null,
+  };
 }
 
 export class HeyGenClient implements HeyGenApi {
@@ -96,9 +111,22 @@ export class HeyGenClient implements HeyGenApi {
   }
 
   async voices(): Promise<HeyGenVoice[]> {
-    const res = await fetch(`${this.base}/v3/voices?type=public&language=Portuguese&limit=100`, { headers: this.headers() });
-    if (!res.ok) throw new Error(`HeyGen respondeu HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
-    return ((await res.json()) as { data: HeyGenVoice[] }).data;
+    const all: HeyGenVoice[] = [];
+    let token: string | null | undefined;
+    for (let page = 0; page < MAX_VOICE_PAGES; page++) {
+      const query = `type=public&limit=100${token ? `&token=${encodeURIComponent(token)}` : ""}`;
+      const res = await fetch(`${this.base}/v3/voices?${query}`, { headers: this.headers() });
+      if (!res.ok) throw new Error(`HeyGen respondeu HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
+      const body = (await res.json()) as { data: HeyGenVoice[]; next_token?: string | null };
+      all.push(...body.data.map(savedVoice));
+      token = body.next_token;
+      if (!token) break;
+    }
+    return all;
+  }
+
+  voice(id: string): Promise<HeyGenVoice> {
+    return this.json<HeyGenVoice>(`/v3/voices/${encodeURIComponent(id)}`).then(savedVoice);
   }
 
   async cloneVoice(name: string, assetId: string): Promise<string> {

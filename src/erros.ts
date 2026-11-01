@@ -58,6 +58,7 @@ export const ERROS = {
   criacaoPausada: erro("Criação de vídeos pausada.", "Tente mais tarde."),
   criacaoPausadaAviso: erro("Criação de vídeos pausada.", "Seus vídeos continuam aqui."),
   ajustesNaoAceitos: erro("Este modelo não aceita esses ajustes.", "Mude os ajustes e gere de novo."),
+  vozesIndisponiveis: erro("Não foi possível carregar as vozes.", "Tente mais tarde."),
   videoFalhou: erro("Não foi possível gerar o vídeo.", "Toque em Refazer para tentar de novo."),
   fala: campo("Escreva a fala do vídeo."),
   falaLonga: (max: number) => campo(`Encurte a fala para até ${max} caracteres.`),

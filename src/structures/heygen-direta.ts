@@ -18,7 +18,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { EXPRESSIVENESS, HEYGEN_AVATAR, MAX_MOTION, MAX_SCRIPT, MOTION_GUIDE, speechSeconds, VOICES } from "./heygen";
-import { InputError, type Option, type Structure } from "./types";
+import { InputError, type Option, type Structure, type VoiceOption } from "./types";
 import { options } from "./wan";
 
 /** Preço por segundo do Avatar IV com foto na API direta (US$). */
@@ -51,11 +51,50 @@ export const MAX_CLONE_NAME = 64;
 /** Marca, no valor da voz pronta, que ela aceita o sotaque pt-BR (voice_settings.locale). */
 const LOCALE_MARK = "|pt-BR";
 
-/** As vozes do catálogo como opções; sem catálogo, as que o OpenRouter mostra (também são da HeyGen). */
-export function voiceOptions(voices: { voice_id: string; name: string; gender: string; support_locale: boolean }[]): Option[] {
+/** Os idiomas do catálogo (a HeyGen os escreve em inglês) na língua de quem usa. */
+const LANGUAGES: Record<string, string> = {
+  Arabic: "Árabe", Bulgarian: "Búlgaro", Chinese: "Chinês", Croatian: "Croata", Czech: "Tcheco", Danish: "Dinamarquês", Dutch: "Holandês",
+  English: "Inglês", Filipino: "Filipino", Finnish: "Finlandês", French: "Francês", German: "Alemão", Greek: "Grego", Hebrew: "Hebraico",
+  Hindi: "Hindi", Hungarian: "Húngaro", Indonesian: "Indonésio", Italian: "Italiano", Japanese: "Japonês", Korean: "Coreano", Malay: "Malaio",
+  Norwegian: "Norueguês", Polish: "Polonês", Portuguese: "Português", Romanian: "Romeno", Russian: "Russo", Slovak: "Eslovaco", Spanish: "Espanhol",
+  Swedish: "Sueco", Tamil: "Tâmil", Thai: "Tailandês", Turkish: "Turco", Ukrainian: "Ucraniano", Vietnamese: "Vietnamita",
+};
+const SAME_LANGUAGE: Record<string, string> = { en: "English", es: "Spanish", Turkey: "Turkish" };
+const NO_LANGUAGE = "Sem idioma definido";
+/** O catálogo escreve o mesmo idioma de jeitos diferentes, e 188 vozes vêm sem idioma. */
+function languageName(language: string): string {
+  const name = language.trim();
+  if (!name || name === "unknown") return NO_LANGUAGE;
+  if (/multi/i.test(name)) return "Multilíngue";
+  const english = SAME_LANGUAGE[name] ?? name;
+  return LANGUAGES[english] ?? english;
+}
+/** Português vem primeiro, depois Multilíngue, os outros em ordem alfabética e, por último, as vozes sem idioma. */
+const languageRank = (language: string) => (language === "Português" ? 0 : language === "Multilíngue" ? 1 : language === NO_LANGUAGE ? 3 : 2);
+
+/**
+ * As vozes do catálogo como opções; as que o OpenRouter mostra (também são da HeyGen) ficam
+ * sempre na lista, com o idioma delas. Sem catálogo, são só elas.
+ */
+export function voiceOptions(voices: { voice_id: string; name: string; language: string; gender: string; support_locale: boolean; preview_audio_url?: string | null }[]): VoiceOption[] {
   if (!voices.length) return VOICES;
   const gender = (g: string) => (g === "female" ? "feminina" : g === "male" ? "masculina" : "");
-  return voices.map((v) => ({ value: v.voice_id + (v.support_locale ? LOCALE_MARK : ""), label: [v.name, gender(v.gender)].filter(Boolean).join(" · ") }));
+  const known = new Map(VOICES.map((v) => [v.value, v]));
+  const catalog = voices.map((v): VoiceOption => {
+    const language = known.get(v.voice_id)?.language ?? languageName(v.language);
+    return {
+      value: v.voice_id + (v.support_locale ? LOCALE_MARK : ""),
+      label: [v.name, gender(v.gender), language.toLowerCase()].filter(Boolean).join(" · "),
+      name: v.name,
+      gender: v.gender === "female" || v.gender === "male" ? v.gender : "",
+      language,
+      preview: Boolean(v.preview_audio_url),
+    };
+  });
+  const ids = new Set(voices.map((v) => v.voice_id));
+  return [...catalog, ...VOICES.filter((v) => !ids.has(v.value))].sort(
+    (a, b) => languageRank(a.language) - languageRank(b.language) || a.language.localeCompare(b.language, "pt") || a.name.localeCompare(b.name, "pt"),
+  );
 }
 
 const onlyText = { fonte: ["pronta", "clonada"] };
@@ -77,8 +116,8 @@ export const HEYGEN_DIRECT: Structure = {
       {
         title: "Fala",
         fields: [
-          { kind: "segmented", name: "fonte", label: "Voz", options: SOURCES, value: "pronta" },
-          { kind: "select", name: "voz", label: "Voz pronta", options: voices, value: voices[0]!.value, showIf: { fonte: ["pronta"] } },
+          { kind: "segmented", name: "fonte", label: "Voz", options: SOURCES, value: "pronta", hideLabel: true },
+          { kind: "voice", name: "voz", label: "Voz pronta", voices, value: voices[0]!.value, showIf: { fonte: ["pronta"] } },
           { kind: "select", name: "clone", label: "Voz clonada", options: clones, value: clones[0]!.value, showIf: { fonte: ["clonada"] } },
           { kind: "audio", name: "amostra", label: "Gravação da voz", supporting: "MP3 ou WAV, 1 a 3 min de fala limpa.", showIf: newClone },
           { kind: "text", name: "nome_voz", label: "Nome da voz", maxLength: MAX_CLONE_NAME, placeholder: "Ex.: Minha voz", supporting: "Para achar a voz na lista depois.", showIf: newClone },
@@ -97,10 +136,10 @@ export const HEYGEN_DIRECT: Structure = {
         ],
       },
       {
-        title: "Avatar",
+        title: "Expressividade",
         fields: [
           { kind: "image", name: "imagem", label: "Foto do avatar", required: true, supporting: "" },
-          { kind: "segmented", name: "expressividade", label: "Expressividade", options: EXPRESSIVENESS, value: "low" },
+          { kind: "segmented", name: "expressividade", label: "Expressividade", options: EXPRESSIVENESS, value: "low", hideLabel: true },
           {
             kind: "text",
             name: "movimento",

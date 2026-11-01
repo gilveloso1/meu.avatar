@@ -4,6 +4,7 @@ import type { AudioApi, ContainerPlan, Face } from "../src/audio";
 import type { ExportApi } from "../src/exportar";
 import { randomToken, sha256 } from "../src/auth";
 import type { CloneStatus, HeyGenApi, HeyGenVideo, HeyGenVideoRequest, HeyGenVoice } from "../src/heygen";
+import { VOICES } from "../src/structures/heygen";
 import type { ChatRequest, ChatResult, VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
 
 export const SITE = "https://meu-avatar.gilveloso.workers.dev";
@@ -314,6 +315,11 @@ export class FakeHeyGenApi implements HeyGenApi {
   }
   async voices() {
     return this.catalog;
+  }
+  async voice(id: string) {
+    const known = VOICES.find((v) => v.value === id);
+    if (!known) throw new Error("voz não existe");
+    return { voice_id: id, name: known.name, language: "Multilingual", gender: known.gender, support_locale: false, preview_audio_url: `https://static.heygen.ai/voice_preview/${known.name}.wav` };
   }
   async cloneVoice(name: string, assetId: string) {
     this.clones.push({ name, assetId });
