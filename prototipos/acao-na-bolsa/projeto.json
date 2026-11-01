@@ -1,0 +1,628 @@
+{
+ "blocks": [
+  {
+   "id": "bmvy6hve20",
+   "tone": 1,
+   "kind": "video",
+   "name": "Por que o Japão deve três",
+   "src": "/videos/a7651c62-3179-4709-ab3c-e70d1136a410.mp4",
+   "dur": 6.08,
+   "tin": 0.3058923715096701,
+   "tout": 3.15589237150967,
+   "x": 0,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1,
+      "x": 0.492,
+      "y": 0.3
+     },
+     {
+      "t": 5.561,
+      "z": 1.35,
+      "x": 0.492,
+      "y": 0.3
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy6iaha3",
+   "tone": 1,
+   "kind": "video",
+   "name": "Por que o Japão deve três (cópia) (cópia)",
+   "src": "/videos/a7651c62-3179-4709-ab3c-e70d1136a410.mp4",
+   "dur": 6.08,
+   "tin": 3.229058320204548,
+   "tout": 5.940058320204548,
+   "x": 113.99999999999999,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": -2.85,
+      "z": 1,
+      "x": 0.492,
+      "y": 0.3
+     },
+     {
+      "t": 2.711,
+      "z": 1.35,
+      "x": 0.492,
+      "y": 0.3
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy6w93n0",
+   "tone": 2,
+   "kind": "video",
+   "name": "A resposta está em uma palavra:",
+   "src": "/videos/9eeff433-0a3d-468b-a130-64219143eccd.mp4",
+   "dur": 12.44,
+   "tin": 4.141520182291667,
+   "tout": 9.547520182291667,
+   "x": 493.0258756830937,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1.3,
+      "x": 0.45,
+      "y": 0.3
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy6xeup1",
+   "tone": 2,
+   "kind": "video",
+   "name": "A resposta está em uma palavra: (cópia)",
+   "src": "/videos/9eeff433-0a3d-468b-a130-64219143eccd.mp4",
+   "dur": 12.44,
+   "tin": 9.980697289553556,
+   "tout": 12.3,
+   "x": 709.2658756830937,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1.3,
+      "x": 0.49,
+      "y": 0.138
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy7d7el0",
+   "tone": 3,
+   "kind": "video",
+   "name": "A resposta está em uma palavra:",
+   "src": "/videos/f9770e8e-a12b-4562-b961-c3ab33cfbf0c.mp4",
+   "dur": 3.6,
+   "tin": 0.2991235654625882,
+   "tout": 2.0561235654625882,
+   "x": 222.44,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1,
+      "x": 0.505,
+      "y": 0.174
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvyb49zr0",
+   "tone": 3,
+   "kind": "video",
+   "name": "A resposta está em uma palavra:",
+   "src": "/videos/f9770e8e-a12b-4562-b961-c3ab33cfbf0c.mp4",
+   "dur": 3.6,
+   "tin": 2.3781235654625883,
+   "tout": 3.347123565462588,
+   "x": 292.72,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1.55,
+      "x": 0.505,
+      "y": 0.174
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy7fiiq3",
+   "tone": 4,
+   "kind": "video",
+   "name": "Agora, olha o histórico. Durante o",
+   "src": "/videos/8c6f0c2c-8717-4f58-97e0-ac37a3953305.mp4",
+   "dur": 13.12,
+   "tin": 0.2023008449296662,
+   "tout": 1.7529793700745244,
+   "x": 945.7455364212699,
+   "y": 0,
+   "mute": false,
+   "vol": 1
+  },
+  {
+   "id": "bmvy7g3c04",
+   "tone": 4,
+   "kind": "video",
+   "name": "Agora, olha o histórico. Durante o (cópia)",
+   "src": "/videos/8c6f0c2c-8717-4f58-97e0-ac37a3953305.mp4",
+   "dur": 13.12,
+   "tin": 2.025056486007313,
+   "tout": 5.036178092556203,
+   "x": 1007.7726774270642,
+   "y": 0,
+   "mute": false,
+   "vol": 1
+  },
+  {
+   "id": "bmvy7gp395",
+   "tone": 4,
+   "kind": "video",
+   "name": "Agora, olha o histórico. Durante o (cópia) (cópia)",
+   "src": "/videos/8c6f0c2c-8717-4f58-97e0-ac37a3953305.mp4",
+   "dur": 13.12,
+   "tin": 5.331374263035114,
+   "tout": 8.418202294451604,
+   "x": 1128.2175416890198,
+   "y": 0,
+   "mute": false,
+   "vol": 1
+  },
+  {
+   "id": "bmvy7j2fe8",
+   "tone": 5,
+   "kind": "video",
+   "name": "E sabe qual deles já confiscou",
+   "src": "/videos/2cb0755f-941e-4b61-a7fe-609e662e419e.mp4",
+   "dur": 7.85,
+   "tin": 0.27839489760811736,
+   "tout": 3.5403948976081177,
+   "x": 1421.3812584105797,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1,
+      "x": 0.49,
+      "y": 0.147
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy7jweia",
+   "tone": 6,
+   "kind": "video",
+   "name": "Começa com “Bra” e termina com",
+   "src": "/videos/86829549-bb30-4a44-bea9-48c229e8d380.mp4",
+   "dur": 3.2,
+   "tin": 0.30189069958448467,
+   "tout": 1.3188906995844847,
+   "x": 1551.8612584105797,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1.55,
+      "x": 0.497,
+      "y": 0.179
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy7m5ied",
+   "tone": 5,
+   "kind": "video",
+   "name": "Para entender o que acontece na",
+   "src": "/videos/f725179b-c84e-4e8c-b3fc-2f18af09c83b.mp4",
+   "dur": 5.28,
+   "tin": 0.14,
+   "tout": 3.338237476029226,
+   "x": 2228.33289904662,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1,
+      "x": 0.511,
+      "y": 0.175
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy7odwrf",
+   "tone": 5,
+   "kind": "video",
+   "name": "Para entender o que acontece na (cópia)",
+   "src": "/videos/f725179b-c84e-4e8c-b3fc-2f18af09c83b.mp4",
+   "dur": 5.28,
+   "tin": 3.5123226610154856,
+   "tout": 4.998322661015486,
+   "x": 2356.262398087789,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1.3,
+      "x": 0.511,
+      "y": 0.175
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy7qinbi",
+   "tone": 4,
+   "kind": "video",
+   "name": "Agora, olha o histórico. Durante o (cópia) (cópia) (cópia)",
+   "src": "/videos/8c6f0c2c-8717-4f58-97e0-ac37a3953305.mp4",
+   "dur": 13.12,
+   "tin": 8.703551193572224,
+   "tout": 12.94581608019473,
+   "x": 1251.6906629456794,
+   "y": 0,
+   "mute": false,
+   "vol": 1
+  },
+  {
+   "id": "bmvy7sw2vk",
+   "tone": 3,
+   "kind": "video",
+   "name": "No mercado financeiro, não basta saber",
+   "src": "/videos/c21e8bc2-7b62-4d0a-a9d0-8e26fa554d17.mp4",
+   "dur": 7.96,
+   "tin": 0.2936756613558351,
+   "tout": 1.483675661355835,
+   "x": 1802.9969706247157,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1.3,
+      "x": 0.49,
+      "y": 0.146
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvyb4af11",
+   "tone": 3,
+   "kind": "video",
+   "name": "No mercado financeiro, não basta saber",
+   "src": "/videos/c21e8bc2-7b62-4d0a-a9d0-8e26fa554d17.mp4",
+   "dur": 7.96,
+   "tin": 1.691675661355835,
+   "tout": 3.930675661355835,
+   "x": 1850.5969706247156,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1,
+      "x": 0.49,
+      "y": 0.146
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy7tcyml",
+   "tone": 3,
+   "kind": "video",
+   "name": "No mercado financeiro, não basta saber (cópia)",
+   "src": "/videos/c21e8bc2-7b62-4d0a-a9d0-8e26fa554d17.mp4",
+   "dur": 7.96,
+   "tin": 4.2181026781536,
+   "tout": 7.56,
+   "x": 1940.1569706247155,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1.55,
+      "x": 0.49,
+      "y": 0.146
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvy95woe0",
+   "tone": 6,
+   "kind": "video",
+   "name": "Começa com “Bra” e termina com (cópia)",
+   "src": "/videos/86829549-bb30-4a44-bea9-48c229e8d380.mp4",
+   "dur": 3.2,
+   "tin": 1.5974301982674235,
+   "tout": 3.1064301982674234,
+   "x": 1592.5412584105798,
+   "y": 0,
+   "mute": false,
+   "vol": 1,
+   "frame": {
+    "keys": [
+     {
+      "t": 0,
+      "z": 1,
+      "x": 0.497,
+      "y": 0.179
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmvyb4al42",
+   "kind": "video",
+   "name": "Motion",
+   "src": "/projetos/x/arquivos/motion",
+   "dur": 11.9,
+   "tin": 0,
+   "tout": 11.893,
+   "x": 945.7455364212699,
+   "y": -96,
+   "mute": false,
+   "vol": 1,
+   "tone": 1,
+   "audio": "none"
+  },
+  {
+   "id": "bmvychxvy0",
+   "kind": "video",
+   "name": "Gráficos",
+   "src": "/projetos/x/arquivos/over",
+   "dur": 40.3,
+   "tin": 0,
+   "tout": 7.399107142857143,
+   "x": 0,
+   "y": -96,
+   "mute": false,
+   "vol": 1,
+   "tone": 2,
+   "audio": "none",
+   "speed": 0.8928571428571428
+  },
+  {
+   "id": "bmvychxvz1",
+   "kind": "audio",
+   "name": "Trilha",
+   "src": "/projetos/x/arquivos/musica",
+   "dur": 41,
+   "tin": 0,
+   "tout": 7.399107142857143,
+   "x": 0,
+   "y": 136,
+   "mute": false,
+   "vol": 0.13,
+   "tone": 1,
+   "speed": 0.8928571428571428
+  },
+  {
+   "id": "bmvychxvz2",
+   "kind": "video",
+   "name": "Gráficos",
+   "src": "/projetos/x/arquivos/over",
+   "dur": 40.3,
+   "tin": 7.399107142857143,
+   "tout": 14.296698848612895,
+   "x": 493.0258756830937,
+   "y": -96,
+   "mute": false,
+   "vol": 1,
+   "tone": 2,
+   "audio": "none",
+   "speed": 0.8928571428571428
+  },
+  {
+   "id": "bmvychxw03",
+   "kind": "audio",
+   "name": "Trilha",
+   "src": "/projetos/x/arquivos/musica",
+   "dur": 41,
+   "tin": 7.399107142857143,
+   "tout": 14.296698848612895,
+   "x": 493.0258756830937,
+   "y": 136,
+   "mute": false,
+   "vol": 0.13,
+   "tone": 1,
+   "speed": 0.8928571428571428
+  },
+  {
+   "id": "bmvychxw04",
+   "kind": "video",
+   "name": "Gráficos",
+   "src": "/projetos/x/arquivos/over",
+   "dur": 40.3,
+   "tin": 14.296698848612895,
+   "tout": 30.08142478587427,
+   "x": 945.7455364212699,
+   "y": -192,
+   "mute": false,
+   "vol": 1,
+   "tone": 2,
+   "audio": "none",
+   "speed": 0.8928571428571428
+  },
+  {
+   "id": "bmvychxw15",
+   "kind": "audio",
+   "name": "Trilha",
+   "src": "/projetos/x/arquivos/musica",
+   "dur": 41,
+   "tin": 14.296698848612895,
+   "tout": 30.08142478587427,
+   "x": 945.7455364212699,
+   "y": 136,
+   "mute": false,
+   "vol": 0.13,
+   "tone": 1,
+   "speed": 0.8928571428571428
+  },
+  {
+   "id": "bmvychxw16",
+   "kind": "video",
+   "name": "Gráficos",
+   "src": "/projetos/x/arquivos/over",
+   "dur": 40.3,
+   "tin": 30.08142478587427,
+   "tout": 36.12686882323712,
+   "x": 1802.9969706247157,
+   "y": -96,
+   "mute": false,
+   "vol": 1,
+   "tone": 2,
+   "audio": "none",
+   "speed": 0.8928571428571428
+  },
+  {
+   "id": "bmvychxw27",
+   "kind": "audio",
+   "name": "Trilha",
+   "src": "/projetos/x/arquivos/musica",
+   "dur": 41,
+   "tin": 30.08142478587427,
+   "tout": 36.12686882323712,
+   "x": 1802.9969706247157,
+   "y": 136,
+   "mute": false,
+   "vol": 0.13,
+   "tone": 1,
+   "speed": 0.8928571428571428
+  },
+  {
+   "id": "bmvychxw28",
+   "kind": "video",
+   "name": "Gráficos",
+   "src": "/projetos/x/arquivos/over",
+   "dur": 40.3,
+   "tin": 36.10764511068819,
+   "tout": 40.29,
+   "x": 2228.33289904662,
+   "y": -96,
+   "mute": false,
+   "vol": 1,
+   "tone": 2,
+   "audio": "none",
+   "speed": 0.8928571428571428
+  },
+  {
+   "id": "bmvychxw39",
+   "kind": "audio",
+   "name": "Trilha",
+   "src": "/projetos/x/arquivos/musica",
+   "dur": 41,
+   "tin": 36.12686882323712,
+   "tout": 40.30922371254893,
+   "x": 2228.33289904662,
+   "y": 136,
+   "mute": false,
+   "vol": 0.13,
+   "tone": 1,
+   "speed": 0.8928571428571428
+  }
+ ],
+ "finals": [
+  {
+   "id": "final",
+   "x": 2559.60281582712,
+   "y": 8,
+   "speed": 1.12
+  }
+ ],
+ "edges": [
+  {
+   "id": "emvy7djy71",
+   "from": "bmvy6iaha3",
+   "to": "bmvy7d7el0"
+  },
+  {
+   "id": "emvy7hzz46",
+   "from": "bmvy6xeup1",
+   "to": "bmvy7fiiq3"
+  },
+  {
+   "id": "emvy7lerxb",
+   "from": "bmvy7gp395",
+   "to": "bmvy7j2fe8"
+  },
+  {
+   "id": "emvy7p3oeh",
+   "from": "bmvy7odwrf",
+   "to": "final"
+  },
+  {
+   "id": "emvy7s58sj",
+   "from": "bmvy7m5ied",
+   "to": "bmvy7odwrf"
+  },
+  {
+   "id": "emvy7u7m0n",
+   "from": "bmvy7jweia",
+   "to": "bmvy7sw2vk"
+  },
+  {
+   "id": "emvy7u99jo",
+   "from": "bmvy7tcyml",
+   "to": "bmvy7m5ied"
+  },
+  {
+   "id": "emvy9g74n1",
+   "from": "bmvy7d7el0",
+   "to": "bmvy6w93n0"
+  }
+ ]
+}
