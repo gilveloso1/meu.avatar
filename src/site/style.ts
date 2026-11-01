@@ -781,6 +781,42 @@ a.frame { display: block; }
 }
 .spinner circle { stroke-dasharray: 46 22; animation: spinner-arc 1.4s ease-in-out infinite; }
 /* Em lista, só o item tocado mostra o indicador, à direita, e o texto fica. */
+/* Avatar e ativos no painel do modelo: lista segmentada (2 px entre itens, 4 px por dentro, 16 px nas pontas). */
+.file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.file-list .file-picker { width: 100%; padding-right: 8px; border: 0; border-radius: 4px; font: inherit; text-align: left; cursor: pointer; }
+.file-list div.file-picker { cursor: default; }
+.file-list li:first-child .file-picker { border-top-left-radius: 16px; border-top-right-radius: 16px; }
+.file-list li:nth-last-child(1 of :not([hidden])) .file-picker { border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
+.file-list [aria-expanded="true"] { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.file-list .icon-button { flex: none; color: var(--md-sys-color-on-surface-variant); }
+.file-list [hidden] { display: none; }
+.file-picker__preview--empty { border: 1px dashed var(--md-sys-color-outline); background: none; color: var(--md-sys-color-on-surface-variant); }
+/* O menu que desdobra ao lado do painel: o mesmo painel, colado nele (2 px). */
+.side-panel {
+  position: fixed; inset: 0; z-index: 20; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px;
+  background: var(--md-sys-color-surface-container-lowest); overflow-y: auto;
+}
+.side-panel[hidden], .side-panel__body[hidden], .side-panel__kind[hidden] { display: none; }
+.side-panel__head { display: flex; align-items: center; gap: 4px; min-height: 48px; }
+.side-panel__title { flex: 1; min-width: 0; padding-left: 8px; font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-panel__body, .side-panel__kind { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.side-panel .search-field { width: 100%; max-width: none; flex: none; }
+.side-panel .dialog__list { max-height: none; }
+.side-panel .vrow__support { display: block; }
+.side-panel .chip-set { margin: 0; }
+.side-panel__new { align-self: flex-start; }
+.side-panel__help { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.asset-grid .frame { padding: 0; border: 0; background: none; cursor: pointer; }
+.asset-grid .frame[aria-pressed="true"] { outline: 3px solid var(--md-sys-color-primary); outline-offset: -3px; }
+.frame__check { position: absolute; z-index: 2; top: 8px; right: 8px; display: none; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.frame__check .icon { font-size: 18px; }
+.frame[aria-pressed="true"] .frame__check { display: grid; }
+.asset-upload {
+  position: relative; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  border: 1px dashed var(--md-sys-color-outline); border-radius: 16px; font: var(--md-sys-typescale-label-large); color: var(--md-sys-color-primary); cursor: pointer;
+}
+.asset-upload:has(input:focus-visible) { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
 .avatar-option .spinner { position: static; flex: none; margin: 0 8px 0 auto; }
 .xlist__item .spinner { position: static; flex: none; margin: 0; }
 @keyframes spinner-turn { to { transform: rotate(360deg); } }
@@ -884,6 +920,10 @@ a.frame { display: block; }
   /* A configuração à esquerda e a lista de vídeos no centro. */
   .workspace { grid-template-columns: var(--layout-config) minmax(0, 1fr); grid-template-areas: "config main"; }
   .pane--config { grid-area: config; }
+  /* O menu de ativos desdobra entre o painel e a lista, que encolhe. */
+  .workspace:has(.side-panel:not([hidden])) { grid-template-columns: var(--layout-config) 344px minmax(0, 1fr); grid-template-areas: "config panel main"; }
+  .workspace:has(.side-panel:not([hidden])) .pane--config { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+  .side-panel { grid-area: panel; position: sticky; inset: auto; top: 72px; z-index: auto; height: calc(100vh - 88px); margin-left: -14px; padding: 16px; border-radius: 4px var(--md-sys-shape-corner-extra-large) var(--md-sys-shape-corner-extra-large) 4px; }
   .workspace__main { grid-area: main; align-self: stretch; }
   /* Tudo numa linha: marca, abas, busca e conta. */
   .top-app-bar--home { flex-wrap: nowrap; }
@@ -895,6 +935,7 @@ a.frame { display: block; }
 @media (min-width: 1200px) {
   /* A configuração fica presa ao rolar a lista e ocupa sempre a altura da janela; rola por dentro. */
   .pane--config { position: sticky; top: 84px; height: calc(100vh - 100px); overflow-y: auto; }
+  .side-panel { top: 84px; height: calc(100vh - 100px); }
 }
 
 /* Celular: as setas vão por cima do vídeo (sem a margem dos lados), a barra ocupa a largura toda

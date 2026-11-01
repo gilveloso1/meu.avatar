@@ -464,6 +464,11 @@ export class Db {
     return (await this.d1.prepare("SELECT * FROM avatar_assets WHERE avatar_id = ? ORDER BY created_at DESC").bind(avatarId).all<AvatarAsset>()).results;
   }
 
+  /** Todos os ativos dos avatares da pessoa (para escolher num modelo). */
+  async assetsByUser(userId: number): Promise<AvatarAsset[]> {
+    return (await this.d1.prepare("SELECT x.* FROM avatar_assets x JOIN avatars a ON a.id = x.avatar_id WHERE a.user_id = ? ORDER BY x.created_at DESC").bind(userId).all<AvatarAsset>()).results;
+  }
+
   asset(avatarId: string, id: string): Promise<AvatarAsset | null> {
     return this.d1.prepare("SELECT * FROM avatar_assets WHERE avatar_id = ? AND id = ?").bind(avatarId, id).first<AvatarAsset>();
   }

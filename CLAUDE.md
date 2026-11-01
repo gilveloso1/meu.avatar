@@ -61,8 +61,9 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
   - Painel de configuração: `pane pane--config` em `.workspace`, com `formField`, e `filePicker`
     para foto, vídeo e áudio.
   - Item aberto: o molde da página do vídeo (`.viewer`), como a página de um ativo.
-  - Escolher um avatar: `avatarDialog` (diálogo básico do M3, com busca), em "Salvar no avatar" e
-    "Usar um avatar".
+  - Escolher um avatar: `avatarPicker` (busca e lista), em `avatarDialog` (diálogo básico do M3, em
+    "Salvar no avatar") e em `assetPanel`.
+  - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
   - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`.
 
 ## Esboço e M3
@@ -132,8 +133,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 
 - Página do modelo (`/modelo/<id>`): seta de voltar no lugar do logo; à esquerda
   o painel de Configuração (400 px, não recolhe, ocupa a altura da janela, rola
-  por dentro). Nele, a foto do avatar é uma área só (item de lista, ícone de
-  rosto, sem dica); o bloco Fala tem a voz ou o idioma primeiro e o campo
+  por dentro). Nele, "Avatar e ativos" (aprovado em 01/11/2026): primeiro o avatar, e só
+  depois "Adicionar ativo". Os dois desdobram, colado ao painel (2 px, sem sombra), um menu
+  com os ativos do avatar, só dos tipos que o modelo aceita (os campos da estrutura, um de
+  cada tipo) e sem função presa ao ativo; cada escolha se acumula no painel. O bloco Fala tem a voz ou o idioma primeiro e o campo
   "Texto" (cresce com o texto, como o Movimento); no fim, a estimativa (Duração
   e Custo estimado, linhas com ícone) e o "Gerar vídeo" na largura toda, sem
   fixar, com espaço sobrando embaixo. No centro, a lista de vídeos.
