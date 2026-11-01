@@ -31,6 +31,10 @@ Agora, no PR 42 (API dos projetos):
 
 Próximos passos, nesta ordem:
 
+Aplicar o Ação na Bolsa só pelo MCP (01/11/2026) funcionou, mas o agente recebeu prontos o motion,
+a camada de legenda e a trilha. Pelo MCP ele ainda não faz gráficos, legenda nem música, nem sabe
+o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (itens 2, 3 e 4).
+
 1. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
 2. **Transcrição** com o tempo de cada palavra: edição pelo texto, remover vícios de fala e
    repetições. Ativos de avatar nos projetos.
