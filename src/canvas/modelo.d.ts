@@ -27,6 +27,7 @@ export function exportWork(project: unknown, finalId: string, pick?: number[]): 
 export function groups(project: CanvasProject): Group[];
 export function groupIndex(gs: Group[]): Map<string, Group>;
 export function members(g: Group): Block[];
+export function baseGaps(g: Group): number[][];
 export function versions(project: CanvasProject, finalId: string): Group[][];
 export function versionName(i: number): string;
 export function output(final: CanvasFinal): { resolution: string; format: string; width: number; height: number };

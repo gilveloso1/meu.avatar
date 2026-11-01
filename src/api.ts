@@ -3,7 +3,7 @@
  * mesmo modelo da tela. Só o administrador, como o canvas; cada projeto é só de quem o
  * criou. Exportar e baixar usam as rotas do site, com o mesmo token.
  */
-import { finalRate, groups, members, output, versionName, versions } from "./canvas/modelo.js";
+import { baseGaps, finalRate, groups, members, output, versionName, versions } from "./canvas/modelo.js";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
 import type { Db, Project, User, Video } from "./db";
@@ -83,6 +83,7 @@ export class Api {
         return { id: f.id, resolucao: resolution, formato: format, variacoes: vs.map((v, i) => ({ nome: versionName(i), grupos: v.map((g) => g.id), duracao: v.reduce((t, g) => t + g.dur, 0) / finalRate(f) })) };
       }),
       arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })),
+      avisos: gs.filter((g) => g.blocks.length).flatMap((g) => baseGaps(g).map(([de, ate]) => ({ tipo: "sem_video_de_base", grupo: g.id, de, ate, segundos: +(ate! - de!).toFixed(3) }))),
       canvas: data,
     };
   }
