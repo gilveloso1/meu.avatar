@@ -796,7 +796,7 @@ a.frame { display: block; }
   position: fixed; inset: 0; z-index: 20; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px;
   background: var(--md-sys-color-surface-container-lowest); overflow-y: auto;
 }
-.side-panel[hidden], .side-panel__body[hidden], .side-panel__kind[hidden] { display: none; }
+.side-panel[hidden], .side-panel__body[hidden], .side-panel__kind[hidden], .side-panel__head [hidden] { display: none; }
 .side-panel__head { display: flex; align-items: center; gap: 4px; min-height: 48px; }
 .side-panel__title { flex: 1; min-width: 0; padding-left: 8px; font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-panel__body, .side-panel__kind { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
@@ -805,6 +805,15 @@ a.frame { display: block; }
 .side-panel .vrow__support { display: block; }
 .side-panel .chip-set { margin: 0; }
 .side-panel__new { align-self: flex-start; }
+.voice-more { display: flex; justify-content: center; padding-top: 8px; }
+[data-voice-list] .vgroup__title { padding-top: 16px; }
+[data-voice-list] .side-panel__help { padding: 0 4px 4px; }
+.side-panel .linear-progress[hidden], .side-panel .library__empty[hidden] { display: none; }
+.voice-row { position: relative; border-radius: 16px; }
+.voice-row .avatar-option { padding-left: 56px; }
+.voice-row > .icon-button { position: absolute; z-index: 1; top: 50%; left: 8px; transform: translateY(-50%); }
+.voice-row:has([aria-pressed="true"]) { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.voice-row:has([aria-pressed="true"]) .vrow__support { color: inherit; }
 .side-panel__help { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .asset-grid .frame { padding: 0; border: 0; background: none; cursor: pointer; }

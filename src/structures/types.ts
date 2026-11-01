@@ -20,6 +20,16 @@ export interface Option {
   description?: string;
 }
 
+/** Uma voz pronta: a opção e o que o menu de vozes mostra dela. */
+export interface VoiceOption extends Option {
+  name: string;
+  gender: "female" | "male" | "";
+  /** O idioma na língua de quem usa ("Português", "Multilíngue"). */
+  language: string;
+  /** Tem amostra para ouvir (/vozes/previa/<id>). */
+  preview?: boolean;
+}
+
 /** Uma linha do cartão de detalhes do vídeo. */
 export interface Detail {
   term: string;
@@ -44,6 +54,8 @@ export type Field = (
   | { kind: "text"; name: string; label: string; maxLength: number; placeholder: string; supporting: string }
   | { kind: "select"; name: string; label: string; options: Option[]; value: string; supporting?: string }
   | { kind: "segmented"; name: string; label: string; options: Option[]; value: string }
+  /** Voz pronta, escolhida no menu ao lado do painel (busca, idioma, gênero e prévia). */
+  | { kind: "voice"; name: string; label: string; voices: VoiceOption[]; value: string }
   | { kind: "image"; name: string; label: string; required: boolean; supporting: string }
   /** Vídeo enviado do computador (MP4 ou MOV); a duração é lida do arquivo. */
   | { kind: "video"; name: string; label: string; supporting: string }
@@ -143,7 +155,7 @@ export interface HeyGenPlan {
 
 /** Listas que vêm de fora da estrutura: as vozes da HeyGen e as vozes clonadas da pessoa. */
 export interface Lists {
-  voices?: Option[];
+  voices?: VoiceOption[];
   clones?: Option[];
   /** Vozes de avatar da lista acima que ainda serão clonadas: pedem o consentimento. */
   newClones?: string[];

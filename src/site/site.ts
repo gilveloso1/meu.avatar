@@ -23,7 +23,7 @@ import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video, VideoSta
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure } from "../structures";
+import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
@@ -128,6 +128,10 @@ export class Site {
     if (!post && path === "/novo") return redirect("/");
     const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
     if (!post && old) return redirect(`/modelo/${old[1]}`);
+
+    if (!post && path === "/vozes/lista") return this.voiceList(user, url);
+    const preview = /^\/vozes\/previa\/([\w-]+)$/.exec(path);
+    if (!post && preview) return this.voicePreview(user, preview[1]!);
 
     const model = /^\/modelo\/([a-z0-9-]+)$/.exec(path);
     if (model) {
@@ -754,6 +758,7 @@ ${CANVAS_BODY}
     const fields = sections.flatMap((s) => s.fields);
     const kinds = acceptedKinds(fields);
     const isFile = (f: Field) => fieldAsset(f) !== null;
+    const voiceField = fields.find((f) => f.kind === "voice");
     const avatars = kinds.length ? await this.db.avatarsByUser(user.id) : [];
     const assets = kinds.length ? (await this.db.assetsByUser(user.id)).filter((a) => kinds.includes(a.kind)) : [];
     const leads = sections.filter((s) => s.lead);
@@ -771,7 +776,7 @@ ${CANVAS_BODY}
       </div>
       ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)))}
     </section>
-    ${kinds.length ? assetPanel(avatars, assets, kinds) : ""}
+    ${kinds.length ? assetPanel(avatars, assets, kinds, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined) : ""}
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
       ${videoLibrary(videos, {
@@ -790,6 +795,32 @@ ${CANVAS_BODY}
 </main>
 ${error ? snackbar(error) : ""}`;
     return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
+  }
+
+  /** Uma página do menu de vozes, só com o que os filtros pedem. */
+  private async voiceList(user: User, url: URL): Promise<Response> {
+    const found = structureById("heygen");
+    if (!found || !canUse(found, user.role)) return new Response("não encontrado", { status: 404 });
+    const structure = await this.studio.resolve(found);
+    const lists = await this.studio.lists(structure, user.id);
+    const voice = structure.sections(null, this.config.defaults, lists).flatMap((s) => s.fields).find((f) => f.kind === "voice");
+    if (!voice) return new Response("não encontrado", { status: 404 });
+    const q = url.searchParams, from = Math.max(0, Number(q.get("de")) || 0);
+    const rows = voiceRows(voice.voices, { language: q.get("idioma") ?? "", gender: q.get("genero") ?? "", search: q.get("busca")?.trim() ?? "", from });
+    return html(rows);
+  }
+
+  /** A amostra de uma voz pronta, só para quem pode usar o modelo; a HeyGen não aparece no navegador. */
+  private async voicePreview(user: User, id: string): Promise<Response> {
+    const structure = structureById("heygen");
+    if (!structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
+    try {
+      const audio = await this.studio.voicePreview(id);
+      if (audio) return new Response(audio.bytes, { headers: { ...SECURITY_HEADERS, "content-type": audio.type, "cache-control": "private, max-age=86400" } });
+    } catch (err) {
+      console.error("Não deu para baixar a amostra da voz", err);
+    }
+    return new Response("não encontrado", { status: 404 });
   }
 
   /** "Gerar vídeo editado", na prévia da edição rápida: põe o vídeo na fila do contêiner e volta para ele. */
@@ -1411,7 +1442,7 @@ const ASSET_UPLOAD: Record<AssetKind, { name: string; accept: string; plural: st
  * O menu que se desdobra ao lado do painel: primeiro o avatar, depois os ativos dele, só dos
  * tipos que o modelo aceita. Fica dentro do formulário: enviar um arquivo aqui vai junto.
  */
-function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[]): string {
+function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[], voice?: { voices: VoiceOption[]; value: string }): string {
   const src = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
   const frame = (a: AvatarAsset) => `<button class="frame interactive" type="button" data-asset="${a.id}" data-asset-of="${a.avatar_id}" data-asset-type="${a.kind}" data-asset-src="${src(a)}" data-asset-name="${esc(a.name)}" aria-label="${esc(a.name)}" title="${esc(a.name)}" aria-pressed="false" hidden><span class="frame__media">${assetThumb(a, src(a))}</span><span class="frame__check" aria-hidden="true"><span class="icon">check</span></span></button>`;
   return `<aside class="side-panel" data-side-panel aria-labelledby="painel-titulo" hidden>
@@ -1441,7 +1472,58 @@ function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[]
           )
           .join("")}
       </div>
+      ${voice ? voicePanel(voice.voices, chosenVoice(voice.voices, voice.value)) : ""}
     </aside>`;
+}
+
+const GENDERS: Record<string, string> = { female: "Feminina", male: "Masculina" };
+/** O que aparece abaixo do nome da voz, no painel e no menu. */
+const voiceHint = (v: VoiceOption) => [v.gender ? GENDERS[v.gender] : "", v.language].filter(Boolean).join(" · ");
+/** Quantas vozes cada pedido do menu traz. */
+const VOICE_PAGE = 50;
+/** A voz do formulário; o vídeo guarda a voz sem a marca de sotaque: "Refazer" acha a mesma voz pelo id. */
+const chosenVoice = (voices: VoiceOption[], chosen: string) => voices.find((v) => v.value === chosen || v.value.split("|")[0] === chosen) ?? voices[0]!;
+
+/** O menu de vozes prontas: busca e filtros. As vozes vêm do servidor (`voiceRows`), só as do filtro. */
+function voicePanel(voices: VoiceOption[], chosen: VoiceOption): string {
+  const counts = new Map<string, number>();
+  for (const v of voices) counts.set(v.language, (counts.get(v.language) ?? 0) + 1);
+  const number = (n: number) => n.toLocaleString("pt-BR");
+  const options = [...counts]
+    .map(([l, n]) => `<option value="${esc(l)}"${l === chosen.language ? " selected" : ""}>${esc(l)} (${number(n)})</option>`)
+    .join("");
+  return `<div class="side-panel__body" data-panel-view="vozes" hidden>
+        <div class="search-field"><span class="icon" aria-hidden="true">search</span><input class="search-field__input" type="search" placeholder="Pesquisar vozes" aria-label="Pesquisar vozes" data-voice-search></div>
+        <div class="text-field text-field--select">
+          <select class="text-field__input" id="voz-idioma" data-voice-language>${options}<option value="">Todos os idiomas (${number(voices.length)})</option></select>
+          <label class="text-field__label" for="voz-idioma">Idioma</label>
+          <span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
+        </div>
+        <div class="chip-set" role="group" aria-label="Gênero da voz">${Object.entries(GENDERS).map(([k, label]) => `<button class="chip interactive" type="button" data-voice-filter="${k}" aria-pressed="false"><span class="icon chip__check">check</span>${label}</button>`).join("")}</div>
+        <div class="linear-progress" role="progressbar" aria-label="Carregando as vozes" data-voice-progress hidden></div>
+        <p class="library__empty" data-voice-error hidden>${esc(ERROS.vozesIndisponiveis)}</p>
+        <ul class="dialog__list" data-voice-list></ul>
+      </div>`;
+}
+
+/** Uma página do menu de vozes: só as que passam nos filtros, por idioma, e "Mostrar mais" se houver. */
+function voiceRows(voices: VoiceOption[], f: { language: string; gender: string; search: string; from: number }): string {
+  const q = f.search.toLowerCase();
+  const found = voices.filter((v) => (!f.language || v.language === f.language) && (!f.gender || v.gender === f.gender) && (!q || v.name.toLowerCase().includes(q)));
+  if (!found.length) return `<li class="library__empty">Nenhuma voz encontrada.</li>`;
+  const row = (v: VoiceOption) => {
+    const play = v.preview
+      ? `<button class="icon-button interactive" type="button" data-voice-play="/vozes/previa/${esc(v.value.split("|")[0]!)}" aria-label="Ouvir ${esc(v.name)}" title="Ouvir"><span class="icon">play_arrow</span></button>`
+      : `<button class="icon-button" type="button" disabled aria-label="Sem prévia" title="Sem prévia"><span class="icon">volume_off</span></button>`;
+    return `<li class="voice-row">${play}<button class="avatar-option interactive" type="button" data-voice="${esc(v.value)}" data-name="${esc(v.name)}" data-hint="${esc(voiceHint(v))}" aria-pressed="false"><span class="avatar-option__text"><span class="vrow__headline">${esc(v.name)}</span><span class="vrow__support">${esc(voiceHint(v))}</span></span></button></li>`;
+  };
+  const end = f.from + VOICE_PAGE;
+  const rows = found.slice(f.from, end).map((v, i, page) => {
+    const before = page[i - 1] ?? found[f.from - 1];
+    return `${f.language || before?.language === v.language ? "" : `<li class="vgroup__title">${esc(v.language)}</li>`}${row(v)}`;
+  });
+  const total = found.length === 1 ? "1 voz" : `${found.length.toLocaleString("pt-BR")} vozes`;
+  return `${f.from ? "" : `<li class="side-panel__help">${total}</li>`}${rows.join("")}${end < found.length ? `<li class="voice-more"><button class="button button--text interactive" type="button" data-voice-more="${end}">Mostrar mais</button></li>` : ""}`;
 }
 
 /** O mesmo botão principal, escolhendo um arquivo: enviar é escolher (data-auto-submit). */
@@ -1734,6 +1816,13 @@ function fieldHtml(f: Field, value: Values): string {
     }
     case "segmented":
       return segmented(f.name, f.label, f.options, value(f.name));
+    case "voice": {
+      const voice = chosenVoice(f.voices, value(f.name));
+      return `<input type="hidden" name="${f.name}" value="${esc(voice.value)}" data-voice-input>
+        <ul class="file-list">
+          <li><button class="file-picker interactive" type="button" data-panel-open="vozes" aria-expanded="false" aria-label="${esc(f.label)}: trocar"><span class="file-picker__preview"><span class="icon">record_voice_over</span></span><span class="file-picker__text"><span class="file-picker__name" data-voice-name>${esc(voice.name)}</span><span class="file-picker__hint" data-voice-hint>${esc(voiceHint(voice))}</span></span><span class="icon file-picker__trailing">chevron_right</span></button></li>
+        </ul>`;
+    }
     case "image":
       return filePicker("image", {
         name: f.name,
@@ -2358,13 +2447,23 @@ const SCRIPT = `(() => {
       const title = panel.querySelector("[data-panel-title]"), back = panel.querySelector("[data-panel-back]");
       const LABELS = { imagem: "Imagem", video: "Vídeo", audio: "Áudio" };
       let view = null, avatarName = "", cover = "", voiceBefore = "pronta";
+      // A voz: uma amostra toca por vez e para quando o menu fecha.
+      const audio = new Audio(), voiceInput = f.querySelector("[data-voice-input]");
+      let playing = null, openVoices = () => {};
+      const stopVoice = () => {
+        audio.pause();
+        if (playing) playing.firstElementChild.textContent = "play_arrow";
+        playing = null;
+      };
       const show = (next) => {
+        if (next !== "vozes") stopVoice();
         view = next;
         panel.hidden = !next;
         for (const b of opens) b.setAttribute("aria-expanded", String(b.dataset.panelOpen === next));
         for (const v of views) v.hidden = v.dataset.panelView !== next;
         back.hidden = next !== "ativos";
-        title.textContent = next === "ativos" ? avatarName : "Escolha o avatar";
+        title.textContent = next === "ativos" ? avatarName : next === "vozes" ? "Escolha a voz" : "Escolha o avatar";
+        if (next === "vozes") openVoices();
       };
       const showKind = (kind) => {
         for (const c of chips) c.setAttribute("aria-pressed", String(c.dataset.kind === kind));
@@ -2473,9 +2572,70 @@ const SCRIPT = `(() => {
         if (e.key === "Enter" && e.target.matches("input")) e.preventDefault();
         if (e.key === "Escape") show(null);
       });
+      if (voiceInput) {
+        const voiceView = panel.querySelector('[data-panel-view="vozes"]'), search = voiceView.querySelector("[data-voice-search]"), language = voiceView.querySelector("[data-voice-language]");
+        const genders = [...voiceView.querySelectorAll("[data-voice-filter]")], rows = voiceView.querySelector("[data-voice-list]");
+        const progress = voiceView.querySelector("[data-voice-progress]"), failed = voiceView.querySelector("[data-voice-error]");
+        const markVoice = () => { for (const b of rows.querySelectorAll("[data-voice]")) b.setAttribute("aria-pressed", String(b.dataset.voice === voiceInput.value)); };
+        // Só vem do servidor o que os filtros pedem; a resposta de um filtro antigo é ignorada.
+        let asked = 0, typing = 0;
+        const load = async (from) => {
+          const id = ++asked;
+          if (!from) stopVoice();
+          progress.hidden = false;
+          failed.hidden = true;
+          const gender = genders.find((c) => c.getAttribute("aria-pressed") === "true");
+          const query = new URLSearchParams({ idioma: language.value, genero: gender ? gender.dataset.voiceFilter : "", busca: search.value.trim(), de: from });
+          try {
+            const res = await fetch("/vozes/lista?" + query);
+            if (!res.ok) throw new Error();
+            const page = await res.text();
+            if (id !== asked) return;
+            const more = rows.querySelector(".voice-more");
+            if (more) more.remove();
+            if (from) rows.insertAdjacentHTML("beforeend", page); else rows.innerHTML = page;
+            markVoice();
+          } catch {
+            if (id !== asked) return;
+            failed.hidden = false;
+          }
+          progress.hidden = true;
+        };
+        openVoices = () => { if (!rows.children.length) load(0); };
+        search.addEventListener("input", () => { clearTimeout(typing); typing = setTimeout(() => load(0), 250); });
+        language.addEventListener("change", () => load(0));
+        for (const c of genders) c.addEventListener("click", () => {
+          const on = c.getAttribute("aria-pressed") === "true";
+          for (const o of genders) o.setAttribute("aria-pressed", "false");
+          c.setAttribute("aria-pressed", String(!on));
+          load(0);
+        });
+        rows.addEventListener("click", (e) => {
+          const pick = e.target.closest("[data-voice]"), play = e.target.closest("[data-voice-play]"), more = e.target.closest("[data-voice-more]");
+          if (more) load(Number(more.dataset.voiceMore));
+          if (pick) {
+            voiceInput.value = pick.dataset.voice;
+            f.querySelector("[data-voice-name]").textContent = pick.dataset.name;
+            f.querySelector("[data-voice-hint]").textContent = pick.dataset.hint;
+            markVoice();
+            dirty = true;
+          }
+          if (play) {
+            const again = playing === play;
+            stopVoice();
+            if (again) return;
+            playing = play;
+            play.firstElementChild.textContent = "pause";
+            audio.src = play.dataset.voicePlay;
+            audio.play().catch(stopVoice);
+          }
+        });
+        audio.addEventListener("ended", stopVoice);
+      }
       // "Meu áudio" sem áudio escolhido abre os áudios; sair dele tira o áudio da lista.
       f.addEventListener("change", (e) => {
         if (e.target.name !== "fonte") return;
+        if (view === "vozes" && val("fonte") !== "pronta") show(null);
         if (val("fonte") !== "audio") { clear("audio"); update(); }
         else if (!rowOf("audio")) { showKind("audio"); show(avatarInput.value ? "ativos" : "avatares"); }
       });
@@ -2498,10 +2658,12 @@ const SCRIPT = `(() => {
   const refresh = Number(document.body.dataset.refresh);
   // Confere a página em segundo plano e só recarrega quando o status de algum vídeo mudou:
   // sem a página piscando a cada rodada e sem perder o filtro e a vista escolhidos.
-  const signature = (doc) => [...doc.querySelectorAll("[data-kind][data-video], .status-line")].map((e) => (e.dataset.video || "") + ":" + (e.dataset.kind || e.textContent)).join(",");
+  // A ordem não conta: quem trocou a ordem da lista não tem nada novo para ver.
+  const signature = (doc) => [...doc.querySelectorAll("[data-kind][data-video], .status-line")].map((e) => (e.dataset.video || "") + ":" + (e.dataset.kind || e.textContent)).sort().join(",");
   if (refresh) setInterval(async () => {
     const playing = [...document.querySelectorAll("video")].some((v) => !v.paused);
-    if (dirty || playing || document.querySelector(".is-previewing")) return;
+    // Com o menu lateral aberto, a pessoa está escolhendo: recarregar a tiraria dali.
+    if (dirty || playing || document.querySelector(".is-previewing, [data-side-panel]:not([hidden])")) return;
     try {
       const res = await fetch(location.href, { headers: { accept: "text/html" } });
       const next = new DOMParser().parseFromString(await res.text(), "text/html");

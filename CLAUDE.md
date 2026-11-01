@@ -64,6 +64,7 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Como o prompt
   - Escolher um avatar: `avatarPicker` (busca e lista), em `avatarDialog` (diálogo básico do M3, em
     "Salvar no avatar") e em `assetPanel`.
   - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
+  - Voz pronta: campo `voice` no painel, escolhida em `voicePanel`, no mesmo menu (busca, idioma, gênero e prévia); as vozes vêm de `/vozes/lista`, só as do filtro.
   - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`.
 
 ## Esboço e M3

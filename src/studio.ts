@@ -6,7 +6,7 @@ import { type InputReference, validate, type VideoApi, type VideoJob, type Video
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
 import { canUse, InputError, type Lists, onPlatform, structureById, type Structure, type Values, videoPlatform } from "./structures";
-import { HEYGEN_AVATAR } from "./structures/heygen";
+import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { AVATAR_VOICE, HEYGEN_MODEL, MAX_CLONE_NAME, NEW_CLONE, PRICE_PER_SECOND, voiceOptions } from "./structures/heygen-direta";
 import {
   aspectLabel,
@@ -65,9 +65,12 @@ const AUDIO_TYPES: Record<string, string> = { "audio/mpeg": "mp3", "audio/mp3": 
 export const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
 /** Depois disso, a voz clonada que não ficou pronta conta como falha. */
 export const VOICE_TIMEOUT_MS = 30 * 60_000;
-/** As vozes prontas da HeyGen mudam pouco: ficam guardadas por uma hora em cada instância. */
+/** As vozes prontas da HeyGen mudam pouco: ficam por uma hora em cada instância e um dia no banco. */
 const VOICES_TTL_MS = 60 * 60_000;
+const VOICES_SAVED_TTL_MS = 24 * 60 * 60_000;
 let voicesCache: { at: number; voices: HeyGenVoice[] } | null = null;
+/** Nos testes: a próxima leitura age como uma instância nova. */
+export const resetVoiceCache = () => { voicesCache = null; };
 
 /** A estrutura existe, mas quem pediu não tem acesso a ela. */
 export class ForbiddenError extends Error {}
@@ -117,14 +120,7 @@ export class Studio {
   /** As listas do formulário da HeyGen direta: as vozes prontas e as vozes clonadas da pessoa. */
   async lists(structure: Structure, userId: number): Promise<Lists> {
     if (structure.platform !== "heygen" || !this.heygen) return {};
-    if (!voicesCache || Date.now() - voicesCache.at > VOICES_TTL_MS) {
-      try {
-        voicesCache = { at: Date.now(), voices: await this.heygen.voices() };
-      } catch (err) {
-        // Sem o catálogo, o formulário usa as vozes que o OpenRouter mostra (também são da HeyGen).
-        console.error("Não deu para listar as vozes da HeyGen", err);
-      }
-    }
+    const catalog = await this.voiceCatalog();
     const voices = await this.db.voicesByUser(userId);
     const label = (v: Voice, name = v.name) => (v.status === "ACTIVE" ? name : `${name} (preparando)`);
     const clones = voices.filter((v) => !v.asset_id).map((v) => ({ value: v.id, label: label(v) }));
@@ -136,7 +132,38 @@ export class Studio {
       if (!voice) newClones.push(value);
       clones.push({ value, label: voice ? label(voice, name) : name });
     }
-    return { voices: voiceOptions(voicesCache?.voices ?? []), clones, newClones };
+    return { voices: voiceOptions(catalog), clones, newClones };
+  }
+
+  /** O catálogo de vozes prontas: da instância, do banco ou da HeyGen, nessa ordem. */
+  private async voiceCatalog(): Promise<HeyGenVoice[]> {
+    if (voicesCache && Date.now() - voicesCache.at <= VOICES_TTL_MS) return voicesCache.voices;
+    const saved = await this.db.voiceCatalog<HeyGenVoice>();
+    if (saved && Date.now() - saved.at <= VOICES_SAVED_TTL_MS) {
+      voicesCache = { at: Date.now(), voices: saved.voices };
+      return saved.voices;
+    }
+    try {
+      const listed = await this.heygen!.voices();
+      // A Kore e a Orus não vêm na listagem: as vozes do OpenRouter são buscadas pelo id.
+      const missing = VOICES.filter((v) => !listed.some((l) => l.voice_id === v.value));
+      const found = await Promise.allSettled(missing.map((v) => this.heygen!.voice(v.value)));
+      voicesCache = { at: Date.now(), voices: [...listed, ...found.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []))] };
+      await this.db.setVoiceCatalog(voicesCache);
+    } catch (err) {
+      // Sem o catálogo, vale o último guardado ou as vozes que o OpenRouter mostra (também são da HeyGen).
+      console.error("Não deu para listar as vozes da HeyGen", err);
+      return voicesCache?.voices ?? saved?.voices ?? [];
+    }
+    return voicesCache.voices;
+  }
+
+  /** A amostra de uma voz pronta; null se a voz não existe ou não tem amostra. */
+  async voicePreview(voiceId: string): Promise<{ bytes: ArrayBuffer; type: string } | null> {
+    if (!this.heygen) return null;
+    const url = (await this.voiceCatalog()).find((v) => v.voice_id === voiceId)?.preview_audio_url;
+    if (!url) return null;
+    return { bytes: await this.heygen.download(url), type: /\.wav(\?|$)/i.test(url) ? "audio/wav" : "audio/mpeg" };
   }
 
   model(id: string): Promise<VideoModel> {

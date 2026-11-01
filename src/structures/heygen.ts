@@ -13,19 +13,19 @@
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
-import { InputError, type Option, type Structure } from "./types";
+import { InputError, type Option, type Structure, type VoiceOption } from "./types";
 import { options } from "./wan";
 
 export const MAX_SCRIPT = 1500;
 export const MAX_MOTION = 500;
 
-export const VOICES: Option[] = [
-  { value: "80441555167a467e967ab9487d844a30", label: "Kore · feminina · multilíngue" },
-  { value: "3097f9a8fd3b4340b6bbe913177b378f", label: "Orus · masculina · multilíngue" },
-  { value: "16a09e4706f74997ba4ed05ea11470f6", label: "Cassidy · feminina · inglês" },
-  { value: "6be73833ef9a4eb0aeee399b8fe9d62b", label: "Andrew · masculina · inglês" },
-  { value: "246cdbf530954380a62109f3107fce0d", label: "Amelia · feminina · espanhol" },
-  { value: "707365599f8545d5b6ce7a32a20e9c93", label: "Antonio · masculina · espanhol" },
+export const VOICES: VoiceOption[] = [
+  { value: "80441555167a467e967ab9487d844a30", label: "Kore · feminina · multilíngue", name: "Kore", gender: "female", language: "Multilíngue" },
+  { value: "3097f9a8fd3b4340b6bbe913177b378f", label: "Orus · masculina · multilíngue", name: "Orus", gender: "male", language: "Multilíngue" },
+  { value: "16a09e4706f74997ba4ed05ea11470f6", label: "Cassidy · feminina · inglês", name: "Cassidy", gender: "female", language: "Inglês" },
+  { value: "6be73833ef9a4eb0aeee399b8fe9d62b", label: "Andrew · masculina · inglês", name: "Andrew", gender: "male", language: "Inglês" },
+  { value: "246cdbf530954380a62109f3107fce0d", label: "Amelia · feminina · espanhol", name: "Amelia", gender: "female", language: "Espanhol" },
+  { value: "707365599f8545d5b6ce7a32a20e9c93", label: "Antonio · masculina · espanhol", name: "Antonio", gender: "male", language: "Espanhol" },
 ];
 
 /** Energia dos movimentos de cabeça e rosto. A HeyGen usa "low" se nada for pedido. */
@@ -63,7 +63,7 @@ export const HEYGEN_AVATAR: Structure = {
       {
         title: "Fala",
         fields: [
-          { kind: "select", name: "voz", label: "Voz", options: VOICES, value: VOICES[0]!.value, supporting: "Para português, use uma voz multilíngue." },
+          { kind: "voice", name: "voz", label: "Voz", voices: VOICES, value: VOICES[0]!.value },
           {
             kind: "textarea",
             name: "fala",

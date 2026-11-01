@@ -81,6 +81,23 @@ No ar pela API direta desde 30/10/2026, só para o administrador. Falta decidir
 se libera para todos (`access: "all"`) e confirmar se o aviso
 `/heygen/webhook` chega (ver o teste no ar, abaixo).
 
+## Vozes prontas (01/11/2026)
+
+Lido da API com a chave ativa; nenhum vídeo foi gerado.
+
+- **Catálogo:** `GET /v3/voices?type=public` traz 2.950 vozes em 30 páginas de 100 (`next_token`),
+  ≈ 925 KB. 2.332 são em inglês, 29 em português e 50 multilíngues. Fica guardado um dia na config
+  `vozes.heygen`, e o menu pede ao site só a página do filtro escolhido (`/vozes/lista`, 50 por vez).
+- **Idiomas sujos:** 188 vozes vêm com idioma vazio ou `unknown` ("Sem idioma definido"). `en`, `es`
+  e `Turkey` são o mesmo que English, Spanish e Turkish, e há nomes com espaço no fim.
+- **A listagem deixa vozes de fora:** Kore e Orus não vêm nela, mas `GET /v3/voices/{id}` responde
+  (Multilingual, amostra em `static.heygen.ai/voice_preview/gemini/`). Por isso as seis vozes do
+  OpenRouter são buscadas pelo id. **Falta gerar um vídeo com a Kore pela API direta.**
+- **Prévias:** `preview_audio_url` vem em todas, mas 182 têm endereço assinado da S3 (os 3 testados
+  deram 403) e 8 não têm endereço válido: essas aparecem como "Sem prévia". O site toca a amostra
+  por `/vozes/previa/<id>`, sem custo de geração.
+- **Qualidade:** a listagem pública traz vozes de teste de outras contas ("sdsad - Voice 1", "demo").
+
 ## Testes pela API direta (30/10/2026)
 
 No computador, com a mesma foto (avatar com os produtos na mesa), o mesmo texto

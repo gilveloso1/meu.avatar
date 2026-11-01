@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Db } from "../src/db";
 import { ERROS } from "../src/erros";
 import { createStudio } from "../src/index";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
+import { resetVoiceCache } from "../src/studio";
 import { call, cookie, FakeHeyGenApi, FakeVideoApi, memberCookie, postForm, SITE } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
@@ -11,6 +12,10 @@ const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "imag
 const mp3 = (text = "fala") => new File([new TextEncoder().encode(text)], "fala.mp3", { type: "audio/mpeg" });
 
 const db = () => new Db(env.DB);
+beforeEach(async () => {
+  resetVoiceCache();
+  await env.DB.prepare("DELETE FROM config WHERE key = 'vozes.heygen'").run();
+});
 const useHeyGen = () => db().setPlatform("heygen");
 
 async function post(heygen: FakeHeyGenApi | null, fields: Record<string, string | File>, api = new FakeVideoApi()) {
@@ -23,7 +28,7 @@ const page = async (heygen: FakeHeyGenApi | null, session?: string) =>
 describe("HeyGen: plataforma pelo banco", () => {
   it("por padrão segue pelo OpenRouter, com o formulário de antes", async () => {
     const html = await page(new FakeHeyGenApi());
-    expect(html).toContain(VOICES[0]!.label);
+    expect(html).toContain(`data-voice-name>${VOICES[0]!.name}<`);
     expect(html).not.toContain('name="fonte"');
   });
 
@@ -33,10 +38,87 @@ describe("HeyGen: plataforma pelo banco", () => {
     expect(html).toContain("Voz pronta");
     expect(html).toContain("Voz clonada");
     expect(html).toContain("Meu áudio");
-    expect(html).toContain("Ana · feminina");
+    expect(html).toContain("data-voice-name>Ana<");
+    expect(html).toContain("Feminina · Português");
     expect(html).toContain("Clonar uma voz nova");
     // A API direta aceita 4:5; o OpenRouter não.
     expect(html).toContain('value="4:5"');
+  });
+
+  const list = async (api: FakeHeyGenApi, query: string, session?: string) =>
+    call(new Request(`${SITE}/vozes/lista?${query}`, { headers: { cookie: session ?? (await cookie()) } }), new FakeVideoApi(), null, api);
+
+  it("o menu lista todos os idiomas, com Multilíngue à parte, e a página não traz as vozes", async () => {
+    await useHeyGen();
+    const api = new FakeHeyGenApi();
+    api.catalog = [
+      { voice_id: "en1", name: "Sara", language: "English", gender: "female", support_locale: false, preview_audio_url: "https://files.heygen.ai/voz/sara.mp3" },
+      { voice_id: "en2", name: "Joe", language: "en", gender: "male", support_locale: false },
+      { voice_id: "tr1", name: "Ada", language: "Turkey", gender: "female", support_locale: false },
+      { voice_id: "pt1", name: "Lucilene", language: "Portuguese", gender: "female", support_locale: false },
+      { voice_id: "x1", name: "Sem", language: "", gender: "unknown", support_locale: false },
+    ];
+    const html = await page(api);
+    const select = html.slice(html.indexOf("data-voice-language"), html.indexOf("</select>", html.indexOf("data-voice-language")));
+    const options = [...select.matchAll(/<option value="([^"]*)"(?: selected)?>([^<]+)</g)].map((m) => m[2]);
+    expect(options.slice(0, 2)).toEqual(["Português (1)", "Multilíngue (2)"]);
+    expect(options).toContain("Inglês (4)");
+    expect(options).toContain("Turco (1)");
+    expect(options.at(-2)).toBe("Sem idioma definido (1)");
+    expect(options.at(-1)).toBe("Todos os idiomas (11)");
+    expect(html).toContain('name="voz" value="pt1"');
+    expect(html).not.toContain("data-voice=");
+  });
+
+  it("a lista traz só o idioma pedido, e Português não mistura Multilíngue", async () => {
+    await useHeyGen();
+    const api = new FakeHeyGenApi();
+    const pt = await (await list(api, "idioma=Portugu%C3%AAs")).text();
+    expect(pt).toContain('data-name="Ana"');
+    expect(pt).not.toContain('data-name="Kore"');
+    const multi = await (await list(api, "idioma=Multil%C3%ADngue")).text();
+    expect(multi).toContain('data-voice-play="/vozes/previa/80441555167a467e967ab9487d844a30"');
+    expect(multi).not.toContain('data-name="Ana"');
+    expect(await (await list(api, "idioma=&busca=kor")).text()).toContain('data-name="Kore"');
+    expect(await (await list(api, "idioma=Portugu%C3%AAs&genero=male")).text()).toContain('data-name="Rui"');
+  });
+
+  it("a lista vem em páginas e só para quem pode usar o modelo", async () => {
+    await useHeyGen();
+    const api = new FakeHeyGenApi();
+    api.catalog = Array.from({ length: 60 }, (_, i) => ({ voice_id: `v${i}`, name: `Voz ${i}`, language: "English", gender: "female", support_locale: false }));
+    const first = await (await list(api, "idioma=Ingl%C3%AAs")).text();
+    expect(first).toContain('data-voice-more="50"');
+    expect(first.match(/data-voice="/g)).toHaveLength(50);
+    const rest = await (await list(api, "idioma=Ingl%C3%AAs&de=50")).text();
+    expect(rest).not.toContain("data-voice-more");
+    expect(rest.match(/data-voice="/g)).toHaveLength(12);
+    expect((await list(api, "idioma=", await memberCookie())).status).toBe(404);
+  });
+
+  it("guarda o catálogo no banco: a instância nova não pede à HeyGen de novo", async () => {
+    await useHeyGen();
+    const api = new FakeHeyGenApi();
+    const voices = vi.spyOn(api, "voices");
+    resetVoiceCache();
+    await page(api);
+    resetVoiceCache();
+    await page(api);
+    expect(voices).toHaveBeenCalledTimes(1);
+  });
+
+  it("a prévia da voz vem pelo site, e só para quem pode usar o modelo", async () => {
+    await useHeyGen();
+    const api = new FakeHeyGenApi();
+    api.catalog = [{ voice_id: "en1", name: "Sara", language: "English", gender: "female", support_locale: false, preview_audio_url: "https://files.heygen.ai/voz/sara.mp3" }];
+    resetVoiceCache();
+    const get = async (path: string, session: string) => call(new Request(`${SITE}${path}`, { headers: { cookie: session } }), new FakeVideoApi(), null, api);
+    const ok = await get("/vozes/previa/en1", await cookie());
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("content-type")).toBe("audio/mpeg");
+    expect(api.downloads).toContain("https://files.heygen.ai/voz/sara.mp3");
+    expect((await get("/vozes/previa/nao-existe", await cookie())).status).toBe(404);
+    expect((await get("/vozes/previa/en1", await memberCookie())).status).toBe(404);
   });
 
   it("com a config na HeyGen direta mas sem a chave, segue pelo OpenRouter", async () => {
@@ -84,7 +166,7 @@ describe("HeyGen direta: gerar", () => {
     const [video] = await db().recentVideos();
     expect(body!.callback_id).toBe(video!.id);
     expect(video).toMatchObject({ job_id: "hg-2", status: "pending", structure: "heygen", prompt: FALA });
-    expect(JSON.parse(video!.settings!)).toMatchObject({ platform: "heygen", source: "pronta", voice_id: "voz-ana", voice: "Ana · feminina" });
+    expect(JSON.parse(video!.settings!)).toMatchObject({ platform: "heygen", source: "pronta", voice_id: "voz-ana", voice: "Ana · feminina · português" });
   });
 
   it("voz pronta sem sotaque: não manda o locale", async () => {
