@@ -1,11 +1,14 @@
 /**
- * Base dos contêineres do site (AudioFixer e Exporter): o `sleepAfter` da biblioteca
- * só conta quando não há pedido em andamento, e um pedido só termina quando o corpo
- * da resposta é lido até o fim. Se o Worker abandona uma resposta no meio (a tela
- * fechou, o Worker caiu), a conta fica presa acima de zero e o contêiner nunca dorme:
- * em out/2026 os dois do Exporter (8 GiB cada) e o AudioFixer ficaram ligados dia e
- * noite sem trabalho. Aqui, um pedido que passa do prazo do próprio trabalho conta
- * como abandonado, e o contêiner dorme normalmente.
+ * Base dos contêineres do site (AudioFixer e Exporter). Em out/2026 os dois do
+ * Exporter (8 GiB cada) e o AudioFixer ficaram ligados dia e noite sem trabalho, por
+ * dois motivos que esta base cobre:
+ *
+ * - Para dormir, a biblioteca só manda SIGTERM, e o Python como PID 1 o ignorava
+ *   (os servidores em container/ agora tratam o sinal). Se o contêiner seguir ligado
+ *   depois do SIGTERM, a próxima volta do alarme o derruba com SIGKILL.
+ * - O `sleepAfter` só conta quando não há pedido em andamento, e um pedido só termina
+ *   quando o corpo da resposta é lido até o fim. Um pedido que passa do prazo do
+ *   próprio trabalho conta como abandonado (a tela fechou, o Worker caiu).
  */
 import { Container } from "@cloudflare/containers";
 
@@ -23,7 +26,10 @@ export function abandoned(inflight: number, lastRequestAt: number, now: number, 
 export abstract class SleepyContainer extends Container {
   /** Quanto um pedido pode durar; passado isso, a resposta foi abandonada. */
   protected abstract maxRequestMs: number;
+  /** Quanto o contêiner tem para sair depois do SIGTERM, antes do SIGKILL. */
+  protected stopGraceMs = 10_000;
   private lastRequestAt = 0;
+  private stopSentAt = 0;
 
   override containerFetch(...args: Parameters<Container["containerFetch"]>): Promise<Response> {
     this.lastRequestAt = Date.now();
@@ -42,5 +48,26 @@ export abstract class SleepyContainer extends Container {
     console.error(`Contêiner com ${self.inflightRequests} pedido(s) sem fim há mais de ${this.maxRequestMs / 60_000} min: desligando.`);
     self.inflightRequests = 0;
     self.sleepAfterMs = Date.now();
+  }
+
+  /** Prazo vencido: SIGTERM; se na volta seguinte ainda estiver ligado, SIGKILL. */
+  override async onActivityExpired(): Promise<void> {
+    if (!this.ctx.container?.running) return;
+    if (this.stopSentAt && Date.now() - this.stopSentAt > this.stopGraceMs) {
+      console.error(`Contêiner seguiu ligado ${Math.round((Date.now() - this.stopSentAt) / 1000)} s depois do SIGTERM: forçando a parada.`);
+      this.stopSentAt = 0;
+      await this.destroy();
+      return;
+    }
+    this.stopSentAt ||= Date.now();
+    await this.stop();
+  }
+
+  override onStart(): void {
+    this.stopSentAt = 0;
+  }
+
+  override onStop(): void {
+    this.stopSentAt = 0;
   }
 }

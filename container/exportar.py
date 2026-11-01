@@ -16,7 +16,7 @@ Sem o contêiner (precisa de ffmpeg):
   python3 container/exportar.py trecho plano.json saida.mkv arquivo...
   python3 container/exportar.py emendar saida.mp4 trecho.mkv...
 """
-import json, math, os, subprocess, sys, tempfile, threading, zlib
+import json, math, os, signal, subprocess, sys, tempfile, threading, zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 FPS = 30
@@ -235,4 +235,7 @@ if __name__ == "__main__":
     elif len(sys.argv) > 2 and sys.argv[1] == "emendar":
         emendar(sys.argv[2], sys.argv[3:])
     else:
+        # O Python é o PID 1 do contêiner, e o Linux ignora o SIGTERM no PID 1 sem um tratador:
+        # sem isto, o "dormir" da Cloudflare (que só manda SIGTERM) nunca desliga o contêiner.
+        signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
         ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()

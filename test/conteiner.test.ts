@@ -1,34 +1,43 @@
 /**
- * A guarda de src/conteiner.ts lê e zera campos privados da biblioteca
- * @cloudflare/containers. Aqui roda o código de verdade dela (o alarme que decide
- * desligar), num Durable Object de verdade, só com o contêiner falso (test/worker.ts):
- * se uma versão nova mudar os campos ou o alarme, o teste falha em vez de os
- * contêineres voltarem a ficar ligados sem aviso.
+ * src/conteiner.ts usa campos privados e o alarme da biblioteca @cloudflare/containers.
+ * Aqui roda o código de verdade dela, num Durable Object de verdade, só com o contêiner
+ * falso (test/worker.ts): se uma versão nova mudar os campos ou o alarme, o teste falha
+ * em vez de os contêineres voltarem a ficar ligados sem aviso.
  */
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { abandoned } from "../src/conteiner";
+import type { Falso } from "./worker";
 
+const SIGTERM = 15;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Espera o alarme da biblioteca decidir desligar, até o prazo. */
-async function expires(name: string, maxRequestMs: number, sleepAfter: string, waitMs: number): Promise<boolean> {
+/** Configura o contêiner e espera, até o prazo, o alarme fazer o que `pronto` pede. */
+async function espera(name: string, cfg: [number, string, number, boolean], pronto: (f: Falso) => boolean, waitMs: number): Promise<Falso> {
   const stub = env.TESTE_CONTEINER.getByName(name);
-  await stub.abandonar(maxRequestMs, sleepAfter);
-  for (const end = Date.now() + waitMs; Date.now() < end; await sleep(100)) {
-    if (await runInDurableObject(stub, (obj) => obj.expired)) return true;
-  }
-  return false;
+  await stub.configurar(...cfg);
+  let f = await runInDurableObject(stub, (obj) => obj.falso());
+  for (const end = Date.now() + waitMs; !pronto(f) && Date.now() < end; await sleep(100)) f = await runInDurableObject(stub, (obj) => obj.falso());
+  return f;
 }
 
-describe("contêiner que dorme", () => {
+describe("contêiner que dorme", { timeout: 15_000 }, () => {
   it("resposta abandonada não segura o contêiner ligado", async () => {
-    expect(await expires("abandonado", 50, "1h", 5000)).toBe(true);
+    const f = await espera("abandonado", [50, "1h", 60_000, true], (f) => f.sinais.length > 0, 5000);
+    expect(f.sinais).toContain(SIGTERM);
   });
 
   it("pedido dentro do prazo do trabalho mantém o contêiner ligado", async () => {
     // Sem a guarda, a biblioteca segura o contêiner enquanto o corpo não termina, mesmo com o sleepAfter vencido.
-    expect(await expires("trabalhando", 60 * 60_000, "1s", 3000)).toBe(false);
+    const f = await espera("trabalhando", [60 * 60_000, "1s", 60_000, true], (f) => f.sinais.length > 0, 3000);
+    expect(f.sinais).toEqual([]);
+    expect(f.running).toBe(true);
+  });
+
+  it("contêiner que ignora o SIGTERM é parado à força", async () => {
+    const f = await espera("teimoso", [60 * 60_000, "1s", 0, false], (f) => f.destruido, 8000);
+    expect(f.sinais).toContain(SIGTERM);
+    expect(f.destruido).toBe(true);
   });
 
   it("a regra do prazo", () => {
