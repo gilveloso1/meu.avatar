@@ -31,7 +31,7 @@ Agora, no PR 42 (API dos projetos):
 
 Próximos passos, nesta ordem:
 
-1. **Servidor MCP** por cima da API.
+1. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
 2. **Transcrição** com o tempo de cada palavra: edição pelo texto, remover vícios de fala e
    repetições. Ativos de avatar nos projetos.
 3. **Texto e gráficos com o HyperFrames** (testado, ver

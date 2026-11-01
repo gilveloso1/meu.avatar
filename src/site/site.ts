@@ -19,6 +19,7 @@
  * da página só roda com o nonce da CSP.
  */
 import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
+import { handleMcp } from "../mcp";
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
@@ -109,11 +110,13 @@ export class Site {
     // Formulário de outro site tentando agir em nome de quem está logado.
     // O token fica fora do navegador (nenhum site consegue usá-lo sem ter o código), mas só abre a API.
     const bearer = bearerToken(request);
-    if (bearer || API_PATH.test(path)) {
+    if (bearer || API_PATH.test(path) || path === "/mcp") {
       const caller = bearer ? await this.accounts.tokenUser(bearer) : null;
-      if (!caller) return Response.json({ erro: "token_invalido" }, { status: 401 });
+      if (!caller) return Response.json({ erro: "token_invalido" }, { status: 401, headers: { "www-authenticate": "Bearer" } });
       // Em teste, como os projetos: para os outros, nada existe.
       if (caller.role !== "admin") return Response.json({ erro: "nao_encontrado" }, { status: 404 });
+      // Cada ferramenta do MCP é um pedido às rotas abaixo, com o mesmo token.
+      if (path === "/mcp") return handleMcp(request, (method, to, body, headers) => this.handle(new Request(new URL(to, url), { method, body, headers: { ...headers, authorization: `Bearer ${bearer}` } })));
       if (API_PATH.test(path)) return new Api(this.db, this.media, this.exports).handle(request, caller, path, url);
       if (PROJECT_API_PATH.test(path)) return this.projects(request, caller, path, url);
       return Response.json({ erro: "nao_encontrado" }, { status: 404 });
