@@ -76,10 +76,10 @@ export const HEYGEN_AVATAR: Structure = {
         ],
       },
       {
-        title: "Avatar",
+        title: "Expressividade",
         fields: [
           { kind: "image", name: "imagem", label: "Foto do avatar", required: true, supporting: "" },
-          { kind: "segmented", name: "expressividade", label: "Expressividade", options: EXPRESSIVENESS, value: "low" },
+          { kind: "segmented", name: "expressividade", label: "Expressividade", options: EXPRESSIVENESS, value: "low", hideLabel: true },
           {
             kind: "text",
             name: "movimento",

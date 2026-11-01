@@ -1269,12 +1269,12 @@ function canQuickEdit(v: Video, structure: Structure): boolean {
 }
 
 /** Escolha única em botão segmentado; `form` liga os botões a um formulário de fora. */
-function segmented(name: string, label: string, options: Option[], selected: string, form?: string): string {
+function segmented(name: string, label: string, options: Option[], selected: string, form?: string, hideLabel?: boolean): string {
   const owner = form ? ` form="${form}"` : "";
   // Opções com explicação: a da escolhida aparece embaixo (o script troca ao mudar).
   const help = options.find((o) => o.value === selected)?.description;
   return `<fieldset class="segmented-field">
-          <legend class="segmented-field__label">${esc(label)}</legend>
+          <legend class="${hideLabel ? "visually-hidden" : "segmented-field__label"}">${esc(label)}</legend>
           <div class="segmented-button">${options
             .map(
               (o) =>
@@ -1421,7 +1421,7 @@ function avatarDialog(o: { id: string; title: string; avatars: Avatar[]; item: (
 function assetList(picks?: AssetPicks): string {
   const pick = picks?.avatar ? ` data-picks="${esc(JSON.stringify(picks))}"` : "";
   return `<section class="form-section form-section--assets"${pick} aria-labelledby="ativos-titulo">
-        <h2 class="form-section__title" id="ativos-titulo">Avatar e ativos</h2>
+        <h2 class="form-section__title" id="ativos-titulo">Avatar</h2>
         <input type="hidden" name="avatar" value="" data-avatar-input>
         <ul class="file-list" data-asset-list>
           <li><button class="file-picker interactive" type="button" data-panel-open="avatares" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty" data-avatar-preview><span class="icon">face</span></span><span class="file-picker__text"><span class="file-picker__name" data-avatar-name>Adicionar avatar</span></span></button></li>
@@ -1815,7 +1815,7 @@ function fieldHtml(f: Field, value: Values): string {
         </div>`;
     }
     case "segmented":
-      return segmented(f.name, f.label, f.options, value(f.name));
+      return segmented(f.name, f.label, f.options, value(f.name), undefined, f.hideLabel);
     case "voice": {
       const voice = chosenVoice(f.voices, value(f.name));
       return `<input type="hidden" name="${f.name}" value="${esc(voice.value)}" data-voice-input>
@@ -2435,7 +2435,7 @@ const SCRIPT = `(() => {
       audioHint.textContent = file ? "Trocar áudio" : audioHint.dataset.empty;
     });
 
-    // Avatar e ativos: o menu desdobra ao lado do painel; primeiro o avatar, depois um ativo
+    // Avatar: o menu desdobra ao lado do painel; primeiro o avatar, depois um ativo
     // por tipo, que se acumula no painel. Enviar um arquivo fica no campo do próprio menu.
     const panel = f.querySelector("[data-side-panel]");
     if (panel) {

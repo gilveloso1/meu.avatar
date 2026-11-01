@@ -116,7 +116,7 @@ export const HEYGEN_DIRECT: Structure = {
       {
         title: "Fala",
         fields: [
-          { kind: "segmented", name: "fonte", label: "Voz", options: SOURCES, value: "pronta" },
+          { kind: "segmented", name: "fonte", label: "Voz", options: SOURCES, value: "pronta", hideLabel: true },
           { kind: "voice", name: "voz", label: "Voz pronta", voices, value: voices[0]!.value, showIf: { fonte: ["pronta"] } },
           { kind: "select", name: "clone", label: "Voz clonada", options: clones, value: clones[0]!.value, showIf: { fonte: ["clonada"] } },
           { kind: "audio", name: "amostra", label: "Gravação da voz", supporting: "MP3 ou WAV, 1 a 3 min de fala limpa.", showIf: newClone },
@@ -136,10 +136,10 @@ export const HEYGEN_DIRECT: Structure = {
         ],
       },
       {
-        title: "Avatar",
+        title: "Expressividade",
         fields: [
           { kind: "image", name: "imagem", label: "Foto do avatar", required: true, supporting: "" },
-          { kind: "segmented", name: "expressividade", label: "Expressividade", options: EXPRESSIVENESS, value: "low" },
+          { kind: "segmented", name: "expressividade", label: "Expressividade", options: EXPRESSIVENESS, value: "low", hideLabel: true },
           {
             kind: "text",
             name: "movimento",

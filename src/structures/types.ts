@@ -53,7 +53,8 @@ export type Field = (
     }
   | { kind: "text"; name: string; label: string; maxLength: number; placeholder: string; supporting: string }
   | { kind: "select"; name: string; label: string; options: Option[]; value: string; supporting?: string }
-  | { kind: "segmented"; name: string; label: string; options: Option[]; value: string }
+  /** `hideLabel`: o título da seção já diz o que é; o rótulo fica só para o leitor de tela. */
+  | { kind: "segmented"; name: string; label: string; options: Option[]; value: string; hideLabel?: boolean }
   /** Voz pronta, escolhida no menu ao lado do painel (busca, idioma, gênero e prévia). */
   | { kind: "voice"; name: string; label: string; voices: VoiceOption[]; value: string }
   | { kind: "image"; name: string; label: string; required: boolean; supporting: string }

@@ -134,7 +134,7 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 
 - Página do modelo (`/modelo/<id>`): seta de voltar no lugar do logo; à esquerda
   o painel de Configuração (400 px, não recolhe, ocupa a altura da janela, rola
-  por dentro). Nele, "Avatar e ativos" (aprovado em 01/11/2026): primeiro o avatar, e só
+  por dentro). Nele, "Avatar" (aprovado em 01/11/2026): primeiro o avatar, e só
   depois "Adicionar ativo". Os dois desdobram, colado ao painel (2 px, sem sombra), um menu
   com os ativos do avatar, só dos tipos que o modelo aceita (os campos da estrutura, um de
   cada tipo) e sem função presa ao ativo; cada escolha se acumula no painel. O bloco Fala tem a voz ou o idioma primeiro e o campo
