@@ -730,7 +730,7 @@ ${CANVAS_BODY}
    * A página do modelo: a configuração do vídeo à esquerda (com o botão de gerar no fim)
    * e, no centro, os vídeos do modelo (videoLibrary). Tocar num vídeo abre /video/<id>.
    */
-  private async modelPage(user: User, structure: Structure, values?: Values, error?: string): Promise<Response> {
+  private async modelPage(user: User, structure: Structure, values?: Values, error?: string, picks?: AssetPicks): Promise<Response> {
     const { model, error: modelError } = await this.tryModel(structure);
     // Sem a chave da plataforma: no computador, nenhum aviso; no ar, um aviso na língua de quem usa.
     const canGenerate = this.studio.canGenerateWith(structure);
@@ -749,14 +749,13 @@ ${CANVAS_BODY}
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const videos = await this.db.videosByStructure(structure.id);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
-    // A foto vem de um arquivo solto ou de um avatar (só os que têm foto).
-    const avatars = (await this.db.avatarsByUser(user.id)).filter((a) => a.cover);
-
-    // Os arquivos (vídeo de origem e foto) abrem o painel, depois das seções que vêm antes (o "Uso");
-    // o resto (a fala inclusive) segue as seções da estrutura.
+    // Os ativos abrem o painel, depois das seções que vêm antes (o "Uso"); o resto (a fala
+    // inclusive) segue as seções da estrutura. O modelo aceita o que os campos dele pedem.
     const fields = sections.flatMap((s) => s.fields);
-    const isFile = (f: Field) => f.kind === "image" || f.kind === "video";
-    const images = fields.filter(isFile);
+    const kinds = acceptedKinds(fields);
+    const isFile = (f: Field) => fieldAsset(f) !== null;
+    const avatars = kinds.length ? await this.db.avatarsByUser(user.id) : [];
+    const assets = kinds.length ? (await this.db.assetsByUser(user.id)).filter((a) => kinds.includes(a.kind)) : [];
     const leads = sections.filter((s) => s.lead);
     const rest = sections.filter((s) => !s.lead).map((s) => ({ ...s, fields: s.fields.filter((f) => !isFile(f)) })).filter((s) => s.fields.length);
 
@@ -767,12 +766,12 @@ ${CANVAS_BODY}
       <div class="pane__head"><h2 class="pane__headline" id="configuracao">Configuração</h2></div>
       <div class="pane__body" id="configuracao-corpo">
         ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
-        ${images.map((f) => formField(f, value)).join("")}
-        ${images.some((f) => f.kind === "image") ? `<input type="hidden" name="avatar" value="" data-avatar-input><button class="button button--text interactive" type="button" data-dialog-open="usar-avatar"><span class="icon">face</span>Usar um avatar</button>` : ""}
+        ${kinds.length ? assetList(picks) : ""}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
       ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)))}
     </section>
+    ${kinds.length ? assetPanel(avatars, assets, kinds) : ""}
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
       ${videoLibrary(videos, {
@@ -789,16 +788,6 @@ ${CANVAS_BODY}
     </div>
   </form>
 </main>
-${
-  images.some((f) => f.kind === "image")
-    ? avatarDialog({
-        id: "usar-avatar",
-        title: "Usar um avatar",
-        avatars,
-        item: (a, content) => `<button class="avatar-option interactive" type="button" data-avatar-pick="${a.id}" data-avatar-cover="/avatares/${a.id}/arquivos/${esc(a.cover!)}" data-avatar-name="${esc(a.name)}"${a.voice_asset ? ` data-avatar-voice="avatar:${a.id}"` : ""}>${content}</button>`,
-      })
-    : ""
-}
 ${error ? snackbar(error) : ""}`;
     return html(page(`${structure.name} · ${SITE_NAME}`, body, { refresh: waiting, bar: { user, back: "/", title: structure.name } }), error ? 400 : 200);
   }
@@ -1006,32 +995,45 @@ ${error ? snackbar(error) : ""}`;
   private async createVideo(request: Request, user: User, structure: Structure): Promise<Response> {
     const form = await request.formData();
     const { model } = await this.tryModel(structure);
-    const values = formValues(form, structure.sections(model, this.config.defaults, await this.studio.lists(structure, user.id)));
+    const sections = structure.sections(model, this.config.defaults, await this.studio.lists(structure, user.id));
+    const values = formValues(form, sections);
+    const fields = sections.flatMap((s) => s.fields);
     const file = (name: string) => {
       const f = form.get(name);
       return f instanceof File ? f : null;
     };
-    // Arquivo solto ou avatar: com avatar, a foto vem dos ativos dele.
-    const chosen = String(form.get("avatar") ?? "");
-    const fromAvatar = chosen ? await this.avatarPhoto(chosen, user) : null;
-    if (chosen && !fromAvatar) return this.modelPage(user, structure, values, ERROS.avatarSemFoto);
+    // Cada tipo vem de um arquivo solto ou de um ativo do avatar escolhido.
+    const picks: AssetPicks = { avatar: String(form.get("avatar") ?? ""), assets: form.getAll("ativo").map(String) };
+    const chosen = await this.pickedFiles(picks, user, acceptedKinds(fields));
+    if (!chosen) return this.modelPage(user, structure, values, ERROS.ativoIndisponivel);
     let video: Video;
     try {
-      video = await this.studio.create({ structure, values, image: fromAvatar ?? file("imagem"), video: file("video"), audio: file("audio"), sample: file("amostra"), avatarId: fromAvatar ? chosen : null, user });
+      video = await this.studio.create({ structure, values, image: chosen.imagem ?? file("imagem"), video: chosen.video ?? file("video"), audio: chosen.audio ?? file("audio"), sample: file("amostra"), avatarId: picks.avatar || null, user });
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
-      return this.modelPage(user, structure, values, err.message);
+      return this.modelPage(user, structure, values, err.message, picks);
     }
     return redirect(`/modelo/${structure.id}?video=${video.id}`);
   }
 
-  /** A foto do avatar da pessoa (a principal ou a primeira), como arquivo para o modelo. */
-  private async avatarPhoto(id: string, user: User): Promise<File | null> {
-    const avatar = (await this.db.avatarsByUser(user.id)).find((a) => a.id === id);
-    const asset = avatar?.cover ? await this.db.asset(avatar.id, avatar.cover) : null;
-    const object = asset ? await this.media.get(asset.key) : null;
-    return asset && object ? new File([await object.arrayBuffer()], asset.name, { type: asset.type }) : null;
+  /**
+   * Os ativos escolhidos, como arquivos para o modelo: só do avatar da própria pessoa, um por
+   * tipo e só dos tipos que o modelo aceita. null: a escolha não vale.
+   */
+  private async pickedFiles(picks: AssetPicks, user: User, kinds: AssetKind[]): Promise<Partial<Record<AssetKind, File>> | null> {
+    if (!picks.avatar) return picks.assets.length ? null : {};
+    const avatar = await this.db.avatarById(picks.avatar);
+    if (avatar?.user_id !== user.id) return null;
+    const files: Partial<Record<AssetKind, File>> = {};
+    for (const id of picks.assets) {
+      const asset = await this.db.asset(avatar.id, id);
+      if (!asset || !kinds.includes(asset.kind) || files[asset.kind]) return null;
+      const object = await this.media.get(asset.key);
+      if (!object) return null;
+      files[asset.kind] = new File([await object.arrayBuffer()], asset.name, { type: asset.type });
+    }
+    return files;
   }
 
   private async login(request: Request): Promise<Response> {
@@ -1354,26 +1356,92 @@ function fab(icon: string, label: string, to: { href: string } | { post: string 
     : `<form method="post" action="${to.post}"><button class="fab fab--extended interactive" type="submit">${content}</button></form>`;
 }
 
-/**
- * Diálogo para escolher um avatar (M3: diálogo básico), com busca para quando houver muitos.
- * `item` diz o que tocar faz: salvar nele ou usar a foto dele.
- */
-function avatarDialog(o: { id: string; title: string; avatars: Avatar[]; item: (a: Avatar, content: string) => string; note?: (a: Avatar) => string | null; newHref?: string }): string {
+/** A busca e a lista de avatares: `item` diz o que tocar faz. No diálogo e no painel de ativos. */
+function avatarPicker(o: { avatars: Avatar[]; item: (a: Avatar, content: string) => string; note?: (a: Avatar) => string | null }): string {
   const row = (a: Avatar) => {
     const cover = a.cover ? faceImage(`/avatares/${a.id}/arquivos/${esc(a.cover)}`, a.cover_face, "avatar-cover") : `<span class="icon-tile icon-tile--large icon-tile--primary" aria-hidden="true"><span class="icon">face</span></span>`;
     const support = o.note?.(a) ?? (a.assets === 1 ? "1 ativo" : `${a.assets ?? 0} ativos`);
     return `<li data-avatar-item="${esc(a.name.toLowerCase())}">${o.item(a, `${cover}<span class="avatar-option__text"><span class="vrow__headline">${esc(a.name)}</span><span class="vrow__support">${esc(support)}</span></span>`)}</li>`;
   };
+  return `${o.avatars.length ? `<div class="search-field"><span class="icon" aria-hidden="true">search</span><input class="search-field__input" type="search" placeholder="Pesquisar avatares" aria-label="Pesquisar avatares" data-avatar-search></div>` : ""}
+    <ul class="dialog__list">${o.avatars.map(row).join("")}</ul>
+    <p class="library__empty" data-avatar-none${o.avatars.length ? " hidden" : ""}>Nenhum avatar encontrado.</p>`;
+}
+
+/**
+ * Diálogo para escolher um avatar (M3: diálogo básico), com busca para quando houver muitos.
+ * `item` diz o que tocar faz.
+ */
+function avatarDialog(o: { id: string; title: string; avatars: Avatar[]; item: (a: Avatar, content: string) => string; note?: (a: Avatar) => string | null; newHref?: string }): string {
   return `<dialog class="dialog" id="${o.id}" aria-labelledby="${o.id}-titulo">
     <h2 class="dialog__title" id="${o.id}-titulo">${esc(o.title)}</h2>
-    ${o.avatars.length ? `<div class="search-field"><span class="icon" aria-hidden="true">search</span><input class="search-field__input" type="search" placeholder="Pesquisar avatares" aria-label="Pesquisar avatares" data-avatar-search></div>` : ""}
-    <ul class="dialog__list">${o.avatars.map(row).join("")}</ul>
-    <p class="library__empty" data-avatar-none${o.avatars.length ? " hidden" : ""}>Nenhum avatar encontrado.</p>
+    ${avatarPicker(o)}
     <form class="dialog__actions" method="dialog">
       <a class="button button--text interactive dialog__start" href="${o.newHref ?? "/avatares/novo"}"><span class="icon">add</span>Novo avatar</a>
       <button class="button button--text interactive" type="submit">Cancelar</button>
     </form>
   </dialog>`;
+}
+
+/**
+ * O que o painel do modelo guarda: o avatar e, abaixo dele, os ativos escolhidos um a um. O script
+ * da página monta as linhas; `picks` devolve a escolha quando a geração volta com erro.
+ */
+function assetList(picks?: AssetPicks): string {
+  const pick = picks?.avatar ? ` data-picks="${esc(JSON.stringify(picks))}"` : "";
+  return `<section class="form-section form-section--assets"${pick} aria-labelledby="ativos-titulo">
+        <h2 class="form-section__title" id="ativos-titulo">Avatar e ativos</h2>
+        <input type="hidden" name="avatar" value="" data-avatar-input>
+        <ul class="file-list" data-asset-list>
+          <li><button class="file-picker interactive" type="button" data-panel-open="avatares" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty" data-avatar-preview><span class="icon">face</span></span><span class="file-picker__text"><span class="file-picker__name" data-avatar-name>Adicionar avatar</span></span></button></li>
+          <li data-asset-add hidden><button class="file-picker interactive" type="button" data-panel-open="ativos" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty"><span class="icon">add</span></span><span class="file-picker__text"><span class="file-picker__name">Adicionar ativo</span></span></button></li>
+        </ul>
+        <template data-asset-row><li data-asset-row><div class="file-picker"><span class="file-picker__preview" data-row-preview></span><span class="file-picker__text"><span class="file-picker__name" data-row-name></span><span class="file-picker__hint" data-row-hint></span></span><button class="icon-button interactive" type="button" data-row-remove aria-label="Remover"><span class="icon">close</span></button></div></li></template>
+      </section>`;
+}
+
+/** O limite e o envio de cada tipo de ativo. Cada modelo aceita um de cada tipo. */
+const ASSET_UPLOAD: Record<AssetKind, { name: string; accept: string; plural: string; one: string }> = {
+  imagem: { name: "imagem", accept: "image/jpeg,image/png,image/webp", plural: "Fotos", one: "1 foto" },
+  video: { name: "video", accept: "video/mp4,video/quicktime", plural: "Vídeos", one: "1 vídeo" },
+  audio: { name: "audio", accept: "audio/mpeg,audio/wav,audio/x-wav", plural: "Áudios", one: "1 áudio" },
+};
+
+/**
+ * O menu que se desdobra ao lado do painel: primeiro o avatar, depois os ativos dele, só dos
+ * tipos que o modelo aceita. Fica dentro do formulário: enviar um arquivo aqui vai junto.
+ */
+function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[]): string {
+  const src = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
+  const frame = (a: AvatarAsset) => `<button class="frame interactive" type="button" data-asset="${a.id}" data-asset-of="${a.avatar_id}" data-asset-type="${a.kind}" data-asset-src="${src(a)}" data-asset-name="${esc(a.name)}" aria-label="${esc(a.name)}" title="${esc(a.name)}" aria-pressed="false" hidden><span class="frame__media">${assetThumb(a, src(a))}</span><span class="frame__check" aria-hidden="true"><span class="icon">check</span></span></button>`;
+  return `<aside class="side-panel" data-side-panel aria-labelledby="painel-titulo" hidden>
+      <div class="side-panel__head">
+        <button class="icon-button interactive" type="button" data-panel-back aria-label="Trocar avatar" hidden><span class="icon">arrow_back</span></button>
+        <h2 class="side-panel__title" id="painel-titulo" data-panel-title>Escolha o avatar</h2>
+        <button class="icon-button interactive" type="button" data-panel-close aria-label="Fechar"><span class="icon">close</span></button>
+      </div>
+      <div class="side-panel__body" data-panel-view="avatares">
+        ${avatarPicker({
+          avatars,
+          item: (a, content) => `<button class="avatar-option interactive" type="button" data-avatar-pick="${a.id}" data-avatar-cover="${esc(a.cover ?? "")}" data-avatar-name="${esc(a.name)}"${a.voice_asset ? ` data-avatar-voice="avatar:${a.id}"` : ""}>${content}</button>`,
+        })}
+        <a class="button button--text interactive side-panel__new" href="/avatares/novo"><span class="icon">add</span>Novo avatar</a>
+      </div>
+      <div class="side-panel__body" data-panel-view="ativos" hidden>
+        ${kinds.length > 1 ? `<div class="chip-set" role="group" aria-label="Tipo de ativo">${kinds.map((k, i) => `<button class="chip interactive" type="button" data-kind="${k}" aria-pressed="${i === 0}"><span class="icon chip__check">check</span>${ASSET_UPLOAD[k].plural}</button>`).join("")}</div>` : ""}
+        ${kinds
+          .map(
+            (k, i) => `<div class="side-panel__kind" data-kind-view="${k}"${i ? " hidden" : ""}>
+          <p class="side-panel__help">Este modelo aceita ${ASSET_UPLOAD[k].one}.</p>
+          <div class="asset-grid">
+            <label class="asset-upload interactive"><input class="visually-hidden" type="file" name="${ASSET_UPLOAD[k].name}" accept="${ASSET_UPLOAD[k].accept}" aria-label="Enviar arquivo" data-asset-upload="${k}"><span class="icon">upload</span>Enviar arquivo</label>
+            ${assets.filter((a) => a.kind === k).map(frame).join("")}
+          </div>
+        </div>`,
+          )
+          .join("")}
+      </div>
+    </aside>`;
 }
 
 /** O mesmo botão principal, escolhendo um arquivo: enviar é escolher (data-auto-submit). */
@@ -1497,6 +1565,17 @@ function videoAssetName(s: SavableVideo): string {
 const MAX_AVATAR_DESCRIPTION = 500;
 const ASSET_LABELS: Record<AssetKind, string> = { imagem: "Imagem", video: "Vídeo", audio: "Áudio" };
 const assetOrigin = (a: AvatarAsset) => `${ASSET_LABELS[a.kind]} ${a.source_video ? "gerad" : "enviad"}${a.kind === "imagem" ? "a" : "o"}`;
+/** O ativo que um campo do formulário recebe (a gravação da voz clonada fica na fala); null se não for ativo. */
+function fieldAsset(f: Field): AssetKind | null {
+  return f.kind === "image" ? "imagem" : f.kind === "video" ? "video" : f.kind === "audio" && f.name === "audio" ? "audio" : null;
+}
+const acceptedKinds = (fields: Field[]) => [...new Set(fields.flatMap((f) => fieldAsset(f) ?? []))].sort((a, b) => ASSET_ORDER.indexOf(a) - ASSET_ORDER.indexOf(b));
+const ASSET_ORDER: AssetKind[] = ["imagem", "video", "audio"];
+/** O avatar e os ativos escolhidos no painel do modelo. */
+interface AssetPicks {
+  avatar: string;
+  assets: string[];
+}
 const ASSET_ICONS: Record<AssetKind, string> = { imagem: "image", video: "movie", audio: "mic" };
 const ASSET_ACCEPT = "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/ogg";
 
@@ -1505,16 +1584,20 @@ function formatBytes(n: number): string {
 }
 
 /** Os ativos do avatar, na listagem do site. */
+/** A miniatura de um ativo: a foto, o vídeo (baixa quando aparece na tela) ou o ícone do áudio. */
+function assetThumb(a: AvatarAsset, src: string): string {
+  return a.kind === "imagem"
+    ? faceImage(src, a.face)
+    : a.kind === "video"
+      ? `<video data-src="${src}" data-face="${facePoint(a.face).join(",")}" preload="metadata" muted playsinline tabindex="-1"></video>`
+      : `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--tertiary" aria-hidden="true"><span class="icon">mic</span></span></span>`;
+}
+
 function assetLibrary(assets: AvatarAsset[], o: { key: string; avatar?: Avatar; src?: (a: AvatarAsset) => string; href?: (a: AvatarAsset) => string }): string {
   const { avatar } = o;
   const src = o.src ?? ((a: AvatarAsset) => `/avatares/${avatar!.id}/arquivos/${a.id}`);
   const href = o.href ?? ((a: AvatarAsset) => `${src(a)}/ver`);
-  const thumb = (a: AvatarAsset) =>
-    a.kind === "imagem"
-      ? faceImage(src(a), a.face)
-      : a.kind === "video"
-        ? `<video data-src="${src(a)}" data-face="${facePoint(a.face).join(",")}" preload="metadata" muted playsinline tabindex="-1"></video>`
-        : `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--tertiary" aria-hidden="true"><span class="icon">mic</span></span></span>`;
+  const thumb = (a: AvatarAsset) => assetThumb(a, src(a));
   return library({
     key: o.key,
     head: (count) => `<h2 class="library__title">Ativos <span class="pane__count"${count ? " data-library-count" : ""}>${count || 0}</span></h2>`,
@@ -2175,32 +2258,14 @@ const SCRIPT = `(() => {
     });
   }
 
-  // Diálogos: abrir, buscar na lista e, no formulário do modelo, usar a foto de um avatar.
+  // Diálogos: abrir e buscar na lista de avatares (a mesma do painel de ativos).
   for (const b of document.querySelectorAll("[data-dialog-open]")) b.addEventListener("click", () => document.getElementById(b.dataset.dialogOpen).showModal());
   for (const box of document.querySelectorAll("[data-avatar-search]")) box.addEventListener("input", () => {
-    const d = box.closest("dialog"), q = box.value.trim().toLowerCase();
+    const d = box.closest("dialog, [data-panel-view]"), q = box.value.trim().toLowerCase();
     let n = 0;
     for (const it of d.querySelectorAll("[data-avatar-item]")) { it.hidden = !it.dataset.avatarItem.includes(q); if (!it.hidden) n++; }
     d.querySelector("[data-avatar-none]").hidden = n > 0;
   });
-  for (const b of document.querySelectorAll("[data-avatar-pick]")) b.addEventListener("click", () => {
-    const form = document.querySelector("[data-composer]"), input = form.querySelector("[data-image]");
-    form.querySelector("[data-avatar-input]").value = b.dataset.avatarPick;
-    input.value = ""; input.required = false;
-    const img = new Image(); img.alt = ""; img.src = b.dataset.avatarCover;
-    form.querySelector("[data-preview]").replaceChildren(img);
-    form.querySelector("[data-image-name]").textContent = b.dataset.avatarName;
-    form.querySelector("[data-image-hint]").textContent = "Avatar";
-    // Avatar com voz: já deixa a voz dele escolhida, onde a voz clonada existe.
-    const clone = form.elements.clone, voice = b.dataset.avatarVoice;
-    if (clone && voice && [...clone.options].some((o) => o.value === voice)) {
-      form.elements.fonte.value = "clonada";
-      clone.value = voice;
-      clone.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    b.closest("dialog").close();
-  });
-
   for (const input of document.querySelectorAll("[data-auto-submit]")) input.addEventListener("change", () => { if (input.files.length) { setBusy(input.closest(".fab")); input.form.submit(); } });
 
   const f = document.querySelector("[data-composer]");
@@ -2235,7 +2300,7 @@ const SCRIPT = `(() => {
     const audioField = cfg.seconds.audio ? f.elements[cfg.seconds.audio] : null;
     const update = () => {
       applyShowIf();
-      const useAudio = audioField && !audioField.disabled;
+      const useAudio = audioField && val("fonte") === "audio";
       const n = speech && !speech.disabled ? speech.value.split(/\\s+/).filter(Boolean).length : 0;
       const fixed = cfg.seconds.field ? Number(val(cfg.seconds.field)) : cfg.seconds.video ? fromSource() : useAudio ? Math.round(audioSeconds) : 0;
       const s = fixed || (n ? Math.max(1, Math.round(n / mid)) : 0);
@@ -2267,8 +2332,6 @@ const SCRIPT = `(() => {
     const image = f.querySelector("[data-image]"), preview = f.querySelector("[data-preview]"), name = f.querySelector("[data-image-name]"), hint = f.querySelector("[data-image-hint]");
     if (image) image.addEventListener("change", () => {
       const file = image.files[0];
-      const chosen = f.querySelector("[data-avatar-input]");
-      if (chosen && file) chosen.value = "";
       name.textContent = file ? file.name : name.dataset.empty;
       hint.textContent = file ? "Trocar foto" : hint.dataset.empty;
       f.querySelector("[data-image-trailing]").hidden = !file;
@@ -2281,38 +2344,153 @@ const SCRIPT = `(() => {
       const audioName = label.querySelector("[data-audio-name]"), audioHint = label.querySelector("[data-audio-hint]");
       audioName.textContent = file ? file.name : audioName.dataset.empty;
       audioHint.textContent = file ? "Trocar áudio" : audioHint.dataset.empty;
-      if (input !== audioField) return;
-      audioSeconds = 0;
-      update();
-      if (!file) return;
-      const a = new Audio();
-      a.addEventListener("loadedmetadata", () => {
-        audioSeconds = Number.isFinite(a.duration) ? a.duration : 0;
-        if (audioSeconds) audioHint.textContent = audioSeconds.toFixed(1).replace(".", ",") + " s · Trocar áudio";
-        update();
-      });
-      a.src = URL.createObjectURL(file);
     });
 
-    const source = f.querySelector("[data-source]");
-    if (source) source.addEventListener("change", () => {
-      const file = source.files[0], box = f.querySelector("[data-source-preview]");
-      const sourceName = f.querySelector("[data-source-name]"), sourceHint = f.querySelector("[data-source-hint]");
-      sourceName.textContent = file ? file.name : sourceName.dataset.empty;
-      sourceHint.textContent = file ? "Trocar vídeo" : sourceHint.dataset.empty;
-      f.querySelector("[data-source-trailing]").hidden = !file;
-      box.innerHTML = file ? '<video muted playsinline preload="metadata"></video>' : '<span class="icon">videocam</span>';
-      sourceSeconds = 0;
-      update();
-      if (!file) return;
-      const v = box.firstChild;
-      v.addEventListener("loadedmetadata", () => {
-        sourceSeconds = Number.isFinite(v.duration) ? v.duration : 0;
-        if (sourceSeconds) sourceHint.textContent = sourceSeconds.toFixed(1).replace(".", ",") + " s · Trocar vídeo";
+    // Avatar e ativos: o menu desdobra ao lado do painel; primeiro o avatar, depois um ativo
+    // por tipo, que se acumula no painel. Enviar um arquivo fica no campo do próprio menu.
+    const panel = f.querySelector("[data-side-panel]");
+    if (panel) {
+      const section = f.querySelector(".form-section--assets"), list = f.querySelector("[data-asset-list]"), add = list.querySelector("[data-asset-add]");
+      const rowTemplate = section.querySelector("template"), avatarInput = f.querySelector("[data-avatar-input]");
+      const frames = [...panel.querySelectorAll("[data-asset]")], uploads = [...panel.querySelectorAll("[data-asset-upload]")];
+      const opens = [...f.querySelectorAll("[data-panel-open]")], views = [...panel.querySelectorAll("[data-panel-view]")];
+      const chips = [...panel.querySelectorAll("[data-kind]")], kindViews = [...panel.querySelectorAll("[data-kind-view]")];
+      const title = panel.querySelector("[data-panel-title]"), back = panel.querySelector("[data-panel-back]");
+      const LABELS = { imagem: "Imagem", video: "Vídeo", audio: "Áudio" };
+      let view = null, avatarName = "", cover = "", voiceBefore = "pronta";
+      const show = (next) => {
+        view = next;
+        panel.hidden = !next;
+        for (const b of opens) b.setAttribute("aria-expanded", String(b.dataset.panelOpen === next));
+        for (const v of views) v.hidden = v.dataset.panelView !== next;
+        back.hidden = next !== "ativos";
+        title.textContent = next === "ativos" ? avatarName : "Escolha o avatar";
+      };
+      const showKind = (kind) => {
+        for (const c of chips) c.setAttribute("aria-pressed", String(c.dataset.kind === kind));
+        for (const v of kindViews) v.hidden = v.dataset.kindView !== kind;
+      };
+      const rowOf = (kind) => list.querySelector('[data-row-kind="' + kind + '"]');
+      // A duração do vídeo e do áudio vale para o custo; lida no navegador.
+      const measure = (kind, src) => {
+        if (kind === "imagem") return;
+        const m = document.createElement(kind === "video" ? "video" : "audio");
+        m.preload = "metadata";
+        m.addEventListener("loadedmetadata", () => {
+          const seconds = Number.isFinite(m.duration) ? m.duration : 0;
+          if (kind === "video") sourceSeconds = seconds; else audioSeconds = seconds;
+          update();
+        });
+        m.src = src;
+      };
+      const setFonte = (value) => {
+        if (!f.elements.fonte || val("fonte") === value) return;
+        f.elements.fonte.value = value;
+        f.dispatchEvent(new Event("change"));
+      };
+      const clear = (kind, keepUpload) => {
+        const row = rowOf(kind);
+        if (row) row.remove();
+        for (const b of frames) if (b.dataset.assetType === kind) b.setAttribute("aria-pressed", "false");
+        if (!keepUpload) for (const u of uploads) if (u.dataset.assetUpload === kind) u.value = "";
+        if (kind === "video") sourceSeconds = 0;
+        if (kind === "audio") audioSeconds = 0;
+      };
+      const set = (kind, item) => {
+        clear(kind, !item.id);
+        const row = rowTemplate.content.firstElementChild.cloneNode(true);
+        row.dataset.rowKind = kind;
+        row.querySelector("[data-row-name]").textContent = item.name;
+        row.querySelector("[data-row-hint]").textContent = item.hint;
+        const box = row.querySelector("[data-row-preview]");
+        if (kind === "audio") box.innerHTML = '<span class="icon">mic</span>';
+        else {
+          const media = document.createElement(kind === "video" ? "video" : "img");
+          media.alt = ""; media.muted = true; media.playsInline = true;
+          media.src = kind === "video" ? item.src + "#t=0.5" : item.src;
+          box.append(media);
+        }
+        if (item.id) {
+          const input = document.createElement("input");
+          input.type = "hidden"; input.name = "ativo"; input.value = item.id;
+          row.append(input);
+        }
+        row.querySelector("[data-row-remove]").addEventListener("click", () => {
+          clear(kind);
+          if (kind === "audio") setFonte(voiceBefore);
+          update();
+        });
+        list.insertBefore(row, add);
+        if (kind === "audio") {
+          if (val("fonte") !== "audio") voiceBefore = val("fonte");
+          setFonte("audio");
+        }
+        measure(kind, item.src);
         update();
+      };
+      const pickFrame = (b) => set(b.dataset.assetType, { id: b.dataset.asset, name: b.dataset.assetName, src: b.dataset.assetSrc, hint: b.dataset.asset === cover ? "Foto principal" : LABELS[b.dataset.assetType] });
+      for (const b of frames) b.addEventListener("click", () => {
+        if (b.getAttribute("aria-pressed") === "true") { clear(b.dataset.assetType); if (b.dataset.assetType === "audio") setFonte(voiceBefore); update(); return; }
+        pickFrame(b);
+        b.setAttribute("aria-pressed", "true");
       });
-      v.src = URL.createObjectURL(file);
-    });
+      for (const u of uploads) u.addEventListener("change", () => {
+        const file = u.files[0];
+        if (file) set(u.dataset.assetUpload, { name: file.name, src: URL.createObjectURL(file), hint: "Arquivo enviado" });
+      });
+      const pickAvatar = (b) => {
+        for (const kind of Object.keys(LABELS)) clear(kind);
+        avatarInput.value = b.dataset.avatarPick;
+        avatarName = b.dataset.avatarName;
+        cover = b.dataset.avatarCover;
+        f.querySelector("[data-avatar-name]").textContent = avatarName;
+        const preview = f.querySelector("[data-avatar-preview]");
+        preview.classList.toggle("file-picker__preview--empty", !cover);
+        if (cover) {
+          const img = new Image(); img.alt = ""; img.src = "/avatares/" + avatarInput.value + "/arquivos/" + cover;
+          preview.replaceChildren(img);
+        }
+        for (const a of frames) a.hidden = a.dataset.assetOf !== avatarInput.value;
+        add.hidden = false;
+        const main = frames.find((a) => a.dataset.asset === cover);
+        if (main) { pickFrame(main); main.setAttribute("aria-pressed", "true"); }
+        // Avatar com voz: já deixa a voz dele escolhida, onde a voz clonada existe.
+        const clone = f.elements.clone, voice = b.dataset.avatarVoice;
+        if (clone && voice && [...clone.options].some((o) => o.value === voice)) {
+          f.elements.fonte.value = "clonada";
+          clone.value = voice;
+          clone.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        showKind(kindViews[0].dataset.kindView);
+        show("ativos");
+      };
+      for (const b of panel.querySelectorAll("[data-avatar-pick]")) b.addEventListener("click", () => pickAvatar(b));
+      for (const b of opens) b.addEventListener("click", () => show(view === b.dataset.panelOpen ? null : b.dataset.panelOpen));
+      for (const c of chips) c.addEventListener("click", () => showKind(c.dataset.kind));
+      back.addEventListener("click", () => show("avatares"));
+      panel.querySelector("[data-panel-close]").addEventListener("click", () => show(null));
+      panel.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target.matches("input")) e.preventDefault();
+        if (e.key === "Escape") show(null);
+      });
+      // "Meu áudio" sem áudio escolhido abre os áudios; sair dele tira o áudio da lista.
+      f.addEventListener("change", (e) => {
+        if (e.target.name !== "fonte") return;
+        if (val("fonte") !== "audio") { clear("audio"); update(); }
+        else if (!rowOf("audio")) { showKind("audio"); show(avatarInput.value ? "ativos" : "avatares"); }
+      });
+      // Geração que voltou com erro: a escolha continua como estava.
+      if (section.dataset.picks) {
+        const picks = JSON.parse(section.dataset.picks);
+        const b = panel.querySelector('[data-avatar-pick="' + picks.avatar + '"]');
+        if (b) {
+          pickAvatar(b);
+          show(null);
+          for (const kind of Object.keys(LABELS)) clear(kind);
+          for (const a of frames) if (picks.assets.includes(a.dataset.asset)) { pickFrame(a); a.setAttribute("aria-pressed", "true"); }
+        }
+      }
+    }
   }
 
   // Vídeo na fila: confere de novo de tempos em tempos, sem perder o que está sendo

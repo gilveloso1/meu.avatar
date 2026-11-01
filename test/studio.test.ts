@@ -519,7 +519,7 @@ describe("HeyGen Avatar IV", () => {
     expect(page).toContain('name="movimento"');
     expect(page).toContain('value="720p" checked');
     expect(page).not.toContain('name="duracao"');
-    expect(page).toMatch(/<input type="file" name="imagem"[^>]* required/);
+    expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
   });
 
   it("manda a fala como prompt, a foto como referência e a voz nas opções da HeyGen", async () => {
@@ -616,8 +616,8 @@ describe("Seedance 2.0", () => {
     const page = await (await get("/modelo/seedance")).text();
     expect(page).toMatch(/<select class="text-field__input" id="uso" name="uso"[^>]*><option value="trocar-avatar" selected/);
     expect(page.indexOf('name="uso"')).toBeLessThan(page.indexOf('name="video"'));
-    expect(page).toMatch(/<input type="file" name="video" accept="video\/mp4,video\/quicktime"[^>]* required/);
-    expect(page).toMatch(/<input type="file" name="imagem"[^>]* required/);
+    expect(page).toMatch(/<input [^>]*type="file" name="video" accept="video\/mp4,video\/quicktime"/);
+    expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
     expect(page).toContain('name="roupa" value="video" checked');
     expect(page).toContain('name="instrucoes"');
     expect(page).not.toContain('name="fala"');
@@ -735,8 +735,8 @@ describe("Aleph 2", () => {
   it("o formulário abre com o uso e pede o vídeo e a foto, sem resolução nem formato", async () => {
     const page = await (await get("/modelo/aleph")).text();
     expect(page).toMatch(/<select class="text-field__input" id="uso" name="uso"[^>]*><option value="trocar-avatar" selected/);
-    expect(page).toMatch(/<input type="file" name="video"[^>]* required/);
-    expect(page).toMatch(/<input type="file" name="imagem"[^>]* required/);
+    expect(page).toMatch(/<input [^>]*type="file" name="video"/);
+    expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
     expect(page).not.toContain('name="resolucao"');
     expect(page).not.toContain('name="formato"');
   });

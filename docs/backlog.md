@@ -33,9 +33,9 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    áudios) e não depende de nenhum modelo. Os modelos geram por arquivo solto
    ou por avatar (`videos.avatar_id`), e "Salvar no avatar" leva o vídeo pronto
    para os ativos. A voz do avatar entra na lista de vozes clonadas e é clonada no primeiro uso.
-   Falta: gerar um vídeo real
-   com avatar e voltar ao formulário do modelo depois de criar um avatar por
-   "Usar um avatar".
+   "Avatar e ativos" no painel do modelo: escolher o avatar e, um a um, os ativos dos tipos
+   que o modelo aceita. Falta: gerar um vídeo real com avatar e voltar ao formulário do
+   modelo depois de criar um avatar por "Novo avatar".
 3. **Modelo de imagem** (um card em "Modelos"): gera a imagem inicial, por
    exemplo a personagem da pessoa na cena de um print do vídeo de referência.
    Primeiro candidato: Nano Banana 2.1 pelo OpenRouter (já usado no Aleph).

@@ -71,13 +71,21 @@ describe("avatares", () => {
   });
 });
 
+/** Mais uma foto no avatar, pelo envio de arquivo; devolve o id. */
+async function criarAtivo(session: string, avatar: string): Promise<string> {
+  await call(postForm(`/avatares/${avatar}/arquivos`, { arquivo: foto("outra") }, { cookie: session }));
+  const antes = (await db().avatarById(avatar))!.photo_asset;
+  return (await db().assetsByAvatar(avatar)).find((a) => a.kind === "imagem" && a.id !== antes)!.id;
+}
+
 describe("vídeo com avatar ou arquivo solto", () => {
-  it("com avatar, a foto dele vai para o modelo e o vídeo fica vinculado", async () => {
+  it("com avatar, o ativo escolhido vai para o modelo e o vídeo fica vinculado", async () => {
     const session = await cookie();
     const id = await criar(session, { nome: "Camila", imagem: foto() });
     await db().setPlatform("heygen");
     const heygen = new FakeHeyGenApi();
-    const res = await call(postForm("/modelo/heygen", { fonte: "pronta", voz: "voz-rui", fala: FALA, avatar: id }, { cookie: session }), new FakeVideoApi(), null, heygen);
+    const principal = (await db().avatarById(id))!.photo_asset!;
+    const res = await call(postForm("/modelo/heygen", { fonte: "pronta", voz: "voz-rui", fala: FALA, avatar: id, ativo: principal }, { cookie: session }), new FakeVideoApi(), null, heygen);
     expect(res.status).toBe(303);
     expect(heygen.assets[0]).toMatchObject({ type: "image/png", text: "foto-do-avatar" });
     const [video] = await db().recentVideos();
@@ -96,16 +104,74 @@ describe("vídeo com avatar ou arquivo solto", () => {
     expect(api.submitted).toHaveLength(1);
   });
 
-  it("avatar de outra pessoa ou sem foto não serve", async () => {
+  it("avatar ou ativo de outra pessoa não serve", async () => {
     const dono = await cookie();
     const alheio = await criar(dono, { nome: "Camila", imagem: foto() });
-    const semFoto = await criar(dono, { nome: "Sem foto" });
+    const ativo = (await db().avatarById(alheio))!.photo_asset!;
+    const membro = await memberCookie();
+    const proprio = await criar(membro, { nome: "Bia", imagem: foto() });
     const api = new FakeVideoApi();
-    const res = await call(postForm("/modelo/wan", { estilo: "selfie", idioma: "pt-BR", fala: FALA, avatar: alheio }, { cookie: await memberCookie() }), api);
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain(ERROS.avatarSemFoto);
-    expect((await call(postForm("/modelo/wan", { estilo: "selfie", idioma: "pt-BR", fala: FALA, avatar: semFoto }, { cookie: dono }), api)).status).toBe(400);
+    const fala = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
+    for (const campos of [{ avatar: alheio, ativo }, { avatar: proprio, ativo }, { avatar: "", ativo }]) {
+      const res = await call(postForm("/modelo/wan", { ...fala, ...campos }, { cookie: membro }), api);
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(ERROS.ativoIndisponivel);
+    }
     expect(api.submitted).toHaveLength(0);
+  });
+
+  it("o modelo só recebe os tipos que aceita, um de cada", async () => {
+    const session = await cookie();
+    const id = await criar(session, { nome: "Camila", imagem: foto(), voz: new File(["voz"], "voz.mp3", { type: "audio/mpeg" }) });
+    const avatar = (await db().avatarById(id))!;
+    const api = new FakeVideoApi();
+    const fala = { estilo: "selfie", idioma: "pt-BR", fala: FALA, avatar: id };
+    expect((await call(postForm("/modelo/wan", { ...fala, ativo: avatar.voice_asset! }, { cookie: session }), api)).status).toBe(400);
+    const segunda = await criarAtivo(session, id);
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fala)) form.set(k, v);
+    form.append("ativo", avatar.photo_asset!);
+    form.append("ativo", segunda);
+    const res = await call(new Request(`${SITE}/modelo/wan`, { method: "POST", body: form, headers: { cookie: session, origin: SITE } }), api);
+    expect(res.status).toBe(400);
+    expect(api.submitted).toHaveLength(0);
+  });
+
+  it("na HeyGen direta, o áudio do avatar vira a fala", async () => {
+    const session = await cookie();
+    const id = await criar(session, { nome: "Camila", imagem: foto(), voz: new File(["fala-gravada"], "voz.mp3", { type: "audio/mpeg" }) });
+    const avatar = (await db().avatarById(id))!;
+    await db().setPlatform("heygen");
+    const heygen = new FakeHeyGenApi();
+    const page = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), new FakeVideoApi(), null, heygen)).text();
+    expect(page).toContain(`data-asset="${avatar.voice_asset}"`);
+    const form = new FormData();
+    form.set("fonte", "audio");
+    form.set("avatar", id);
+    form.append("ativo", avatar.photo_asset!);
+    form.append("ativo", avatar.voice_asset!);
+    const res = await call(new Request(`${SITE}/modelo/heygen`, { method: "POST", body: form, headers: { cookie: session, origin: SITE } }), new FakeVideoApi(), null, heygen);
+    expect(res.status).toBe(303);
+    expect(heygen.assets.map((a) => a.text)).toContain("fala-gravada");
+  });
+
+  it("sem ativo escolhido, o avatar não manda foto: quem pede foto recusa", async () => {
+    const session = await cookie();
+    const id = await criar(session, { nome: "Camila", imagem: foto() });
+    await db().setPlatform("heygen");
+    const res = await call(postForm("/modelo/heygen", { fonte: "pronta", voz: "voz-rui", fala: FALA, avatar: id }, { cookie: session }), new FakeVideoApi(), null, new FakeHeyGenApi());
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain(ERROS.foto);
+  });
+
+  it("o formulário só oferece os ativos dos tipos que o modelo aceita", async () => {
+    const session = await cookie();
+    const id = await criar(session, { nome: "Camila", imagem: foto(), voz: new File(["voz"], "voz.mp3", { type: "audio/mpeg" }) });
+    const avatar = (await db().avatarById(id))!;
+    const page = await (await get("/modelo/wan", session)).text();
+    expect(page).toContain("Adicionar avatar");
+    expect(page).toContain(`data-asset="${avatar.photo_asset}"`);
+    expect(page).not.toContain(`data-asset="${avatar.voice_asset}"`);
   });
 
   it("Novo avatar a partir do vídeo leva o vídeo junto: só salva com o avatar, ao tocar em Salvar", async () => {
