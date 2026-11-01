@@ -6,6 +6,7 @@
   "description": "Vídeos curtos com avatar realista falando, para redes sociais e anúncios, gerados pelo OpenRouter. Roda no Cloudflare Workers.",
   "scripts": {
     "gerar": "tsx tools/gerar-video.ts",
+    "token": "tsx tools/token-api.ts",
     "tema": "tsx tools/tema.ts",
     "canvas": "node tools/canvas.mjs",
     "dev": "wrangler dev",

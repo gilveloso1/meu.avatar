@@ -17,6 +17,11 @@ a anterior e será revista com o dono por essa direção.
 exportação de até 50 versões. Falta a timeline embaixo do canvas e abrir para todos, depois
 de definir o limite de uso e o custo do contêiner por pessoa.
 
+**Agentes editando projetos** (ver [api.md](api.md)): a API está pronta. Falta, um PR por
+vez: servidor MCP por cima dela; transcrição com o tempo de cada palavra e ativos de avatar
+na exportação; legendas e gráficos com o HyperFrames (testado, ver
+`prototipos/hyperframes-linux/RESULTADOS.md` no branch `claude/teste-hyperframes-linux`).
+
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 
 O desafio: a pessoa tem um vídeo de referência (ex.: review UGC de um produto)

@@ -208,30 +208,57 @@ function commit(before) {
 
 /* ---------- salvar (no site: o projeto vai para o servidor pouco depois de cada mudança) ---------- */
 
+const REFRESH_MS = 5000;
 let saveTimer = 0;
 let saving = Promise.resolve();
+let pending = 0;
+// Com o botão apertado há um gesto no meio: o projeto não muda embaixo dele.
+let pressed = false;
+addEventListener("pointerdown", () => (pressed = true), true);
+for (const end of ["pointerup", "pointercancel"]) addEventListener(end, () => (pressed = false), true);
+let revision = PROJETO?.revisao ?? 0;
 let nameDirty = false;
 function scheduleSave() {
   if (!PROJETO) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 700);
 }
-function payload() {
-  const body = { data: project };
-  if (nameDirty) body.name = projectName;
+function payload(withName = nameDirty) {
+  const body = { data: project, revisao: revision };
+  if (withName) body.name = projectName;
   return JSON.stringify(body);
+}
+/** O projeto mudou por fora (a API): passa a valer o do servidor, e o histórico daqui não serve mais. */
+function adopt(state) {
+  if (!valid(state.data) || state.revisao < revision) return;
+  revision = state.revisao;
+  project = M.upgrade(state.data);
+  projectName = state.nome;
+  undo.length = 0;
+  redo.length = 0;
+  render();
+}
+async function refresh() {
+  const res = await fetch(`${PROJETO.estado}?revisao=${revision}`);
+  if (res.status === 200) adopt(await res.json());
 }
 function save() {
   clearTimeout(saveTimer);
   saveTimer = 0;
-  const body = payload();
   const sentName = nameDirty;
   nameDirty = false;
-  // Um salvamento por vez, na ordem: o último sempre chega por último.
+  pending++;
+  // Um salvamento por vez, na ordem: o último sempre chega por último, com a revisão do anterior.
   saving = saving.then(async () => {
     try {
-      const res = await fetch(PROJETO.salvar, { method: "POST", headers: { "content-type": "application/json" }, body });
+      const res = await fetch(PROJETO.salvar, { method: "POST", headers: { "content-type": "application/json" }, body: payload(sentName) });
+      if (res.status === 409) {
+        await refresh();
+        toast(CONFIG.erros?.conflito ?? "");
+        return false;
+      }
       if (!res.ok) throw new Error(String(res.status));
+      revision = Number(res.headers.get("x-revisao"));
       // No mesmo formato do servidor (formatDate, em src/site/site.ts).
       projectEdited = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
       const edited = $("#p-edited");
@@ -241,10 +268,17 @@ function save() {
       if (sentName) nameDirty = true;
       toast(CONFIG.erros?.salvar ?? "");
       return false;
+    } finally {
+      pending--;
     }
   });
   return saving;
 }
+// Um agente pode estar editando pela API: a tela confere de tempos em tempos, sem atropelar quem edita.
+if (PROJETO) setInterval(() => {
+  if (document.hidden || saveTimer || pending || pressed) return;
+  refresh().catch(() => {});
+}, REFRESH_MS);
 // Ao sair da página com mudança ainda não enviada: manda junto com a saída (se couber).
 addEventListener("pagehide", () => {
   if (!PROJETO || !saveTimer) return;

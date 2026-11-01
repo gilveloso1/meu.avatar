@@ -18,6 +18,7 @@
  * Origin), páginas sem cache e sem abrir dentro de outros sites, e o script
  * da página só roda com o nonce da CSP.
  */
+import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
@@ -106,6 +107,18 @@ export class Site {
     }
 
     // Formulário de outro site tentando agir em nome de quem está logado.
+    // O token fica fora do navegador (nenhum site consegue usá-lo sem ter o código), mas só abre a API.
+    const bearer = bearerToken(request);
+    if (bearer || API_PATH.test(path)) {
+      const caller = bearer ? await this.accounts.tokenUser(bearer) : null;
+      if (!caller) return Response.json({ erro: "token_invalido" }, { status: 401 });
+      // Em teste, como os projetos: para os outros, nada existe.
+      if (caller.role !== "admin") return Response.json({ erro: "nao_encontrado" }, { status: 404 });
+      if (API_PATH.test(path)) return new Api(this.db, this.media).handle(request, caller, path, url);
+      if (PROJECT_API_PATH.test(path)) return this.projects(request, caller, path, url);
+      return Response.json({ erro: "nao_encontrado" }, { status: 404 });
+    }
+
     if (post && !sameSite(request, url)) return new Response("forbidden", { status: 403 });
 
     if (path === "/cadastro") return post ? this.signup(request) : this.signupPage();
@@ -496,7 +509,7 @@ ${error ? snackbar(error) : ""}`;
       const project = await this.db.insertProject({ id: crypto.randomUUID(), user_id: user.id, name: "Projeto sem nome", data: EMPTY_PROJECT });
       return redirect(`/canvas/${project.id}`);
     }
-    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|arquivos|apagar|exportar|exportacoes)(?:\/([0-9a-f-]{36})(?:\/(\d+\.mp4|todas\.zip))?)?)?$/.exec(path);
+    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|estado|arquivos|apagar|exportar|exportacoes)(?:\/([0-9a-f-]{36})(?:\/(\d+\.mp4|todas\.zip))?)?)?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     // Projeto de outra pessoa (ou que não existe): a página nem existe.
     if (!m || !project || project.user_id !== user.id) return new Response("não encontrado", { status: 404 });
@@ -506,6 +519,7 @@ ${error ? snackbar(error) : ""}`;
     if (download) return new Response("não encontrado", { status: 404 });
     if (!action && !post && path.startsWith("/canvas/")) return this.canvasPage(user, project);
     if (action === "salvar" && post) return this.saveProject(request, project);
+    if (action === "estado" && !post) return this.projectState(project, url);
     if (action === "arquivos" && post && !fileId) return this.uploadProjectFile(request, project);
     if (action === "arquivos" && !post && fileId) {
       const file = await this.db.projectFile(project.id, fileId);
@@ -585,13 +599,14 @@ ${error ? snackbar(error) : ""}`;
     const latest = await this.db.latestExport(project.id);
     const config = {
       videos,
-      projeto: { id: project.id, name: project.name, data, criado: formatDate(project.created_at), modificado: formatDate(project.updated_at), autor: user.name, salvar: `/projetos/${project.id}/salvar`, arquivos: `/projetos/${project.id}/arquivos`, exportar: `/projetos/${project.id}/exportar` },
+      projeto: { id: project.id, name: project.name, data, criado: formatDate(project.created_at), modificado: formatDate(project.updated_at), autor: user.name, revisao: project.revision, salvar: `/projetos/${project.id}/salvar`, estado: `/projetos/${project.id}/estado`, arquivos: `/projetos/${project.id}/arquivos`, exportar: `/projetos/${project.id}/exportar` },
       exportacao: latest ? this.exports.state(project, latest) : null,
       limites: { imagem: MAX_IMAGE_BYTES, video: MAX_VIDEO_BYTES },
       erros: {
         arquivo: ERROS.canvasArquivo,
         video: ERROS.canvasVideo,
         salvar: ERROS.canvasSalvar,
+        conflito: ERROS.canvasConflito,
         enviar: ERROS.canvasEnviar,
         grandeImagem: ERROS.canvasArquivoGrande(MAX_IMAGE_BYTES / 1024 / 1024),
         grandeVideo: ERROS.canvasArquivoGrande(MAX_VIDEO_BYTES / 1024 / 1024),
@@ -655,7 +670,7 @@ ${CANVAS_BODY}
     if (Number(request.headers.get("content-length") ?? 0) > MAX_PROJECT_BYTES) return new Response("grande demais", { status: 413 });
     const text = await request.text();
     if (text.length > MAX_PROJECT_BYTES) return new Response("grande demais", { status: 413 });
-    let body: { name?: unknown; data?: unknown };
+    let body: { name?: unknown; data?: unknown; revisao?: unknown };
     try {
       body = JSON.parse(text);
     } catch {
@@ -672,8 +687,15 @@ ${CANVAS_BODY}
       if (!d || !Array.isArray(d.blocks) || !Array.isArray(d.finals) || !Array.isArray(d.edges)) return new Response("projeto inválido", { status: 400 });
       changes.data = JSON.stringify(d);
     }
-    await this.db.saveProject(project.id, changes);
-    return new Response(null, { status: 204 });
+    const revision = await this.db.saveProject(project.id, changes, typeof body.revisao === "number" ? body.revisao : undefined);
+    if (revision === null) return new Response(ERROS.canvasConflito, { status: 409 });
+    return new Response(null, { status: 204, headers: { "x-revisao": String(revision) } });
+  }
+
+  /** A tela confere se o projeto mudou por fora (a API); sem mudança, responde sem o canvas. */
+  private projectState(project: Project, url: URL): Response {
+    if (url.searchParams.get("revisao") === String(project.revision)) return new Response(null, { status: 204 });
+    return Response.json({ revisao: project.revision, nome: project.name, data: JSON.parse(project.data) });
   }
 
   /** Recebe um arquivo do computador (o corpo do pedido) e guarda no R2, dentro do projeto. */

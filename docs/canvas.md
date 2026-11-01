@@ -180,6 +180,8 @@ menos custo.
 - Cada projeto é só de quem o criou: de outra pessoa, nada abre, salva, recebe
   arquivo ou apaga (testes em `test/canvas.test.ts`).
 - Tabelas `projects` e `project_files` (migration 0010).
+- **API**: um agente edita o mesmo projeto por comandos, e a tela acompanha sozinha
+  ([api.md](api.md)). Cada salvamento diz de qual revisão partiu.
 - **Exportar** (`src/exportar.ts`, `container/exportar.py`, tabela `exports`, migration
   0013): o Worker lê o projeto **salvo** e monta o plano com `exportWork` (`modelo.js`).
   Cada grupo vira um trecho (H.264 sem B-frames e FLAC), guardado em
