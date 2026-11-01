@@ -87,12 +87,14 @@ Lido da API com a chave ativa; nenhum vídeo foi gerado.
 
 - **Catálogo:** `GET /v3/voices?type=public` traz 2.950 vozes em 30 páginas de 100 (`next_token`),
   ≈ 925 KB. 2.332 são em inglês, 29 em português e 50 multilíngues. Fica guardado um dia na config
-  `vozes.heygen`, e o menu pede ao site só a página do filtro escolhido (`/vozes/lista`, 50 por vez).
+  `vozes.heygen.listadas`, e o menu pede ao site só a página do filtro escolhido (`/vozes/lista`, 50 por vez).
 - **Idiomas sujos:** 188 vozes vêm com idioma vazio ou `unknown` ("Sem idioma definido"). `en`, `es`
   e `Turkey` são o mesmo que English, Spanish e Turkish, e há nomes com espaço no fim.
-- **A listagem deixa vozes de fora:** Kore e Orus não vêm nela, mas `GET /v3/voices/{id}` responde
-  (Multilingual, amostra em `static.heygen.ai/voice_preview/gemini/`). Por isso as seis vozes do
-  OpenRouter são buscadas pelo id. **Falta gerar um vídeo com a Kore pela API direta.**
+- **Voz fora da listagem não entra no menu:** Kore, Orus, Cassidy e Andrew respondem em
+  `GET /v3/voices/{id}`, com amostra, mas não vêm na listagem. Em 01/11/2026, no ar, a Kore
+  (`78d88deb`) e a Orus falharam com `TTS_VOICE_UNAVAILABLE_ERR`. Cassidy e Andrew não foram
+  testadas e saíram juntas. Pelo OpenRouter a Kore funcionou; a estrutura `heygen.ts` segue com as seis.
+  Amelia e Antonio vêm na listagem e são a reserva quando o catálogo não pode ser lido.
 - **Prévias:** `preview_audio_url` vem em todas, mas 182 têm endereço assinado da S3 (os 3 testados
   deram 403) e 8 não têm endereço válido: essas aparecem como "Sem prévia". O site toca a amostra
   por `/vozes/previa/<id>`, sem custo de geração.

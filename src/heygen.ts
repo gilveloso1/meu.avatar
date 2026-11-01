@@ -58,10 +58,8 @@ export interface HeyGenApi {
   createVideo(body: HeyGenVideoRequest): Promise<{ video_id: string }>;
   getVideo(id: string): Promise<HeyGenVideo>;
   download(url: string): Promise<ArrayBuffer>;
-  /** Todas as vozes prontas do catálogo. */
+  /** Todas as vozes prontas da listagem pública. Só elas geram vídeo por aqui (ver DIRECT_VOICES). */
   voices(): Promise<HeyGenVoice[]>;
-  /** Uma voz pelo id: a listagem deixa de fora algumas vozes públicas, como a Kore. */
-  voice(id: string): Promise<HeyGenVoice>;
   /** Clone instantâneo a partir de um áudio já enviado; devolve o id da voz (fica PENDING). */
   cloneVoice(name: string, assetId: string): Promise<string>;
   cloneStatus(voiceId: string): Promise<CloneStatus>;
@@ -123,10 +121,6 @@ export class HeyGenClient implements HeyGenApi {
       if (!token) break;
     }
     return all;
-  }
-
-  voice(id: string): Promise<HeyGenVoice> {
-    return this.json<HeyGenVoice>(`/v3/voices/${encodeURIComponent(id)}`).then(savedVoice);
   }
 
   async cloneVoice(name: string, assetId: string): Promise<string> {
