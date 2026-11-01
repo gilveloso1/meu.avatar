@@ -312,7 +312,9 @@ Uma resposta abandonada (tela fechada, Worker caído) deixava a conta presa: de 
 sem trabalho (412 GiB·h de memória e 1.052 GB·h de disco, contra 25 GiB·h e 200 GB·h
 da franquia do mês). Os dois herdam de `SleepyContainer` (`src/conteiner.ts`): um
 pedido que passa do prazo do trabalho (15 min na exportação, 20 min no áudio) conta
-como abandonado e o contêiner dorme. Para conferir: `containersUsageAdaptiveGroups` na
+como abandonado e o contêiner dorme. `test/conteiner.test.ts` roda o alarme de verdade da
+biblioteca num Durable Object de teste (`test/worker.ts`, só o contêiner é falso): se uma
+versão nova da biblioteca mudar os campos que a guarda usa, o teste falha. Para conferir: `containersUsageAdaptiveGroups` na
 API GraphQL da Cloudflare, por hora; sem trabalho, a memória alocada tem de ir a zero.
 
 Regras do R2

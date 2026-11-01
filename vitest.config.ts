@@ -6,9 +6,12 @@ export default defineConfig(async () => {
   return {
     plugins: [
       cloudflareTest({
+        // O site e um contêiner de teste (test/worker.ts).
+        main: "./test/worker.ts",
         wrangler: { configPath: "./wrangler.jsonc" },
         remoteBindings: false,
         miniflare: {
+          durableObjects: { TESTE_CONTEINER: { className: "TesteConteiner", useSQLite: true } },
           bindings: {
             TEST_MIGRATIONS: migrations,
             BCRYPT_COST: "4",

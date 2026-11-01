@@ -22,7 +22,7 @@ export function abandoned(inflight: number, lastRequestAt: number, now: number, 
 
 export abstract class SleepyContainer extends Container {
   /** Quanto um pedido pode durar; passado isso, a resposta foi abandonada. */
-  protected abstract readonly maxRequestMs: number;
+  protected abstract maxRequestMs: number;
   private lastRequestAt = 0;
 
   override containerFetch(...args: Parameters<Container["containerFetch"]>): Promise<Response> {
