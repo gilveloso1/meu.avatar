@@ -292,7 +292,8 @@ async function enquadrar(project: CanvasProject, c: Comando, ctx: Contexto, falh
     if (!c.chaves.length || c.chaves.length > MAX_CHAVES) throw falha("enquadramento_invalido");
     frame.keys = (c.chaves as Record<string, unknown>[]).map((k) => {
       const t = numero(k.t);
-      if (t === null || t < 0) throw falha("enquadramento_invalido");
+      // Negativo: um movimento que começou no bloco anterior continua neste.
+      if (t === null) throw falha("enquadramento_invalido");
       return chave(k, t);
     });
   } else if (c.zoom !== undefined || c.focoX !== undefined || c.focoY !== undefined || c.rosto === true) frame.keys = [chave(c, 0)];
