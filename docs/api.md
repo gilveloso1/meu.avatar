@@ -22,6 +22,24 @@ administrador, como o canvas; cada projeto é só de quem o criou. O código est
   mudança e adota o que veio, parado e sem nada por salvar. Se salvar por cima de uma
   mudança de fora, o que vale é o do servidor, com um aviso, e o desfazer zera.
 
+## MCP
+
+`POST /mcp` (`src/mcp.ts`) deixa um agente usar a API como ferramentas. Cada ferramenta é um
+pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própria.
+
+- **Revisão 2026-07-28**, a atual: sem sessão e sem handshake, com `server/discover`, a versão
+  e as capacidades em `_meta` e os cabeçalhos `MCP-Protocol-Version`, `Mcp-Method` e `Mcp-Name`.
+- **Clientes antigos** (`initialize`, até 2025-11-25) seguem funcionando no mesmo endereço. Por
+  padrão, até o SDK v2 ainda conecta assim.
+- Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
+- Ferramentas: `listar_videos`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
+  `editar_projeto`, `ver_quadros` (devolve imagem), `ver_silencios`, `enviar_arquivo`,
+  `exportar` e `acompanhar_exportacao`. Não apagam projeto e não geram vídeo.
+
+```bash
+claude mcp add --transport http meu-avatar https://meuavatar.ia.br/mcp --header "Authorization: Bearer ma_..."
+```
+
 ## Criar um token
 
 ```bash
