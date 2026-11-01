@@ -303,7 +303,21 @@ picos cortados e o vídeo idêntico byte a byte ao original.
 ## Exportação dos projetos
 
 O contêiner `Exporter` (`container/Dockerfile.exportar`, `standard-3`) é separado do
-de áudio: imagem só com ffmpeg, dorme 30 s depois do último pedido. Regras do R2
+de áudio: imagem só com ffmpeg, uma instância só, dorme 30 s depois do último pedido.
+
+**Contêiner que dorme de verdade.** O `sleepAfter` da biblioteca só conta quando não
+há pedido em andamento, e o pedido só termina quando o Worker lê a resposta até o fim.
+Uma resposta abandonada (tela fechada, Worker caído) deixava a conta presa: de 26/10 a
+01/11/2026 o `AudioFixer` e as duas instâncias do `Exporter` ficaram ligados dia e noite
+sem trabalho (412 GiB·h de memória e 1.052 GB·h de disco, contra 25 GiB·h e 200 GB·h
+da franquia do mês). Os dois herdam de `SleepyContainer` (`src/conteiner.ts`): um
+pedido que passa do prazo do trabalho (15 min na exportação, 20 min no áudio) conta
+como abandonado e o contêiner dorme. `test/conteiner.test.ts` roda o alarme de verdade da
+biblioteca num Durable Object de teste (`test/worker.ts`, só o contêiner é falso): se uma
+versão nova da biblioteca mudar os campos que a guarda usa, o teste falha. Para conferir: `containersUsageAdaptiveGroups` na
+API GraphQL da Cloudflare, por hora; sem trabalho, a memória alocada tem de ir a zero.
+
+Regras do R2
 (uma vez só, para os arquivos não se acumularem; versões em `exportacoes/versoes/`):
 
 ```bash

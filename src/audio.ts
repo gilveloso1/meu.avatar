@@ -15,7 +15,8 @@
  * O contêiner não tem acesso à internet: recebe o MP4 e devolve o MP4 tratado.
  * Fica ligado alguns minutos depois de cada vídeo e depois dorme sozinho.
  */
-import { Container, getContainer } from "@cloudflare/containers";
+import { getContainer } from "@cloudflare/containers";
+import { SleepyContainer } from "./conteiner";
 import type { containerPlan } from "./quickedit";
 
 export type ContainerPlan = ReturnType<typeof containerPlan>;
@@ -23,9 +24,11 @@ export type ContainerPlan = ReturnType<typeof containerPlan>;
 /** Centro e altura do rosto, em frações do quadro; vazio se não achou. */
 export type Face = { x: number; y: number; altura: number } | Record<string, never>;
 
-export class AudioFixer extends Container {
+export class AudioFixer extends SleepyContainer {
   defaultPort = 8080;
   sleepAfter = "3m";
+  // O prazo do tratamento (AUDIO_TIMEOUT_MS, src/studio.ts): passado isso, o vídeo já virou falha.
+  protected readonly maxRequestMs = 20 * 60_000;
   enableInternet = false;
 }
 
@@ -126,7 +129,11 @@ export class ContainerAudio implements AudioApi {
       new Request(`http://audio${path}`, { method: "POST", body: mp4, headers: { "content-length": String(size), ...headers } }),
     );
     if (!res.ok) throw new Error(`${what} falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
-    if (!res.body || !res.headers.get("content-length")) throw new Error(`${what} voltou sem o vídeo.`);
+    if (!res.body || !res.headers.get("content-length")) {
+      // Corpo sem ler deixa o pedido aberto no contêiner, e ele não dorme.
+      await res.body?.cancel();
+      throw new Error(`${what} voltou sem o vídeo.`);
+    }
     return res;
   }
 }

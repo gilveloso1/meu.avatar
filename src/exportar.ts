@@ -8,9 +8,10 @@
  * que chama o próximo passo assim que o anterior acaba (começa na hora); se ela
  * fechar, o agendamento termina. Um passo só roda uma vez por causa do claim do banco.
  */
-import { Container, getContainer } from "@cloudflare/containers";
+import { getContainer } from "@cloudflare/containers";
 import { type ExportWork, exportWork } from "./canvas/modelo.js";
 import type { Db, ExportRow, Project, Role } from "./db";
+import { SleepyContainer } from "./conteiner";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
 
@@ -29,10 +30,12 @@ const START_TIMEOUT_MS = 120_000;
 /** Um ZIP comum guarda tamanhos em 32 bits: acima disso, o arquivo sairia corrompido. */
 const MAX_ZIP_BYTES = 0xffffffff;
 
-export class Exporter extends Container {
+export class Exporter extends SleepyContainer {
   defaultPort = 8080;
-  // Curto: parado, o tipo grande ainda paga memória e disco.
+  // Curto: ligado, o tipo grande paga memória e disco mesmo sem trabalho.
   sleepAfter = "30s";
+  // Um passo que passa disso já pode ser retomado por outro pedido (STALE_MS).
+  protected readonly maxRequestMs = STALE_MS;
   enableInternet = false;
 }
 
@@ -56,13 +59,17 @@ export class ContainerExport implements ExportApi {
   }
 
   private async post(path: string, job: string, body: ReadableStream, sizes: number[]): Promise<Response> {
-    // Duas instâncias; a mesma exportação fica sempre na mesma.
-    const container = getContainer(this.ns, `exportar-${job.charCodeAt(0) % 2}`);
+    // Uma instância só (a de 8 GiB é a parte cara): as exportações dividem o mesmo contêiner.
+    const container = getContainer(this.ns, "exportar");
     await container.startAndWaitForPorts({ ports: 8080, cancellationOptions: { instanceGetTimeoutMS: START_TIMEOUT_MS, portReadyTimeoutMS: START_TIMEOUT_MS } });
     const size = sizes.reduce((a, b) => a + b, 0);
     const res = await container.fetch(new Request(`http://exportar${path}`, { method: "POST", body, headers: { "content-length": String(size), "x-tamanhos": sizes.join(",") } }));
     if (!res.ok) throw new Error(`Exportação falhou em ${path} (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
-    if (!res.body || !res.headers.get("content-length")) throw new Error(`Exportação voltou sem o arquivo em ${path}.`);
+    if (!res.body || !res.headers.get("content-length")) {
+      // Corpo sem ler deixa o pedido aberto no contêiner, e ele não dorme.
+      await res.body?.cancel();
+      throw new Error(`Exportação voltou sem o arquivo em ${path}.`);
+    }
     return res;
   }
 }
