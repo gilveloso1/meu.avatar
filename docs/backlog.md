@@ -33,16 +33,16 @@ Próximos passos, nesta ordem:
 
 Aplicar o Ação na Bolsa só pelo MCP (01/11/2026) funcionou, mas o agente recebeu prontos o motion,
 a camada de legenda e a trilha. Pelo MCP ele ainda não faz gráficos, legenda nem música, nem sabe
-o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (itens 2, 3 e 4).
+o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (itens 1, 2 e 4).
 
-1. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
-2. **Transcrição** com o tempo de cada palavra: edição pelo texto, remover vícios de fala e
+1. **Transcrição** com o tempo de cada palavra: edição pelo texto, remover vícios de fala e
    repetições. Ativos de avatar nos projetos.
-3. **Texto e gráficos com o HyperFrames** (testado, ver
+2. **Texto e gráficos com o HyperFrames** (testado, ver
    `prototipos/hyperframes-linux/RESULTADOS.md` no branch `claude/teste-hyperframes-linux`):
    bloco de HTML escrito pelo agente, legendas palavra a palavra, títulos, lower thirds,
    selos, gráficos, contadores, modelos por marca e máscara para cobrir uma área. Feito à
    mão no caso real, com camada WebM transparente e Whisper; falta virar recurso do site.
+3. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
 4. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
    licenciada ou geração por API (a do caso real foi sintetizada, só para teste),
    realce de voz por bloco e volume animado.
