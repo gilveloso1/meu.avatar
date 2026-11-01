@@ -37,8 +37,8 @@ export interface Contexto {
 }
 
 export const MAX_COMANDOS = 100;
-/** Entre um bloco solto e o que está acima: longe das trilhas, para não virarem um grupo só. */
-const LINHA = 96;
+/** Entre um bloco solto e o que já está no canvas: longe, para não virarem um grupo só. */
+const LINHA = 160;
 const IMAGEM_PADRAO = 3;
 
 const numero = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -207,8 +207,8 @@ function adicionar(project: CanvasProject, c: Comando, f: Fonte, falha: (c: stri
     if (!s.mode) throw falha("posicao_invalida");
     p = dropBlock(p, block.id, s);
   } else {
-    const fundo = Math.max(0, ...groups(project).map((g) => g.bottom + LINHA));
-    block.y = project.blocks.length ? fundo : 0;
+    // À direita de tudo: empilhado, o que cobre um grupo cairia no som do grupo de cima.
+    block.x = project.blocks.length ? Math.max(...project.blocks.map((b) => b.x + width(b))) + LINHA : 0;
   }
   // O primeiro elemento traz o Final, já ligado a ele, como na tela.
   linkFirst(p, p.blocks[0]!);

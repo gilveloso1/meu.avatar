@@ -281,6 +281,21 @@ describe("edição fina", () => {
     expect(lido.avisos).toEqual(r.avisos);
   });
 
+  it("grupos soltos com cobertura e som não se misturam", async () => {
+    const { id, revisao } = await novo();
+    const arquivo = crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO project_files (id, project_id, key, name, type, size, created_at) VALUES (?, ?, 'x', 'm.m4a', 'audio/mp4', 1, ?)").bind(arquivo, id, new Date().toISOString()).run();
+    const cmd: unknown[] = [];
+    for (const n of ["a", "b", "c"]) {
+      cmd.push({ tipo: "adicionar", video: VIDEO, fim: 3, rotulo: n });
+      cmd.push({ tipo: "adicionar", video: VIDEO2, fim: 3, sobre: `@${n}`, em: 0, semSom: true });
+      cmd.push({ tipo: "adicionar", arquivo, dur: 9, fim: 3, sobre: `@${n}`, em: 0 });
+    }
+    const r = await (await comandos(id, revisao, cmd)).json<{ grupos: { blocos: string[]; duracao: number }[]; avisos: unknown[] }>();
+    expect(r.grupos.map((g) => [g.blocos.length, g.duracao])).toEqual([[3, 3], [3, 3], [3, 3]]);
+    expect(r.avisos).toEqual([]);
+  });
+
   it("rotulo: um comando cita o bloco criado antes no mesmo lote", async () => {
     const { id, revisao } = await novo();
     const r = await lote(id, revisao, [
