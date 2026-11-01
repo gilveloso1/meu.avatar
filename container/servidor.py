@@ -10,7 +10,7 @@ no corpo (o cabeçalho x-primeiro diz quantos bytes são do primeiro) e devolve
 o composto. GET /saude responde ok. Um vídeo por vez em /tratar, /editar e
 /preparar; os outros são leves e têm a sua própria vez, para a prévia não
 esperar uma edição de minutos."""
-import os, subprocess, tempfile, threading
+import os, signal, subprocess, tempfile, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LIMITE = 300 * 1024 * 1024  # 300 MB
@@ -94,4 +94,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(corpo)
 
 
+# O Python é o PID 1 do contêiner, e o Linux ignora o SIGTERM no PID 1 sem um tratador:
+# sem isto, o "dormir" da Cloudflare (que só manda SIGTERM) nunca desliga o contêiner.
+signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
