@@ -182,6 +182,10 @@ menos custo.
 - Tabelas `projects` e `project_files` (migration 0010).
 - **API**: um agente edita o mesmo projeto por comandos, e a tela acompanha sozinha
   ([api.md](api.md)). Cada salvamento diz de qual revisão partiu.
+- **Velocidade e enquadramento** (`speed` e `frame` no bloco, `speed` no Final): a largura do
+  bloco é o tempo na tela (`len`), e `tin`/`tout` seguem em segundos do arquivo. O trecho da
+  prévia usa `playbackRate` e `placement` (matriz CSS); o fundo desfocado é um quadro pequeno
+  num canvas borrado, sem um segundo vídeo tocando.
 - **Exportar** (`src/exportar.ts`, `container/exportar.py`, tabela `exports`, migration
   0013): o Worker lê o projeto **salvo** e monta o plano com `exportWork` (`modelo.js`).
   Cada grupo vira um trecho (H.264 sem B-frames e FLAC), guardado em

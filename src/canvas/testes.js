@@ -403,3 +403,63 @@ test("só a primeira importação traz o Final, ligado a ela", () => {
   const com = { blocks: [b("a")], finals: [{ id: "f", x: 0, y: 0 }], edges: [] };
   assert.equal(M.linkFirst(com, com.blocks[0]), false);
 });
+
+test("velocidade: o bloco dura menos, e a linha do tempo toca o arquivo mais rápido", () => {
+  const b = { id: "a", kind: "video", tin: 2, tout: 8, dur: 10, x: 0, y: 0, speed: 2 };
+  assert.equal(M.len(b), 3);
+  const [i] = M.timeline([{ blocks: [b], covers: [], audios: [], x: 0, dur: 3 }], 1.5).items;
+  assert.equal(i.speed, 3);
+  assert.equal(i.len, 2);
+});
+
+test("o corte pela tela anda no tempo do arquivo, na velocidade do bloco", () => {
+  const b = { id: "a", kind: "video", name: "a", src: "a", tin: 0, tout: 8, dur: 10, x: 0, y: 0, speed: 2, vol: 1 };
+  const out = M.trim({ blocks: [b], finals: [], edges: [] }, "a", "r", -1);
+  assert.equal(out.blocks[0].tout, 6);
+});
+
+test("dividir: a soma dos pedaços é o bloco, e a animação continua de onde estava", () => {
+  const b = { id: "a", kind: "video", name: "a", src: "a", tin: 1, tout: 5, dur: 10, x: 40, y: 0, vol: 1, frame: { keys: [{ t: 3, z: 2, x: 0.5, y: 0.5 }] } };
+  const { project, id } = M.split({ blocks: [b], finals: [], edges: [] }, "a", 3);
+  const c = project.blocks.find((o) => o.id === id);
+  assert.equal(project.blocks[0].tout, 3);
+  assert.equal(c.x, 120);
+  assert.equal(c.frame.keys[0].t, 1);
+});
+
+test("frameAt: fora das chaves fica na ponta; entre elas, a curva suave", () => {
+  const f = { keys: [{ t: 1, z: 1 }, { t: 3, z: 2 }] };
+  assert.equal(M.frameAt(f, 0).z, 1);
+  assert.equal(M.frameAt(f, 2).z, 1.5);
+  assert.equal(M.frameAt(f, 9).z, 2);
+});
+
+test("zoomWindow: foco no canto não mostra fora da imagem", () => {
+  assert.deepEqual(M.zoomWindow({ z: 2, x: 0, y: 1 }, 100, 200), { x: 0, y: 100, w: 50, h: 100 });
+});
+
+test("placement: sem ajuste cobre o quadro, e cobrir e caber diferem no menor lado", () => {
+  const ponto = ([a, b, c, d, e, f], x, y) => [a * x + c * y + e, b * x + d * y + f];
+  const cobre = M.placement({}, 200, 100, 100, 100).matrix;
+  assert.deepEqual(ponto(cobre, 100, 50), [50, 50]);
+  assert.deepEqual(ponto(cobre, 50, 0), [0, 0]);
+  const cabe = M.placement({ fit: "contain" }, 200, 100, 100, 100).matrix;
+  assert.deepEqual(ponto(cabe, 0, 0), [0, 25]);
+});
+
+test("placement: zoom leva o foco ao centro, e girar 90° manda a direita para baixo", () => {
+  const ponto = ([a, b, c, d, e, f], x, y) => [a * x + c * y + e, b * x + d * y + f];
+  const z = M.placement({ keys: [{ t: 0, z: 2, x: 0.5, y: 0.25 }] }, 100, 100, 100, 100).matrix;
+  assert.deepEqual(ponto(z, 50, 25), [50, 50]);
+  const g = M.placement({ rotate: 90 }, 100, 100, 100, 100).matrix;
+  assert.deepEqual(ponto(g, 100, 50), [50, 100]);
+});
+
+test("relay: encosta a sequência e leva junto quem a cobre", () => {
+  const v = (id, x, y, extra = {}) => ({ id, kind: "video", name: id, src: id, tin: 0, tout: 2, dur: 2, x, y, vol: 1, audio: "none", ...extra });
+  const antes = { blocks: [v("a", 0, 0), v("b", 80, 0), v("c", 100, -96, { tout: 1 })], finals: [], edges: [] };
+  const depois = { ...antes, blocks: antes.blocks.map((b) => (b.id === "a" ? { ...b, tout: 1 } : b)) };
+  const p = M.relay(antes, depois, ["a", "b"], 0, 0);
+  assert.equal(p.blocks[1].x, 40);
+  assert.equal(p.blocks[2].x, 60);
+});

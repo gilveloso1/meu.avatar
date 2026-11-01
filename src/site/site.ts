@@ -114,7 +114,7 @@ export class Site {
       if (!caller) return Response.json({ erro: "token_invalido" }, { status: 401 });
       // Em teste, como os projetos: para os outros, nada existe.
       if (caller.role !== "admin") return Response.json({ erro: "nao_encontrado" }, { status: 404 });
-      if (API_PATH.test(path)) return new Api(this.db, this.media).handle(request, caller, path, url);
+      if (API_PATH.test(path)) return new Api(this.db, this.media, this.exports).handle(request, caller, path, url);
       if (PROJECT_API_PATH.test(path)) return this.projects(request, caller, path, url);
       return Response.json({ erro: "nao_encontrado" }, { status: 404 });
     }

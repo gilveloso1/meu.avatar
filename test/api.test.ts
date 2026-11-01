@@ -171,6 +171,120 @@ describe("comandos", () => {
   });
 });
 
+describe("edição fina", () => {
+  type Bloco = { id: string; x: number; y: number; tin: number; tout: number; speed?: number; frame?: Record<string, unknown> };
+  type Vista = { revisao: number; criados: string[]; grupos: { blocos: string[]; duracao: number }[]; finais: { variacoes: { duracao: number }[] }[]; canvas: { blocks: Bloco[]; finals: { speed?: number }[] } };
+  const lote = async (id: string, revisao: number, lista: unknown[]) => (await comandos(id, revisao, lista)).json<Vista>();
+  const bloco = (v: Vista, id: string) => v.canvas.blocks.find((b) => b.id === id)!;
+
+  /** Um projeto com A (4 s) e B (2 s) em sequência. */
+  async function dois() {
+    const { id, revisao } = await novo();
+    const a = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4 }]);
+    const v = await lote(id, a.revisao, [{ tipo: "adicionar", video: VIDEO2, fim: 2, depois: a.criados[0] }]);
+    return { id, a: a.criados[0]!, b: v.criados[0]!, v };
+  }
+
+  it("dividir: dois blocos encostados, que somam o mesmo tempo", async () => {
+    const { id, a, v } = await dois();
+    const r = await lote(id, v.revisao, [{ tipo: "dividir", bloco: a, em: 1.5 }]);
+    expect(r.grupos[0]!.duracao).toBe(6);
+    expect(bloco(r, a).tout).toBe(1.5);
+    expect(bloco(r, r.criados[0]!)).toMatchObject({ tin: 1.5, tout: 4, x: 60 });
+  });
+
+  it("dividir longe demais de uma ponta é recusado", async () => {
+    const { id, a, v } = await dois();
+    expect(await (await comandos(id, v.revisao, [{ tipo: "dividir", bloco: a, em: 0.1 }])).json()).toEqual({ erro: "corte_invalido", comando: 0 });
+  });
+
+  it("inserir no meio empurra quem vem depois", async () => {
+    const { id, a, b, v } = await dois();
+    const r = await lote(id, v.revisao, [{ tipo: "adicionar", video: VIDEO2, fim: 1, depois: a }]);
+    expect(bloco(r, r.criados[0]!).x).toBe(160);
+    expect(bloco(r, b).x).toBe(200);
+    expect(r.grupos[0]!.duracao).toBe(7);
+  });
+
+  it("mover troca a ordem sem buraco, e a cobertura vai junto", async () => {
+    const { id, a, b, v } = await dois();
+    const c = await lote(id, v.revisao, [{ tipo: "adicionar", video: VIDEO2, fim: 1, sobre: a, em: 1, semSom: true }]);
+    const r = await lote(id, c.revisao, [{ tipo: "mover", bloco: b, antes: a }]);
+    expect(bloco(r, b).x).toBe(0);
+    expect(bloco(r, a).x).toBe(80);
+    expect(bloco(r, c.criados[0]!).x).toBe(120);
+  });
+
+  it("cortar puxa quem vem depois, sem abrir buraco", async () => {
+    const { id, a, b, v } = await dois();
+    const r = await lote(id, v.revisao, [{ tipo: "cortar", bloco: a, inicio: 1, fim: 3 }]);
+    expect(bloco(r, b).x).toBe(80);
+    expect(r.grupos[0]!.duracao).toBe(4);
+  });
+
+  it("remover com fechar encosta o resto", async () => {
+    const { id, a, b, v } = await dois();
+    const r = await lote(id, v.revisao, [{ tipo: "remover", ids: [a], fechar: true }]);
+    expect(bloco(r, b).x).toBe(0);
+  });
+
+  it("velocidade do bloco encurta o tempo e empurra a sequência", async () => {
+    const { id, a, b, v } = await dois();
+    const r = await lote(id, v.revisao, [{ tipo: "velocidade", bloco: a, velocidade: 2 }]);
+    expect(bloco(r, a).speed).toBe(2);
+    expect(bloco(r, b).x).toBe(80);
+    expect(r.grupos[0]!.duracao).toBe(4);
+    expect(await (await comandos(id, r.revisao, [{ tipo: "velocidade", bloco: a, velocidade: 9 }])).json()).toEqual({ erro: "velocidade_invalida", comando: 0 });
+  });
+
+  it("velocidade do Final vale para a duração das variações", async () => {
+    const { id, v } = await dois();
+    const r = await lote(id, v.revisao, [{ tipo: "final", id: "final", velocidade: 1.5 }]);
+    expect(r.canvas.finals[0]!.speed).toBe(1.5);
+    expect(r.finais[0]!.variacoes[0]!.duracao).toBe(4);
+  });
+
+  it("enquadrar guarda zoom, recorte e animação, e recusa fora da faixa", async () => {
+    const { id, a, v } = await dois();
+    const r = await lote(id, v.revisao, [{ tipo: "enquadrar", bloco: a, encaixe: "desfocar", girar: 90, espelharH: true, recorte: { topo: 0.1 }, chaves: [{ t: 0, zoom: 1 }, { t: 2, zoom: 1.5, focoY: 0.3 }] }]);
+    expect(bloco(r, a).frame).toEqual({ fit: "blur", rotate: 90, flipH: true, crop: { l: 0, t: 0.1, r: 0, b: 0 }, keys: [{ t: 0, z: 1, x: 0.5, y: 0.5 }, { t: 2, z: 1.5, x: 0.5, y: 0.3 }] });
+    expect(await (await comandos(id, r.revisao, [{ tipo: "enquadrar", bloco: a, zoom: 0.5 }])).json()).toEqual({ erro: "enquadramento_invalido", comando: 0 });
+  });
+
+  it("zoom no rosto usa o ponto achado; sem ele, recusa", async () => {
+    const { id, a, v } = await dois();
+    expect(await (await comandos(id, v.revisao, [{ tipo: "enquadrar", bloco: a, zoom: 1.4, rosto: true }])).json()).toEqual({ erro: "rosto_indisponivel", comando: 0 });
+    await env.DB.prepare("UPDATE videos SET face = ? WHERE id = ?").bind('{"x":0.4,"y":0.2}', VIDEO).run();
+    const r = await lote(id, v.revisao, [{ tipo: "enquadrar", bloco: a, zoom: 1.4, rosto: true }]);
+    expect(bloco(r, a).frame!.keys).toEqual([{ t: 0, z: 1.4, x: 0.4, y: 0.2 }]);
+  });
+
+  it("remover pausas tira o silêncio do meio e mantém a sequência encostada", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [[3, 5]] };
+    const a = await (await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao, comandos: [{ tipo: "adicionar", video: VIDEO }] }, fake)).json<Vista>();
+    const r = await (await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao: a.revisao, comandos: [{ tipo: "removerPausas", bloco: a.criados[0], pausa: "curta" }] }, fake)).json<Vista>();
+    expect(r.canvas.blocks).toHaveLength(2);
+    expect(r.grupos).toHaveLength(1);
+    expect(r.grupos[0]!.duracao).toBeLessThan(9);
+  });
+
+  it("quadros e silêncios só de arquivo que a conta pode usar", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id } = await novo();
+    const fake = new FakeExportApi();
+    const q = await api(`/api/v1/projetos/${id}/quadros?src=/videos/${VIDEO}.mp4&instantes=1,2`, admin, undefined, fake);
+    expect(q.status).toBe(200);
+    expect(q.headers.get("content-type")).toBe("image/jpeg");
+    await q.arrayBuffer();
+    expect(await (await api(`/api/v1/projetos/${id}/silencios?src=/videos/${VIDEO}.mp4`, admin, undefined, fake)).json()).toEqual(fake.silences);
+    expect((await api(`/api/v1/projetos/${id}/quadros?src=/videos/${OCULTO}.mp4&instantes=1`, admin, undefined, fake)).status).toBe(404);
+    expect((await api(`/api/v1/projetos/${id}/quadros?src=/videos/${VIDEO}.mp4&instantes=x`, admin, undefined, fake)).status).toBe(400);
+  });
+});
+
 describe("a tela e a API no mesmo projeto", () => {
   const save = (id: string, session: string, body: unknown) => call(new Request(`${SITE}/projetos/${id}/salvar`, { method: "POST", body: JSON.stringify(body), headers: { origin: SITE, cookie: session } }));
   const data = { blocks: [], finals: [], edges: [] };

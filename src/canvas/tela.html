@@ -187,6 +187,7 @@ body { min-height: 0; overflow: hidden; }
 /* Cada trecho é um vídeo ou imagem empilhado no quadro; só o da vez aparece. */
 .pv-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
 .pv-media[data-layer="1"] { z-index: 1; }
+.pv-back { position: absolute; inset: -8%; width: 116%; height: 116%; filter: blur(24px); }
 .pv-media.is-on { opacity: 1; }
 .preview .vbar { width: 100%; box-shadow: none; }
 .preview__title { align-self: stretch; text-align: center; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); text-wrap: balance; }

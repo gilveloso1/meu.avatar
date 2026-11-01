@@ -94,7 +94,7 @@ function loadPreview() {
     const b = project.blocks.find((b) => b.id === preview.id);
     if (b) {
       // Só o bloco, do corte dele: sem o que está por cima nem o som somado.
-      tl = { duration: M.len(b), items: [{ block: b, layer: b.kind === "audio" ? "audio" : 0, start: 0, len: M.len(b), tin: b.tin }] };
+      tl = { duration: M.len(b), items: [{ block: b, layer: b.kind === "audio" ? "audio" : 0, start: 0, len: M.len(b), tin: b.tin, speed: b.speed ?? 1 }] };
       title = b.name;
     }
   }
@@ -106,8 +106,8 @@ function loadPreview() {
       title = M.versionName(versionIdx);
     }
   }
-  tl ??= v ? M.timeline(v) : { duration: 0, items: [] };
-  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.start, i.len, i.tin, i.block.mute, i.block.vol]));
+  tl ??= v ? M.timeline(v, M.finalRate(previewFinal())) : { duration: 0, items: [] };
+  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
   pv.title.textContent = title;
   if (key === loadedKey) return playhead(player.t);
   loadedKey = key;
@@ -322,8 +322,9 @@ function paintWave(m, b) {
     m.shown = url;
     m.style.maskImage = m.style.webkitMaskImage = `url("${url}")`;
   }
-  m.style.maskSize = m.style.webkitMaskSize = `${(to - from) * M.PX}px 100%`;
-  m.style.maskPosition = m.style.webkitMaskPosition = `${(from - b.tin) * M.PX}px 0`;
+  const sp = b.speed ?? 1;
+  m.style.maskSize = m.style.webkitMaskSize = `${((to - from) * M.PX) / sp}px 100%`;
+  m.style.maskPosition = m.style.webkitMaskPosition = `${((from - b.tin) * M.PX) / sp}px 0`;
 }
 let sharpTimer = 0;
 function scheduleSharp() {
@@ -346,7 +347,7 @@ function sharpen() {
       if (m.sharp) (m.sharp = null), paintWave(m, b);
       continue;
     }
-    const [a, c] = [b.tin + s0, b.tin + s1];
+    const [a, c] = [b.tin + s0 * (b.speed ?? 1), b.tin + s1 * (b.speed ?? 1)];
     const has = m.want ?? m.sharp;
     if (has && has.from <= a && has.to >= c) continue;
     // Pede um pouco a mais dos dois lados, para andar sem refazer a cada passo.
@@ -482,7 +483,7 @@ function render({ side = true } = {}) {
     const vs = M.versions(project, f.id, gs);
     const n = vs.length;
     const isSel = sel.type === "final" && sel.id === f.id;
-    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview, selectionIn(f.id, gs, idx)) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
+    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview, selectionIn(f.id, gs, idx), M.finalRate(f)) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
     html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
   if (html !== chromeHtml) chrome.innerHTML = chromeHtml = html;
@@ -521,14 +522,14 @@ function selectionIn(finalId, gs, idx) {
 }
 
 /** As variações de um Final: em lista até 3 colunas, em números depois, com a escolhida em cima. */
-function variantList(vs, active, part) {
+function variantList(vs, active, part, rate = 1) {
   const { rows, cols } = M.variantShape(vs.length);
   const style = M.variantLabel(cols);
   const bar = active ? `<span class="fin__bar" style="--p:${player.duration ? player.t / player.duration : 0}"></span>` : "";
   const label = (i) => (style === "full" ? M.versionName(i) : `V. ${i + 1}`);
   const glyph = (i) => (active && i === versionIdx && player.playing ? "pause" : "play_arrow");
   const lead = (i) => `<span class="icon" aria-hidden="true">${glyph(i)}</span>`;
-  const time = (v) => `<span class="xlist__trail">${fmt(M.timeline(v).duration)}</span>`;
+  const time = (v) => `<span class="xlist__trail">${fmt(M.timeline(v, rate).duration)}</span>`;
   const item = (v, i) => {
     const on = active && i === versionIdx;
     const attrs = `class="xlist__item interactive ${part(v) ? "is-part" : ""}" type="button" data-variant="${i}" aria-label="${M.versionName(i)}" aria-current="${on}"`;
@@ -558,7 +559,7 @@ function renderSide(gs) {
   if (sel.type === "final") {
     const vs = M.versions(project, sel.id, gs);
     title = "Final";
-    const durs = vs.map((v) => M.timeline(v).duration);
+    const durs = vs.map((v) => M.timeline(v, M.finalRate(project.finals.find((f) => f.id === sel.id))).duration);
     const [least, most] = [Math.min(...durs), Math.max(...durs)];
     const dur = least === most ? fmt(most) : `${fmt(least).replace(" s", "")} a ${fmt(most)}`;
     h += vs.length ? `<div class="viewer__card"><div>${row("movie", "Variações", vs.length)}${row("schedule", "Duração", dur)}</div></div>` : `<p class="sheet-hint">Ligue um bloco ao Final para ter variações.</p>`;
@@ -736,8 +737,8 @@ function onSideInput(t0) {
   if (t.id === "f-name") b.name = t.value;
   if (t.id === "f-mute") b.mute = t.checked;
   if (t.id === "f-vol") b.vol = +t.value;
-  if (t.id === "f-tin" && t.value !== "") project = M.trim(project, b.id, "l", +t.value - b.tin);
-  if (t.id === "f-tout" && t.value !== "") project = M.trim(project, b.id, "r", +t.value - b.tout);
+  if (t.id === "f-tin" && t.value !== "") project = M.trim(project, b.id, "l", (+t.value - b.tin) / (b.speed ?? 1));
+  if (t.id === "f-tout" && t.value !== "") project = M.trim(project, b.id, "r", (+t.value - b.tout) / (b.speed ?? 1));
   commit(before);
   if (t.id === "f-vol") {
     t.style.setProperty("--p", `${b.vol * 100}%`);
