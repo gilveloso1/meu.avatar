@@ -63,13 +63,23 @@ menos custo.
   saída. Puxar a linha solta a ponta mais perto: num ponto ela liga de novo, no vazio ela
   some. Clique na linha e Delete apaga. `linkProblem` (`modelo.js`) recusa ligar um grupo a
   ele mesmo, repetir uma ligação, fechar um círculo e passar do limite de variações.
-- **Encaixe magnético**: o elemento que entra na área de um bloco é puxado. Quem decide o
-  lugar é o centro do elemento: acima da fileira, ele apoia em cima; na fileira, entra na
-  sequência, e o lugar só muda na metade de cada elemento; som vai para baixo. Vídeo e imagem abaixo da fileira seguem livres. Em cima, ele
-  corre até a própria ponta sair da sequência, nos dois lados, e o bloco cresce junto (o
-  fundo é preto onde não há sequência). Pela direita, depois disso desce para o lado; pela
-  esquerda, sai do bloco. O bloco o segura numa área maior e a linha entre em cima e
-  na fileira muda para quem já está lá, para nada piscar. Alt solta sem encaixar.
+- **Trilhas**: todo elemento segue as mesmas regras (`snap`, `trackIn`, `freeTrack` em
+  `modelo.js`); só a área muda. Vídeo, imagem e, no futuro, legenda ficam na área de vídeo, com
+  a trilha 0 embaixo e as outras subindo; sons ficam na área de som, com a trilha 0 em cima e
+  as outras descendo. Uma trilha pode ter um elemento ou vários, e nada se sobrepõe nela: o
+  elemento vai para a trilha livre mais perto do mouse, e a seguinte à última está sempre livre.
+  Qualquer elemento é puxado pelo ímã, corre até a própria ponta sair do bloco, que cresce
+  junto, e encosta nas pontas dos outros. Passou da direita, fica ao lado, na primeira trilha;
+  passou da esquerda, sai do bloco. O bloco o segura numa área maior e, perto da trilha onde
+  está, ele fica nela, para nada piscar. Alt solta sem encaixar. O tempo de cada elemento vem
+  só da posição dele; quem está em trilha mais alta fica por cima.
+- **Som do vídeo**: vai na área de som (`g.sounds`), anda junto com o vídeo e pode mudar de
+  faixa puxando por ele (`lane`, `setLane`). Se a faixa pedida estiver ocupada, fica na mais
+  perto com lugar. `upgrade` acerta projetos antigos, em que o som de quem estava por cima
+  ficava entre a imagem e a sequência.
+- **Exceções, e por quê**: só som tem limite de faixas (`MAX_FAIXAS`, a exportação soma todos);
+  som solto não tem área de vídeo, então o conector dele fica na altura dele; a prévia junta as
+  trilhas de vídeo acima da primeira numa camada, porque cada uma cobre a imagem inteira.
 - **Arrasto leve**: cada arrasto desenha no máximo uma vez por quadro, sem o painel (ele vem
   ao soltar). Sem mudança no lugar do elemento, nada é desenhado; cada elemento, as portas e
   as linhas só tocam a página se algo deles mudou.
@@ -82,16 +92,16 @@ menos custo.
   linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
   Clicar num ponto vazio dentro da área de um grupo escolhe o grupo e leva a linha
   de reprodução até ali; o tocar (ou o Espaço) toca dali.
-- **Áudio do vídeo**: todo vídeo com som mostra o próprio áudio numa faixa presa
-  logo embaixo da imagem, na mesma cor e tom do vídeo (corta e anda junto).
+- **Áudio do vídeo**: todo vídeo com som mostra o próprio áudio numa faixa da área
+  de som, na mesma cor e tom do vídeo (corta e anda junto).
   - "Desvincular o áudio" cria uma **cópia** do som como bloco de áudio comum
-    (terciária), logo embaixo e com o mesmo corte, sem ligação com o vídeo; o vídeo
-    só deixa de mostrar e tocar o próprio som. As faixas que já havia descem uma.
+    (terciária), na mesma faixa e com o mesmo corte, sem ligação com o vídeo; o vídeo
+    só deixa de mostrar e tocar o próprio som.
   - No vídeo, "Vincular ao áudio" volta a mostrar e tocar o som dele; a cópia não
     muda (se as duas tocam no mesmo grupo, um aviso diz que o som está duas vezes).
   - No áudio que veio de um vídeo, "Vincular ao vídeo" volta a mostrar o vídeo do
     mesmo arquivo, com o corte e o volume dele, logo abaixo do grupo; o vídeo de
-    onde veio não muda. A faixa que fica vazia fecha.
+    onde veio não muda.
   - Apagar um não afeta o outro. O som somado tem até 8 faixas embaixo do grupo.
 - **Corte**: no bloco escolhido, puxar a borda da esquerda ou da direita (sem
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.

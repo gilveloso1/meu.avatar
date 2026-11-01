@@ -131,13 +131,18 @@ export class Player {
   /** Mostra, em cada camada, o trecho da vez; se ele ainda não tem imagem, fica o anterior. */
   show() {
     const t = Math.min(this.t, this.duration - 0.001);
-    for (const layer of [0, 1]) {
-      const cur = this.items.find((i) => i.layer === layer && t >= i.start && t < i.start + i.len);
-      const ready = cur && (cur.el.tagName === "IMG" ? cur.el.complete : cur.el.readyState >= READY && !cur.el.seeking);
-      if (ready) this.shown[layer] = cur;
-      // A cobertura some quando acaba o trecho dela (por baixo há sempre a base).
-      if (!cur && layer === 1) this.shown[1] = null;
-    }
+    // Na mesma camada, vale quem está na trilha mais alta: é o último da lista.
+    const at = (layer) => this.items.findLast((i) => i.layer === layer && !i.el.error && t >= i.start && t < i.start + i.len);
+    const ready = (i) => (i.el.tagName === "IMG" ? i.el.complete : i.el.readyState >= READY && !i.el.seeking);
+    const top = at(1);
+    const base = at(0);
+    // Quem deve aparecer ainda sem imagem: fica o que estava, senão outra coisa pisca na tela.
+    const front = top ?? base;
+    if (front && !ready(front)) return;
+    this.shown[1] = top ?? null;
+    // Sem ninguém naquele instante, a camada fica vazia (no fundo há sempre o preto).
+    if (!base) this.shown[0] = null;
+    else if (ready(base)) this.shown[0] = base;
     for (const i of this.items) {
       if (i.el.tagName === "AUDIO") continue;
       i.el.classList.toggle("is-on", this.shown[0] === i || this.shown[1] === i);

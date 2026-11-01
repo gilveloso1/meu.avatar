@@ -19,7 +19,7 @@ const world = $("#world");
 const wires = $("#wires");
 const chrome = $("#chrome");
 const side = $("#side");
-const SNAP = { after: "Juntar na sequência", before: "Juntar na sequência", cover: "Cobrir a imagem neste trecho", audio: "Somar este som" };
+const SNAP = { video: "Trilha de vídeo", sound: "Trilha de som" };
 const fmt = (s) => `${s.toFixed(1).replace(".", ",")} s`;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -31,6 +31,7 @@ const emptyProject = () => ({ blocks: [], finals: [], edges: [] });
 const PROJETO = CONFIG.projeto ?? null;
 const valid = (d) => d && Array.isArray(d.blocks) && Array.isArray(d.finals) && Array.isArray(d.edges);
 let project = valid(PROJETO?.data) ? PROJETO.data : CONFIG.amostra ? M.sample((f) => `midia/${f}`) : emptyProject();
+project = M.upgrade(project);
 // O canvas vazio começa sem Final (projetos antigos já vinham com um).
 if (PROJETO && !project.blocks.length) project = { ...project, finals: [] };
 let projectName = PROJETO?.name ?? "";
@@ -131,9 +132,7 @@ function playhead(t) {
   } else if (preview?.type === "group") {
     const g = M.groups(project).find((g) => g.id === preview.id);
     if (g) {
-      const top = Math.min(g.y, ...g.covers.map((c) => c.y));
-      const bottom = groupBottom(g);
-      box = { x: g.x, y: top, h: bottom - top };
+      box = { x: g.x, y: g.top, h: g.bottom - g.top };
     }
   }
   headBox = box;
@@ -267,12 +266,10 @@ const FRAME_PAD = 20;
 /** O grupo cuja área (o tracejado) tem este ponto do canvas. */
 function groupAt(pt) {
   return M.groups(project).find((g) => {
-    if (!(g.blocks.length > 1 || g.covers.length || (g.audios.length && !g.soloAudio))) return false;
-    const top = Math.min(g.y, ...g.covers.map((c) => c.y)) - FRAME_PAD;
-    return pt.x >= g.x - FRAME_PAD && pt.x <= g.x + g.w + FRAME_PAD && pt.y >= top && pt.y <= groupBottom(g) + FRAME_PAD;
+    if (!M.hasArea(g)) return false;
+    return pt.x >= g.x - FRAME_PAD && pt.x <= g.x + g.w + FRAME_PAD && pt.y >= g.top - FRAME_PAD && pt.y <= g.bottom + FRAME_PAD;
   });
 }
-const groupBottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + M.AUD_H));
 const blockEls = new Map();
 
 /* ---------- onda do som: a leve no bloco, a nítida só no que está à vista com zoom alto ---------- */
@@ -393,11 +390,14 @@ function render({ side = true } = {}) {
     const role = g?.covers.includes(b) ? "cover" : g?.audios.includes(b) && !g.soloAudio ? "under" : "";
     const look = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""} ${path?.includes(g) ? "is-path" : ""}${el.classList.contains("is-drag") ? " is-drag" : ""}`;
     // Só mexe no elemento se algo mudou: arrastar um bloco não redesenha os outros.
-    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}`;
+    // O som do vídeo fica na área de som, na faixa dele.
+    const sound = g?.sounds.find((s) => s.block === b);
+    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}`;
     if (el.drawn === state) continue;
     el.drawn = state;
     el.className = look;
     Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${M.width(b)}px`, height: `${M.height(b)}px` });
+    if (sound) el.style.setProperty("--link-top", `${sound.y - b.y}px`);
     const tipo = { video: "video", image: "imagem", audio: "audio" }[b.kind];
     el.style.setProperty("--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
     el.style.setProperty("--on", `var(--bloco-${tipo}-on)`);
@@ -415,16 +415,23 @@ function render({ side = true } = {}) {
   // Abas dos grupos, portas e blocos finais.
   let html = "";
   for (const g of gs) {
-    const top = Math.min(g.y, ...g.covers.map((c) => c.y));
+    const top = g.top;
     const rowH = g.soloAudio ? M.AUD_H : M.VIS_H;
     const isSel = sel.type === "group" && sel.id === g.id;
     if (M.hasArea(g)) {
       const gPlaying = player.playing && preview?.type === "group" && preview.id === g.id;
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
-      const bottom = groupBottom(g);
+      const bottom = g.bottom;
       const onPath = path?.includes(g) ? "is-path" : "";
       html += `<div class="gframe ${isSel ? "is-sel" : ""} ${onPath}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
       html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.label)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o bloco"}" title="${gPlaying ? "Pausar" : "Tocar o bloco"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
+    }
+    // As duas áreas do bloco: vídeo em cima, som embaixo.
+    if (M.hasArea(g) && g.bottom > g.y + M.VIS_H) {
+      const side = g.x - FRAME_PAD;
+      html += `<div class="gsplit" style="left:${side}px;top:${g.y + M.VIS_H}px;width:${g.w + 2 * FRAME_PAD}px"></div>`;
+      html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${top + 4}px">movie</span>`;
+      html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${g.y + M.VIS_H + 12}px">music_note</span>`;
     }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
@@ -553,7 +560,7 @@ function renderSide(gs) {
     if (g) {
       title = "Bloco";
       if (M.hasArea(g)) h += field("f-group", "Nome", g.label, 'maxlength="60"');
-      h += `<div class="viewer__card"><div>${row("schedule", "Duração", fmt(g.dur))}${row("movie", "Em sequência", g.blocks.length)}${row("layers", "Por cima", g.covers.length)}${row("music_note", "Som somado", g.audios.length)}</div></div>`;
+      h += `<div class="viewer__card"><div>${row("schedule", "Duração", fmt(g.dur))}${row("movie", "Vídeos e imagens", g.blocks.length + g.covers.length)}${row("music_note", "Sons", g.audios.length + g.sounds.length)}</div></div>`;
       actions = btn("text", 'data-act="del"', "delete", "Excluir bloco");
     }
   } else if (sel.type === "edge") {
@@ -716,7 +723,7 @@ function removeSelection() {
   const before = project;
   if (sel.type === "group") {
     const g = M.groups(project).find((g) => g.id === sel.id);
-    if (g) project = M.removeItems(project, [...g.blocks, ...g.covers, ...g.audios].map((b) => b.id));
+    if (g) project = M.removeItems(project, M.members(g).map((b) => b.id));
   } else if (sel.type) project = M.removeItems(project, [sel.id]);
   commit(before);
   sel = { type: null };
@@ -954,7 +961,7 @@ function fit() {
   zoomGoal = null;
   const xs = [];
   const ys = [];
-  for (const b of project.blocks) xs.push(b.x, b.x + M.width(b)), ys.push(b.y, b.y + M.height(b));
+  for (const g of M.groups(project)) xs.push(g.x, g.x + g.w), ys.push(g.top, g.bottom);
   const r = vp.getBoundingClientRect();
   // Canvas vazio: o aviso do começo fica no meio; o Final, à direita dele.
   if (!project.blocks.length && project.finals.length) {
@@ -1235,6 +1242,8 @@ vp.addEventListener("pointerdown", (e) => {
   } else if (blk) {
     const id = blk.dataset.id;
     const b0 = base.blocks.find((b) => b.id === id);
+    // Puxar pela faixa de som: anda junto com o vídeo e muda só a faixa do som.
+    const bySound = !!t.closest(".blk__link");
     sel = { type: "block", id };
     preview = { type: "block", id };
     render();
@@ -1243,13 +1252,15 @@ vp.addEventListener("pointerdown", (e) => {
     let placed = "";
     onMove = (ev) => {
       const d = dW(ev);
-      const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + d.y, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + d.y, 16 / view.z, keep);
-      keep = { group: s.group?.id, mode: s.mode };
+      const dy = bySound ? 0 : d.y;
+      const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + dy, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + dy, 16 / view.z, keep);
+      keep = { group: s.group?.id, track: s.track, beside: s.beside };
       // O mouse anda, mas o elemento pode estar parado no encaixe: nada a redesenhar.
-      const at = `${s.x}|${s.y}|${s.mode}|${s.target}`;
+      const at = `${s.x}|${s.y}|${bySound ? Math.round(d.y / M.AUD_H) : ""}`;
       if (at === placed) return;
       placed = at;
       project = M.dropBlock(base, id, s);
+      if (bySound) project = M.setLane(project, id, toWorld(ev.clientX, ev.clientY).y);
       $("#snapinfo").textContent = SNAP[s.mode] ?? "";
       blockEls.get(id)?.classList.add("is-drag");
       renderSoon();

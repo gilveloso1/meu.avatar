@@ -65,11 +65,10 @@ body { min-height: 0; overflow: hidden; }
 .blk.is-mute .blk__media { opacity: 0.38; }
 /* Áudio vinculado: faixa de 40 px embaixo da imagem, na cor e no tom do vídeo, com a onda dele. */
 /* A onda vai de borda a borda do bloco: o x dela é o mesmo tempo do vídeo (o corte de agora). */
-/* A faixa recorta a onda nos cantos de baixo do bloco (os mesmos cantos dele). */
-.blk__link { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 40px; overflow: hidden; border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; background: color-mix(in srgb, var(--on) 10%, transparent); pointer-events: none; }
+/* O som do vídeo fica na área de som, na faixa dele; puxar por ela muda a faixa. */
+.blk__link { display: none; position: absolute; left: 0; right: 0; top: var(--link-top); height: 40px; overflow: hidden; border-radius: var(--md-sys-shape-corner-small); background: color-mix(in srgb, var(--on) 10%, var(--c)); box-shadow: var(--el1); cursor: ns-resize; }
 .blk__wave { position: absolute; inset: 4px 0; background: var(--on); opacity: 0.55; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .blk.is-linked .blk__link { display: block; }
-.blk.is-linked .blk__media { bottom: 40px; }
 .blk.is-linked.is-mute .blk__wave { opacity: 0.2; }
 .blk--audio { border-radius: var(--md-sys-shape-corner-small); }
 .blk--audio .blk__label { height: 20px; }
@@ -98,6 +97,9 @@ body { min-height: 0; overflow: hidden; }
 /* Área do grupo: retângulo tracejado (contorno outline, cantos grandes), em primary quando escolhido. */
 .gframe { position: absolute; border: var(--line) dashed var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-large); pointer-events: none; }
 .gframe.is-sel { border-color: var(--md-sys-color-primary); }
+/* As duas áreas do bloco: a linha entre vídeo e som e o ícone de cada uma, na margem da área. */
+.gsplit { position: absolute; height: 1px; background: var(--md-sys-color-outline-variant); pointer-events: none; }
+.garea { position: absolute; font-size: 16px; color: var(--md-sys-color-on-surface-variant); pointer-events: none; }
 .gtab__play { width: 24px; height: 24px; margin: 0 -8px 0 0; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: none; color: var(--md-sys-color-primary); }
 .gtab__play .icon { font-size: 18px; }
 .gtab.is-sel .gtab__play { color: inherit; }

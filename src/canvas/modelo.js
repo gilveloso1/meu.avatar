@@ -35,9 +35,8 @@ const COL_GAP = 140;
 const ROW_GAP = 110;
 // O ímã do bloco alcança MAGNET vezes a mira fina do encaixe.
 const MAGNET = 3;
-// Até onde da fileira o centro do elemento conta como "em cima"; mais baixo para quem já está lá.
-const ROW_LINE = 0.25;
-const ROW_LINE_HELD = 0.5;
+// Longe assim da trilha atual (em trilhas), o elemento muda de trilha.
+const TRACK_HOLD = 0.7;
 const FINAL_HEAD = 92;
 const FINAL_ROW = 38;
 const LANE_ABOVE = 70;
@@ -76,7 +75,7 @@ export function output(final) {
 export const len = (b) => b.tout - b.tin;
 export const width = (b) => len(b) * PX;
 export const linked = (b) => b.kind === "video" && (b.audio ?? "linked") === "linked";
-export const height = (b) => (b.kind === "audio" ? AUD_H : VIS_H + (linked(b) ? LINK_H : 0));
+export const height = (b) => (visual(b) ? VIS_H : AUD_H);
 /** O som que o bloco toca: o próprio áudio, ou o do vídeo enquanto vinculado. */
 export const sounds = (b) => !b.mute && (b.kind === "audio" || linked(b));
 const visual = (b) => b.kind !== "audio";
@@ -87,66 +86,47 @@ const overlapX = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0) > EPS;
 export function groups(project) {
   const blocks = project.blocks;
   const vis = blocks.filter(visual);
-  // Visual encostado no topo de outro visual é cobertura, não base.
-  const isCover = (b) =>
-    vis.some((o) => o !== b && near(b.y + height(b), o.y) && overlapX(b.x, b.x + width(b), o.x, o.x + width(o)));
-  const covers = vis.filter(isCover);
-  const bases = vis.filter((b) => !covers.includes(b));
-
-  // Une bases encostadas na mesma linha.
-  const sorted = [...bases].sort((a, b) => a.y - b.y || a.x - b.x);
+  // A primeira trilha de vídeo é a de quem não apoia em ninguém; o resto se acha pela altura.
+  const upper = (b) => vis.some((o) => o !== b && restsOn(b, o.y) && overlapX(b.x, b.x + width(b), o.x, o.x + width(o)));
   const out = [];
-  for (const b of sorted) {
+  for (const b of [...vis.filter((b) => !upper(b))].sort((a, b) => a.y - b.y || a.x - b.x)) {
     const g = out.find((g) => near(g.y, b.y) && near(g.x + g.w, b.x));
     if (g) {
       g.blocks.push(b);
       g.w += width(b);
-    } else out.push({ id: b.id, blocks: [b], x: b.x, y: b.y, w: width(b), covers: [], audios: [] });
+    } else out.push(single(b, [b]));
   }
-  // Duas sequências podem ter crescido até se encostar.
-  for (let merged = true; merged; ) {
-    merged = false;
-    for (const a of out)
-      for (const b of out)
-        if (a !== b && near(a.y, b.y) && near(a.x + a.w, b.x)) {
-          a.blocks.push(...b.blocks);
-          a.w += b.w;
-          out.splice(out.indexOf(b), 1);
-          merged = true;
-        }
+  for (const b of vis.filter(upper)) out.push(single(b, [], [b]));
+  for (const a of blocks.filter((b) => !visual(b))) out.push({ ...single(a, [], [], [a]), soloAudio: true });
+  // Junta quem encosta ou fica em cima do que outro bloco ocupa, numa trilha dele.
+  for (let found = true; found; ) {
+    found = false;
+    for (const g of out) {
+      const edge = members(g);
+      const lo = Math.min(...edge.map((b) => b.x));
+      const hi = Math.max(...edge.map((b) => b.x + width(b)));
+      const other = out.find((o) => {
+        if (o === g) return false;
+        const all = members(o);
+        const x0 = Math.min(...all.map((b) => b.x));
+        const x1 = Math.max(...all.map((b) => b.x + width(b)));
+        if (!overlapX(x0, x1, lo, hi) && !near(x0, hi) && !near(x1, lo)) return false;
+        // Sem trilha vazia no meio da área de vídeo: longe assim, é só coincidência de altura.
+        const top = Math.max(...[...g.blocks, ...g.covers].map((b) => trackIn(b, g)), -1);
+        const fits = (b) => trackIn(b, g) >= 0 && (!visual(b) || trackIn(b, g) <= top + 1);
+        return all.every(fits);
+      });
+      if (!other) continue;
+      for (const b of members(other)) (!visual(b) ? g.audios : near(b.y, g.y) && !g.soloAudio ? g.blocks : g.covers).push(b);
+      out.splice(out.indexOf(other), 1);
+      found = true;
+      break;
+    }
   }
-
-  for (const g of out) g.h = Math.max(...g.blocks.map(height));
-  const overlaps = (b, g) => overlapX(b.x, b.x + width(b), g.x, g.x + g.w);
-  for (const c of covers) {
-    const g = out.find((g) => near(g.y, c.y + height(c)) && overlaps(c, g));
-    if (g) g.covers.push(c);
-    else out.push({ id: c.id, blocks: [c], x: c.x, y: c.y, w: width(c), covers: [], audios: [] });
-  }
-  // Som somado: em faixas de AUD_H embaixo do grupo, até MAX_FAIXAS (a primeira
-  // encosta no grupo; uma faixa que fica vazia não solta as de baixo).
-  const lane = (a, g) => (a.y - g.y - g.h) / AUD_H;
-  for (const a of blocks.filter((b) => !visual(b))) {
-    const g = out.find((g) => g.blocks.length && overlaps(a, g) && lane(a, g) > -0.01 && lane(a, g) < MAX_FAIXAS && near(Math.round(lane(a, g)) * AUD_H, a.y - g.y - g.h));
-    if (g) g.audios.push(a);
-    else out.push({ id: a.id, blocks: [], x: a.x, y: a.y, w: width(a), h: AUD_H, covers: [], audios: [a], soloAudio: true });
-  }
-  for (const g of out) {
-    // O bloco vai de onde começa a onde acaba o que está nele: quem está em cima pode passar da
-    // sequência, nos dois lados (seqX e seq guardam onde ela começa e acaba).
-    g.seqX = g.x;
-    g.seq = g.x + g.w;
-    g.x = Math.min(g.x, ...g.covers.map((c) => c.x));
-    g.w = Math.max(g.seq, ...g.covers.map((c) => c.x + width(c))) - g.x;
-    g.dur = g.w / PX;
-    g.first = g.blocks[0] ?? g.audios[0];
-    g.last = g.blocks[g.blocks.length - 1] ?? g.audios[0];
-    g.name = g.blocks.length ? g.blocks.map((b) => b.name).join(" + ") : g.audios[0].name;
-  }
+  for (const g of out) finishGroup(g);
   // Bloco é o que tem a área tracejada: numerado na ordem em que os elementos entraram no canvas.
   const firstIndex = (g) => Math.min(...members(g).map((b) => blocks.indexOf(b)));
-  const framed = out.filter(hasArea).sort((a, b) => firstIndex(a) - firstIndex(b));
-  framed.forEach((g, i) => (g.number = i + 1));
+  out.filter(hasArea).sort((a, b) => firstIndex(a) - firstIndex(b)).forEach((g, i) => (g.number = i + 1));
   for (const g of out) {
     const own = members(g).map((b) => project.names?.[b.id]).find(Boolean);
     g.label = own ?? (g.number ? `Bloco ${g.number}` : g.name);
@@ -154,9 +134,68 @@ export function groups(project) {
   return out;
 }
 
-const members = (g) => [...g.blocks, ...g.covers, ...g.audios];
-/** Se o grupo tem a área tracejada: mais de um elemento em sequência, por cima ou de som somado. */
-export const hasArea = (g) => g.blocks.length > 1 || g.covers.length > 0 || (g.audios.length > 0 && !g.soloAudio);
+const single = (b, blocks = [], covers = [], audios = []) => ({ id: b.id, blocks, covers, audios, x: b.x, y: b.y, w: width(b), h: VIS_H });
+export const members = (g) => [...g.blocks, ...g.covers, ...g.audios];
+/** Se o bloco tem a área tracejada: mais de um elemento. */
+export const hasArea = (g) => members(g).length > 1;
+
+/** Onde começa cada área do bloco: no som solto, o que existe é a área de som. */
+const videoY = (g) => (g.soloAudio ? g.y - VIS_H : g.y);
+const soundY = (g) => (g.soloAudio ? g.y : g.y + VIS_H);
+
+/** A trilha do elemento neste bloco, na área dele (0 é a mais perto da outra área), ou -1. */
+function trackIn(b, g) {
+  if (!visual(b)) {
+    const t = Math.round((b.y - soundY(g)) / AUD_H);
+    return near(t * AUD_H, b.y - soundY(g)) && t >= 0 && t < MAX_FAIXAS ? t : -1;
+  }
+  if (legacyRest(b, videoY(g))) return 1;
+  const up = videoY(g) - b.y;
+  const t = Math.round(up / VIS_H);
+  return near(t * VIS_H, up) && t >= 0 ? t : -1;
+}
+
+/** Fecha o bloco: extensão, trilhas e onde fica o som dos vídeos vinculados. */
+function finishGroup(g) {
+  const all = members(g);
+  g.blocks.sort((a, b) => a.x - b.x);
+  g.covers.sort((a, b) => trackIn(a, g) - trackIn(b, g) || a.x - b.x);
+  g.x = Math.min(...all.map((b) => b.x));
+  g.w = Math.max(...all.map((b) => b.x + width(b))) - g.x;
+  g.dur = g.w / PX;
+  g.top = Math.min(g.y, ...g.covers.map((c) => c.y));
+  // O som de quem é vinculado vai para a faixa pedida ou a mais perto com lugar.
+  const taken = g.audios.map((a) => ({ track: trackIn(a, g), x0: a.x, x1: a.x + width(a) }));
+  g.sounds = [...g.blocks, ...g.covers].filter(linked).map((block) => {
+    const track = freeTrack(taken, block.lane ?? 0, block.x, block.x + width(block));
+    taken.push({ track, x0: block.x, x1: block.x + width(block) });
+    return { block, track, y: soundY(g) + track * LINK_H };
+  });
+  g.soundTaken = taken;
+  g.bottom = Math.max(g.soloAudio ? g.y : g.y + VIS_H, ...g.audios.map((a) => a.y + AUD_H), ...g.sounds.map((s) => s.y + LINK_H));
+  g.first = g.blocks[0] ?? g.audios[0] ?? g.covers[0];
+  g.last = g.blocks[g.blocks.length - 1] ?? g.audios[0] ?? g.covers[0];
+  g.name = g.first.name;
+  if (g.blocks.length) g.name = g.blocks.map((b) => b.name).join(" + ");
+}
+
+/** A trilha livre mais perto da pedida: a última, depois de tudo, sempre está. */
+function freeTrack(taken, want, x0, x1) {
+  const next = taken.length ? Math.max(...taken.map((t) => t.track)) + 1 : 0;
+  const tracks = Array.from({ length: Math.max(next, want) + 1 }, (_, i) => i).sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || a - b);
+  return tracks.find((track) => !taken.some((t) => t.track === track && overlapX(x0, x1, t.x0, t.x1)));
+}
+
+/** Em projetos antigos, o som de quem estava por cima ficava entre a imagem e a sequência. */
+const legacyRest = (b, y) => linked(b) && near(b.y + VIS_H + LINK_H, y);
+const restsOn = (b, y) => near(b.y + VIS_H, y) || legacyRest(b, y);
+
+/** Projeto antigo: põe quem estava por cima na trilha certa. */
+export function upgrade(project) {
+  const p = clone(project);
+  for (const g of groups(p)) for (const c of g.covers) if (legacyRest(c, g.y)) p.blocks.find((b) => b.id === c.id).y = g.y - VIS_H;
+  return p;
+}
 
 /** Dá nome a um bloco; vazio volta ao "Bloco 1". O nome fica no primeiro elemento dele. */
 export function renameGroup(project, group, name) {
@@ -246,23 +285,11 @@ export function timeline(version) {
   const items = [];
   let t = 0;
   for (const g of version) {
-    // Quem está em cima pode começar antes da sequência.
-    let at = t + (g.seqX - g.x) / PX;
-    for (const b of g.blocks) {
-      items.push({ block: b, layer: 0, start: at, len: len(b), tin: b.tin });
-      at += len(b);
-    }
-    const clip = (b, layer) => {
-      const rel = (b.x - g.x) / PX;
-      const s = Math.max(0, rel);
-      const e = Math.min(g.dur, rel + len(b));
-      if (e - s > 0.01) items.push({ block: b, layer, start: t + s, len: e - s, tin: b.tin + (s - rel) });
-    };
-    if (g.soloAudio) items.push({ block: g.audios[0], layer: "audio", start: t, len: g.dur, tin: g.audios[0].tin });
-    else {
-      g.covers.forEach((b) => clip(b, 1));
-      g.audios.forEach((b) => clip(b, "audio"));
-    }
+    // Por trilha: quem está mais acima vem depois e fica por cima.
+    const on = (b, layer) => items.push({ block: b, layer, start: t + (b.x - g.x) / PX, len: len(b), tin: b.tin });
+    g.blocks.forEach((b) => on(b, 0));
+    g.covers.forEach((b) => on(b, 1));
+    g.audios.forEach((b) => on(b, "audio"));
     t += g.dur;
   }
   return { duration: t, items };
@@ -319,71 +346,68 @@ export function snap(project, id, x, y, tol, keep = {}) {
   const b = project.blocks.find((o) => o.id === id);
   const w = width(b);
   const h = height(b);
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) }).filter((g) => g.blocks.length);
+  const isVideo = visual(b);
+  const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) });
   const magnet = tol * MAGNET;
-  const free = () => ({ x, y, mode: null });
   // O bloco onde o elemento já está vem primeiro, e o segura numa área maior.
-  const order = [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group)];
-  for (const g of order) {
+  for (const g of [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group)]) {
     const inside = g.id === keep.group;
     const pad = inside ? magnet * 2 : magnet;
-    const top = Math.min(g.y, ...g.covers.map((c) => c.y));
-    const bottom = Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
-    if (y + h <= top - pad || y >= bottom + pad) continue;
-    const start = g.seqX;
-    const end = g.seq;
-    const beside = { x: end, y: g.last.y, mode: "after", target: g.last.id, group: g };
-    if (visual(b)) {
-      // O centro do elemento decide: acima da linha, ele apoia em cima; abaixo, entra na sequência.
-      if (cy < g.y + VIS_H * (inside && keep.mode === "cover" ? ROW_LINE_HELD : ROW_LINE)) {
-        // Corre até a própria ponta sair da sequência, e o bloco cresce junto. Pela direita,
-        // passou disso, desce para o lado; pela esquerda, sai do bloco. Entrar pede um pouco mais
-        // que sair, para a borda não piscar.
-        if (x > end - EPS * 2 - (inside && keep.mode === "after" ? tol : 0)) {
-          if (x > end + pad) continue;
-          return beside;
-        }
-        if (x + w <= start + (inside ? EPS * 2 : tol)) continue;
-        return { x, y: g.y - h, mode: "cover", target: g.id, group: g };
-      }
-      // Vídeo e imagem não têm lugar embaixo do bloco: abaixo da fileira, seguem livres.
-      if (cy > g.y + g.h) continue;
-      // Na sequência, o lugar muda só na metade de cada elemento: não abre e fecha a cada emenda.
-      const at = g.blocks.findIndex((o) => cx < o.x + width(o) / 2);
-      if (at < 0) {
-        if (x > end + pad) continue;
-        return beside;
-      }
-      if (at > 0) {
-        const o = g.blocks[at - 1];
-        return { x: o.x + width(o), y: o.y, mode: "after", target: o.id, group: g };
-      }
-      if (x + w < start - pad) continue;
-      return { x: start - w, y: g.y, mode: "before", target: g.first.id, group: g };
+    if (y + h <= g.top - pad || y >= g.bottom + pad) continue;
+    const lo = g.x;
+    const hi = g.x + g.w;
+    let at;
+    let track = null;
+    if (x > hi - EPS * 2 - (inside && keep.beside ? tol : 0)) {
+      // Passou da ponta direita: desce para a primeira trilha, ao lado do bloco.
+      if (x > hi + pad) continue;
+      at = hi;
+      track = 0;
+    } else if (x + w <= lo + (inside ? EPS * 2 : tol)) {
+      // Pela esquerda, encosta na ponta; passou disso, sai do bloco.
+      if (x + w < lo - tol) continue;
+      at = lo - w;
+    } else {
+      at = nearestEdge(x, w, [lo, hi, ...members(g).flatMap((o) => [o.x, o.x + width(o)])], tol);
+      if (at >= hi - EPS * 2 || at + w <= lo + EPS * 2) at = x;
     }
-    if (cy < g.y + g.h / 2 || cx > end) continue;
-    if ((inside && x < start - tol) || x + w <= start) continue;
-    const lanes = new Set(g.audios.map((a) => Math.round((a.y - g.y - g.h) / AUD_H))).size;
-    const lane = Math.min(Math.max(Math.round((y - g.y - g.h) / AUD_H), 0), lanes);
-    return { x: Math.max(start, Math.min(x, end - w)), y: g.y + g.h + lane * AUD_H, mode: "audio", target: g.id, group: g };
+    const taken = isVideo ? [...g.blocks, ...g.covers].map((o) => ({ track: trackIn(o, g), x0: o.x, x1: o.x + width(o) })) : g.soundTaken;
+    const raw = isVideo ? (videoY(g) - y) / VIS_H : (y - soundY(g)) / AUD_H;
+    // Perto da trilha onde está, fica nela: mexer devagar na fronteira não troca de trilha.
+    const held = inside && keep.track !== undefined && Math.abs(raw - keep.track) < TRACK_HOLD;
+    const limit = taken.length ? Math.max(...taken.map((t) => t.track)) + 1 : 0;
+    const want = track ?? (held ? keep.track : Math.min(Math.max(Math.round(raw), 0), limit));
+    track = freeTrack(taken, isVideo ? want : Math.min(want, MAX_FAIXAS - 1), at, at + w);
+    return { x: at, y: isVideo ? videoY(g) - track * VIS_H : soundY(g) + track * AUD_H, mode: isVideo ? "video" : "sound", track, beside: at === hi, group: g };
   }
-  return free();
+  return { x, y, mode: null };
 }
 
-/** Move um bloco para onde o snap() mandou, abrindo espaço se encaixou no meio. */
+/** A posição que encosta uma ponta do elemento na ponta mais perto, dentro da mira. */
+function nearestEdge(x, w, edges, tol) {
+  let best = x;
+  let gap = tol;
+  for (const e of edges)
+    for (const at of [e, e - w])
+      if (Math.abs(at - x) < gap) (gap = Math.abs(at - x)), (best = at);
+  return best;
+}
+
+/** Move um elemento para onde o snap() mandou. */
 export function dropBlock(project, id, s) {
   const p = clone(project);
   const b = p.blocks.find((o) => o.id === id);
-  if (s.mode === "after") {
-    const t = p.blocks.find((o) => o.id === s.target);
-    const end = t.x + width(t);
-    const g = groups({ ...p, blocks: p.blocks.filter((o) => o.id !== id) }).find((g) => g.blocks.some((o) => o.id === t.id));
-    if (g) for (const o of [...g.blocks, ...g.covers, ...g.audios]) if (o.x >= end - EPS) o.x += width(b);
-  }
   b.x = s.x;
   b.y = s.y;
+  return p;
+}
+
+/** Muda a faixa do som de um vídeo vinculado para a mais perto desta altura do canvas. */
+export function setLane(project, id, y) {
+  const p = clone(project);
+  const b = p.blocks.find((o) => o.id === id);
+  const g = groupIndex(groups(p)).get(id);
+  b.lane = Math.max(0, Math.min(Math.round((y - soundY(g)) / AUD_H), MAX_FAIXAS - 1));
   return p;
 }
 
@@ -391,7 +415,7 @@ export function moveGroup(project, groupId, dx, dy) {
   const p = clone(project);
   const g = groups(p).find((g) => g.id === groupId);
   if (!g) return p;
-  const ids = new Set([...g.blocks, ...g.covers, ...g.audios].map((b) => b.id));
+  const ids = new Set(members(g).map((b) => b.id));
   for (const b of p.blocks) if (ids.has(b.id)) (b.x += dx), (b.y += dy);
   return p;
 }
@@ -417,7 +441,7 @@ function finalSize(n) {
 
 /** O que as linhas devem evitar: as áreas dos grupos e os Finais. */
 export function wireBoxes(project, gs = groups(project)) {
-  const boxes = gs.map((g) => ({ node: g, x0: g.x, x1: g.x + g.w, y0: Math.min(g.y, ...g.covers.map((c) => c.y)), y1: Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H)) }));
+  const boxes = gs.map((g) => ({ node: g, x0: g.x, x1: g.x + g.w, y0: g.top, y1: g.bottom }));
   for (const f of project.finals) {
     const { w, h } = finalSize(versions(project, f.id, gs).length);
     boxes.push({ node: f.id, x0: f.x, x1: f.x + w, y0: f.y, y1: f.y + h });
@@ -468,8 +492,8 @@ export function arrange(project) {
   const lastCol = Math.max(...column.values()) + 1;
   const col = (node) => (typeof node === "string" ? lastCol : column.get(node));
   const finalH = (f) => finalSize(versions(p, f.id, gs).length).h;
-  const top = (g) => Math.min(g.y, ...g.covers.map((c) => c.y));
-  const bottom = (g) => Math.max(g.y + g.h, ...g.audios.map((a) => a.y + AUD_H));
+  const top = (g) => g.top;
+  const bottom = (g) => g.bottom;
   // Altura do elemento e do conector dentro dele; o Final entra pelo id, como nas ligações.
   const size = (n) => (typeof n === "string" ? { h: finalH(p.finals.find((f) => f.id === n)), port: 40 } : { h: bottom(n) - top(n), port: portY(n) - top(n) });
 
@@ -527,7 +551,7 @@ export function arrange(project) {
   for (const g of gs) {
     const dx = xs.get(column.get(g)) - g.x;
     const dy = tops.get(g) - top(g);
-    for (const b of [...g.blocks, ...g.covers, ...g.audios]) (b.x += dx), (b.y += dy);
+    for (const b of members(g)) (b.x += dx), (b.y += dy);
   }
   for (const f of p.finals) (f.x = x), (f.y = tops.get(f.id));
   return p;
@@ -540,9 +564,12 @@ export function arrange(project) {
 export function trim(project, id, side, seconds) {
   const p = clone(project);
   const b = p.blocks.find((o) => o.id === id);
-  const g = groups(p).find((g) => g.blocks.some((o) => o.id === id));
+  const g = groupIndex(groups(p)).get(id);
   const oldEnd = b.x + width(b);
   const max = b.kind === "image" ? IMAGE_MAX : b.dur;
+  // Na mesma trilha, quem vem encostado depois acompanha, para não abrir buraco.
+  const track = g ? members(g).filter((o) => o.id !== id && near(o.y, b.y)) : [];
+  const followed = track.some((o) => near(o.x, oldEnd));
   if (side === "l") {
     let d;
     if (b.kind === "image") {
@@ -554,11 +581,10 @@ export function trim(project, id, side, seconds) {
       d = tin - b.tin;
       b.tin = tin;
     }
-    if (!g || g.blocks.length === 1) b.x += d * PX;
+    if (!followed) b.x += d * PX;
   } else b.tout = Math.min(Math.max(b.tout + seconds, b.tin + MIN_LEN), max);
   const delta = b.x + width(b) - oldEnd;
-  if (g && g.blocks.length > 1 && delta)
-    for (const o of [...g.blocks, ...g.covers, ...g.audios]) if (o.id !== id && o.x >= oldEnd - EPS) o.x += delta;
+  if (followed && delta) for (const o of track) if (o.x >= oldEnd - EPS) p.blocks.find((q) => q.id === o.id).x += delta;
   return p;
 }
 
@@ -572,65 +598,45 @@ export function unlinkAudio(project, id) {
   const p = clone(project);
   const v = p.blocks.find((b) => b.id === id);
   if (!v || !linked(v)) return { project: p, audioId: null };
-  const g = groups(p).find((g) => g.blocks.some((b) => b.id === id));
-  const below = g ? g.audios.map((a) => p.blocks.find((b) => b.id === a.id)) : [];
+  const y = groupIndex(groups(p)).get(id).sounds.find((s) => s.block.id === id).y;
   v.audio = "unlinked";
+  delete v.lane;
   const a = {
     id: newId("a"), kind: "audio", name: `Áudio de ${v.name}`, src: v.src, dur: v.dur, tin: v.tin, tout: v.tout,
-    x: v.x, y: 0, mute: v.mute, vol: v.vol, tone: nextTone(p, "audio", v.src), origin: "video",
+    x: v.x, y, mute: v.mute, vol: v.vol, tone: nextTone(p, "audio", v.src), origin: "video",
   };
-  // O áudio fica logo embaixo do vídeo, na primeira faixa de som do grupo; as
-  // faixas que já havia descem uma (e acompanham se o grupo ficou mais baixo).
-  const h = Math.max(...(g ? g.blocks : [v]).map(height));
-  a.y = (g ? g.y : v.y) + h;
-  const shift = h - (g ? g.h : 0) + AUD_H;
-  for (const o of below) o.y += shift;
   p.blocks.push(a);
   return { project: p, audioId: a.id };
 }
 
-/**
- * "Vincular ao áudio": o vídeo volta a mostrar e tocar o próprio som. Uma cópia
- * de áudio feita antes não muda. Se o grupo ficou mais alto, o som somado desce.
- */
+/** "Vincular ao áudio": o vídeo volta a mostrar e tocar o próprio som. Uma cópia feita antes não muda. */
 export function relinkVideo(project, id) {
   const p = clone(project);
   const v = p.blocks.find((b) => b.id === id);
-  if (!v || v.kind !== "video" || linked(v)) return p;
-  const g = groups(p).find((g) => g.blocks.some((b) => b.id === id));
-  v.audio = "linked";
-  if (g) {
-    const shift = Math.max(...g.blocks.map((b) => height(b.id === id ? v : b))) - g.h;
-    for (const a of g.audios) p.blocks.find((b) => b.id === a.id).y += shift;
-  }
+  if (v?.kind === "video") v.audio = "linked";
   return p;
 }
 
 /**
- * "Vincular ao vídeo": um áudio que veio de um vídeo volta a mostrar o vídeo do
- * mesmo arquivo, com o som preso embaixo, mantendo corte, volume e posição na
- * linha do tempo. Sai das faixas de som e vai para logo abaixo do grupo. O vídeo
- * de onde veio não muda. Devolve { project, videoId }.
+ * "Vincular ao vídeo": um áudio que veio de um vídeo volta a mostrar o vídeo do mesmo arquivo,
+ * com o corte, o volume e a posição na linha do tempo, logo abaixo do bloco. O vídeo de onde
+ * veio não muda. Devolve { project, videoId }.
  */
 export function audioToVideo(project, id) {
   const p = clone(project);
   const a = p.blocks.find((b) => b.id === id);
   if (!a || a.kind !== "audio" || a.origin !== "video") return { project: p, videoId: null };
-  const g = groups(p).find((g) => g.audios.some((b) => b.id === id));
-  const bottom = g ? Math.max(g.y + g.h, ...g.audios.map((o) => o.y + AUD_H)) : a.y;
+  const g = groupIndex(groups(p)).get(id);
   const others = p.blocks.filter((b) => b !== a);
-  const v = { ...a, kind: "video", audio: "linked", name: a.name.replace(/^Áudio de /, ""), tone: nextTone({ blocks: others }, "video", a.src), y: bottom + 48 };
+  const v = { ...a, kind: "video", audio: "linked", name: a.name.replace(/^Áudio de /, ""), tone: nextTone({ blocks: others }, "video", a.src), y: g.bottom + 48 };
   delete v.origin;
   p.blocks[p.blocks.indexOf(a)] = v;
-  // A faixa que ele deixou, se ficou vazia, fecha: as de baixo sobem uma.
-  if (g && !g.audios.some((o) => o.id !== id && near(o.y, a.y)))
-    for (const o of g.audios) if (o.y > a.y + 1) p.blocks.find((b) => b.id === o.id).y -= AUD_H;
   return { project: p, videoId: v.id };
 }
 
 /** O som de um vídeo vinculado e uma cópia dele tocam juntos no mesmo grupo. */
 export function doubledSound(project, gs = groups(project)) {
-  return gs.some((g) => g.blocks.some((v) => linked(v) && !v.mute && g.audios.some((a) => a.origin === "video" && a.src === v.src && !a.mute)));
+  return gs.some((g) => g.sounds.some(({ block: v }) => !v.mute && g.audios.some((a) => a.origin === "video" && a.src === v.src && !a.mute)));
 }
 
 /**
@@ -697,7 +703,7 @@ export function sample(media) {
     v("g3", "Gancho 3", "gancho-3.mp4", 4, 0, 384, 3),
     v("corpo", "Corpo", "corpo.mp4", 8, 400, 192, 5),
     { id: "produto", kind: "image", tone: 3, name: "Produto", src: media("produto.jpg"), dur: IMAGE_MAX, tin: 0, tout: 2, x: 720, y: 192, mute: false, vol: 1 },
-    v("broll", "B-roll", "broll.mp4", 4, 480, 56, 2, { tout: 3, mute: true }),
+    v("broll", "B-roll", "broll.mp4", 4, 480, 96, 2, { tout: 3, mute: true }),
     { id: "musica", kind: "audio", tone: 4, name: "Música", src: media("musica.mp3"), dur: 16, tin: 0, tout: 10, x: 400, y: 328, mute: false, vol: 0.35 },
     v("ctaa", "CTA A", "cta-a.mp4", 3, 960, 64, 4),
     v("ctab", "CTA B", "cta-b.mp4", 3, 960, 320, 6),
