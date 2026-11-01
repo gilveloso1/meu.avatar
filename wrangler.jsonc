@@ -32,8 +32,9 @@
   "containers": [
     { "class_name": "AudioFixer", "image": "./container/Dockerfile", "instance_type": "basic", "max_instances": 1 },
     // Contêiner que monta os vídeos dos projetos (src/exportar.ts, container/exportar.py):
-    // 2 vCPU e 8 GiB (medidos em docs/operacao.md), imagem própria e leve. Duas instâncias: uma exportação não trava a outra.
-    { "class_name": "Exporter", "image": "./container/Dockerfile.exportar", "instance_type": "standard-3", "max_instances": 2 }
+    // 2 vCPU e 8 GiB (medidos em docs/operacao.md), imagem própria e leve. Uma instância só:
+    // ligada, ela paga 8 GiB de memória por hora (src/conteiner.ts explica por que dormir importa).
+    { "class_name": "Exporter", "image": "./container/Dockerfile.exportar", "instance_type": "standard-3", "max_instances": 1 }
   ],
   "durable_objects": {
     "bindings": [
