@@ -178,6 +178,13 @@ export class Exports {
       const key = video[2] === "original" ? v?.video_key : video[2] === "editado" ? v?.edited_key : (v?.processed_key ?? v?.video_key);
       if (key && structure && canUse(structure, role)) return key;
     }
+    // O vídeo exportado: é assim que o agente confere o resultado do próprio trabalho.
+    const exported = /^\/projetos\/([0-9a-f-]{36})\/exportacoes\/([0-9a-f-]{36})\/(\d+)\.mp4$/.exec(path);
+    if (exported?.[1] === project.id) {
+      const row = await this.db.exportById(exported[2]!);
+      const version = row?.project_id === project.id && row.status === "done" ? (JSON.parse(row.plan) as ExportPlan).versoes[Number(exported[3])] : undefined;
+      if (version) return version.chave;
+    }
     const file = /^\/projetos\/([0-9a-f-]{36})\/arquivos\/([0-9a-f-]{36})$/.exec(path);
     if (file?.[1] === project.id) {
       const f = await this.db.projectFile(project.id, file[2]!);

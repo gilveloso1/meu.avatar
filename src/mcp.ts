@@ -12,13 +12,13 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.1.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.2.0" };
 /** A lista de ferramentas não depende de quem pede. */
 const CACHE = { ttlMs: 3_600_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros e ver_silencios, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, leia o projeto e refaça o lote. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros e ver_silencios, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, leia o projeto e refaça o lote. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro. Cada um tem "tipo":
 adicionar {video|arquivo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo), depois: bloco | sobre: bloco, em: segundos}
@@ -33,12 +33,13 @@ remover {ids, fechar}
 som {bloco, volume: 0 a 4, mudo}
 final {id, resolucao, formato, velocidade}
 organizar {}
+Em adicionar e dividir, rotulo: "nome" permite citar esse bloco como "@nome" nos comandos seguintes do mesmo lote.
 O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele. Tempos de inicio, fim e em são do arquivo; t das chaves é do bloco.`;
 
 const texto = (descricao: string) => ({ type: "string", description: descricao });
 const objeto = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
 const projeto = texto("Id do projeto.");
-const src = texto('Endereço do arquivo, como "/videos/<id>.mp4", vindo de listar_videos ou ver_projeto.');
+const src = texto('Endereço do arquivo: "/videos/<id>.mp4" de listar_videos, um arquivo de ver_projeto ou o href de uma exportação pronta.');
 
 const FERRAMENTAS = [
   { name: "listar_videos", description: "Vídeos prontos que podem entrar num projeto, com a fala e a duração.", inputSchema: objeto({ busca: texto("Parte da fala.") }) },
