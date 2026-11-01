@@ -20,7 +20,7 @@ const EXPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 /** Quanto os vídeos prontos ficam para baixar. Os trechos saem pela regra de ciclo de vida do R2. */
 const EXPORT_TTL_MS = 24 * 60 * 60 * 1000;
 /** Muda quando container/exportar.py passa a gerar trechos diferentes: os antigos não servem mais. */
-const SEGMENT_VERSION = "4";
+const SEGMENT_VERSION = "5";
 /** Um passo que ficou sem resposta (Worker caiu) pode ser retomado depois disso. */
 const STALE_MS = 15 * 60 * 1000;
 const MAX_TRIES = 3;
@@ -45,6 +45,8 @@ export interface ExportApi {
   segment(job: string, body: ReadableStream, sizes: number[]): Promise<Response>;
   /** Devolve a versão emendada, com o CRC-32 em x-crc32. */
   join(job: string, body: ReadableStream, sizes: number[]): Promise<Response>;
+  /** Olha um arquivo: "/quadros" devolve um JPG e "/silencios", um JSON (docs/api.md). */
+  inspect(path: "/quadros" | "/silencios", body: ReadableStream, size: number, instants?: string): Promise<Response>;
 }
 
 export class ContainerExport implements ExportApi {
@@ -58,12 +60,16 @@ export class ContainerExport implements ExportApi {
     return this.post("/emendar", job, body, sizes);
   }
 
-  private async post(path: string, job: string, body: ReadableStream, sizes: number[]): Promise<Response> {
+  inspect(path: "/quadros" | "/silencios", body: ReadableStream, size: number, instants = ""): Promise<Response> {
+    return this.post(path, path, body, [size], { "x-instantes": instants });
+  }
+
+  private async post(path: string, job: string, body: ReadableStream, sizes: number[], headers: Record<string, string> = {}): Promise<Response> {
     // Uma instância só (a de 8 GiB é a parte cara): as exportações dividem o mesmo contêiner.
     const container = getContainer(this.ns, "exportar");
     await container.startAndWaitForPorts({ ports: 8080, cancellationOptions: { instanceGetTimeoutMS: START_TIMEOUT_MS, portReadyTimeoutMS: START_TIMEOUT_MS } });
     const size = sizes.reduce((a, b) => a + b, 0);
-    const res = await container.fetch(new Request(`http://exportar${path}`, { method: "POST", body, headers: { "content-length": String(size), "x-tamanhos": sizes.join(",") } }));
+    const res = await container.fetch(new Request(`http://exportar${path}`, { method: "POST", body, headers: { "content-length": String(size), "x-tamanhos": sizes.join(","), ...headers } }));
     if (!res.ok) throw new Error(`Exportação falhou em ${path} (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
     if (!res.body || !res.headers.get("content-length")) {
       // Corpo sem ler deixa o pedido aberto no contêiner, e ele não dorme.
@@ -155,8 +161,15 @@ export class Exports {
     return { chave: `trechos/${hex(hash)}.mkv`, plano, arquivos };
   }
 
+  /** O que o agente pede para ver: um mosaico dos instantes ou os silêncios do arquivo. */
+  async inspect(key: string, path: "/quadros" | "/silencios", instants?: string): Promise<Response> {
+    if (!this.api) throw new InputError(ERROS.exportarIndisponivel);
+    const sizes = await this.sizes([key]);
+    return this.pipe(sizes, [key], null, (body) => this.api!.inspect(path, body, sizes[0]!, instants));
+  }
+
   /** O arquivo de um bloco no R2: só um vídeo que a pessoa pode usar ou um arquivo deste projeto. */
-  private async source(project: Project, role: Role, src: unknown): Promise<string> {
+  async source(project: Project, role: Role, src: unknown): Promise<string> {
     const path = typeof src === "string" ? src : "";
     const video = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.mp4$/.exec(path);
     if (video) {

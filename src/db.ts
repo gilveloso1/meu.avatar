@@ -144,6 +144,8 @@ export interface Project {
   user_id: number;
   name: string;
   data: string;
+  /** Sobe a cada mudança: quem salva diz de qual revisão partiu. */
+  revision: number;
   created_at: string;
   updated_at: string;
 }
@@ -566,11 +568,12 @@ export class Db {
     ).results;
   }
 
-  async saveProject(id: string, changes: { name?: string; data?: string }, now = new Date()): Promise<void> {
-    await this.d1
-      .prepare("UPDATE projects SET name = COALESCE(?, name), data = COALESCE(?, data), updated_at = ? WHERE id = ?")
-      .bind(changes.name ?? null, changes.data ?? null, now.toISOString(), id)
-      .run();
+  async saveProject(id: string, changes: { name?: string; data?: string }, revision?: number, now = new Date()): Promise<number | null> {
+    const row = await this.d1
+      .prepare("UPDATE projects SET name = COALESCE(?, name), data = COALESCE(?, data), revision = revision + 1, updated_at = ? WHERE id = ? AND (? IS NULL OR revision = ?) RETURNING revision")
+      .bind(changes.name ?? null, changes.data ?? null, now.toISOString(), id, revision ?? null, revision ?? null)
+      .first<{ revision: number }>();
+    return row?.revision ?? null;
   }
 
   /** Apaga o projeto e devolve as chaves no R2 dos arquivos dele (para apagar lá também). */
@@ -638,6 +641,10 @@ export class Db {
       .run();
   }
 
+  async projectFiles(projectId: string): Promise<ProjectFile[]> {
+    return (await this.d1.prepare("SELECT * FROM project_files WHERE project_id = ? ORDER BY created_at DESC").bind(projectId).all<ProjectFile>()).results;
+  }
+
   async projectFile(projectId: string, id: string): Promise<ProjectFile | null> {
     return this.d1.prepare("SELECT * FROM project_files WHERE project_id = ? AND id = ?").bind(projectId, id).first<ProjectFile>();
   }
@@ -698,6 +705,15 @@ export class Db {
     return row ? toUser(row) : null;
   }
 
+  /** A conta dona do token. O último uso é anotado no máximo uma vez por hora. */
+  async tokenUser(tokenHash: string, now = new Date()): Promise<User | null> {
+    const row = await this.d1.prepare("SELECT u.* FROM api_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?").bind(tokenHash).first<UserRow>();
+    if (!row) return null;
+    const hourAgo = new Date(now.getTime() - 3_600_000).toISOString();
+    await this.d1.prepare("UPDATE api_tokens SET last_used_at = ? WHERE token_hash = ? AND (last_used_at IS NULL OR last_used_at < ?)").bind(now.toISOString(), tokenHash, hourAgo).run();
+    return toUser(row);
+  }
+
   async deleteSession(tokenHash: string): Promise<void> {
     await this.d1.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(tokenHash).run();
   }
@@ -714,6 +730,7 @@ export class Db {
       this.d1.prepare("DELETE FROM voices"),
       this.d1.prepare("UPDATE config SET value = 'openrouter' WHERE key = 'plataforma.heygen'"),
       this.d1.prepare("DELETE FROM sessions"),
+      this.d1.prepare("DELETE FROM api_tokens"),
       this.d1.prepare("DELETE FROM users"),
     ]);
   }

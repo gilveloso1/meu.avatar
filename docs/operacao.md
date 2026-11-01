@@ -321,6 +321,9 @@ do alarme, com o contêiner seguindo ligado. Agora:
 - `test/conteiner.test.ts` roda o alarme de verdade da biblioteca num Durable Object de
   teste (`test/worker.ts`, só o contêiner é falso, e ele ignora o SIGTERM).
 
+Para a API, o mesmo contêiner responde `POST /quadros` e `POST /silencios`
+([api.md](api.md)). Mudou o `exportar.py`: precisa do deploy com Docker, no ambiente cloud.
+
 Para conferir em produção: `containersUsageAdaptiveGroups` na API GraphQL, por minuto (sem
 trabalho, a memória alocada vai a zero), e os logs do Worker na API de Observability
 (`/workers/observability/telemetry/query`; o `wrangler tail` não passa pelo proxy do

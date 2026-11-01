@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=720, height=1280" />
+<script src="gsap.min.js"></script>
+<style>
+@font-face { font-family: "Inter"; src: url("Inter-400.woff2") format("woff2"); font-weight: 400; }
+@font-face { font-family: "Inter"; src: url("Inter-700.woff2") format("woff2"); font-weight: 700; }
+html, body { margin: 0; background: #08131d; }
+#root { position: relative; width: 720px; height: 1280px; overflow: hidden; background: #08131d; color: #f2f7f5; font-family: "Inter", sans-serif; font-weight: 700; }
+.grade { position: absolute; inset: 0; background-image: linear-gradient(rgba(70,255,150,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(70,255,150,.07) 1px, transparent 1px); background-size: 60px 60px; }
+.brilho { position: absolute; left: -160px; right: -160px; top: 220px; height: 700px; background: radial-gradient(closest-side, rgba(40,220,130,.20), transparent); }
+.cena { position: absolute; inset: 0; padding: 170px 56px 250px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
+.kicker { font-size: 26px; letter-spacing: 5px; color: #46ff96; }
+.titulo { font-size: 104px; line-height: 1; letter-spacing: -3px; margin-top: 18px; }
+.sub { font-size: 40px; line-height: 1.2; font-weight: 400; color: #b9c9c3; margin-top: 22px; }
+.verde { color: #46ff96; }
+.vermelho { color: #ff6b5e; }
+#grafico { position: absolute; left: 0; right: 0; bottom: 250px; width: 720px; height: 460px; }
+.numero { font-size: 300px; line-height: .9; letter-spacing: -12px; }
+.pilula { display: inline-block; align-self: flex-start; margin-top: 30px; padding: 14px 28px; border-radius: 40px; background: #46ff96; color: #08131d; font-size: 38px; }
+.lista { margin-top: 28px; display: flex; flex-direction: column; gap: 10px; }
+.moeda { display: flex; justify-content: space-between; align-items: baseline; padding: 11px 22px; border-radius: 14px; background: rgba(255,255,255,.07); font-size: 33px; }
+.moeda span { font-size: 26px; font-weight: 400; color: #9fb3ac; }
+.moeda.real { background: #46ff96; color: #08131d; }
+.moeda.real span { color: #08131d; }
+#oito { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(8,19,29,.86); }
+#oito .numero { font-size: 420px; color: #ff6b5e; }
+#oito .sub { color: #f2f7f5; font-weight: 700; font-size: 56px; margin-top: 8px; }
+.duelo { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 34px; }
+.lado { border-radius: 24px; padding: 28px 22px; background: rgba(255,255,255,.06); min-height: 470px; box-sizing: border-box; display: flex; flex-direction: column; }
+.pais { font-size: 30px; color: #b9c9c3; }
+.grande { font-size: 132px; line-height: 1; letter-spacing: -4px; margin-top: 8px; }
+.rotulo { font-size: 30px; font-weight: 400; color: #b9c9c3; }
+.barras { margin-top: auto; display: flex; gap: 6px; height: 150px; align-items: flex-end; }
+.barras i { flex: 1; border-radius: 6px; background: #ff6b5e; transform-origin: bottom; }
+.barra-unica { margin-top: auto; height: 150px; border-radius: 8px; background: #46ff96; transform-origin: left; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="11.9" data-width="720" data-height="1280">
+  <div class="grade clip" id="fundo" data-start="0" data-duration="11.9" data-track-index="0"></div>
+  <div class="brilho clip" id="luz" data-start="0" data-duration="11.9" data-track-index="0"></div>
+
+  <div class="clip" id="camada" data-start="0" data-duration="11.9" data-track-index="0"><svg id="grafico" viewBox="0 0 720 460"><defs><clipPath id="janela"><rect id="vidro" x="0" y="-20" width="0" height="520"/></clipPath></defs><g clip-path="url(#janela)"><g id="rola"><path id="area" d="M0 420 L50 375 L100 410 L170 340 L220 245 L270 280 L360 235 L410 165 L500 215 L570 170 L620 75 L690 70 L740 70 L810 70 L860 70 L930 70 L980 120 L1050 155 L1140 85 L1190 70 L1260 70 L1310 120 L1380 70 L1450 120 L1540 75 L1630 70 L1700 105 L1790 70 L1860 105 L1910 70 L1980 70 L2030 70 L2080 105 L2170 70 L2260 120 L2350 155 L2440 110 L2490 70 L2540 105 L2590 140 L2660 70 L2730 105 L2820 155 L2890 205 L2940 160 L2990 70 L3000 520 L0 520Z" fill="rgba(70,255,150,.10)"/><path id="linha" d="M0 420 L50 375 L100 410 L170 340 L220 245 L270 280 L360 235 L410 165 L500 215 L570 170 L620 75 L690 70 L740 70 L810 70 L860 70 L930 70 L980 120 L1050 155 L1140 85 L1190 70 L1260 70 L1310 120 L1380 70 L1450 120 L1540 75 L1630 70 L1700 105 L1790 70 L1860 105 L1910 70 L1980 70 L2030 70 L2080 105 L2170 70 L2260 120 L2350 155 L2440 110 L2490 70 L2540 105 L2590 140 L2660 70 L2730 105 L2820 155 L2890 205 L2940 160 L2990 70" fill="none" stroke="#46ff96" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/></g></g></svg></div>
+  <section id="c1" class="cena clip" data-start="0" data-duration="1.551" data-track-index="1" style="justify-content:flex-start">
+    <div class="kicker" id="c1k">BRASIL × EUA</div>
+    <div class="titulo" id="c1t">Olha o<br/><span class="verde">histórico</span></div>
+  </section>
+
+  <section id="c2" class="cena clip" data-start="1.551" data-duration="3.011" data-track-index="1">
+    <div class="kicker" id="c2k">IMPÉRIO · 1822–1889</div>
+    <div class="numero verde" id="c2n">1</div>
+    <div class="titulo" id="c2t" style="font-size:88px">única moeda</div>
+    <div class="pilula" id="c2p">Réis</div>
+  </section>
+
+  <section id="c3" class="cena clip" data-start="4.562" data-duration="3.087" data-track-index="1">
+    <div class="kicker" id="c3k">REPÚBLICA · DESDE 1889</div>
+    <div class="lista">
+      <div class="moeda m"><b>Cruzeiro</b><span>1942</span></div>
+      <div class="moeda m"><b>Cruzeiro Novo</b><span>1967</span></div>
+      <div class="moeda m"><b>Cruzeiro</b><span>1970</span></div>
+      <div class="moeda m"><b>Cruzado</b><span>1986</span></div>
+      <div class="moeda m"><b>Cruzado Novo</b><span>1989</span></div>
+      <div class="moeda m"><b>Cruzeiro</b><span>1990</span></div>
+      <div class="moeda m"><b>Cruzeiro Real</b><span>1993</span></div>
+      <div class="moeda m real"><b>Real</b><span>1994</span></div>
+    </div>
+    <div id="oito"><div class="numero">8</div><div class="sub">moedas</div></div>
+  </section>
+
+  <section id="c4" class="cena clip" data-start="7.649" data-duration="4.251" data-track-index="1">
+    <div class="kicker" id="c4k">ENQUANTO ISSO</div>
+    <div class="duelo">
+      <div class="lado" id="l1">
+        <div class="pais">BRASIL</div>
+        <div class="grande vermelho">8</div>
+        <div class="rotulo">moedas</div>
+        <div class="barras"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="lado" id="l2">
+        <div class="pais">EUA</div>
+        <div class="grande verde">1</div>
+        <div class="rotulo">dólar</div>
+        <div class="barra-unica" id="barra"></div>
+      </div>
+    </div>
+    <div class="sub" id="c4s">O mesmo dólar <span class="verde">desde a criação.</span></div>
+  </section>
+</div>
+<script>
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const entra = (alvo, t, d = 0.35) => tl.fromTo(alvo, { y: 36, opacity: 0 }, { y: 0, opacity: 1, duration: d, ease: "power3.out" }, t);
+tl.fromTo("#luz", { opacity: 0.6 }, { opacity: 1, duration: 11.9, ease: "none" }, 0);
+// "Agora, olha o histórico."
+entra("#c1k", 0.05, 0.25); entra("#c1t", 0.1, 0.3);
+// O gráfico desenha no título e segue andando atrás das outras cenas, até o fim do trecho.
+tl.fromTo("#vidro", { attr: { width: 0 } }, { attr: { width: 720 }, duration: 1.4, ease: "power1.out" }, 0.1);
+tl.fromTo("#rola", { x: 0 }, { x: -2280, duration: 10.4, ease: "none" }, 1.5);
+tl.to("#grafico", { opacity: 0.55, duration: 0.4 }, 1.5);
+tl.to("#linha", { stroke: "#ff6b5e", duration: 0.3 }, 4.6);
+tl.to("#linha", { stroke: "#46ff96", duration: 0.3 }, 7.7);
+// "Durante o Império," | "o Brasil teve uma única moeda."
+entra("#c2k", 1.6);
+tl.fromTo("#c2n", { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.45, ease: "back.out(2)", transformOrigin: "left center" }, 2.54);
+entra("#c2t", 2.9); entra("#c2p", 3.4);
+// "Mas desde a chegada da República," | "já tivemos oito."
+entra("#c3k", 4.6, 0.25);
+gsap.utils.toArray(".m").forEach((m, i) => tl.fromTo(m, { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.2, ease: "power2.out" }, 4.72 + i * 0.25));
+tl.fromTo("#oito", { opacity: 0 }, { opacity: 1, duration: 0.15 }, 6.72);
+tl.fromTo("#oito .numero", { scale: 0.6 }, { scale: 1, duration: 0.4, ease: "back.out(2.4)" }, 6.72);
+// "Enquanto isso," | "os Estados Unidos mantêm o dólar desde a sua criação."
+entra("#c4k", 7.7);
+entra("#l1", 7.85);
+gsap.utils.toArray(".barras i").forEach((b, i) => { gsap.set(b, { height: 40 + i * 15 }); tl.fromTo(b, { scaleY: 0 }, { scaleY: 1, duration: 0.2, ease: "power2.out" }, 8 + i * 0.06); });
+entra("#l2", 8.75);
+tl.fromTo("#barra", { scaleX: 0 }, { scaleX: 1, duration: 2.4, ease: "none" }, 9.0);
+entra("#c4s", 10.3);
+tl.set({}, {}, 11.9);
+window.__timelines.main = tl;
+</script>
+</body>
+</html>

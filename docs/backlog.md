@@ -17,6 +17,43 @@ a anterior e será revista com o dono por essa direção.
 exportação de até 50 versões. Falta a timeline embaixo do canvas e abrir para todos, depois
 de definir o limite de uso e o custo do contêiner por pessoa.
 
+**Agentes editando projetos** (ver [api.md](api.md)): a meta é um agente fazer uma edição de
+nível profissional num projeto real. O caso de teste é o projeto "Ação na Bolsa". Cada item
+precisa existir nos comandos, na exportação e na prévia do canvas.
+
+Agora, no PR 42 (API dos projetos):
+
+- Cortes e ritmo: dividir, inserir no meio, mover e trocar a ordem, aparar sem abrir buraco,
+  velocidade por bloco e do Final, remover pausas.
+- Imagem: zoom e posição, recorte, espelhar, girar, encaixe (preencher, caber, fundo
+  desfocado), zoom no rosto e animação com keyframes.
+- Para o agente decidir: ver quadros e o mapa de silêncios de cada arquivo.
+
+Próximos passos, nesta ordem:
+
+1. **Servidor MCP** por cima da API.
+2. **Transcrição** com o tempo de cada palavra: edição pelo texto, remover vícios de fala e
+   repetições. Ativos de avatar nos projetos.
+3. **Texto e gráficos com o HyperFrames** (testado, ver
+   `prototipos/hyperframes-linux/RESULTADOS.md` no branch `claude/teste-hyperframes-linux`):
+   bloco de HTML escrito pelo agente, legendas palavra a palavra, títulos, lower thirds,
+   selos, gráficos, contadores, modelos por marca e máscara para cobrir uma área. Feito à
+   mão no caso real, com camada WebM transparente e Whisper; falta virar recurso do site.
+4. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
+   licenciada ou geração por API (a do caso real foi sintetizada, só para teste),
+   realce de voz por bloco e volume animado.
+5. **Transições**: fusão, fade do preto, cortina, zoom, flash e transição em HyperFrames.
+6. **Cor**: exposição, contraste, saturação, temperatura, LUT, igualar a cor entre vídeos,
+   vinheta e nitidez.
+7. **Tempo e imagem avançados**: rampa de velocidade, cortes em J e L, congelar, reverter,
+   repetir, reenquadrar seguindo o rosto, tela dividida, picture-in-picture, opacidade,
+   mistura, tremido e estabilização.
+8. **Agente mais autônomo**: detectar cenas e o que aparece nelas, prévia rápida de um
+   trecho, plano sem aplicar com o custo, desfazer pela API, histórico de versões, medir
+   gancho, ritmo e áreas seguras.
+9. **Entrega**: variações por plataforma, capa, limites por rede, presets e publicar direto.
+10. **Abrir para todos**: limite de uso, custo do contêiner por pessoa e tela de tokens.
+
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 
 O desafio: a pessoa tem um vídeo de referência (ex.: review UGC de um produto)

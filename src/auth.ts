@@ -89,6 +89,11 @@ export class Accounts {
     return this.db.sessionUser(await sha256(token), this.now().toISOString());
   }
 
+  /** A conta de um token da API (docs/api.md). */
+  async tokenUser(token: string): Promise<User | null> {
+    return this.db.tokenUser(await sha256(token), this.now());
+  }
+
   async logout(token: string | null): Promise<void> {
     if (token) await this.db.deleteSession(await sha256(token));
   }

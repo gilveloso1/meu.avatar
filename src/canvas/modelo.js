@@ -4,12 +4,13 @@
  *
  * Projeto: { blocks, finals, edges }
  *   bloco: { id, kind: "video" | "image" | "audio", name, src, dur, tin, tout,
- *            x, y, mute, vol, tone, audio }   (dur: duração do arquivo;
- *            tin/tout: o corte; tone: 1 a TONES, o tom da cor do tipo; audio,
- *            só no vídeo: "linked" (o som dele numa faixa presa embaixo, na cor
- *            do vídeo), "unlinked" (desvinculado: virou um bloco de áudio) ou
- *            "none" (o arquivo não tem som))
- *   final: { id, x, y, resolution, format }   (o que ele exporta; ver output())
+ *            x, y, mute, vol, tone, audio, speed, frame }   (dur: duração do
+ *            arquivo; tin/tout: o corte; tone: 1 a TONES, o tom da cor do tipo;
+ *            audio, só no vídeo: "linked" (o som dele numa faixa presa embaixo,
+ *            na cor do vídeo), "unlinked" (desvinculado: virou um bloco de áudio)
+ *            ou "none" (o arquivo não tem som); speed: a velocidade, 1 se não
+ *            houver; frame: o enquadramento, ver placement())
+ *   final: { id, x, y, resolution, format, speed }   (o que ele exporta; ver output())
  *   linha: { id, from, to }      (from: um bloco do grupo de saída;
  *                                 to: um bloco do grupo de entrada ou um final)
  *
@@ -72,7 +73,10 @@ export function output(final) {
   return { resolution, format, width, height };
 }const EPS = 1;
 
-export const len = (b) => b.tout - b.tin;
+export const SPEED_MIN = 0.25;
+export const SPEED_MAX = 4;
+/** O tempo do bloco na tela: o trecho do arquivo, na velocidade dele. */
+export const len = (b) => (b.tout - b.tin) / (b.speed ?? 1);
 export const width = (b) => len(b) * PX;
 export const linked = (b) => b.kind === "video" && (b.audio ?? "linked") === "linked";
 export const height = (b) => (visual(b) ? VIS_H : AUD_H);
@@ -281,19 +285,22 @@ export const variantLabel = (cols) => (cols <= 2 ? "full" : cols === 3 ? "short"
  * Linha do tempo de uma versão: o que toca, quando e de onde do arquivo.
  * layer 0: base; 1: cobertura (b-roll); "audio": som somado.
  */
-export function timeline(version) {
+export function timeline(version, rate = 1) {
   const items = [];
   let t = 0;
   for (const g of version) {
     // Por trilha: quem está mais acima vem depois e fica por cima.
-    const on = (b, layer) => items.push({ block: b, layer, start: t + (b.x - g.x) / PX, len: len(b), tin: b.tin });
+    const on = (b, layer) => items.push({ block: b, layer, start: (t + (b.x - g.x) / PX) / rate, len: len(b) / rate, tin: b.tin, speed: (b.speed ?? 1) * rate, rate });
     g.blocks.forEach((b) => on(b, 0));
     g.covers.forEach((b) => on(b, 1));
     g.audios.forEach((b) => on(b, "audio"));
     t += g.dur;
   }
-  return { duration: t, items };
+  return { duration: t / rate, items };
 }
+
+/** Quanto o Final acelera todas as variações dele. */
+export const finalRate = (final) => final?.speed ?? 1;
 
 /**
  * O que o contêiner monta para um Final: cada grupo vira um trecho, feito uma vez
@@ -314,7 +321,7 @@ export function exportWork(project, finalId, pick) {
   const trecho = (g) => {
     if (!seen.has(g)) {
       seen.set(g, trechos.length);
-      const tl = timeline([g]);
+      const tl = timeline([g], finalRate(final));
       trechos.push({
         duracao: +tl.duration.toFixed(3),
         itens: tl.items.map((i) => ({
@@ -325,6 +332,8 @@ export function exportWork(project, finalId, pick) {
           dura: +i.len.toFixed(3),
           corte: +i.tin.toFixed(3),
           volume: sounds(i.block) ? i.block.vol : 0,
+          velocidade: +i.speed.toFixed(4),
+          ...(i.block.frame && i.block.kind !== "audio" ? { quadro: { ...i.block.frame, ...(i.block.frame.keys ? { keys: i.block.frame.keys.map((k) => ({ ...k, t: k.t / i.rate })) } : {}) } } : {}),
         })),
       });
     }
@@ -561,9 +570,11 @@ export function arrange(project) {
  * Encurta ou alonga um bloco por uma das pontas. Num grupo, o que vem depois
  * acompanha (sem buraco); solto, a ponta esquerda anda com o corte.
  */
-export function trim(project, id, side, seconds) {
+export function trim(project, id, side, timelineSeconds) {
   const p = clone(project);
   const b = p.blocks.find((o) => o.id === id);
+  // A borda anda no tempo da tela; no arquivo, isso vale a velocidade do bloco.
+  const seconds = timelineSeconds * (b.speed ?? 1);
   const g = groupIndex(groups(p)).get(id);
   const oldEnd = b.x + width(b);
   const max = b.kind === "image" ? IMAGE_MAX : b.dur;
@@ -586,6 +597,113 @@ export function trim(project, id, side, seconds) {
   const delta = b.x + width(b) - oldEnd;
   if (followed && delta) for (const o of track) if (o.x >= oldEnd - EPS) p.blocks.find((q) => q.id === o.id).x += delta;
   return p;
+}
+
+/**
+ * Divide um bloco de vídeo ou áudio em dois, no instante `at` do arquivo. O segundo
+ * vem logo depois, com tudo igual. Devolve { project, id }, id: o bloco novo.
+ */
+export function split(project, id, at) {
+  const p = clone(project);
+  const i = p.blocks.findIndex((o) => o.id === id);
+  const b = p.blocks[i];
+  const nid = newId("b");
+  const part = (b.tout - at) / (b.tout - b.tin);
+  const c = { ...clone(b), id: nid, tin: at, x: b.x + width(b) * (1 - part) };
+  // A animação continua de onde estava: no segundo pedaço, o tempo dela recomeça antes.
+  if (c.frame?.keys) c.frame.keys = c.frame.keys.map((k) => ({ ...k, t: k.t - (at - b.tin) / (b.speed ?? 1) }));
+  b.tout = at;
+  p.blocks.splice(i + 1, 0, c);
+  return { project: p, id: nid };
+}
+
+/**
+ * Refaz uma sequência: os blocos de `order`, encostados a partir de (x0, y). Quem cobria
+ * ou somava som a um bloco (em `before`, onde ele começa) acompanha esse bloco. `after` é
+ * o projeto já com os cortes e velocidades novos; quem saiu dele não conta.
+ */
+export function relay(before, after, order, x0, y) {
+  const p = clone(after);
+  const home = (id) => before.blocks.find((b) => b.id === id);
+  const seqOf = new Set(order);
+  const riders = [];
+  for (const g of groups(before)) {
+    const base = g.blocks.filter((b) => seqOf.has(b.id));
+    if (!base.length) continue;
+    for (const o of [...g.covers, ...g.audios]) {
+      const under = base.find((b) => o.x >= b.x - EPS && o.x < b.x + width(b) - EPS);
+      if (under) riders.push({ id: o.id, under: under.id });
+    }
+  }
+  let x = x0;
+  const moved = new Map();
+  for (const id of order) {
+    const b = p.blocks.find((o) => o.id === id);
+    const was = home(id) ?? b;
+    moved.set(id, { dx: x - was.x, dy: y - was.y });
+    b.x = x;
+    b.y = y;
+    x += width(b);
+  }
+  for (const { id, under } of riders) {
+    const b = p.blocks.find((o) => o.id === id);
+    const was = home(id);
+    const d = moved.get(under);
+    if (b && was && d) (b.x = was.x + d.dx), (b.y = was.y + d.dy);
+  }
+  return p;
+}
+
+/** Uma chave da animação, com os valores que faltam no padrão. */
+const keyOf = (k) => ({ t: k.t ?? 0, z: k.z ?? 1, x: k.x ?? 0.5, y: k.y ?? 0.5 });
+
+/** O enquadramento (zoom e foco) no instante t do bloco, com a mesma curva da exportação. */
+export function frameAt(frame, t) {
+  const keys = (frame?.keys ?? [{}]).map(keyOf).sort((a, b) => a.t - b.t);
+  const next = keys.findIndex((k) => k.t > t);
+  if (next === 0) return keys[0];
+  if (next < 0) return keys[keys.length - 1];
+  const [a, b] = [keys[next - 1], keys[next]];
+  const u = (t - a.t) / (b.t - a.t);
+  const s = u * u * (3 - 2 * u);
+  return { t, z: a.z + (b.z - a.z) * s, x: a.x + (b.x - a.x) * s, y: a.y + (b.y - a.y) * s };
+}
+
+/** A janela do quadro que o zoom mostra: foco no centro, sem sair da imagem. */
+export function zoomWindow({ z, x, y }, W, H) {
+  const [w, h] = [W / z, H / z];
+  return { x: Math.min(Math.max(x * W - w / 2, 0), W - w), y: Math.min(Math.max(y * H - h / 2, 0), H - h), w, h };
+}
+
+/**
+ * Onde a mídia (vw × vh) fica num quadro W × H, a mesma conta do container/exportar.py.
+ * frame: { fit: "cover" | "contain" | "blur", flipH, flipV, rotate: 0, 90, 180 ou 270,
+ * crop: { l, t, r, b } (fração cortada de cada lado), keys: [{ t, z, x, y }] }.
+ * Devolve a matriz CSS (origem no canto da mídia) e o recorte em % para clip-path.
+ */
+export function placement(frame, vw, vh, W, H, t = 0) {
+  const c = { l: 0, t: 0, r: 0, b: 0, ...frame?.crop };
+  const [sw, sh] = [vw * (1 - c.l - c.r), vh * (1 - c.t - c.b)];
+  const rotate = frame?.rotate ?? 0;
+  const turned = rotate % 180 !== 0;
+  const [rw, rh] = turned ? [sh, sw] : [sw, sh];
+  const fill = (frame?.fit ?? "cover") === "cover";
+  const s = fill ? Math.max(W / rw, H / rh) : Math.min(W / rw, H / rh);
+  const win = zoomWindow(frameAt(frame, t), W, H);
+  const z = W / win.w;
+  // Da mídia para o quadro: centro do recorte na origem, espelha, gira, escala e leva ao centro.
+  const a = (rotate * Math.PI) / 180;
+  const [cos, sin] = [Math.round(Math.cos(a)), Math.round(Math.sin(a))];
+  const [fx, fy] = [frame?.flipH ? -1 : 1, frame?.flipV ? -1 : 1];
+  const k = s * z;
+  const m = [cos * fx * k, sin * fx * k, -sin * fy * k, cos * fy * k];
+  const [cx, cy] = [vw * (c.l + (1 - c.l - c.r) / 2), vh * (c.t + (1 - c.t - c.b) / 2)];
+  const ox = (W / 2 - win.x) * z - (m[0] * cx + m[2] * cy);
+  const oy = (H / 2 - win.y) * z - (m[1] * cx + m[3] * cy);
+  return {
+    matrix: [...m, ox, oy],
+    clip: `inset(${c.t * 100}% ${c.r * 100}% ${c.b * 100}% ${c.l * 100}%)`,
+  };
 }
 
 /**
