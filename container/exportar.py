@@ -52,6 +52,10 @@ def tem_som(arquivo):
     return "Audio:" in r.stderr
 
 
+def tem_alfa(arquivo):
+    return "alpha_mode" in subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-i", arquivo], capture_output=True, text=True).stderr.lower()
+
+
 def numero(valor, minimo, maximo):
     """Tudo o que vai para os filtros passa por aqui: o plano vem do canvas da pessoa."""
     if isinstance(valor, bool) or not isinstance(valor, (int, float)) or not math.isfinite(valor) or not minimo <= valor <= maximo:
@@ -183,7 +187,9 @@ def filtros(plano, arquivos):
             # No servidor os arquivos não têm extensão: diz o demuxer, que é o que aceita -loop.
             entradas += ["-f", "image2", "-pattern_type", "none", "-loop", "1", "-framerate", str(FPS), "-t", f"{dura:.6f}", "-i", caminho]
         else:
-            entradas += ["-ss", f"{corte:.6f}", "-t", f"{dura * velocidade:.6f}", "-i", caminho]
+            # WebM com transparência: o decodificador nativo do ffmpeg ignora o alfa e cobre de preto.
+            alfa = ["-c:v", "libvpx-vp9"] if tipo == "video" and tem_alfa(caminho) else []
+            entradas += ["-ss", f"{corte:.6f}", "-t", f"{dura * velocidade:.6f}", *alfa, "-i", caminho]
         i = len([a for a in entradas if a == "-i"]) - 1
         if tipo != "audio":
             # Cobre o quadro, como a prévia (object-fit: cover). O arquivo pode acabar um quadro

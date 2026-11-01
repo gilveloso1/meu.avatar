@@ -37,8 +37,10 @@ Próximos passos, nesta ordem:
 3. **Texto e gráficos com o HyperFrames** (testado, ver
    `prototipos/hyperframes-linux/RESULTADOS.md` no branch `claude/teste-hyperframes-linux`):
    bloco de HTML escrito pelo agente, legendas palavra a palavra, títulos, lower thirds,
-   selos, gráficos, contadores, modelos por marca e máscara para cobrir uma área.
-4. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música,
+   selos, gráficos, contadores, modelos por marca e máscara para cobrir uma área. Feito à
+   mão no caso real, com camada WebM transparente e Whisper; falta virar recurso do site.
+4. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
+   licenciada ou geração por API (a do caso real foi sintetizada, só para teste),
    realce de voz por bloco e volume animado.
 5. **Transições**: fusão, fade do preto, cortina, zoom, flash e transição em HyperFrames.
 6. **Cor**: exposição, contraste, saturação, temperatura, LUT, igualar a cor entre vídeos,

@@ -79,3 +79,5 @@ A resposta traz `criados`, com os ids novos na ordem dos comandos.
   de abrir a outras contas.
 - Velocidade e enquadramento ainda não têm campos nos Ajustes: só pela API, e a prévia mostra.
 - O fundo desfocado da prévia não acompanha o zoom; o da exportação, sim.
+- Vídeo WebM com transparência funciona como cobertura (`exportar.py` detecta o alfa), para
+  legendas e gráficos feitos fora. Na prévia, depende do navegador.
