@@ -83,7 +83,7 @@ recusado. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
 
 | `tipo` | Campos | Efeito |
 |---|---|---|
-| `adicionar` | `video` ou `arquivo`; `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo`); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: linha nova, solta |
+| `adicionar` | `video` ou `arquivo`; `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo`); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: bloco solto, à direita de tudo |
 | `cortar` | `bloco`, `inicio`, `fim` | Trecho do arquivo, em segundos; a sequência fica encostada |
 | `dividir` | `bloco`, `em` | Dois blocos, no instante `em` do arquivo; 0,5 s no mínimo de cada lado |
 | `mover` | `bloco`, `depois` ou `antes` | Muda a ordem, sem buraco; a cobertura e o som somado vão junto |
