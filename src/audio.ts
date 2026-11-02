@@ -15,8 +15,7 @@
  * O contêiner não tem acesso à internet: recebe o MP4 e devolve o MP4 tratado.
  * Fica ligado alguns minutos depois de cada vídeo e depois dorme sozinho.
  */
-import { getContainer } from "@cloudflare/containers";
-import { SleepyContainer } from "./conteiner";
+import { ligado, SleepyContainer, tentando } from "./conteiner";
 import type { containerPlan } from "./quickedit";
 
 export type ContainerPlan = ReturnType<typeof containerPlan>;
@@ -66,11 +65,8 @@ const START_TIMEOUT_MS = 120_000;
 export class ContainerAudio implements AudioApi {
   constructor(private readonly ns: DurableObjectNamespace<AudioFixer>) {}
 
-  /** O contêiner (uma instância só), já de pé e com a porta respondendo. */
-  private async ready() {
-    const container = getContainer(this.ns, "audio");
-    await container.startAndWaitForPorts({ ports: 8080, cancellationOptions: { instanceGetTimeoutMS: START_TIMEOUT_MS, portReadyTimeoutMS: START_TIMEOUT_MS } });
-    return container;
+  private ready() {
+    return ligado(this.ns, "audio", START_TIMEOUT_MS);
   }
 
   treat(mp4: ReadableStream, size: number): Promise<Response> {
@@ -81,18 +77,12 @@ export class ContainerAudio implements AudioApi {
     return this.post("/editar", "Edição rápida", mp4, size, { "x-plano": JSON.stringify(plan) });
   }
 
-  async face(mp4: ArrayBuffer): Promise<Face> {
-    // Uma segunda tentativa: a primeira pode pegar o contêiner ainda subindo.
-    for (let attempt = 1; ; attempt++) {
-      try {
-        const res = await (await this.ready()).fetch(new Request("http://audio/rosto", { method: "POST", body: mp4 }));
-        if (!res.ok) throw new Error(`Detecção do rosto falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
-        return (await res.json()) as Face;
-      } catch (err) {
-        if (attempt >= 2) throw err;
-        console.error("Detecção do rosto: tentando de novo", err);
-      }
-    }
+  face(mp4: ArrayBuffer): Promise<Face> {
+    return tentando("Detecção do rosto", async () => {
+      const res = await (await this.ready()).fetch(new Request("http://audio/rosto", { method: "POST", body: mp4 }));
+      if (!res.ok) throw new Error(`Detecção do rosto falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
+      return (await res.json()) as Face;
+    });
   }
 
   prepare(mp4: ReadableStream, size: number): Promise<Response> {

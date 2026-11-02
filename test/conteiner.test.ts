@@ -6,7 +6,7 @@
  */
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { abandoned } from "../src/conteiner";
+import { abandoned, tentando } from "../src/conteiner";
 import type { Falso } from "./worker";
 
 const SIGTERM = 15;
@@ -45,5 +45,34 @@ describe("contêiner que dorme", { timeout: 15_000 }, () => {
     expect(abandoned(0, 0, 60 * min, 15 * min)).toBe(false);
     expect(abandoned(1, 0, 14 * min, 15 * min)).toBe(false);
     expect(abandoned(1, 0, 16 * min, 15 * min)).toBe(true);
+  });
+});
+
+describe("nova tentativa", () => {
+  const falhando = (vezes: number, erro = new Error("The container service is unreachable")) => {
+    let chamadas = 0;
+    const fn = async () => {
+      if (++chamadas <= vezes) throw erro;
+      return "ok";
+    };
+    return { fn, chamadas: () => chamadas };
+  };
+
+  it("o contêiner que falha e depois responde passa sem o erro chegar a quem pediu", async () => {
+    const f = falhando(2);
+    expect(await tentando("Teste", f.fn, undefined, 0)).toBe("ok");
+    expect(f.chamadas()).toBe(3);
+  });
+
+  it("desiste depois de três tentativas", async () => {
+    const f = falhando(3);
+    await expect(tentando("Teste", f.fn, undefined, 0)).rejects.toThrow("unreachable");
+    expect(f.chamadas()).toBe(3);
+  });
+
+  it("o erro do próprio trabalho não se repete", async () => {
+    const f = falhando(1, new TypeError("html quebrado"));
+    await expect(tentando("Teste", f.fn, (err) => err instanceof TypeError, 0)).rejects.toThrow("html quebrado");
+    expect(f.chamadas()).toBe(1);
   });
 });

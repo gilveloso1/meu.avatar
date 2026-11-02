@@ -10,7 +10,36 @@
  *   quando o corpo da resposta é lido até o fim. Um pedido que passa do prazo do
  *   próprio trabalho conta como abandonado (a tela fechou, o Worker caiu).
  */
-import { Container } from "@cloudflare/containers";
+import { Container, getContainer } from "@cloudflare/containers";
+
+/** Quantas vezes tentar ligar ou falar com o contêiner antes de desistir. */
+const TENTATIVAS = 3;
+const ESPERA_MS = 2000;
+
+/**
+ * Tenta de novo o que falhou por estar o contêiner subindo, indo dormir ou ocupado com outro
+ * pedido ("The container service is unreachable", "Container port connection closed"): em
+ * 02/11/2026, chamadas em paralelo do agente caíram assim e passaram na segunda vez. `final`
+ * diz o erro que não adianta repetir (o do próprio trabalho).
+ */
+export async function tentando<T>(oQue: string, fn: () => Promise<T>, final: (err: unknown) => boolean = () => false, esperaMs = ESPERA_MS): Promise<T> {
+  for (let tentativa = 1; ; tentativa++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (tentativa >= TENTATIVAS || final(err)) throw err;
+      console.error(`${oQue}: tentando de novo (${tentativa}/${TENTATIVAS - 1})`, err);
+      await new Promise((r) => setTimeout(r, esperaMs * tentativa));
+    }
+  }
+}
+
+/** O contêiner (uma instância só, pelo nome), já de pé e com a porta respondendo. */
+export async function ligado<T extends Container>(ns: DurableObjectNamespace<T>, nome: string, timeoutMs: number) {
+  const container = getContainer(ns, nome);
+  await tentando(`Ligar o contêiner ${nome}`, () => container.startAndWaitForPorts({ ports: 8080, cancellationOptions: { instanceGetTimeoutMS: timeoutMs, portReadyTimeoutMS: timeoutMs } }));
+  return container;
+}
 
 /** Campos privados da biblioteca (0.3.x) que a guarda precisa ler e zerar. */
 interface Internals {

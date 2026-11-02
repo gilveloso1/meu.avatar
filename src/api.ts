@@ -29,6 +29,12 @@ const assetSrc = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`
 
 const falha = (status: number, erro: string, extra: Record<string, unknown> = {}) => Response.json({ erro, ...extra }, { status });
 
+/** O contêiner não respondeu nem nas novas tentativas (src/conteiner.ts): o agente tenta mais tarde. */
+function conteinerFalhou(oQue: string, err: unknown): Response {
+  console.error(`${oQue} falhou`, err);
+  return falha(503, "conteiner_falhou");
+}
+
 const nomeDoArquivo = (v: unknown, padrao: string) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : padrao);
 const COR = /^#[0-9a-f]{3}([0-9a-f]{3})?([0-9a-f]{2})?$/i;
 
@@ -137,7 +143,7 @@ export class Api {
       return Response.json({ arquivo: { id: r.file.id, nome: r.file.name, tipo: r.file.type, src: `/projetos/${project.id}/arquivos/${r.file.id}` }, duracao: c.duracao, largura: r.largura, altura: r.altura, ...extra }, { status: 201 });
     } catch (err) {
       if (err instanceof RenderError) return falha(422, "render_falhou", { detalhe: err.message });
-      throw err;
+      return conteinerFalhou("Render", err);
     }
   }
 
@@ -174,7 +180,7 @@ export class Api {
       } catch (err) {
         if (err instanceof InputError) return falha(404, "arquivo_indisponivel");
         if (err instanceof AudioLongoError) return falha(413, "audio_longo_demais");
-        throw err;
+        return conteinerFalhou("Transcrição da legenda", err);
       }
     }
     const ts = trechos(palavras, semTexto as number[][], g.dur);
@@ -254,7 +260,7 @@ export class Api {
     } catch (err) {
       if (err instanceof InputError) return falha(404, "arquivo_indisponivel");
       if (err instanceof AudioLongoError) return falha(413, "audio_longo_demais");
-      throw err;
+      return conteinerFalhou(`Inspeção (${what})`, err);
     }
   }
 

@@ -8,10 +8,9 @@
  * que chama o próximo passo assim que o anterior acaba (começa na hora); se ela
  * fechar, o agendamento termina. Um passo só roda uma vez por causa do claim do banco.
  */
-import { getContainer } from "@cloudflare/containers";
 import { type ExportWork, exportWork } from "./canvas/modelo.js";
 import type { Db, ExportRow, Project, ProjectFile, Role } from "./db";
-import { SleepyContainer } from "./conteiner";
+import { ligado, SleepyContainer } from "./conteiner";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
 import { MAX_VIDEO_BYTES } from "./studio";
@@ -77,8 +76,7 @@ export class ContainerExport implements ExportApi {
 
   private async post(path: string, job: string, body: ReadableStream, sizes: number[], headers: Record<string, string> = {}): Promise<Response> {
     // Uma instância só (a de 8 GiB é a parte cara): as exportações dividem o mesmo contêiner.
-    const container = getContainer(this.ns, "exportar");
-    await container.startAndWaitForPorts({ ports: 8080, cancellationOptions: { instanceGetTimeoutMS: START_TIMEOUT_MS, portReadyTimeoutMS: START_TIMEOUT_MS } });
+    const container = await ligado(this.ns, "exportar", START_TIMEOUT_MS);
     const size = sizes.reduce((a, b) => a + b, 0);
     const res = await container.fetch(new Request(`http://exportar${path}`, { method: "POST", body, headers: { "content-length": String(size), "x-tamanhos": sizes.join(","), ...headers } }));
     if (!res.ok) throw new Error(`Exportação falhou em ${path} (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
