@@ -2,6 +2,7 @@
 # Monta a imagem de render, confere um render sem rede e a manda ao registro da Cloudflare.
 # Precisa do Docker (no ambiente cloud: `dockerd &`). Uso: ./construir.sh <versão>, e depois
 # ponha a imagem que ele imprime no "image" do Renderer em wrangler.jsonc (docs/operacao.md).
+# A conta vem de CLOUDFLARE_ACCOUNT_ID, do wrangler.jsonc ou do `wrangler whoami`.
 set -eu
 cd "$(dirname "$0")"
 VERSAO=${1:?Diga a versão, como 1}
@@ -34,5 +35,18 @@ echo "Render sem rede: ok ($(wc -c < "$T/saida.webm") bytes)."
 docker stop -t 5 render-teste >/dev/null
 [ "$(docker inspect -f '{{.State.ExitCode}}' render-teste)" = 0 ] || { echo "O servidor não saiu no SIGTERM." >&2; exit 1; }
 
-npx wrangler containers push "$NOME"
-echo "Imagem: registry.cloudflare.com/<conta>/$NOME (o push acima mostra o endereço)."
+# Com a versão em número, o wrangler lê "meu-avatar-render:1" como host:porta, acha que é outro
+# registro e manda ao Docker Hub. Então a imagem leva o endereço inteiro da Cloudflare.
+# A conta: CLOUDFLARE_ACCOUNT_ID, senão a do "image" do Renderer em wrangler.jsonc, senão o whoami.
+CONTA=${CLOUDFLARE_ACCOUNT_ID:-}
+[ -n "$CONTA" ] || CONTA=$(grep -o 'registry\.cloudflare\.com/[0-9a-f]\{32\}/meu-avatar-render' ../../wrangler.jsonc | head -n 1 | cut -d/ -f2 || true)
+[ -n "$CONTA" ] || CONTA=$(npx wrangler whoami < /dev/null 2>/dev/null | grep -o '[0-9a-f]\{32\}' | head -n 1 || true)
+[ -n "$CONTA" ] || { echo "Não achei a conta da Cloudflare: defina CLOUDFLARE_ACCOUNT_ID." >&2; exit 1; }
+ENDERECO=registry.cloudflare.com/$CONTA/$NOME
+docker tag "$NOME" "$ENDERECO"
+# O registro às vezes responde "blob unknown to registry" depois de subir as camadas; na segunda vai.
+npx wrangler containers push "$ENDERECO" < /dev/null || {
+  echo "O envio falhou; tentando de novo." >&2
+  npx wrangler containers push "$ENDERECO" < /dev/null || { echo "O envio falhou de novo." >&2; exit 1; }
+}
+echo "Imagem: $ENDERECO"
