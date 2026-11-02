@@ -344,8 +344,13 @@ sh container/render/construir.sh 1
 
 Ele baixa o ffmpeg e as fontes (conferindo o SHA-256), monta a imagem com a CA como segredo do
 build (não fica na imagem), faz um render sem rede, confere a transparência e que o servidor
-sai no SIGTERM, e manda a imagem ao registro da Cloudflare. Depois, ponha a versão nova no
-`image` do `Renderer` em `wrangler.jsonc` e publique como sempre. Só precisa disso quando
+sai no SIGTERM, e manda a imagem ao registro da Cloudflare com o nome inteiro
+(`registry.cloudflare.com/<conta>/meu-avatar-render:<versão>`; a conta vem de
+`CLOUDFLARE_ACCOUNT_ID`, do `wrangler.jsonc` ou do `wrangler whoami`). Com o nome curto e a versão
+só em número, o wrangler 4.152 lê `meu-avatar-render:1` como servidor e porta e o docker tenta o
+docker.io. O envio tenta duas vezes: na primeira publicação, o registro respondeu "blob unknown
+to registry" logo depois de receber as camadas, e a segunda passou. No fim, ele imprime o
+endereço; ponha a versão nova no `image` do `Renderer` em `wrangler.jsonc` e publique como sempre. Só precisa disso quando
 `container/render/` muda; os outros deploys usam a imagem que já está no registro.
 
 **Depois de publicar, confira que ele dorme** (o `AudioFixer` e o `Exporter` já ficaram uma

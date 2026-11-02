@@ -34,5 +34,16 @@ echo "Render sem rede: ok ($(wc -c < "$T/saida.webm") bytes)."
 docker stop -t 5 render-teste >/dev/null
 [ "$(docker inspect -f '{{.State.ExitCode}}' render-teste)" = 0 ] || { echo "O servidor não saiu no SIGTERM." >&2; exit 1; }
 
-npx wrangler containers push "$NOME"
-echo "Imagem: registry.cloudflare.com/<conta>/$NOME (o push acima mostra o endereço)."
+# O nome vai inteiro: com a versão só em número, o wrangler lê "meu-avatar-render:1" como
+# servidor e porta, acha que é outro registro e o docker tenta o docker.io (acesso negado).
+CONTA=${CLOUDFLARE_ACCOUNT_ID:-}
+[ -n "$CONTA" ] || CONTA=$(grep -o 'registry\.cloudflare\.com/[0-9a-f]\{32\}/meu-avatar-render' ../../wrangler.jsonc | head -1 | cut -d/ -f2 || true)
+[ -n "$CONTA" ] || CONTA=$(npx wrangler whoami 2>/dev/null | grep -o '[0-9a-f]\{32\}' | head -1 || true)
+[ -n "$CONTA" ] || { echo "Não achei a conta da Cloudflare: defina CLOUDFLARE_ACCOUNT_ID." >&2; exit 1; }
+IMAGEM=registry.cloudflare.com/$CONTA/$NOME
+docker tag "$NOME" "$IMAGEM"
+# O registro às vezes responde "blob unknown to registry" logo depois de receber as camadas: uma
+# segunda tentativa passa.
+npx wrangler containers push "$IMAGEM" || { echo "O envio falhou; tentando de novo." >&2; npx wrangler containers push "$IMAGEM"; }
+echo "Imagem: $IMAGEM"
+grep -q "\"$IMAGEM\"" ../../wrangler.jsonc || echo "Ponha este endereço no \"image\" do Renderer em wrangler.jsonc antes de publicar."
