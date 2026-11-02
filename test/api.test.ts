@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
-import { call, cookie, FakeExportApi, FakeVideoApi, memberCookie, SITE } from "./helpers";
+import { normalizar } from "../src/transcricao";
+import { call, cookie, FakeExportApi, FakeTranscriber, FakeVideoApi, memberCookie, SITE } from "./helpers";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
 const VIDEO2 = "33333333-3333-4333-8333-333333333333";
@@ -15,7 +16,7 @@ async function token(email: string, code: string): Promise<string> {
   return code;
 }
 
-const api = (path: string, code: string | null, body?: unknown, exporter = null as FakeExportApi | null) =>
+const api = (path: string, code: string | null, body?: unknown, exporter = null as FakeExportApi | null, transcriber = null as FakeTranscriber | null) =>
   call(
     new Request(`${SITE}${path}`, {
       method: body === undefined ? "GET" : "POST",
@@ -26,6 +27,7 @@ const api = (path: string, code: string | null, body?: unknown, exporter = null 
     null,
     null,
     exporter,
+    transcriber,
   );
 
 async function video(id: string, structure = "wan", status = "completed") {
@@ -338,6 +340,66 @@ describe("edição fina", () => {
     expect(await (await api(`/api/v1/projetos/${id}/silencios?src=/videos/${VIDEO}.mp4`, admin, undefined, fake)).json()).toEqual(fake.silences);
     expect((await api(`/api/v1/projetos/${id}/quadros?src=/videos/${OCULTO}.mp4&instantes=1`, admin, undefined, fake)).status).toBe(404);
     expect((await api(`/api/v1/projetos/${id}/quadros?src=/videos/${VIDEO}.mp4&instantes=x`, admin, undefined, fake)).status).toBe(400);
+  });
+});
+
+describe("transcrição", () => {
+  type Vista = { revisao: number; criados: string[]; grupos: { duracao: number }[]; canvas: { blocks: { id: string; tin: number; tout: number }[] } };
+  const fala = (id: string, src: string, t: FakeTranscriber | null, e: FakeExportApi | null = new FakeExportApi()) => api(`/api/v1/projetos/${id}/transcricao?src=${src}`, admin, undefined, e, t);
+
+  it("devolve as palavras com os tempos e não paga de novo pelo mesmo arquivo", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id } = await novo();
+    const t = new FakeTranscriber();
+    const res = await fala(id, `/videos/${VIDEO}.mp4`, t);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(t.result);
+    expect(t.calls).toEqual(["mp3"]);
+    await (await fala(id, `/videos/${VIDEO}.mp4`, t)).arrayBuffer();
+    expect(t.calls).toHaveLength(1);
+    // Arquivo trocado (áudio tratado de novo): outro etag, transcreve de novo.
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([4, 5, 6, 7]));
+    await (await fala(id, `/videos/${VIDEO}.mp4`, t)).arrayBuffer();
+    expect(t.calls).toHaveLength(2);
+  });
+
+  it("sem o Whisper ou sem o contêiner, avisa; arquivo que a conta não usa, não existe", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id } = await novo();
+    expect(await (await fala(id, `/videos/${VIDEO}.mp4`, null)).json()).toEqual({ erro: "transcricao_indisponivel" });
+    expect((await fala(id, `/videos/${VIDEO}.mp4`, new FakeTranscriber(), null)).status).toBe(503);
+    expect((await fala(id, `/videos/${OCULTO}.mp4`, new FakeTranscriber())).status).toBe(404);
+  });
+
+  it("normaliza a resposta do Whisper: palavras sem espaço e tempos em centésimos", () => {
+    const out = normalizar({
+      text: " Oi gente",
+      transcription_info: { language: "pt", duration: 2.0004 },
+      segments: [{ words: [{ word: " Oi", start: 0.123, end: 0.456 }] }, { words: [{ word: " gente", start: 0.5, end: 0.9 }, { word: " ", start: 1, end: 1.1 }] }],
+    });
+    expect(out).toEqual({ idioma: "pt", duracao: 2, texto: "Oi gente", palavras: [{ palavra: "Oi", inicio: 0.12, fim: 0.46 }, { palavra: "gente", inicio: 0.5, fim: 0.9 }] });
+    expect(normalizar({ words: [{ word: "Oi", start: 0, end: 0.3 }] }).texto).toBe("Oi");
+  });
+
+  it("removerTrechos tira o vício do meio e o resto encosta", async () => {
+    const { id, revisao } = await novo();
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 6 }])).json<Vista>();
+    const r = await (await comandos(id, a.revisao, [{ tipo: "removerTrechos", bloco: a.criados[0], trechos: [[1.6, 2.5], [5.5, 9]] }])).json<Vista>();
+    expect(r.canvas.blocks.map((b) => [b.tin, b.tout])).toEqual([[0, 1.6], [2.5, 5.5]]);
+    expect(r.criados).toHaveLength(1);
+    expect(r.grupos).toHaveLength(1);
+    expect(r.grupos[0]!.duracao).toBeCloseTo(4.6);
+  });
+
+  it("removerTrechos recusa sobra curta e trecho fora do bloco", async () => {
+    const { id, revisao } = await novo();
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 6 }])).json<Vista>();
+    const pede = async (trechos: unknown) => (await comandos(id, a.revisao, [{ tipo: "removerTrechos", bloco: a.criados[0], trechos }])).json();
+    expect(await pede([[0.2, 3]])).toEqual({ erro: "sobra_curta", comando: 0 });
+    expect(await pede([[0, 6]])).toEqual({ erro: "sobra_curta", comando: 0 });
+    expect(await pede([[7, 8]])).toEqual({ erro: "trechos_invalidos", comando: 0 });
+    expect(await pede([[2, 1]])).toEqual({ erro: "trechos_invalidos", comando: 0 });
+    expect(await pede([])).toEqual({ erro: "trechos_invalidos", comando: 0 });
   });
 });
 

@@ -14,6 +14,7 @@ import type { Db, ExportRow, Project, Role } from "./db";
 import { SleepyContainer } from "./conteiner";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
+import { AudioLongoError, type Transcriber, type Transcricao } from "./transcricao";
 
 /** Passado o prazo dos arquivos, a linha fica mais um pouco: a tela mostra que expirou. */
 const EXPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
@@ -29,6 +30,10 @@ const CRON_BUDGET_MS = 45_000;
 const START_TIMEOUT_MS = 120_000;
 /** Um ZIP comum guarda tamanhos em 32 bits: acima disso, o arquivo sairia corrompido. */
 const MAX_ZIP_BYTES = 0xffffffff;
+/** Muda quando a transcrição passa a sair diferente (outro modelo, outro formato): as guardadas não servem mais. */
+const TRANSCRIPTION_VERSION = "1";
+/** O MP3 do contêiner tem 32 kbit/s: 10 MB são uns 40 minutos de fala. */
+export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 export class Exporter extends SleepyContainer {
   defaultPort = 8080;
@@ -39,14 +44,16 @@ export class Exporter extends SleepyContainer {
   enableInternet = false;
 }
 
+export type Inspecao = "/quadros" | "/silencios" | "/audio";
+
 /** O que o site usa do contêiner; os testes trocam por um falso. */
 export interface ExportApi {
   /** Devolve o trecho (corpo com content-length). */
   segment(job: string, body: ReadableStream, sizes: number[]): Promise<Response>;
   /** Devolve a versão emendada, com o CRC-32 em x-crc32. */
   join(job: string, body: ReadableStream, sizes: number[]): Promise<Response>;
-  /** Olha um arquivo: "/quadros" devolve um JPG e "/silencios", um JSON (docs/api.md). */
-  inspect(path: "/quadros" | "/silencios", body: ReadableStream, size: number, instants?: string): Promise<Response>;
+  /** Olha um arquivo: "/quadros" devolve um JPG, "/silencios" um JSON e "/audio" o som em MP3 (docs/api.md). */
+  inspect(path: Inspecao, body: ReadableStream, size: number, instants?: string): Promise<Response>;
 }
 
 export class ContainerExport implements ExportApi {
@@ -60,7 +67,7 @@ export class ContainerExport implements ExportApi {
     return this.post("/emendar", job, body, sizes);
   }
 
-  inspect(path: "/quadros" | "/silencios", body: ReadableStream, size: number, instants = ""): Promise<Response> {
+  inspect(path: Inspecao, body: ReadableStream, size: number, instants = ""): Promise<Response> {
     return this.post(path, path, body, [size], { "x-instantes": instants });
   }
 
@@ -110,6 +117,7 @@ export class Exports {
     private readonly db: Db,
     private readonly media: R2Bucket,
     private readonly api: ExportApi | null,
+    private readonly transcriber: Transcriber | null = null,
   ) {}
 
   /** Começa a exportação de um Final, sempre a partir do projeto salvo; os arquivos são conferidos aqui. */
@@ -162,10 +170,29 @@ export class Exports {
   }
 
   /** O que o agente pede para ver: um mosaico dos instantes ou os silêncios do arquivo. */
-  async inspect(key: string, path: "/quadros" | "/silencios", instants?: string): Promise<Response> {
+  async inspect(key: string, path: Inspecao, instants?: string): Promise<Response> {
     if (!this.api) throw new InputError(ERROS.exportarIndisponivel);
     const sizes = await this.sizes([key]);
     return this.pipe(sizes, [key], null, (body) => this.api!.inspect(path, body, sizes[0]!, instants));
+  }
+
+  /**
+   * A fala do arquivo com o tempo de cada palavra, ou null sem contêiner ou sem Whisper. Fica
+   * guardada no R2 pelo etag: pedir de novo não paga de novo, e o áudio tratado outra vez é refeito.
+   */
+  async transcribe(key: string): Promise<Transcricao | null> {
+    if (!this.api || !this.transcriber) return null;
+    const head = await this.media.head(key);
+    if (!head) throw new InputError(ERROS.exportarArquivo);
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${TRANSCRIPTION_VERSION}:${key}:${head.etag}`));
+    const cache = `transcricoes/${hex(hash)}.json`;
+    const saved = await this.media.get(cache);
+    if (saved) return saved.json();
+    const audio = new Uint8Array(await (await this.inspect(key, "/audio")).arrayBuffer());
+    if (audio.byteLength > MAX_AUDIO_BYTES) throw new AudioLongoError();
+    const result = await this.transcriber.transcribe(audio);
+    await this.media.put(cache, JSON.stringify(result), { httpMetadata: { contentType: "application/json" } });
+    return result;
   }
 
   /** O arquivo de um bloco no R2: só um vídeo que a pessoa pode usar ou um arquivo deste projeto. */

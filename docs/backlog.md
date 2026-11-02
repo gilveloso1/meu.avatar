@@ -21,22 +21,20 @@ de definir o limite de uso e o custo do contêiner por pessoa.
 nível profissional num projeto real. O caso de teste é o projeto "Ação na Bolsa". Cada item
 precisa existir nos comandos, na exportação e na prévia do canvas.
 
-Agora, no PR 42 (API dos projetos):
-
-- Cortes e ritmo: dividir, inserir no meio, mover e trocar a ordem, aparar sem abrir buraco,
-  velocidade por bloco e do Final, remover pausas.
-- Imagem: zoom e posição, recorte, espelhar, girar, encaixe (preencher, caber, fundo
-  desfocado), zoom no rosto e animação com keyframes.
-- Para o agente decidir: ver quadros e o mapa de silêncios de cada arquivo.
+Já feito: cortes e ritmo (dividir, inserir no meio, mover, aparar, velocidade, remover pausas),
+imagem (zoom, foco, recorte, espelhar, girar, encaixe, rosto, keyframes), ver quadros e silêncios
+(PRs 42 a 46) e a transcrição com o tempo de cada palavra, com `removerTrechos` para editar pelo
+texto (Whisper do Workers AI, ver [api.md](api.md)).
 
 Próximos passos, nesta ordem:
 
 Aplicar o Ação na Bolsa só pelo MCP (01/11/2026) funcionou, mas o agente recebeu prontos o motion,
 a camada de legenda e a trilha. Pelo MCP ele ainda não faz gráficos, legenda nem música, nem sabe
-o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (itens 1, 2 e 4).
+o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (itens 1, 2 e 4). O tempo
+de cada palavra já existe (`ver_transcricao`).
 
-1. **Transcrição** com o tempo de cada palavra: edição pelo texto, remover vícios de fala e
-   repetições. Ativos de avatar nos projetos.
+1. **Ativos de avatar nos projetos** (`Exports.source`) e conferir a transcrição num vídeo real
+   (o primeiro uso no ar diz se o Whisper aceita o tamanho e se os tempos batem com os silêncios).
 2. **Texto e gráficos com o HyperFrames** (testado, ver
    `prototipos/hyperframes-linux/RESULTADOS.md` no branch `claude/teste-hyperframes-linux`):
    bloco de HTML escrito pelo agente, legendas palavra a palavra, títulos, lower thirds,
@@ -259,6 +257,9 @@ próprio admin, hoje o caminho é apagar a conta no D1 e cadastrar de novo
 (`docs/operacao.md`). Fazer junto com o item 4.
 
 ## Pendências pequenas
+
+- **Canvas**: velocidade e enquadramento ainda não têm campos nos Ajustes (só pela API, a prévia
+  mostra), e o fundo desfocado da prévia não acompanha o zoom (o da exportação, sim).
 
 - **`www.meuavatar.ia.br`**: configurado na Cloudflare com certificado
   próprio, mas não deu para conferir do ambiente cloud (o proxy recusa).

@@ -12,13 +12,13 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.2.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.3.0" };
 /** A lista de ferramentas não depende de quem pede. */
 const CACHE = { ttlMs: 3_600_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros e ver_silencios, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, leia o projeto e refaça o lote. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, leia o projeto e refaça o lote. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro. Cada um tem "tipo":
 adicionar {video|arquivo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo), depois: bloco | sobre: bloco, em: segundos}
@@ -27,6 +27,7 @@ dividir {bloco, em}
 mover {bloco, depois|antes}
 velocidade {bloco, velocidade: 0,25 a 4}
 removerPausas {bloco?, pausa: curta|media|longa}
+removerTrechos {bloco, trechos: [[inicio, fim], ...]} (segundos do arquivo, como os de ver_transcricao; o resto encosta)
 enquadrar {bloco, zoom: 1 a 8, focoX, focoY: 0 a 1, rosto: true, chaves: [{t, zoom, focoX, focoY}], encaixe: preencher|caber|desfocar, recorte: {esquerda, topo, direita, base}, espelharH, espelharV, girar: 0|90|180|270, limpar}
 ligar {de, para}
 remover {ids, fechar}
@@ -55,6 +56,11 @@ const FERRAMENTAS = [
     name: "ver_quadros",
     description: "Mostra até 12 instantes de um arquivo, lado a lado, para ver o vídeo.",
     inputSchema: objeto({ projeto, src, instantes: { type: "array", items: { type: "number" }, description: "Segundos do arquivo." } }, ["projeto", "src", "instantes"]),
+  },
+  {
+    name: "ver_transcricao",
+    description: "A fala de um arquivo com o tempo de cada palavra, para editar pelo texto: tirar vícios, repetições e frases com removerTrechos. Os tempos são aproximados: confira as bordas com ver_silencios.",
+    inputSchema: objeto({ projeto, src }, ["projeto", "src"]),
   },
   { name: "ver_silencios", description: "Duração e silêncios de um arquivo, com a regra da Edição rápida.", inputSchema: objeto({ projeto, src }, ["projeto", "src"]) },
   {
@@ -100,6 +106,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("POST", `${p}/comandos`, json({ revisao: a.revisao, comandos: a.comandos }));
     case "ver_quadros":
       return chama("GET", `${p}/quadros?src=${seguro(a.src)}&instantes=${seguro(Array.isArray(a.instantes) ? a.instantes.join(",") : "")}`);
+    case "ver_transcricao":
+      return chama("GET", `${p}/transcricao?src=${seguro(a.src)}`);
     case "ver_silencios":
       return chama("GET", `${p}/silencios?src=${seguro(a.src)}`);
     case "exportar":
