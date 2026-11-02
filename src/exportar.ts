@@ -10,10 +10,14 @@
  */
 import { getContainer } from "@cloudflare/containers";
 import { type ExportWork, exportWork } from "./canvas/modelo.js";
-import type { Db, ExportRow, Project, Role } from "./db";
+import type { Db, ExportRow, Project, ProjectFile, Role } from "./db";
 import { SleepyContainer } from "./conteiner";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
+import { MAX_VIDEO_BYTES } from "./studio";
+import { output } from "./canvas/modelo.js";
+import type { CanvasProject } from "./canvas/modelo.js";
+import { MAX_HTML_BYTES, MAX_RENDER_SECONDS, type RenderApi } from "./render";
 import { AudioLongoError, type Transcriber, type Transcricao } from "./transcricao";
 
 /** Passado o prazo dos arquivos, a linha fica mais um pouco: a tela mostra que expirou. */
@@ -118,7 +122,40 @@ export class Exports {
     private readonly media: R2Bucket,
     private readonly api: ExportApi | null,
     private readonly transcriber: Transcriber | null = null,
+    private readonly renderer: RenderApi | null = null,
   ) {}
+
+  /** Guarda um arquivo no projeto: o que vem do computador e o vídeo feito do HTML. */
+  async saveFile(projectId: string, name: string, type: string, bytes: ArrayBuffer): Promise<ProjectFile> {
+    const id = crypto.randomUUID();
+    const file = { id, project_id: projectId, key: `projetos/${projectId}/${id}`, name, type, size: bytes.byteLength };
+    await this.media.put(file.key, bytes, { httpMetadata: { contentType: type } });
+    await this.db.insertProjectFile(file);
+    return { ...file, created_at: new Date().toISOString() };
+  }
+
+  /**
+   * O HTML do agente vira um WebM transparente, do tamanho de um Final, e entra no projeto.
+   * Null sem o contêiner de render; RenderError (src/render.ts) quando o HTML não roda.
+   */
+  async renderHtml(project: Project, c: { nome: string; html: string; duracao: number; final?: string }): Promise<{ file: ProjectFile; largura: number; altura: number } | "html_invalido" | "duracao_invalida" | "final_inexistente" | "html_grande_demais" | "video_grande_demais" | null> {
+    if (!c.html.trim()) return "html_invalido";
+    if (new TextEncoder().encode(c.html).byteLength > MAX_HTML_BYTES) return "html_grande_demais";
+    if (!Number.isFinite(c.duracao) || c.duracao < 0.1 || c.duracao > MAX_RENDER_SECONDS) return "duracao_invalida";
+    const finals = (JSON.parse(project.data) as CanvasProject).finals;
+    const final = c.final === undefined ? finals[0] : finals.find((f) => f.id === c.final);
+    if (c.final !== undefined && !final) return "final_inexistente";
+    if (!this.renderer) return null;
+    // Sem Final (projeto vazio), o padrão da tela: 720p em 9:16.
+    const { width, height } = output(final!);
+    const res = await this.renderer.render(c.html, width, height, c.duracao);
+    if (Number(res.headers.get("content-length")) > MAX_VIDEO_BYTES) {
+      await res.body?.cancel();
+      return "video_grande_demais";
+    }
+    const file = await this.saveFile(project.id, c.nome, "video/webm", await res.arrayBuffer());
+    return { file, largura: width, altura: height };
+  }
 
   /** Começa a exportação de um Final, sempre a partir do projeto salvo; os arquivos são conferidos aqui. */
   async start(project: Project, role: Role, finalId: string, pick?: number[], now = new Date()): Promise<ExportRow> {

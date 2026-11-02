@@ -4,3 +4,8 @@ saida/
 .wrangler/
 .dev.vars
 __pycache__/
+
+# Render (container/render/baixar.sh)
+container/render/ffmpeg
+container/render/ffprobe
+container/render/fontes/

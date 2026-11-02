@@ -34,11 +34,12 @@ a camada de legenda e a trilha. Pelo MCP ele ainda não faz gráficos, legenda n
 o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (itens 1 e 3). O tempo
 de cada palavra já existe (`ver_transcricao`).
 
-1. **Texto e gráficos com o HyperFrames** (testado, ver
-   `prototipos/hyperframes-linux/RESULTADOS.md` no branch `claude/teste-hyperframes-linux`):
-   bloco de HTML escrito pelo agente, legendas palavra a palavra, títulos, lower thirds,
-   selos, gráficos, contadores, modelos por marca e máscara para cobrir uma área. Feito à
-   mão no caso real, com camada WebM transparente e Whisper; falta virar recurso do site.
+1. **Texto e gráficos com o HyperFrames**: o render do HTML do agente já existe
+   (`renderizar_html`, contêiner próprio, 13 fontes livres, ver [api.md](api.md)). Falta:
+   legenda palavra a palavra montada da transcrição, com as regras do caso real (Inter Black
+   de 44 px numa coluna de 420 px, no máximo duas linhas, some onde já há texto), modelos por
+   marca (títulos, lower thirds, selos) e conferir no ar o render, o tempo da primeira partida
+   e o custo.
 2. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
 3. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
    licenciada ou geração por API (a do caso real foi sintetizada, só para teste),

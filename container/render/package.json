@@ -1,0 +1,9 @@
+{
+  "name": "meu-avatar-render",
+  "private": true,
+  "description": "Render das composições em HTML dos projetos (docs/api.md), num contêiner próprio.",
+  "dependencies": {
+    "gsap": "3.15.0",
+    "hyperframes": "0.8.228"
+  }
+}

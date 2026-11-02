@@ -34,6 +34,7 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
 - Ferramentas: `listar_videos`, `listar_avatares`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`,
+  `renderizar_html`,
   `exportar` e `acompanhar_exportacao`. Não apagam projeto e não geram vídeo.
 
 ```bash
@@ -61,6 +62,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) |
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida |
+| `POST /api/v1/projetos/<id>/html` `{nome, html, duracao, final?}` | Faz um WebM transparente do HTML e o guarda nos arquivos do projeto: `{arquivo: {id, nome, tipo, src}, largura, altura}` |
 | `GET /api/v1/projetos/<id>/transcricao?src=` | A fala com o tempo de cada palavra: `{idioma, duracao, texto, palavras: [{palavra, inicio, fim}]}` |
 
 Nas três, `src` aceita também o `src` de um ativo de avatar da conta e o `href` de uma exportação
@@ -82,6 +84,18 @@ antes de uma pausa caiu a até 0,04 s do silêncio, mas a palavra depois da paus
 antes da hora (o Whisper põe o silêncio dentro dela). Para cortar, use o fim das palavras e, no
 começo, o fim do silêncio de `silencios`. Sem o Whisper ou o
 contêiner, `503 transcricao_indisponivel`; som acima de 10 MB (uns 40 min), `413 audio_longo_demais`.
+
+O vídeo do HTML sai do contêiner de render (`src/render.ts`, `container/render/`), com o
+HyperFrames. O agente manda só o conteúdo (elementos, `<style>` e `<script>`); a página, o
+tamanho do Final (`final`, ou o primeiro; 720 × 1280 sem nenhum) e o fundo transparente já
+existem. A animação é só pela linha do tempo `tl` do GSAP 3, já criada e pausada (`tl.to`,
+`tl.fromTo`, `tl.set`, com o tempo em segundos): nada de `setTimeout`, relógio ou sorteio, para
+o vídeo sair igual toda vez. Sem internet: nada de CDN, link ou imagem de fora. Fontes pelo nome
+no CSS: TikTok Sans, Inter (a padrão), Montserrat, Roboto, Open Sans, Oswald, Playfair Display,
+Poppins, Anton, Bebas Neue, Archivo Black, Courier Prime e Pacifico. Até 60 s e 1 MB de HTML.
+Uns 16 s para 10 s de vídeo; a primeira vez depois de publicar demora mais. HTML que não roda:
+`422 render_falhou`, com o log do HyperFrames em `detalhe`. Sem o contêiner,
+`503 render_indisponivel`. O WebM entra com `adicionar {arquivo, dur, sobre, em}`.
 
 `avisos`, em `ver_projeto` e na resposta dos comandos, aponta o que está aceito mas sairá errado.
 Hoje há um: `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),

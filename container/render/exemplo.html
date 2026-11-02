@@ -1,0 +1,19 @@
+<style>
+  .t { position: absolute; left: 40px; right: 40px; text-align: center; color: #fff; opacity: 0; text-shadow: 0 4px 0 #000; }
+  #a { top: 160px; font: 900 72px "TikTok Sans"; }
+  #b { top: 300px; font: 400 96px "Bebas Neue"; color: #ffd400; }
+  #c { top: 440px; font: 800 56px Poppins; }
+  #d { top: 560px; font: 400 64px Pacifico; color: #ff7ad9; text-shadow: 0 0 18px #ff3fbf; }
+  #e { top: 700px; font: 700 44px "Courier Prime"; }
+  #selo { top: 880px; left: 180px; right: 180px; padding: 18px; border-radius: 28px; background: #46ff96; color: #08131d; font: 900 60px Montserrat; text-shadow: none; }
+</style>
+<div class="t" id="a">Promoção só já</div>
+<div class="t" id="b">VOCÊ NÃO É AÇÚCAR</div>
+<div class="t" id="c">Corre que acaba</div>
+<div class="t" id="d">Neon à noite</div>
+<div class="t" id="e">máquina de escrever</div>
+<div class="t" id="selo">R$ 49,90</div>
+<script>
+  ["#a", "#b", "#c", "#d", "#e"].forEach((s, i) => tl.to(s, { opacity: 1, duration: 0.3 }, 0.2 + i * 0.3));
+  tl.fromTo("#selo", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(2)" }, 1.8);
+</script>

@@ -710,10 +710,7 @@ ${CANVAS_BODY}
     try {
       name = decodeURIComponent(request.headers.get("x-nome") ?? "").slice(0, 200) || name;
     } catch {}
-    const id = crypto.randomUUID();
-    const key = `projetos/${project.id}/${id}`;
-    await this.media.put(key, bytes, { httpMetadata: { contentType: type } });
-    await this.db.insertProjectFile({ id, project_id: project.id, key, name, type, size: bytes.byteLength });
+    const { id } = await this.exports.saveFile(project.id, name, type, bytes);
     return Response.json({ src: `/projetos/${project.id}/arquivos/${id}` }, { status: 201 });
   }
 

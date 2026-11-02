@@ -36,17 +36,24 @@
     // Contêiner que monta os vídeos dos projetos (src/exportar.ts, container/exportar.py):
     // 2 vCPU e 8 GiB (medidos em docs/operacao.md), imagem própria e leve. Uma instância só:
     // ligada, ela paga 8 GiB de memória por hora (src/conteiner.ts explica por que dormir importa).
-    { "class_name": "Exporter", "image": "./container/Dockerfile.exportar", "instance_type": "standard-3", "max_instances": 1 }
+    { "class_name": "Exporter", "image": "./container/Dockerfile.exportar", "instance_type": "standard-3", "max_instances": 1 },
+    // Contêiner que faz o vídeo do HTML dos agentes (src/render.ts, container/render/): o
+    // HyperFrames com o Chrome, sem GPU. A imagem não é montada no deploy (o apt dela precisa da
+    // rede): sai de container/render/construir.sh, que a manda ao registro (docs/operacao.md).
+    // Mudou algo em container/render/: nova versão no construir.sh e aqui.
+    { "class_name": "Renderer", "image": "registry.cloudflare.com/89fd8860072dca2486e51cd4ad292f43/meu-avatar-render:1", "instance_type": "standard-3", "max_instances": 1 }
   ],
   "durable_objects": {
     "bindings": [
       { "class_name": "AudioFixer", "name": "AUDIO" },
-      { "class_name": "Exporter", "name": "EXPORTAR" }
+      { "class_name": "Exporter", "name": "EXPORTAR" },
+      { "class_name": "Renderer", "name": "RENDER" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["AudioFixer"] },
-    { "tag": "v2", "new_sqlite_classes": ["Exporter"] }
+    { "tag": "v2", "new_sqlite_classes": ["Exporter"] },
+    { "tag": "v3", "new_sqlite_classes": ["Renderer"] }
   ],
   "vars": {
     // Endereço público do Worker (sem barra no fim): o OpenRouter manda o aviso

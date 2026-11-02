@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { type RenderApi, RenderError } from "../src/render";
 import type { Transcriber, Transcricao } from "../src/transcricao";
 import { handle } from "../src/index";
 import type { AudioApi, ContainerPlan, Face } from "../src/audio";
@@ -216,6 +217,17 @@ export class FakeExportApi implements ExportApi {
   }
 }
 
+/** Contêiner de render de mentira: guarda o que recebeu e devolve um WebM de bytes conhecidos, ou o log de erro. */
+export class FakeRenderApi implements RenderApi {
+  calls: { html: string; largura: number; altura: number; duracao: number }[] = [];
+  log: string | null = null;
+  async render(html: string, largura: number, altura: number, duracao: number) {
+    this.calls.push({ html, largura, altura, duracao });
+    if (this.log) throw new RenderError(this.log);
+    return new Response("webm", { headers: { "content-length": "4", "content-type": "video/webm" } });
+  }
+}
+
 /** Whisper de mentira: devolve sempre a mesma fala e conta as chamadas. */
 export class FakeTranscriber implements Transcriber {
   calls: string[] = [];
@@ -373,8 +385,8 @@ export class FakeHeyGenApi implements HeyGenApi {
   }
 }
 
-export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null, exporter: ExportApi | null = null, transcriber: Transcriber | null = null): Promise<Response> {
-  return handle(request, { ...env, SITE_URL: SITE }, { api, audio, heygen, exporter, transcriber });
+export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null, exporter: ExportApi | null = null, transcriber: Transcriber | null = null, renderer: RenderApi | null = null): Promise<Response> {
+  return handle(request, { ...env, SITE_URL: SITE }, { api, audio, heygen, exporter, transcriber, renderer });
 }
 
 export function form(fields: Record<string, string | File>): FormData {
