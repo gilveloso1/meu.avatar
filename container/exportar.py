@@ -263,8 +263,21 @@ def emendar(saida, trechos):
     )
 
 
+def duracao_do(log):
+    """A duração que o ffmpeg escreve no log ao abrir o arquivo, ou 0."""
+    fim = re.search(r"Duration: (\d+):(\d+):([\d.]+)", log)
+    return int(fim[1]) * 3600 + int(fim[2]) * 60 + float(fim[3]) if fim else 0
+
+
+# O último quadro fica um pouco antes do fim: pedir o instante do fim não acharia nenhum.
+ANTES_DO_FIM = 0.1
+
+
 def mosaico(saida, arquivo, instantes):
-    """Os instantes do arquivo, lado a lado, para o agente ver o vídeo."""
+    """Os instantes do arquivo, lado a lado, para o agente ver o vídeo; depois do fim, o último quadro."""
+    dura = duracao_do(subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-i", arquivo], capture_output=True, text=True, timeout=60).stderr)
+    if dura:
+        instantes = [min(t, max(0, dura - ANTES_DO_FIM)) for t in instantes]
     entradas = [a for t in instantes for a in ("-ss", f"{t:.3f}", "-i", arquivo)]
     n = len(instantes)
     pedacos = [f"[{i}:v]scale=-2:{ALTURA_QUADRO}[m{i}]" for i in range(n)]
@@ -275,8 +288,7 @@ def mosaico(saida, arquivo, instantes):
 def silencios(saida, arquivo):
     """Onde o som do arquivo para, com a regra da Edição rápida."""
     r = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-i", arquivo, "-af", f"silencedetect=n={RUIDO}dB:d={SILENCIO_MIN}", "-vn", "-f", "null", "-"], capture_output=True, text=True, check=True, timeout=300)
-    fim = re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr)
-    duracao = int(fim[1]) * 3600 + int(fim[2]) * 60 + float(fim[3]) if fim else 0
+    duracao = duracao_do(r.stderr)
     inicios = [float(v) for v in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
     fins = [float(v) for v in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
     with open(saida, "w") as f:

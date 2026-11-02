@@ -206,6 +206,7 @@ export class FakeExportApi implements ExportApi {
   silences = { duracao: 10, silencios: [[3, 4]] };
   async inspect(path: string, body: ReadableStream) {
     await new Response(body).arrayBuffer();
+    if (this.fail) throw new Error(this.fail);
     const out = new TextEncoder().encode(path === "/silencios" ? JSON.stringify(this.silences) : path === "/audio" ? "mp3" : "jpg");
     return new Response(out, { headers: { "content-length": String(out.byteLength) } });
   }
@@ -217,13 +218,15 @@ export class FakeExportApi implements ExportApi {
   }
 }
 
-/** Contêiner de render de mentira: guarda o que recebeu e devolve um WebM de bytes conhecidos, ou o log de erro. */
+/** Contêiner de render de mentira: guarda o que recebeu e devolve um WebM de bytes conhecidos, o log de erro ou a falha do contêiner. */
 export class FakeRenderApi implements RenderApi {
   calls: { html: string; largura: number; altura: number; duracao: number }[] = [];
   log: string | null = null;
+  fail: string | null = null;
   async render(html: string, largura: number, altura: number, duracao: number) {
     this.calls.push({ html, largura, altura, duracao });
     if (this.log) throw new RenderError(this.log);
+    if (this.fail) throw new Error(this.fail);
     return new Response("webm", { headers: { "content-length": "4", "content-type": "video/webm" } });
   }
 }

@@ -194,7 +194,13 @@ const falha = (status: number, code: number, message: string, data?: unknown): F
 async function chamar(params: Args, chama: Interna): Promise<Resposta> {
   const res = pedido(String(params.name), (params.arguments ?? {}) as Args, chama);
   if (!res) return falha(400, -32602, `Unknown tool: ${String(params.name)}`);
-  return { result: await resultado(await res) };
+  try {
+    return { result: await resultado(await res) };
+  } catch (err) {
+    // Uma exceção derrubaria o pedido inteiro (erro 1101), e o agente não saberia o que houve.
+    console.error(`Ferramenta ${String(params.name)} falhou`, err);
+    return { result: { content: [{ type: "text", text: json({ erro: "falha_interna" }) }], isError: true } };
+  }
 }
 
 /** O protocolo de antes da revisão 2026-07-28. */

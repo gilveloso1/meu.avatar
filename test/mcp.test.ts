@@ -176,6 +176,16 @@ describe("ferramentas", () => {
     expect(dados(await ferramenta("ver_silencios", { projeto: id, src: `/videos/${VIDEO}.mp4` }, fake))).toEqual(fake.silences);
   });
 
+  it("contêiner que não responde é erro da ferramenta, e o pedido não cai", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const fake = new FakeExportApi();
+    fake.fail = "The container service is unreachable, try again later";
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "A" }));
+    const q = await ferramenta("ver_quadros", { projeto: id, src: `/videos/${VIDEO}.mp4`, instantes: [1] }, fake);
+    expect(q.isError).toBe(true);
+    expect(dados(q)).toEqual({ erro: "conteiner_falhou" });
+  });
+
   it("enviar_arquivo guarda no projeto; base64 ruim é recusado", async () => {
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "A" }));
     const ok = await ferramenta("enviar_arquivo", { projeto: id, nome: "camada ação.webm", tipo: "video/webm", base64: btoa("webm") });

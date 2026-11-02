@@ -18,6 +18,9 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   erro 1101 e tempo esgotado. Uma por vez funcionou.
 - O `renderizar_html` também falhou sozinho uma vez, com "Container port connection closed", e
   passou na segunda tentativa.
+  (Causa, nos logs de 02/11/2026: o contêiner de render não atendeu ao ligar, "The container
+  service is unreachable", e um `ver_quadros` pediu um instante no fim do arquivo; os dois viravam
+  exceção. Corrigido: novas tentativas sozinhas e `conteiner_falhou` no lugar da queda.)
 - O `editar_projeto` deu conflito duas vezes porque a pessoa editava o canvas ao mesmo tempo. A
   resposta só traz o número da revisão, e foi preciso reler o projeto inteiro.
 - A descrição das ferramentas estava desatualizada: não citava o `rascunho` e o `trocar`. Um teste

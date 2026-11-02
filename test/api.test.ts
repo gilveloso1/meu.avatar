@@ -342,6 +342,18 @@ describe("edição fina", () => {
     expect((await api(`/api/v1/projetos/${id}/quadros?src=/videos/${OCULTO}.mp4&instantes=1`, admin, undefined, fake)).status).toBe(404);
     expect((await api(`/api/v1/projetos/${id}/quadros?src=/videos/${VIDEO}.mp4&instantes=x`, admin, undefined, fake)).status).toBe(400);
   });
+
+  it("contêiner que não responde é um erro com código, não uma queda", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id } = await novo();
+    const fake = new FakeExportApi();
+    fake.fail = "The container service is unreachable, try again later";
+    for (const rota of [`quadros?src=/videos/${VIDEO}.mp4&instantes=1`, `silencios?src=/videos/${VIDEO}.mp4`]) {
+      const res = await api(`/api/v1/projetos/${id}/${rota}`, admin, undefined, fake);
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ erro: "conteiner_falhou" });
+    }
+  });
 });
 
 describe("transcrição", () => {
@@ -529,6 +541,16 @@ describe("vídeo do HTML", () => {
     const res = await html(id, { html: "<script>gsapp.to()</script>", duracao: 2 }, r);
     expect(res.status).toBe(422);
     expect(await res.json()).toEqual({ erro: "render_falhou", detalhe: "ReferenceError: gsapp is not defined" });
+    expect((await (await api(`/api/v1/projetos/${id}`, admin)).json<{ arquivos: unknown[] }>()).arquivos).toEqual([]);
+  });
+
+  it("contêiner que não responde é um erro com código, sem guardar arquivo", async () => {
+    const { id } = await novo();
+    const r = new FakeRenderApi();
+    r.fail = "Container port connection closed";
+    const res = await html(id, { html: "<p>x</p>", duracao: 2 }, r);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ erro: "conteiner_falhou" });
     expect((await (await api(`/api/v1/projetos/${id}`, admin)).json<{ arquivos: unknown[] }>()).arquivos).toEqual([]);
   });
 

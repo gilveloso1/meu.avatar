@@ -45,8 +45,7 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Erros*: várias chamadas ao mesmo tempo derrubam o Worker (1101) e o render ("Container port
-     connection closed"): fila e uma nova tentativa sozinha. Comando desconhecido sugere o nome
+   - *Erros*: comando desconhecido sugere o nome
      certo. A lista de ferramentas não pode ficar 1 h desatualizada depois de publicar (`CACHE` em
      `src/mcp.ts`). Fonte de emoji na imagem de render.
    - *Respostas menores*: `editar_projeto` resumido (revisão, criados, avisos) e, no conflito, o

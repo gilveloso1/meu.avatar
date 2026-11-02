@@ -7,8 +7,7 @@
  * Contêiner próprio, não o da exportação: a imagem leva o Chrome (uns 460 MB contra 118 MB),
  * e a exportação continua leve para ligar.
  */
-import { getContainer } from "@cloudflare/containers";
-import { SleepyContainer } from "./conteiner";
+import { ligado, SleepyContainer, tentando } from "./conteiner";
 
 /** As fontes da imagem de render (container/render/servidor.mjs, FAMILIAS), pelo nome do CSS. */
 export const FONTES = ["TikTok Sans", "Inter", "Montserrat", "Roboto", "Open Sans", "Oswald", "Playfair Display", "Poppins", "Anton", "Bebas Neue", "Archivo Black", "Courier Prime", "Pacifico"];
@@ -39,9 +38,13 @@ export interface RenderApi {
 export class ContainerRender implements RenderApi {
   constructor(private readonly ns: DurableObjectNamespace<Renderer>) {}
 
-  async render(html: string, largura: number, altura: number, duracao: number): Promise<Response> {
-    const container = getContainer(this.ns, "render");
-    await container.startAndWaitForPorts({ ports: 8080, cancellationOptions: { instanceGetTimeoutMS: START_TIMEOUT_MS, portReadyTimeoutMS: START_TIMEOUT_MS } });
+  /** O HTML vai inteiro em cada tentativa: a conexão que cai no meio é refeita do começo. */
+  render(html: string, largura: number, altura: number, duracao: number): Promise<Response> {
+    return tentando("Render", () => this.once(html, largura, altura, duracao), (err) => err instanceof RenderError);
+  }
+
+  private async once(html: string, largura: number, altura: number, duracao: number): Promise<Response> {
+    const container = await ligado(this.ns, "render", START_TIMEOUT_MS);
     const res = await container.fetch(
       new Request("http://render/render", { method: "POST", body: html, headers: { "content-type": "text/html; charset=utf-8", "x-largura": String(largura), "x-altura": String(altura), "x-duracao": String(duracao) } }),
     );
