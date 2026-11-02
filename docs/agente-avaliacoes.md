@@ -26,7 +26,7 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
 - A descrição das ferramentas estava desatualizada: não citava o `rascunho` e o `trocar`. Um teste
   com `troca` recebeu `comando_desconhecido`, sem sugestão do nome certo.
   (Causa: a lista de ferramentas vai com cache de 1 h, `CACHE` em `src/mcp.ts`, e a sessão começou
-  antes da publicação.)
+  antes da publicação. O `comando_desconhecido` agora traz `sugestao`.)
 - Emojis (📅, ✓) viram quadradinhos no `renderizar_html`: a imagem de render não tem fonte de emoji.
 
 ### 2. O que mais atrapalhou e gerou retrabalho

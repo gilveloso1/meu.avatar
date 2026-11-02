@@ -118,7 +118,8 @@ quando uma cobertura ou um som passa do fim da sequência ou há um buraco nela.
 sobre o fundo preto, salvo se uma cobertura opaca o preencher.
 
 Erro: `{"erro": "<código>"}`, com `comando` (a posição no lote) quando um comando é
-recusado. Quando o contêiner não responde (subindo, indo dormir ou ocupado), o site tenta de novo
+recusado. Em `comando_desconhecido`, `sugestao` traz o tipo com o nome mais parecido
+(`troca` → `trocar`) ou, se nenhum chega perto, `tipos` traz a lista. Quando o contêiner não responde (subindo, indo dormir ou ocupado), o site tenta de novo
 sozinho duas vezes; se ainda falhar, `503 conteiner_falhou` em quadros, silêncios, transcrição,
 HTML e legenda: tente de novo em instantes. Chamadas em paralelo esperam a vez no contêiner. Em
 `quadros`, instante depois do fim mostra o último quadro. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
