@@ -74,7 +74,9 @@ describe("protocolo", () => {
     const { result } = await rpc("server/discover");
     expect(result).toMatchObject({ resultType: "complete", capabilities: { tools: {} }, cacheScope: "public", _meta: { "io.modelcontextprotocol/serverInfo": { name: "meu-avatar" } } });
     expect(result.supportedVersions[0]).toBe("2026-07-28");
+    // Uma publicação nova chega ao agente em poucos minutos.
     expect(result.ttlMs).toBeGreaterThan(0);
+    expect(result.ttlMs).toBeLessThanOrEqual(5 * 60_000);
     expect(result.instructions).toContain("ver_quadros");
   });
 

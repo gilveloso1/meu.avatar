@@ -29,6 +29,8 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 
 - **Revisão 2026-07-28**, a atual: sem sessão e sem handshake, com `server/discover`, a versão
   e as capacidades em `_meta` e os cabeçalhos `MCP-Protocol-Version`, `Mcp-Method` e `Mcp-Name`.
+  A lista de ferramentas e o `server/discover` valem 5 min (`ttlMs`): depois de publicar, o
+  agente vê as ferramentas novas em poucos minutos. O Claude Code usa esta revisão.
 - **Clientes antigos** (`initialize`, até 2025-11-25) seguem funcionando no mesmo endereço. Por
   padrão, até o SDK v2 ainda conecta assim.
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
