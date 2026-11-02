@@ -647,6 +647,20 @@ describe("rascunho", () => {
     expect(await (await comandos(id, r.revisao, [{ tipo: "trocar", bloco: r.criados[0], arquivo, dur: 5 }])).json()).toEqual({ erro: "posicao_invalida", comando: 0 });
   });
 
+  it("o nome é Texto 1, Texto 2..., e o agente pode mudar com renomear", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [
+      { tipo: "rascunho", fala: "Primeira", duracao: 2, rotulo: "a" },
+      { tipo: "rascunho", fala: "Segunda", duracao: 2, depois: "@a", rotulo: "b" },
+      { tipo: "renomear", bloco: "@b", nome: "Gancho" },
+      { tipo: "rascunho", fala: "Terceira", duracao: 2, depois: "@b" },
+      { tipo: "rascunho", fala: "Quarta", duracao: 2, nome: "CTA" },
+    ]);
+    expect(r.canvas.blocks.map((b) => (b as unknown as { name: string }).name)).toEqual(["Texto 1", "Gancho", "Texto 2", "CTA"]);
+    expect(await (await comandos(id, r.revisao, [{ tipo: "renomear", bloco: r.criados[0], nome: " " }])).json()).toEqual({ erro: "nome_invalido", comando: 0 });
+    expect(await (await comandos(id, r.revisao, [{ tipo: "renomear", bloco: "x", nome: "Y" }])).json()).toEqual({ erro: "bloco_inexistente", comando: 0 });
+  });
+
   it("não exporta enquanto houver rascunho", async () => {
     const { id, revisao } = await novo();
     await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" }, { tipo: "rascunho", fala: "Falta gravar", duracao: 3, depois: "@a" }]);

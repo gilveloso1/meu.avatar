@@ -17,7 +17,8 @@ menos custo.
   a duração; dá para encurtar no começo e no fim.
 - **Rascunho**: o lugar de um vídeo que ainda não existe, com a fala e a
   duração estimada (comando `rascunho`, [api.md](api.md)). É um bloco de imagem
-  sem arquivo (`draft: {fala}`): no canvas mostra a fala (editável nos Ajustes), na prévia um cartão,
+  sem arquivo (`draft: {fala}`), com o nome Texto 1, Texto 2... (como os blocos;
+  muda no campo Nome ou com `renomear`): no canvas mostra a fala (editável nos Ajustes), na prévia um cartão,
   e a exportação espera até ele ser trocado pelo vídeo (`trocar`). Serve para
   montar a estrutura inteira e gerar só os vídeos que faltam.
 - **Juntar**: blocos encostados lado a lado formam uma sequência fixa (corte

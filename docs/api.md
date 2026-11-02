@@ -125,8 +125,9 @@ recusado. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
 | `tipo` | Campos | Efeito |
 |---|---|---|
 | `adicionar` | `video`, `arquivo` ou `ativo` (de `listar_avatares`); `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo` e de ativo enviado; o ativo gerado usa a duração do vídeo); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: bloco solto, à direita de tudo |
-| `rascunho` | `fala`, `duracao` (0,5 a 30); `nome`; `depois` ou `sobre` e `em`; `rotulo` | O lugar de um vídeo que ainda não existe: um bloco sem arquivo, com a fala, do tamanho estimado. No canvas e na prévia, um cartão com a fala. A exportação é recusada enquanto houver rascunho |
+| `rascunho` | `fala`, `duracao` (0,5 a 30); `nome`; `depois` ou `sobre` e `em`; `rotulo` | O lugar de um vídeo que ainda não existe: um bloco sem arquivo, com a fala, do tamanho estimado. Sem `nome`, Texto 1, Texto 2..., como os blocos. No canvas e na prévia, um cartão com a fala. A exportação é recusada enquanto houver rascunho |
 | `trocar` | `bloco`; `video`, `arquivo` ou `ativo`; `inicio`, `fim`, `dur`, `nome`, `semSom` | Põe o arquivo no lugar do bloco (o vídeo pronto no lugar do rascunho): a posição e o que está por cima ficam, e a sequência acompanha a duração nova. Sem `fim`, o vídeo entra inteiro |
+| `renomear` | `bloco`, `nome` | Muda o nome do bloco, como o campo Nome dos Ajustes |
 | `cortar` | `bloco`, `inicio`, `fim` | Trecho do arquivo, em segundos; a sequência fica encostada |
 | `dividir` | `bloco`, `em` | Dois blocos, no instante `em` do arquivo; 0,5 s no mínimo de cada lado |
 | `mover` | `bloco`, `depois` ou `antes` | Muda a ordem, sem buraco; a cobertura e o som somado vão junto |

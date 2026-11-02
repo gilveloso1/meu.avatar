@@ -38,6 +38,12 @@ export interface Contexto {
 
 export const MAX_COMANDOS = 100;
 const MAX_FALA = 2000;
+
+/** O nome do rascunho novo, como o dos blocos: Texto 1, Texto 2... depois do maior que já existe. */
+function proximoTexto(project: CanvasProject): string {
+  const usados = project.blocks.filter((b) => b.draft).map((b) => Number(/^Texto (\d+)$/.exec(b.name)?.[1] ?? 0));
+  return `Texto ${Math.max(0, ...usados) + 1}`;
+}
 /** Entre um bloco solto e o que já está no canvas: longe, para não virarem um grupo só. */
 const LINHA = 160;
 const IMAGEM_PADRAO = 3;
@@ -69,7 +75,7 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
         const duracao = numero(c.duracao);
         if (!fala) throw falha("fala_invalida");
         if (duracao === null || duracao < MIN_LEN || duracao > IMAGE_MAX) throw falha("duracao_invalida");
-        const nome = texto(c.nome) ?? (fala.split(/\s+/).slice(0, 6).join(" ") || "Rascunho");
+        const nome = texto(c.nome) ?? proximoTexto(project);
         const novo = adicionar(project, { ...c, inicio: 0, fim: duracao }, { src: "", kind: "image", dur: null, name: nome }, falha);
         project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, draft: { fala } } : b)) };
         criados.push(novo.id);
@@ -78,6 +84,13 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
       case "trocar":
         project = await trocar(project, c, ctx, falha);
         break;
+      case "renomear": {
+        const nome = texto(c.nome);
+        if (!nome) throw falha("nome_invalido");
+        if (!project.blocks.some((b) => b.id === c.bloco)) throw falha("bloco_inexistente");
+        project = { ...project, blocks: project.blocks.map((b) => (b.id === c.bloco ? { ...b, name: nome } : b)) };
+        break;
+      }
       case "dividir": {
         const b = project.blocks.find((o) => o.id === c.bloco);
         if (!b) throw falha("bloco_inexistente");
