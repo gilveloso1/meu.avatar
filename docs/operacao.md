@@ -348,6 +348,14 @@ sai no SIGTERM, e manda a imagem ao registro da Cloudflare. Depois, ponha a vers
 `image` do `Renderer` em `wrangler.jsonc` e publique como sempre. Só precisa disso quando
 `container/render/` muda; os outros deploys usam a imagem que já está no registro.
 
+**Depois de publicar, confira que ele dorme** (o `AudioFixer` e o `Exporter` já ficaram uma
+semana ligados sem trabalho, ver "Contêiner que dorme de verdade" acima): faça um render e, uns
+5 minutos depois, veja no `containersUsageAdaptiveGroups` que a memória alocada do `Renderer`
+voltou a zero. O que garante isso: o `servidor.mjs` sai no SIGTERM (o `construir.sh` confere),
+o `Renderer` herda o `SleepyContainer` (dorme 30 s depois do último pedido; pedido com mais de
+6 min conta como abandonado), o `servidor.mjs` mata o render que passa de 5 min, e o Worker
+sempre lê ou cancela o corpo da resposta.
+
 As fontes são do Google Fonts, licença SIL OFL 1.1, num commit fixo (`baixar.sh`), com a
 licença de cada família ao lado dos arquivos: TikTok Sans (a do TikTok), Inter, Montserrat,
 Roboto, Open Sans, Oswald, Playfair Display, Poppins, Anton, Bebas Neue, Archivo Black, Courier
