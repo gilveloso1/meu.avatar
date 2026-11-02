@@ -107,7 +107,7 @@ function loadPreview() {
     }
   }
   tl ??= v ? M.timeline(v, M.finalRate(previewFinal())) : { duration: 0, items: [] };
-  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
+  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.block.draft?.fala, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
   pv.title.textContent = title;
   if (key === loadedKey) return playhead(player.t);
   loadedKey = key;
@@ -185,6 +185,8 @@ function setTab(tab) {
   sheetBody.dataset.tab = tab;
   for (const b of document.querySelectorAll(".viewer__sheet [data-tab][role=tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   for (const p of sheetBody.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== tab;
+  const fala = document.getElementById("f-fala");
+  if (fala) fitText(fala);
   showActions();
   try {
     localStorage.setItem("canvas-aba", tab);
@@ -435,7 +437,7 @@ function render({ side = true } = {}) {
     // Só mexe no elemento se algo mudou: arrastar um bloco não redesenha os outros.
     // O som do vídeo fica na área de som, na faixa dele.
     const sound = g?.sounds.find((s) => s.block === b);
-    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}|${b.src}`;
+    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}|${b.src}|${b.draft?.fala}`;
     if (el.drawn === state) continue;
     el.drawn = state;
     el.className = look;
@@ -556,6 +558,17 @@ const { PORT_OUT, outPoint, inPoint, finalPoint, curve } = M;
 
 const sideActions = $("#side-actions");
 const btn = (kind, act, icon, text) => `<button class="button button--${kind} interactive" type="button" ${act}><span class="icon">${icon}</span>${text}</button>`;
+/** O limite da fala do rascunho, o mesmo dos comandos (src/comandos.ts). */
+const MAX_FALA = 2000;
+/**
+ * O campo de texto cresce com o texto, como na página do modelo. Escondido (na aba Prévia), não
+ * há o que medir: mede de novo quando a aba Ajustes abre (setTab).
+ */
+function fitText(t) {
+  if (!t.offsetParent) return;
+  t.style.height = "auto";
+  t.style.height = `${t.scrollHeight + (t.offsetHeight - t.clientHeight)}px`;
+}
 const field = (id, label, value, attrs = "") =>
   `<div class="text-field"><input class="text-field__input" id="${id}" value="${esc(value)}" placeholder=" " ${attrs}><label class="text-field__label" for="${id}">${label}</label></div>`;
 const row = (icon, label, value) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${icon}</span><span class="qe-result__label">${label}</span><span class="qe-result__value">${value}</span></div>`;
@@ -591,7 +604,9 @@ function renderSide(gs) {
     title = b.draft ? "Rascunho" : { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
     h += field("f-name", "Nome", b.name);
     // O lugar de um vídeo que ainda não existe: a fala vai para o modelo, e o vídeo pronto entra aqui.
-    if (b.draft) h += `<section class="viewer__section"><h3 class="viewer__title">Fala</h3><p class="viewer__text">${esc(b.draft.fala)}</p><p class="sheet-hint">Gere o vídeo com esta fala e troque pelo rascunho.</p></section>`;
+    // O mesmo campo de texto que cresce da página do modelo.
+    if (b.draft)
+      h += `<div class="text-field"><textarea class="text-field__input" id="f-fala" rows="1" maxlength="${MAX_FALA}" placeholder=" " aria-describedby="f-fala-ajuda">${esc(b.draft.fala)}</textarea><label class="text-field__label" for="f-fala">Fala</label><p class="text-field__supporting" id="f-fala-ajuda"><span>Gere o vídeo com esta fala.</span><span id="f-fala-n">${b.draft.fala.length}/${MAX_FALA}</span></p></div>`;
     if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.IMAGE_MAX}"`);
     else
       h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
@@ -623,6 +638,8 @@ function renderSide(gs) {
   }
   for (const undo of selectUndos.splice(0)) undo();
   side.innerHTML = `<h2 class="sheet-title">${title}</h2>` + h;
+  const fala = $("#f-fala");
+  if (fala) fitText(fala);
   // No site, o campo de seleção vira o menu do M3 (window.mdSelect, do script do site).
   if (window.mdSelect) for (const s of side.querySelectorAll(".text-field--select select")) selectUndos.push(window.mdSelect(s));
   sideActions.innerHTML = actions;
@@ -746,6 +763,13 @@ function onSideInput(t0) {
   const b = project.blocks.find((b) => b.id === sel.id);
   const t = t0;
   if (t.id === "f-name") b.name = t.value;
+  if (t.id === "f-fala") {
+    fitText(t);
+    $("#f-fala-n").textContent = `${t.value.length}/${MAX_FALA}`;
+    // Vazio não vale: o rascunho fica com a última fala até haver texto de novo.
+    if (!t.value.trim()) return;
+    b.draft.fala = t.value;
+  }
   if (t.id === "f-mute") b.mute = t.checked;
   if (t.id === "f-vol") b.vol = +t.value;
   if (t.id === "f-tin" && t.value !== "") project = M.trim(project, b.id, "l", (+t.value - b.tin) / (b.speed ?? 1));
