@@ -408,26 +408,34 @@ function render({ side = true } = {}) {
       el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><div class="blk__link"><span class="blk__wave"></span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
       world.append(el);
       blockEls.set(b.id, el);
-      thumb(b).then((u) => {
-        if (!u) return;
-        const m = $(".blk__media", el);
-        // O áudio é uma máscara: a onda pega a cor do bloco.
-        if (b.kind === "audio") setWave(m, b.id, u);
-        else m.style.backgroundImage = `url("${u}")`;
-      });
+    }
+    // A miniatura muda com o arquivo: o rascunho trocado pelo vídeo pronto mantém o mesmo bloco.
+    const fonte = b.draft ? `rascunho:${b.draft.fala}` : b.src;
+    if (el.fonte !== fonte) {
+      el.fonte = fonte;
+      const m = $(".blk__media", el);
+      m.textContent = "";
+      m.style.backgroundImage = "";
+      if (!b.draft)
+        thumb(b).then((u) => {
+          if (!u || el.fonte !== fonte) return;
+          // O áudio é uma máscara: a onda pega a cor do bloco.
+          if (b.kind === "audio") setWave(m, b.id, u);
+          else m.style.backgroundImage = `url("${u}")`;
+        });
       // O vídeo mostra o próprio som numa faixa embaixo, na cor dele.
       if (b.kind === "video")
         thumb({ kind: "audio", src: b.src, dur: b.dur }).then((u) => {
-          if (u) setWave($(".blk__wave", el), b.id, u);
+          if (u && el.fonte === fonte) setWave($(".blk__wave", el), b.id, u);
         });
     }
     const g = idx.get(b.id);
     const role = g?.covers.includes(b) ? "cover" : g?.audios.includes(b) && !g.soloAudio ? "under" : "";
-    const look = `blk blk--${b.kind} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""} ${path?.includes(g) ? "is-path" : ""}${el.classList.contains("is-drag") ? " is-drag" : ""}`;
+    const look = `blk blk--${b.kind}${b.draft ? " blk--draft" : ""} ${role ? `blk--${role}` : ""} ${sel.type === "block" && sel.id === b.id ? "is-sel" : ""} ${b.mute ? "is-mute" : ""} ${M.linked(b) ? "is-linked" : ""} ${path?.includes(g) ? "is-path" : ""}${el.classList.contains("is-drag") ? " is-drag" : ""}`;
     // Só mexe no elemento se algo mudou: arrastar um bloco não redesenha os outros.
     // O som do vídeo fica na área de som, na faixa dele.
     const sound = g?.sounds.find((s) => s.block === b);
-    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}`;
+    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}|${b.src}`;
     if (el.drawn === state) continue;
     el.drawn = state;
     el.className = look;
@@ -439,8 +447,9 @@ function render({ side = true } = {}) {
     const media = $(".blk__media", el);
     if (M.linked(b)) paintWave($(".blk__wave", el), b);
     if (b.kind === "audio") paintWave(media, b);
-    $(".blk__kind", el).textContent = { video: "movie", image: "image", audio: "music_note" }[b.kind];
+    $(".blk__kind", el).textContent = b.draft ? "edit_note" : { video: "movie", image: "image", audio: "music_note" }[b.kind];
     $(".blk__name", el).textContent = b.name;
+    if (b.draft) media.replaceChildren(Object.assign(document.createElement("span"), { className: "blk__fala", textContent: b.draft.fala }));
     $(".blk__dur", el).textContent = fmt(M.len(b));
   }
   for (const [id, el] of blockEls) if (!seen.has(id)) el.remove(), blockEls.delete(id);
@@ -579,8 +588,10 @@ function renderSide(gs) {
     else if (vs.length && PROJETO) actions += btn("filled", 'data-export="one"', "download", "Baixar");
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
-    title = { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
+    title = b.draft ? "Rascunho" : { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
     h += field("f-name", "Nome", b.name);
+    // O lugar de um vídeo que ainda não existe: a fala vai para o modelo, e o vídeo pronto entra aqui.
+    if (b.draft) h += `<section class="viewer__section"><h3 class="viewer__title">Fala</h3><p class="viewer__text">${esc(b.draft.fala)}</p><p class="sheet-hint">Gere o vídeo com esta fala e troque pelo rascunho.</p></section>`;
     if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.IMAGE_MAX}"`);
     else
       h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;

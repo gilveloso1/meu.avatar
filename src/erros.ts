@@ -120,6 +120,7 @@ export const ERROS = {
   exportarLimite: (max: number) => erro(`Este Final chegou ao limite de ${max} variações.`, "Ligue o restante a outro Final."),
   exportarArquivo: erro("Um arquivo do projeto não está disponível.", "Troque o bloco e exporte de novo."),
   exportarFalhou: erro("Não foi possível exportar os vídeos.", "Toque em Exportar para tentar de novo."),
+  exportarRascunho: erro("Este vídeo ainda tem rascunhos.", "Troque cada rascunho pelo vídeo e exporte de novo."),
   exportarIndisponivel: erro("Exportação indisponível agora.", "Tente mais tarde."),
   exportarExpirou: erro("Este vídeo não está mais disponível.", "Toque em Exportar para gerar de novo."),
 

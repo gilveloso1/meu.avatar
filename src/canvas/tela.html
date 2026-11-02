@@ -62,6 +62,9 @@ body { min-height: 0; overflow: hidden; }
   mix-blend-mode: luminosity;
 }
 .blk:hover .blk__media, .blk.is-sel .blk__media { mix-blend-mode: normal; }
+/* O rascunho não tem quadro: a fala, em texto, no lugar dele. */
+.blk--draft .blk__media { padding: 4px 8px; box-sizing: border-box; overflow: hidden; color: var(--on); mix-blend-mode: normal; }
+.blk__fala { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
 .blk.is-mute .blk__media { opacity: 0.38; }
 /* Áudio vinculado: faixa de 40 px embaixo da imagem, na cor e no tom do vídeo, com a onda dele. */
 /* A onda vai de borda a borda do bloco: o x dela é o mesmo tempo do vídeo (o corte de agora). */

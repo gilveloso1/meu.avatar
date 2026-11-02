@@ -37,6 +37,7 @@ export interface Contexto {
 }
 
 export const MAX_COMANDOS = 100;
+const MAX_FALA = 2000;
 /** Entre um bloco solto e o que já está no canvas: longe, para não virarem um grupo só. */
 const LINHA = 160;
 const IMAGEM_PADRAO = 3;
@@ -62,6 +63,21 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
         criados.push(novo.id);
         break;
       }
+      case "rascunho": {
+        // O lugar de um vídeo que ainda não existe: um cartão com a fala, do tamanho estimado.
+        const fala = typeof c.fala === "string" ? c.fala.trim().slice(0, MAX_FALA) : "";
+        const duracao = numero(c.duracao);
+        if (!fala) throw falha("fala_invalida");
+        if (duracao === null || duracao < MIN_LEN || duracao > IMAGE_MAX) throw falha("duracao_invalida");
+        const nome = texto(c.nome) ?? (fala.split(/\s+/).slice(0, 6).join(" ") || "Rascunho");
+        const novo = adicionar(project, { ...c, inicio: 0, fim: duracao }, { src: "", kind: "image", dur: null, name: nome }, falha);
+        project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, draft: { fala } } : b)) };
+        criados.push(novo.id);
+        break;
+      }
+      case "trocar":
+        project = await trocar(project, c, ctx, falha);
+        break;
       case "dividir": {
         const b = project.blocks.find((o) => o.id === c.bloco);
         if (!b) throw falha("bloco_inexistente");
@@ -219,6 +235,41 @@ function adicionar(project: CanvasProject, c: Comando, f: Fonte, falha: (c: stri
   // O primeiro elemento traz o Final, já ligado a ele, como na tela.
   linkFirst(p, p.blocks[0]!);
   return { project: p, id: block.id };
+}
+
+/**
+ * Põe outro arquivo no lugar de um bloco (o vídeo pronto no lugar do rascunho): a posição, a
+ * velocidade e o que está por cima ficam; a sequência acompanha a duração nova.
+ */
+async function trocar(project: CanvasProject, c: Comando, ctx: Contexto, falha: (c: string) => ComandoError): Promise<CanvasProject> {
+  const b = project.blocks.find((o) => o.id === c.bloco);
+  if (!b) throw falha("bloco_inexistente");
+  if (b.kind === "audio") throw falha("posicao_invalida");
+  const f = await ctx.fonte(c);
+  if (!f) throw falha("arquivo_indisponivel");
+  if (f.kind === "audio") throw falha("posicao_invalida");
+  const dur = f.kind === "image" ? IMAGE_MAX : (numero(c.dur) ?? f.dur);
+  if (dur === null || dur <= 0) throw falha("duracao_obrigatoria");
+  const inicio = numero(c.inicio) ?? 0;
+  // A imagem fica com o tempo que o bloco tinha; o vídeo entra inteiro, se ninguém cortar.
+  const fim = numero(c.fim) ?? (f.kind === "image" ? Math.min(b.tout - b.tin, IMAGE_MAX) : dur);
+  if (inicio < 0 || fim <= inicio || fim > dur || fim - inicio < MIN_LEN || (f.kind === "image" && inicio !== 0)) throw falha("corte_invalido");
+  return alterar(project, b.id, (o) => {
+    const { draft, frame, audio, ...resto } = o;
+    return {
+      ...resto,
+      kind: f.kind,
+      src: f.src,
+      dur,
+      tin: inicio,
+      tout: fim,
+      name: texto(c.nome) ?? f.name,
+      tone: nextTone(project, f.kind, f.src),
+      // O enquadramento de um rascunho não diz nada sobre o vídeo; o de um arquivo trocado, sim.
+      ...(frame && !draft ? { frame } : {}),
+      ...(f.kind === "video" ? { audio: c.semSom === true ? "none" : "linked" } : {}),
+    };
+  });
 }
 
 /** O grupo em que o bloco faz parte da sequência (e não da cobertura ou do som). */

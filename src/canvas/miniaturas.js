@@ -10,12 +10,13 @@ const SHARP_H = 80;
 const peaks = new Map();
 
 export function thumb(block) {
-  const key = `${block.kind}:${block.src}`;
+  const key = block.draft ? `rascunho:${block.draft.fala}` : `${block.kind}:${block.src}`;
   if (!cache.has(key)) cache.set(key, make(block).catch(() => ""));
   return cache.get(key);
 }
 
 async function make(b) {
+  if (b.draft) return draftCard(b);
   if (b.kind === "image") return b.src;
   if (b.kind === "video") return frame(b.src);
   return wave(b.src);
@@ -108,4 +109,47 @@ export function probe(file) {
     el.onerror = reject;
     el.src = src;
   });
+}
+
+const cards = new Map();
+const DRAFT_W = 720;
+const DRAFT_H = 1280;
+
+/**
+ * O rascunho: um cartão vertical com a fala, nas cores da superfície do tema. Serve de miniatura
+ * e de quadro na prévia, até o vídeo de verdade entrar no lugar.
+ */
+export function draftCard(b) {
+  const fala = b.draft.fala;
+  if (cards.has(fala)) return cards.get(fala);
+  const css = getComputedStyle(document.documentElement);
+  const cor = (nome, padrao) => css.getPropertyValue(nome).trim() || padrao;
+  const c = document.createElement("canvas");
+  c.width = DRAFT_W;
+  c.height = DRAFT_H;
+  const g = c.getContext("2d");
+  g.fillStyle = cor("--md-sys-color-surface-container-highest", "#e6e0e9");
+  g.fillRect(0, 0, DRAFT_W, DRAFT_H);
+  g.fillStyle = cor("--md-sys-color-on-surface-variant", "#49454f");
+  g.textAlign = "center";
+  g.font = "500 36px Roboto, sans-serif";
+  g.fillText("Rascunho", DRAFT_W / 2, 140);
+  g.fillStyle = cor("--md-sys-color-on-surface", "#1d1b20");
+  g.font = "400 52px Roboto, sans-serif";
+  // A fala, quebrada na largura do cartão; o que não cabe termina em reticências.
+  const linhas = [];
+  let atual = "";
+  for (const palavra of fala.split(/\s+/)) {
+    const tenta = atual ? `${atual} ${palavra}` : palavra;
+    if (g.measureText(tenta).width > DRAFT_W - 120 && atual) linhas.push(atual), (atual = palavra);
+    else atual = tenta;
+  }
+  if (atual) linhas.push(atual);
+  const max = 14;
+  const vistas = linhas.length > max ? [...linhas.slice(0, max - 1), `${linhas[max - 1]}…`] : linhas;
+  const topo = DRAFT_H / 2 - (vistas.length * 68) / 2 + 52;
+  vistas.forEach((l, i) => g.fillText(l, DRAFT_W / 2, topo + i * 68));
+  const url = c.toDataURL("image/png");
+  cards.set(fala, url);
+  return url;
 }

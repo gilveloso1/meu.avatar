@@ -113,7 +113,7 @@ faça depois dos cortes, e de novo se o grupo mudar. Até 60 s por grupo. O WebM
 `adicionar {arquivo, dur: duracao, sobre: grupo, em: 0}`.
 
 `avisos`, em `ver_projeto` e na resposta dos comandos, aponta o que está aceito mas sairá errado.
-Hoje há um: `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),
+Há dois. `rascunho` (`bloco`, `fala`, `segundos`): uma fala que ainda espera o vídeo. E `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),
 quando uma cobertura ou um som passa do fim da sequência ou há um buraco nela. Aquele trecho sai
 sobre o fundo preto, salvo se uma cobertura opaca o preencher.
 
@@ -125,6 +125,8 @@ recusado. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
 | `tipo` | Campos | Efeito |
 |---|---|---|
 | `adicionar` | `video`, `arquivo` ou `ativo` (de `listar_avatares`); `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo` e de ativo enviado; o ativo gerado usa a duração do vídeo); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: bloco solto, à direita de tudo |
+| `rascunho` | `fala`, `duracao` (0,5 a 30); `nome`; `depois` ou `sobre` e `em`; `rotulo` | O lugar de um vídeo que ainda não existe: um bloco sem arquivo, com a fala, do tamanho estimado. No canvas e na prévia, um cartão com a fala. A exportação é recusada enquanto houver rascunho |
+| `trocar` | `bloco`; `video`, `arquivo` ou `ativo`; `inicio`, `fim`, `dur`, `nome`, `semSom` | Põe o arquivo no lugar do bloco (o vídeo pronto no lugar do rascunho): a posição e o que está por cima ficam, e a sequência acompanha a duração nova. Sem `fim`, o vídeo entra inteiro |
 | `cortar` | `bloco`, `inicio`, `fim` | Trecho do arquivo, em segundos; a sequência fica encostada |
 | `dividir` | `bloco`, `em` | Dois blocos, no instante `em` do arquivo; 0,5 s no mínimo de cada lado |
 | `mover` | `bloco`, `depois` ou `antes` | Muda a ordem, sem buraco; a cobertura e o som somado vão junto |
@@ -138,7 +140,7 @@ recusado. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
 | `final` | `id`, `resolucao`, `formato`, `velocidade` | Muda um Final; sem `id`, cria outro. A velocidade vale para todas as variações dele |
 | `organizar` | | O mesmo Organizar da tela |
 
-Em `adicionar` e `dividir`, `rotulo: "nome"` permite citar o bloco como `"@nome"` nos comandos
+Em `adicionar`, `rascunho` e `dividir`, `rotulo: "nome"` permite citar o bloco como `"@nome"` nos comandos
 seguintes do mesmo lote, sem esperar a resposta.
 
 O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, como na tela.
