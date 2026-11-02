@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
 import { normalizar } from "../src/transcricao";
-import { call, cookie, FakeExportApi, FakeTranscriber, FakeVideoApi, memberCookie, SITE } from "./helpers";
+import { call, cookie, FakeExportApi, FakeRenderApi, FakeTranscriber, FakeVideoApi, memberCookie, SITE } from "./helpers";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
 const VIDEO2 = "33333333-3333-4333-8333-333333333333";
@@ -16,7 +16,7 @@ async function token(email: string, code: string): Promise<string> {
   return code;
 }
 
-const api = (path: string, code: string | null, body?: unknown, exporter = null as FakeExportApi | null, transcriber = null as FakeTranscriber | null) =>
+const api = (path: string, code: string | null, body?: unknown, exporter = null as FakeExportApi | null, transcriber = null as FakeTranscriber | null, renderer = null as FakeRenderApi | null) =>
   call(
     new Request(`${SITE}${path}`, {
       method: body === undefined ? "GET" : "POST",
@@ -28,6 +28,7 @@ const api = (path: string, code: string | null, body?: unknown, exporter = null 
     null,
     exporter,
     transcriber,
+    renderer,
   );
 
 async function video(id: string, structure = "wan", status = "completed") {
@@ -481,6 +482,62 @@ describe("ativos de avatar", () => {
     await comandos(id, revisao, [{ tipo: "adicionar", ativo: GERADO, fim: 4 }]);
     const res = await api(`/projetos/${id}/exportar`, admin, { final: "final" }, new FakeExportApi());
     expect(res.status).toBe(201);
+  });
+});
+
+describe("vídeo do HTML", () => {
+  const html = (id: string, body: unknown, r: FakeRenderApi | null) => api(`/api/v1/projetos/${id}/html`, admin, body, null, null, r);
+
+  it("vira um WebM no projeto, do tamanho do Final, e entra como cobertura", async () => {
+    const { id, revisao } = await novo();
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4 }, { tipo: "final", id: "final", resolucao: "1080p", formato: "9:16" }])).json<{ revisao: number; criados: string[] }>();
+    const r = new FakeRenderApi();
+    const res = await html(id, { nome: "legenda.webm", html: "<div>Oi</div>", duracao: 4 }, r);
+    expect(res.status).toBe(201);
+    const { arquivo, largura, altura } = await res.json<{ arquivo: { id: string; tipo: string; src: string }; largura: number; altura: number }>();
+    expect([largura, altura]).toEqual([1080, 1920]);
+    expect(r.calls).toEqual([{ html: "<div>Oi</div>", largura: 1080, altura: 1920, duracao: 4 }]);
+    expect(arquivo.tipo).toBe("video/webm");
+    expect(await (await env.MIDIA.get(`projetos/${id}/${arquivo.id}`))!.text()).toBe("webm");
+    const c = await comandos(id, a.revisao, [{ tipo: "adicionar", arquivo: arquivo.id, dur: 4, sobre: a.criados[0], em: 0 }]);
+    expect(c.status).toBe(200);
+  });
+
+  it("projeto sem Final usa 720 × 1280; Final que não existe é recusado", async () => {
+    const { id } = await novo();
+    const r = new FakeRenderApi();
+    expect((await html(id, { html: "<p>x</p>", duracao: 2 }, r)).status).toBe(201);
+    expect(r.calls[0]).toMatchObject({ largura: 720, altura: 1280 });
+    expect(await (await html(id, { html: "<p>x</p>", duracao: 2, final: "outro" }, r)).json()).toEqual({ erro: "final_inexistente" });
+  });
+
+  it("recusa HTML vazio, duração fora do limite e sem contêiner avisa", async () => {
+    const { id } = await novo();
+    const r = new FakeRenderApi();
+    expect(await (await html(id, { html: " ", duracao: 2 }, r)).json()).toEqual({ erro: "html_invalido" });
+    expect(await (await html(id, { html: "<p>x</p>", duracao: 61 }, r)).json()).toEqual({ erro: "duracao_invalida" });
+    expect(await (await html(id, { html: "<p>x</p>" }, r)).json()).toEqual({ erro: "duracao_invalida" });
+    expect((await html(id, { html: "x".repeat(1024 * 1024 + 1), duracao: 2 }, r)).status).toBe(413);
+    expect(r.calls).toHaveLength(0);
+    expect(await (await html(id, { html: "<p>x</p>", duracao: 2 }, null)).json()).toEqual({ erro: "render_indisponivel" });
+  });
+
+  it("HTML que não roda devolve o log para o agente corrigir, sem guardar arquivo", async () => {
+    const { id } = await novo();
+    const r = new FakeRenderApi();
+    r.log = "ReferenceError: gsapp is not defined";
+    const res = await html(id, { html: "<script>gsapp.to()</script>", duracao: 2 }, r);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ erro: "render_falhou", detalhe: "ReferenceError: gsapp is not defined" });
+    expect((await (await api(`/api/v1/projetos/${id}`, admin)).json<{ arquivos: unknown[] }>()).arquivos).toEqual([]);
+  });
+
+  it("projeto de outra conta não existe", async () => {
+    const { id } = await novo();
+    await memberCookie();
+    const { email } = (await env.DB.prepare("SELECT email FROM users WHERE role = 'member'").first<{ email: string }>())!;
+    const membro = await token(email, "ma_membro");
+    expect((await api(`/api/v1/projetos/${id}/html`, membro, { html: "<p>x</p>", duracao: 2 }, null, null, new FakeRenderApi())).status).toBe(404);
   });
 });
 

@@ -12,7 +12,7 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.4.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.5.0" };
 /** A lista de ferramentas não depende de quem pede. */
 const CACHE = { ttlMs: 3_600_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
@@ -36,6 +36,8 @@ final {id, resolucao, formato, velocidade}
 organizar {}
 Em adicionar e dividir, rotulo: "nome" permite citar esse bloco como "@nome" nos comandos seguintes do mesmo lote.
 O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele. Tempos de inicio, fim e em são do arquivo; t das chaves é do bloco.`;
+
+const RENDER = `Regras do HTML: anime só pela linha do tempo tl (GSAP 3, já criada e pausada), com tempos em segundos: tl.to(...), tl.fromTo(..., 1.2), tl.set(..., 3); nada de setTimeout, requestAnimationFrame, Math.random ou relógio. Posicione dentro de #root (position: relative, do tamanho do Final; cor padrão branca, fonte padrão Inter). Sem internet: nada de link, CDN ou imagem externa. Fontes: TikTok Sans, Inter, Montserrat, Roboto, Open Sans, Oswald, Playfair Display, Poppins (400 a 900), Anton, Bebas Neue, Archivo Black, Courier Prime (400 e 700) e Pacifico, pelo nome no CSS. Desfoque grande, 3D e vídeo dentro do HTML ficam lentos. Se falhar, render_falhou traz o log em detalhe.`;
 
 const texto = (descricao: string) => ({ type: "string", description: descricao });
 const objeto = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
@@ -68,6 +70,20 @@ const FERRAMENTAS = [
     name: "enviar_arquivo",
     description: "Guarda um arquivo no projeto (imagem até 10 MB; vídeo e áudio até 50 MB, limitados aqui a 10 MB pelo base64). WebM com transparência serve de camada sobre o vídeo.",
     inputSchema: objeto({ projeto, nome: texto("Nome do arquivo."), tipo: texto('Tipo, como "video/webm" ou "audio/mp4".'), base64: texto("Conteúdo em base64.") }, ["projeto", "nome", "tipo", "base64"]),
+  },
+  {
+    name: "renderizar_html",
+    description: `Faz um vídeo transparente (WebM) de uma composição em HTML e o guarda no projeto; depois, ponha-o sobre o vídeo com adicionar {arquivo, dur, sobre, em}. Serve para legenda palavra a palavra, títulos, lower thirds, selos, gráficos, contadores e máscaras. ${RENDER}`,
+    inputSchema: objeto(
+      {
+        projeto,
+        nome: texto('Nome do arquivo, como "legenda.webm".'),
+        html: texto("Só o conteúdo: elementos, <style> e <script>. A página, o tamanho e o fundo transparente já existem."),
+        duracao: { type: "number", description: "Segundos do vídeo, até 60." },
+        final: texto("Id do Final cujo tamanho vale; sem isso, o primeiro."),
+      },
+      ["projeto", "html", "duracao"],
+    ),
   },
   {
     name: "exportar",
@@ -113,6 +129,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("GET", `${p}/transcricao?src=${seguro(a.src)}`);
     case "ver_silencios":
       return chama("GET", `${p}/silencios?src=${seguro(a.src)}`);
+    case "renderizar_html":
+      return chama("POST", `${p}/html`, json({ nome: a.nome, html: a.html, duracao: a.duracao, final: a.final }));
     case "exportar":
       return chama("POST", `${site}/exportar`, json({ final: a.final, versoes: a.versoes }));
     case "acompanhar_exportacao":

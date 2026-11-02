@@ -324,6 +324,40 @@ do alarme, com o contêiner seguindo ligado. Agora:
 Para a API, o mesmo contêiner responde `POST /quadros` e `POST /silencios`
 ([api.md](api.md)). Mudou o `exportar.py`: precisa do deploy com Docker, no ambiente cloud.
 
+## Vídeo do HTML (render)
+
+O contêiner `Renderer` (`container/render/`, `standard-3`) faz o WebM transparente do HTML dos
+agentes com o HyperFrames ([api.md](api.md)). É separado da exportação porque a imagem leva o
+Chrome (uns 460 MB comprimida, contra 118 MB). Uma instância só, um render por vez, dorme 30 s
+depois do último pedido. Medido no protótipo (`claude/teste-hyperframes-linux`): 10 s de vídeo
+em 16 s, US$ 0,001 por render (US$ 0,003 com os 30 s ligado).
+
+**A imagem não é montada no `wrangler deploy`.** As bibliotecas do Chrome vêm do apt do Ubuntu,
+e no ambiente cloud o apt e o npm só passam pelo proxy com a CA dele, que o wrangler não sabe
+passar ao build. Então, no ambiente cloud **Meu Avatar**, com o Docker rodando (`dockerd &`):
+
+```bash
+sh container/render/construir.sh 1
+```
+
+(O número é a versão da imagem: a de agora é a 1; a próxima mudança em `container/render/` é a 2.)
+
+Ele baixa o ffmpeg e as fontes (conferindo o SHA-256), monta a imagem com a CA como segredo do
+build (não fica na imagem), faz um render sem rede, confere a transparência e que o servidor
+sai no SIGTERM, e manda a imagem ao registro da Cloudflare. Depois, ponha a versão nova no
+`image` do `Renderer` em `wrangler.jsonc` e publique como sempre. Só precisa disso quando
+`container/render/` muda; os outros deploys usam a imagem que já está no registro.
+
+As fontes são do Google Fonts, licença SIL OFL 1.1, num commit fixo (`baixar.sh`), com a
+licença de cada família ao lado dos arquivos: TikTok Sans (a do TikTok), Inter, Montserrat,
+Roboto, Open Sans, Oswald, Playfair Display, Poppins, Anton, Bebas Neue, Archivo Black, Courier
+Prime e Pacifico. A Instagram Sans é da Meta e não tem licença livre: no lugar dela, Poppins.
+Fonte nova: uma linha no `baixar.sh`, uma em `FAMILIAS` (`servidor.mjs`) e na lista do MCP.
+
+Sem o contêiner (precisa do Node e de `npm ci` em `container/render/`, e do
+`npx hyperframes browser ensure`): `PORT=8090 node container/render/servidor.mjs` e um
+`POST /render` com o `exemplo.html` (cabeçalhos `x-largura`, `x-altura`, `x-duracao`).
+
 Para conferir em produção: `containersUsageAdaptiveGroups` na API GraphQL, por minuto (sem
 trabalho, a memória alocada vai a zero), e os logs do Worker na API de Observability
 (`/workers/observability/telemetry/query`; o `wrangler tail` não passa pelo proxy do

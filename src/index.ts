@@ -6,11 +6,13 @@ import { HeyGenClient, type HeyGenApi } from "./heygen";
 import type { Env } from "./env";
 import { OpenRouterVideo, verifySignature, type VideoApi } from "./openrouter";
 import { Site } from "./site/site";
+import { ContainerRender, type RenderApi } from "./render";
 import { Studio } from "./studio";
 import { type Transcriber, WorkersAiTranscriber } from "./transcricao";
 
 export { AudioFixer } from "./audio";
 export { Exporter } from "./exportar";
+export { Renderer } from "./render";
 
 export interface Deps {
   api?: VideoApi | null;
@@ -18,12 +20,14 @@ export interface Deps {
   heygen?: HeyGenApi | null;
   exporter?: ExportApi | null;
   transcriber?: Transcriber | null;
+  renderer?: RenderApi | null;
 }
 
 export function createExports(env: Env, deps: Deps = {}): Exports {
   const api = deps.exporter !== undefined ? deps.exporter : env.EXPORTAR ? new ContainerExport(env.EXPORTAR) : null;
   const transcriber = deps.transcriber !== undefined ? deps.transcriber : env.AI ? new WorkersAiTranscriber(env.AI) : null;
-  return new Exports(new Db(env.DB), env.MIDIA, api, transcriber);
+  const renderer = deps.renderer !== undefined ? deps.renderer : env.RENDER ? new ContainerRender(env.RENDER) : null;
+  return new Exports(new Db(env.DB), env.MIDIA, api, transcriber, renderer);
 }
 
 export function createStudio(env: Env, deps: Deps = {}): Studio {

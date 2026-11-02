@@ -10,6 +10,7 @@ import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
 import { canUse, InputError, STRUCTURES, structureById } from "./structures";
+import { RenderError } from "./render";
 import { AudioLongoError } from "./transcricao";
 
 export const API_PATH = /^\/api\/v1(\/|$)/;
@@ -43,10 +44,11 @@ export class Api {
     if (path === "/api/v1/videos" && !post) return this.videos(user, url);
     if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
+    if (m[2] === "html") return post ? this.renderHtml(request, project) : falha(405, "metodo_invalido");
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project));
   }
@@ -106,6 +108,21 @@ export class Api {
       avisos: gs.filter((g) => g.blocks.length).flatMap((g) => baseGaps(g).map(([de, ate]) => ({ tipo: "sem_video_de_base", grupo: g.id, de, ate, segundos: +(ate! - de!).toFixed(3) }))),
       canvas: data,
     };
+  }
+
+  /** O HTML do agente vira um WebM transparente no projeto; o log volta quando o HTML não roda. */
+  private async renderHtml(request: Request, project: Project): Promise<Response> {
+    const body = await json(request);
+    const nome = typeof body?.nome === "string" && body.nome.trim() ? body.nome.trim().slice(0, 200) : "camada.webm";
+    try {
+      const r = await this.exports.renderHtml(project, { nome, html: typeof body?.html === "string" ? body.html : "", duracao: typeof body?.duracao === "number" ? body.duracao : NaN, final: typeof body?.final === "string" ? body.final : undefined });
+      if (r === null) return falha(503, "render_indisponivel");
+      if (typeof r === "string") return falha(r === "html_grande_demais" || r === "video_grande_demais" ? 413 : 400, r);
+      return Response.json({ arquivo: { id: r.file.id, nome: r.file.name, tipo: r.file.type, src: `/projetos/${project.id}/arquivos/${r.file.id}` }, largura: r.largura, altura: r.altura }, { status: 201 });
+    } catch (err) {
+      if (err instanceof RenderError) return falha(422, "render_falhou", { detalhe: err.message });
+      throw err;
+    }
   }
 
   /** Um lote de comandos sobre uma revisão: tudo ou nada, e quem partiu de uma revisão velha lê de novo. */

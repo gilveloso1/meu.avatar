@@ -1,5 +1,6 @@
 import type { AudioFixer } from "./audio";
 import type { Exporter } from "./exportar";
+import type { Renderer } from "./render";
 
 export interface Env {
   DB: D1Database;
@@ -15,6 +16,8 @@ export interface Env {
   AUDIO?: DurableObjectNamespace<AudioFixer>;
   /** Contêiner que monta os vídeos dos projetos (src/exportar.ts). Sem ele, o Exportar avisa que está indisponível. */
   EXPORTAR?: DurableObjectNamespace<Exporter>;
+  /** Contêiner que faz o vídeo do HTML dos agentes (src/render.ts). Sem ele, o render avisa que está indisponível. */
+  RENDER?: DurableObjectNamespace<Renderer>;
   /** Workers AI: o Whisper que transcreve a fala dos arquivos dos projetos (src/transcricao.ts). */
   AI?: Ai;
   /** Custo do bcrypt das senhas; padrão 12 (os testes usam 4, para ir rápido). */
