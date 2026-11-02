@@ -37,25 +37,47 @@ Já feito (tudo no ar e conferido em 02/11/2026, ver [api.md](api.md)):
 Com isso o agente faz pelo MCP a pesquisa, o roteiro, a estrutura com rascunhos, os cortes, a
 legenda e os gráficos. Ainda não faz música, nem gera os vídeos (a pessoa gera no site).
 
+O primeiro projeto feito do zero só pelo MCP (Proposta do Lara Resende, 02/11/2026) chegou à
+estrutura completa com rascunhos e animações, e mostrou o que falta: a avaliação inteira do agente
+está em [agente-avaliacoes.md](agente-avaliacoes.md), e o resumo é o item 1 abaixo. A ordem dos
+itens ainda vai ser revista com o dono.
+
 Próximos passos, nesta ordem:
 
-1. **Fechar o HyperFrames**: modelos por marca (títulos, lower thirds, selos) e um projeto real
+1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
+   - *Erros*: várias chamadas ao mesmo tempo derrubam o Worker (1101) e o render ("Container port
+     connection closed"): fila e uma nova tentativa sozinha. Comando desconhecido sugere o nome
+     certo. A lista de ferramentas não pode ficar 1 h desatualizada depois de publicar (`CACHE` em
+     `src/mcp.ts`). Fonte de emoji na imagem de render.
+   - *Respostas menores*: `editar_projeto` resumido (revisão, criados, avisos) e, no conflito, o
+     que mudou; `ver_projeto` com filtros e o início de cada bloco no grupo; `listar_videos` com
+     data e paginação; remover arquivos sem uso.
+   - *Tempo que acompanha*: `sobre` ancorado no bloco (não só no grupo), camada que acompanha o
+     bloco quando ele muda de tamanho ou de vídeo, encaixe do vídeo no rascunho cortando o
+     silêncio, remover pausas acima de X s em todos os blocos com realinhamento; `ligar` e
+     `remover` sem desfazer as variações sem querer.
+   - *Ver o resultado*: quadros do Final montado sem exportar, prévia do `renderizar_html` sem
+     salvar, ler o HTML de um arquivo já renderizado para editar.
+   - *Pronto para usar*: templates de layout com parâmetros, kit de marca por perfil, biblioteca de
+     animações didáticas, preset de legenda numa chamada, onde fica o rosto de cada avatar,
+     modelo de projeto com ganchos ligados ao corpo, música por URL ou da biblioteca do site.
+2. **Fechar o HyperFrames**: modelos por marca (títulos, lower thirds, selos) e um projeto real
    feito só pelo MCP, do roteiro à exportação (o da Lara Resende está em andamento).
-2. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
-3. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
+3. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
+4. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
    licenciada ou geração por API (a do caso real foi sintetizada, só para teste),
    realce de voz por bloco e volume animado.
-4. **Transições**: fusão, fade do preto, cortina, zoom, flash e transição em HyperFrames.
-5. **Cor**: exposição, contraste, saturação, temperatura, LUT, igualar a cor entre vídeos,
+5. **Transições**: fusão, fade do preto, cortina, zoom, flash e transição em HyperFrames.
+6. **Cor**: exposição, contraste, saturação, temperatura, LUT, igualar a cor entre vídeos,
    vinheta e nitidez.
-6. **Tempo e imagem avançados**: rampa de velocidade, cortes em J e L, congelar, reverter,
+7. **Tempo e imagem avançados**: rampa de velocidade, cortes em J e L, congelar, reverter,
    repetir, reenquadrar seguindo o rosto, tela dividida, picture-in-picture, opacidade,
    mistura, tremido e estabilização.
-7. **Agente mais autônomo**: detectar cenas e o que aparece nelas, prévia rápida de um
+8. **Agente mais autônomo**: detectar cenas e o que aparece nelas, prévia rápida de um
    trecho, plano sem aplicar com o custo, desfazer pela API, histórico de versões, medir
    gancho, ritmo e áreas seguras.
-8. **Entrega**: variações por plataforma, capa, limites por rede, presets e publicar direto.
-9. **Abrir para todos**: limite de uso, custo do contêiner por pessoa e tela de tokens.
+9. **Entrega**: variações por plataforma, capa, limites por rede, presets e publicar direto.
+10. **Abrir para todos**: limite de uso, custo do contêiner por pessoa e tela de tokens.
 
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 
