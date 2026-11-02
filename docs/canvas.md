@@ -15,6 +15,11 @@ menos custo.
   blocos soltos, vários grupos, várias conexões e vários blocos finais.
 - **Bloco**: vídeo, imagem, áudio etc., gerado aqui ou importado. A largura é
   a duração; dá para encurtar no começo e no fim.
+- **Rascunho**: o lugar de um vídeo que ainda não existe, com a fala e a
+  duração estimada (comando `rascunho`, [api.md](api.md)). É um bloco de imagem
+  sem arquivo (`draft: {fala}`): no canvas mostra a fala, na prévia um cartão,
+  e a exportação espera até ele ser trocado pelo vídeo (`trocar`). Serve para
+  montar a estrutura inteira e gerar só os vídeos que faltam.
 - **Juntar**: blocos encostados lado a lado formam uma sequência fixa (corte
   seco), como numa linha do tempo. Juntos, viram um grupo.
 - **Sobrepor**: um bloco em cima de outro cobre a imagem dele naquele trecho,

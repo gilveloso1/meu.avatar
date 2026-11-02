@@ -6,7 +6,7 @@ export interface ExportWork {
   trechos: { duracao: number; itens: ExportItem[] }[];
   versoes: { nome: string; trechos: number[] }[];
 }
-export interface Block { id: string; kind: "video" | "image" | "audio"; name: string; src: string; dur: number; tin: number; tout: number; x: number; y: number; mute: boolean; vol: number; tone: number; audio?: string; speed?: number; frame?: Frame }
+export interface Block { id: string; kind: "video" | "image" | "audio"; name: string; src: string; dur: number; tin: number; tout: number; x: number; y: number; mute: boolean; vol: number; tone: number; audio?: string; speed?: number; frame?: Frame; draft?: { fala: string } }
 export interface FrameKey { t: number; z: number; x: number; y: number }
 export interface Frame { fit?: "cover" | "contain" | "blur"; flipH?: boolean; flipV?: boolean; rotate?: number; crop?: { l: number; t: number; r: number; b: number }; keys?: FrameKey[] }
 export interface CanvasFinal { id: string; x: number; y: number; resolution?: string; format?: string; speed?: number }

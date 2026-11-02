@@ -167,6 +167,8 @@ export class Exports {
       console.error("Projeto ilegível na exportação", project.id, err);
     }
     if (!work?.versoes.length) throw new InputError(ERROS.exportarSemVersao);
+    // O rascunho não tem arquivo: marca o lugar de um vídeo que ainda não foi feito.
+    if (work.trechos.some((t) => t.itens.some((i) => !i.src))) throw new InputError(ERROS.exportarRascunho);
     const id = crypto.randomUUID();
     const trechos: ExportPlan["trechos"] = [];
     for (const t of work.trechos) trechos.push(await this.segmentPlan(project, role, work.largura, work.altura, t));

@@ -600,6 +600,62 @@ describe("legenda do grupo", () => {
   });
 });
 
+describe("rascunho", () => {
+  type Bloco = { id: string; kind: string; src: string; x: number; tin: number; tout: number; draft?: { fala: string }; speed?: number };
+  type Vista = { revisao: number; criados: string[]; grupos: { id: string; duracao: number; blocos: string[] }[]; avisos: { tipo: string; bloco?: string; fala?: string; segundos?: number }[]; canvas: { blocks: Bloco[] } };
+  const lote = async (id: string, revisao: number, lista: unknown[]) => (await comandos(id, revisao, lista)).json<Vista>();
+
+  it("marca o lugar com a fala e a duração estimada, e avisa que falta o vídeo", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" },
+      { tipo: "rascunho", fala: "Agora o mais importante: o que muda para você.", duracao: 3.5, depois: "@a", rotulo: "r" },
+      { tipo: "adicionar", video: VIDEO2, fim: 2, depois: "@r" },
+    ]);
+    const rascunho = r.canvas.blocks.find((b) => b.draft)!;
+    expect(rascunho).toMatchObject({ kind: "image", src: "", tin: 0, tout: 3.5, draft: { fala: "Agora o mais importante: o que muda para você." } });
+    expect(r.grupos[0]!.duracao).toBe(9.5);
+    expect(r.avisos).toEqual([{ tipo: "rascunho", bloco: rascunho.id, fala: "Agora o mais importante: o que muda para você.", segundos: 3.5 }]);
+  });
+
+  it("trocar põe o vídeo pronto no lugar, e a sequência acompanha a duração nova", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" },
+      { tipo: "rascunho", fala: "Fala do meio", duracao: 3, depois: "@a", rotulo: "r" },
+      { tipo: "adicionar", video: VIDEO2, fim: 2, depois: "@r", rotulo: "c" },
+    ]);
+    const [, meio, fim] = r.criados;
+    const t = await lote(id, r.revisao, [{ tipo: "trocar", bloco: meio, video: VIDEO2, fim: 6 }]);
+    const b = t.canvas.blocks.find((o) => o.id === meio)!;
+    expect(b).toMatchObject({ kind: "video", src: `/videos/${VIDEO2}.mp4`, tin: 0, tout: 6 });
+    expect(b.draft).toBeUndefined();
+    // 4 s + 6 s + 2 s: o último bloco anda para depois do vídeo novo.
+    expect(t.grupos[0]!.duracao).toBe(12);
+    expect(t.canvas.blocks.find((o) => o.id === fim)!.x).toBe(10 * 40);
+    expect(t.avisos).toEqual([]);
+  });
+
+  it("recusa fala vazia, duração fora do limite e troca por áudio ou por arquivo que não existe", async () => {
+    const { id, revisao } = await novo();
+    expect(await (await comandos(id, revisao, [{ tipo: "rascunho", fala: " ", duracao: 3 }])).json()).toEqual({ erro: "fala_invalida", comando: 0 });
+    expect(await (await comandos(id, revisao, [{ tipo: "rascunho", fala: "Oi", duracao: 31 }])).json()).toEqual({ erro: "duracao_invalida", comando: 0 });
+    const r = await lote(id, revisao, [{ tipo: "rascunho", fala: "Oi", duracao: 3 }]);
+    expect(await (await comandos(id, r.revisao, [{ tipo: "trocar", bloco: r.criados[0], video: OCULTO }])).json()).toEqual({ erro: "arquivo_indisponivel", comando: 0 });
+    const arquivo = crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO project_files (id, project_id, key, name, type, size, created_at) VALUES (?, ?, 'x', 'm.m4a', 'audio/mp4', 1, ?)").bind(arquivo, id, new Date().toISOString()).run();
+    expect(await (await comandos(id, r.revisao, [{ tipo: "trocar", bloco: r.criados[0], arquivo, dur: 5 }])).json()).toEqual({ erro: "posicao_invalida", comando: 0 });
+  });
+
+  it("não exporta enquanto houver rascunho", async () => {
+    const { id, revisao } = await novo();
+    await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" }, { tipo: "rascunho", fala: "Falta gravar", duracao: 3, depois: "@a" }]);
+    const res = await api(`/projetos/${id}/exportar`, admin, { final: "final" }, new FakeExportApi());
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("rascunho");
+  });
+});
+
 describe("a tela e a API no mesmo projeto", () => {
   const save = (id: string, session: string, body: unknown) => call(new Request(`${SITE}/projetos/${id}/salvar`, { method: "POST", body: JSON.stringify(body), headers: { origin: SITE, cookie: session } }));
   const data = { blocks: [], finals: [], edges: [] };

@@ -4,6 +4,7 @@
  *
  * Projeto: { blocks, finals, edges }
  *   bloco: { id, kind: "video" | "image" | "audio", name, src, dur, tin, tout,
+ *     draft? ({ fala }: o rascunho, uma imagem sem arquivo no lugar de um vídeo que falta),
  *            x, y, mute, vol, tone, audio, speed, frame }   (dur: duração do
  *            arquivo; tin/tout: o corte; tone: 1 a TONES, o tom da cor do tipo;
  *            audio, só no vídeo: "linked" (o som dele numa faixa presa embaixo,

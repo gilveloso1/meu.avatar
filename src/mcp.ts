@@ -14,16 +14,18 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.6.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.7.0" };
 /** A lista de ferramentas não depende de quem pede. */
 const CACHE = { ttlMs: 3_600_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, leia o projeto e refaça o lote. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, leia o projeto e refaça o lote. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro. Cada um tem "tipo":
 adicionar {video|arquivo|ativo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos}
+rascunho {fala, duracao: 0,5 a 30, nome, depois: bloco | sobre: bloco, em: segundos} (o lugar de um vídeo que ainda não existe: um cartão com a fala; a exportação espera a troca)
+trocar {bloco, video|arquivo|ativo, inicio, fim, dur, nome} (põe o arquivo no lugar do bloco, como o vídeo pronto no do rascunho; o que está em cima fica e a sequência acompanha)
 cortar {bloco, inicio, fim}
 dividir {bloco, em}
 mover {bloco, depois|antes}
@@ -36,7 +38,7 @@ remover {ids, fechar}
 som {bloco, volume: 0 a 4, mudo}
 final {id, resolucao, formato, velocidade}
 organizar {}
-Em adicionar e dividir, rotulo: "nome" permite citar esse bloco como "@nome" nos comandos seguintes do mesmo lote.
+Em adicionar, rascunho e dividir, rotulo: "nome" permite citar esse bloco como "@nome" nos comandos seguintes do mesmo lote.
 O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele. Tempos de inicio, fim e em são do arquivo; t das chaves é do bloco.`;
 
 const RENDER = `Regras do HTML: anime só pela linha do tempo tl (GSAP 3, já criada e pausada), com tempos em segundos: tl.to(...), tl.fromTo(..., 1.2), tl.set(..., 3); nada de setTimeout, requestAnimationFrame, Math.random ou relógio. Posicione dentro de #root (position: relative, do tamanho do Final; cor padrão branca, fonte padrão Inter). Sem internet: nada de link, CDN ou imagem externa. Fontes, pelo nome no CSS: ${FONTES.join(", ")}. Desfoque grande, 3D e vídeo dentro do HTML ficam lentos. Se falhar, render_falhou traz o log em detalhe.`;

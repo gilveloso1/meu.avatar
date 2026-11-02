@@ -13,6 +13,7 @@
  * - acerto de sincronia só com folga grande e nunca durante outro acerto.
  */
 import { placement, sounds } from "./modelo.js";
+import { draftCard } from "./miniaturas.js";
 
 const READY = 2; // HAVE_CURRENT_DATA: já há quadro para mostrar.
 const FLOWING = 3; // HAVE_FUTURE_DATA: dá para seguir tocando.
@@ -58,7 +59,7 @@ export class Player {
       }
       // Mostra o primeiro quadro assim que ele chega (antes de tocar).
       el.addEventListener(k === "image" ? "load" : "loadeddata", () => this.show(), { once: true });
-      el.src = i.block.src;
+      el.src = i.block.draft ? draftCard(i.block) : i.block.src;
       if (k !== "audio") this.stage.append(el);
       return { ...i, el, active: false };
     });
