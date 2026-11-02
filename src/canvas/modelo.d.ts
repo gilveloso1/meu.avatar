@@ -32,6 +32,8 @@ export function versions(project: CanvasProject, finalId: string): Group[][];
 export function versionName(i: number): string;
 export function output(final: CanvasFinal): { resolution: string; format: string; width: number; height: number };
 export function width(b: Block): number;
+export function len(b: Block): number;
+export function sounds(b: Block): boolean;
 export function finalRate(final?: CanvasFinal): number;
 export function split(project: CanvasProject, id: string, at: number): { project: CanvasProject; id: string };
 export function relay(before: CanvasProject, after: CanvasProject, order: string[], x0: number, y: number): CanvasProject;

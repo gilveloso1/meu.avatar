@@ -34,7 +34,7 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
 - Ferramentas: `listar_videos`, `listar_avatares`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`,
-  `renderizar_html`,
+  `renderizar_html`, `legendar`,
   `exportar` e `acompanhar_exportacao`. Não apagam projeto e não geram vídeo.
 
 ```bash
@@ -63,6 +63,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida |
 | `POST /api/v1/projetos/<id>/html` `{nome, html, duracao, final?}` | Faz um WebM transparente do HTML e o guarda nos arquivos do projeto: `{arquivo: {id, nome, tipo, src}, largura, altura}` |
+| `POST /api/v1/projetos/<id>/legenda` `{grupo, simular?, palavras?, semTexto?, fontes?, estilo?, final?, nome?}` | Legenda palavra a palavra do grupo, em WebM transparente: `{arquivo, duracao, largura, altura, palavras, trechos}`; com `simular`, só `{duracao, palavras, trechos}` |
 | `GET /api/v1/projetos/<id>/transcricao?src=` | A fala com o tempo de cada palavra: `{idioma, duracao, texto, palavras: [{palavra, inicio, fim}]}` |
 
 Nas três, `src` aceita também o `src` de um ativo de avatar da conta e o `href` de uma exportação
@@ -96,6 +97,20 @@ Poppins, Anton, Bebas Neue, Archivo Black, Courier Prime e Pacifico. Até 60 s e
 Uns 16 s para 10 s de vídeo; a primeira vez depois de publicar demora mais. HTML que não roda:
 `422 render_falhou`, com o log do HyperFrames em `detalhe`. Sem o contêiner,
 `503 render_indisponivel`. O WebM entra com `adicionar {arquivo, dur, sobre, em}`.
+
+A legenda (`src/legenda.ts`) junta a transcrição e o render. As palavras dos blocos que falam
+(os de vídeo da sequência com som, ou os de `fontes`) vão para o tempo do grupo, com o corte e a
+velocidade de cada bloco, e viram trechos: quebra na pontuação, numa pausa de 0,25 s, com 4
+palavras ou 24 letras, e palavra curta sozinha entra na anterior. Cada trecho sai 0,35 s depois
+da última palavra, quando o próximo entra ou quando começa um intervalo de `semTexto` (onde já há
+texto na tela, em segundos do grupo; as palavras dali não aparecem). O padrão é o do caso
+aprovado: Inter Black de 44 px numa coluna de 420 px (numa tela de 720; cresce com o Final), em
+maiúsculas, a palavra dita em verde (`#46ff96`), no máximo duas linhas, a 80% da altura.
+`estilo` muda `fonte`, `tamanho`, `cor`, `destaque`, `maiusculas` e `altura` (0 topo, 1 base).
+Para corrigir a grafia (a da tela é o português correto, não o texto mandado ao avatar), chame
+com `simular`, conserte as `palavras` e mande de volta. A legenda vale para o grupo como está:
+faça depois dos cortes, e de novo se o grupo mudar. Até 60 s por grupo. O WebM entra com
+`adicionar {arquivo, dur: duracao, sobre: grupo, em: 0}`.
 
 `avisos`, em `ver_projeto` e na resposta dos comandos, aponta o que está aceito mas sairá errado.
 Hoje há um: `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),
