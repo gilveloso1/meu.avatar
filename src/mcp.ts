@@ -14,7 +14,7 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.7.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.8.0" };
 /** A lista de ferramentas não depende de quem pede. */
 const CACHE = { ttlMs: 3_600_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
@@ -24,7 +24,8 @@ const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, o
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro. Cada um tem "tipo":
 adicionar {video|arquivo|ativo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos}
-rascunho {fala, duracao: 0,5 a 30, nome, depois: bloco | sobre: bloco, em: segundos} (o lugar de um vídeo que ainda não existe: um cartão com a fala; a exportação espera a troca)
+rascunho {fala, duracao: 0,5 a 30, nome, depois: bloco | sobre: bloco, em: segundos} (o lugar de um vídeo que ainda não existe: um cartão com a fala; sem nome, Texto 1, Texto 2...; a exportação espera a troca)
+renomear {bloco, nome}
 trocar {bloco, video|arquivo|ativo, inicio, fim, dur, nome} (põe o arquivo no lugar do bloco, como o vídeo pronto no do rascunho; o que está em cima fica e a sequência acompanha)
 cortar {bloco, inicio, fim}
 dividir {bloco, em}

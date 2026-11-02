@@ -4,7 +4,8 @@ Estúdio de vídeos curtos com avatar realista falando, para redes sociais e
 anúncios. Worker do Cloudflare com D1 e R2; os vídeos vêm da API de vídeo do
 OpenRouter. Segue o mesmo molde do anb.bot (github.com/gilveloso1/anb.bot).
 Como publicar e operar: [docs/operacao.md](docs/operacao.md).
-O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). API e MCP para agentes
+O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Ao concluir um item, atualize o
+backlog no mesmo PR, antes do merge: tire o que ficou feito e corrija o que ficou desatualizado. API e MCP para agentes
 editarem projetos: [docs/api.md](docs/api.md). Como o prompt
 é montado e as medições de áudio: [docs/prompt.md](docs/prompt.md).
 

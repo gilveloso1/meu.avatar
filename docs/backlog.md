@@ -21,24 +21,26 @@ de definir o limite de uso e o custo do contêiner por pessoa.
 nível profissional num projeto real. O caso de teste é o projeto "Ação na Bolsa". Cada item
 precisa existir nos comandos, na exportação e na prévia do canvas.
 
-Já feito: cortes e ritmo (dividir, inserir no meio, mover, aparar, velocidade, remover pausas),
-imagem (zoom, foco, recorte, espelhar, girar, encaixe, rosto, keyframes), ver quadros e silêncios
-(PRs 42 a 46) e a transcrição com o tempo de cada palavra, com `removerTrechos` para editar pelo
-texto (Whisper do Workers AI, ver [api.md](api.md), conferida no ar em 02/11/2026) e os ativos
-de avatar nos projetos (`listar_avatares`, `adicionar {ativo}`).
+Já feito (tudo no ar e conferido em 02/11/2026, ver [api.md](api.md)):
+
+- Cortes e ritmo (dividir, inserir no meio, mover, aparar, velocidade, remover pausas), imagem
+  (zoom, foco, recorte, espelhar, girar, encaixe, rosto, keyframes), ver quadros e silêncios
+  (PRs 42 a 46).
+- Transcrição com o tempo de cada palavra e `removerTrechos` para editar pelo texto (Whisper do
+  Workers AI, PR 48) e os ativos de avatar nos projetos (`listar_avatares`, `adicionar {ativo}`, PR 49).
+- Vídeo transparente do HTML do agente (`renderizar_html`, contêiner próprio com o HyperFrames e
+  13 fontes livres, PR 50) e a legenda palavra a palavra pronta da transcrição (`legendar`, com
+  as regras do caso real, PR 51).
+- Rascunho no lugar de um vídeo que ainda não existe e `trocar` pelo vídeo pronto (PR 52), com a
+  fala editável nos Ajustes do canvas.
+
+Com isso o agente faz pelo MCP a pesquisa, o roteiro, a estrutura com rascunhos, os cortes, a
+legenda e os gráficos. Ainda não faz música, nem gera os vídeos (a pessoa gera no site).
 
 Próximos passos, nesta ordem:
 
-Aplicar o Ação na Bolsa só pelo MCP (01/11/2026) funcionou, mas o agente recebeu prontos o motion,
-a camada de legenda e a trilha. Pelo MCP ele ainda não faz gráficos, legenda nem música, nem sabe
-o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (itens 1 e 3). O tempo
-de cada palavra já existe (`ver_transcricao`).
-
-1. **Texto e gráficos com o HyperFrames**: o render do HTML do agente já existe
-   (`renderizar_html`, contêiner próprio, 13 fontes livres, conferido no ar em 02/11/2026: 3 s
-   em 26 s com a partida, e o contêiner dorme), e a legenda palavra a palavra sai pronta da
-   transcrição (`legendar`, com as regras do caso real, ver [api.md](api.md)). Falta: modelos
-   por marca (títulos, lower thirds, selos) e refazer o Ação na Bolsa só com o MCP.
+1. **Fechar o HyperFrames**: modelos por marca (títulos, lower thirds, selos) e um projeto real
+   feito só pelo MCP, do roteiro à exportação (o da Lara Resende está em andamento).
 2. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
 3. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
    licenciada ou geração por API (a do caso real foi sintetizada, só para teste),
