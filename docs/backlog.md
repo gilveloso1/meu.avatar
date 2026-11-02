@@ -24,37 +24,36 @@ precisa existir nos comandos, na exportação e na prévia do canvas.
 Já feito: cortes e ritmo (dividir, inserir no meio, mover, aparar, velocidade, remover pausas),
 imagem (zoom, foco, recorte, espelhar, girar, encaixe, rosto, keyframes), ver quadros e silêncios
 (PRs 42 a 46) e a transcrição com o tempo de cada palavra, com `removerTrechos` para editar pelo
-texto (Whisper do Workers AI, ver [api.md](api.md)).
+texto (Whisper do Workers AI, ver [api.md](api.md), conferida no ar em 02/11/2026) e os ativos
+de avatar nos projetos (`listar_avatares`, `adicionar {ativo}`).
 
 Próximos passos, nesta ordem:
 
 Aplicar o Ação na Bolsa só pelo MCP (01/11/2026) funcionou, mas o agente recebeu prontos o motion,
 a camada de legenda e a trilha. Pelo MCP ele ainda não faz gráficos, legenda nem música, nem sabe
-o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (itens 1, 2 e 4). O tempo
+o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (itens 1 e 3). O tempo
 de cada palavra já existe (`ver_transcricao`).
 
-1. **Ativos de avatar nos projetos** (`Exports.source`) e conferir a transcrição num vídeo real
-   (o primeiro uso no ar diz se o Whisper aceita o tamanho e se os tempos batem com os silêncios).
-2. **Texto e gráficos com o HyperFrames** (testado, ver
+1. **Texto e gráficos com o HyperFrames** (testado, ver
    `prototipos/hyperframes-linux/RESULTADOS.md` no branch `claude/teste-hyperframes-linux`):
    bloco de HTML escrito pelo agente, legendas palavra a palavra, títulos, lower thirds,
    selos, gráficos, contadores, modelos por marca e máscara para cobrir uma área. Feito à
    mão no caso real, com camada WebM transparente e Whisper; falta virar recurso do site.
-3. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
-4. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
+2. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
+3. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
    licenciada ou geração por API (a do caso real foi sintetizada, só para teste),
    realce de voz por bloco e volume animado.
-5. **Transições**: fusão, fade do preto, cortina, zoom, flash e transição em HyperFrames.
-6. **Cor**: exposição, contraste, saturação, temperatura, LUT, igualar a cor entre vídeos,
+4. **Transições**: fusão, fade do preto, cortina, zoom, flash e transição em HyperFrames.
+5. **Cor**: exposição, contraste, saturação, temperatura, LUT, igualar a cor entre vídeos,
    vinheta e nitidez.
-7. **Tempo e imagem avançados**: rampa de velocidade, cortes em J e L, congelar, reverter,
+6. **Tempo e imagem avançados**: rampa de velocidade, cortes em J e L, congelar, reverter,
    repetir, reenquadrar seguindo o rosto, tela dividida, picture-in-picture, opacidade,
    mistura, tremido e estabilização.
-8. **Agente mais autônomo**: detectar cenas e o que aparece nelas, prévia rápida de um
+7. **Agente mais autônomo**: detectar cenas e o que aparece nelas, prévia rápida de um
    trecho, plano sem aplicar com o custo, desfazer pela API, histórico de versões, medir
    gancho, ritmo e áreas seguras.
-9. **Entrega**: variações por plataforma, capa, limites por rede, presets e publicar direto.
-10. **Abrir para todos**: limite de uso, custo do contêiner por pessoa e tela de tokens.
+8. **Entrega**: variações por plataforma, capa, limites por rede, presets e publicar direto.
+9. **Abrir para todos**: limite de uso, custo do contêiner por pessoa e tela de tokens.
 
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 
@@ -258,6 +257,8 @@ próprio admin, hoje o caminho é apagar a conta no D1 e cadastrar de novo
 
 ## Pendências pequenas
 
+- **Canvas**: o "Seus vídeos" da tela só lista vídeos gerados; os ativos de avatar entram pela
+  API e aparecem na prévia, mas a tela ainda não tem onde escolhê-los.
 - **Canvas**: velocidade e enquadramento ainda não têm campos nos Ajustes (só pela API, a prévia
   mostra), e o fundo desfocado da prévia não acompanha o zoom (o da exportação, sim).
 

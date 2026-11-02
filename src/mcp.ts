@@ -12,7 +12,7 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.3.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.4.0" };
 /** A lista de ferramentas não depende de quem pede. */
 const CACHE = { ttlMs: 3_600_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
@@ -21,7 +21,7 @@ const MAX_BASE64 = 14 * 1024 * 1024;
 const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, leia o projeto e refaça o lote. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro. Cada um tem "tipo":
-adicionar {video|arquivo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo), depois: bloco | sobre: bloco, em: segundos}
+adicionar {video|arquivo|ativo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos}
 cortar {bloco, inicio, fim}
 dividir {bloco, em}
 mover {bloco, depois|antes}
@@ -40,10 +40,11 @@ O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele. Tem
 const texto = (descricao: string) => ({ type: "string", description: descricao });
 const objeto = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
 const projeto = texto("Id do projeto.");
-const src = texto('Endereço do arquivo: "/videos/<id>.mp4" de listar_videos, um arquivo de ver_projeto ou o href de uma exportação pronta.');
+const src = texto('Endereço do arquivo: "/videos/<id>.mp4" de listar_videos, o src de um ativo de listar_avatares, um arquivo de ver_projeto ou o href de uma exportação pronta.');
 
 const FERRAMENTAS = [
   { name: "listar_videos", description: "Vídeos prontos que podem entrar num projeto, com a fala e a duração.", inputSchema: objeto({ busca: texto("Parte da fala.") }) },
+  { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   { name: "listar_projetos", description: "Projetos da conta, o editado por último primeiro.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   { name: "criar_projeto", description: "Cria um projeto vazio.", inputSchema: objeto({ nome: texto("Nome do projeto.") }, ["nome"]) },
   { name: "ver_projeto", description: "Revisão, grupos, Finais com as variações, arquivos, avisos e o canvas do projeto.", inputSchema: objeto({ projeto }, ["projeto"]) },
@@ -96,6 +97,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
   switch (nome) {
     case "listar_videos":
       return chama("GET", `/api/v1/videos?q=${seguro(a.busca ?? "")}`);
+    case "listar_avatares":
+      return chama("GET", `/api/v1/avatares?q=${seguro(a.busca ?? "")}`);
     case "listar_projetos":
       return chama("GET", `/api/v1/projetos?q=${seguro(a.busca ?? "")}`);
     case "criar_projeto":

@@ -122,7 +122,7 @@ describe("protocolo", () => {
     const { result } = await legado("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
     expect(result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "meu-avatar" } });
     expect((await legado("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-11-25");
-    expect((await legado("tools/list")).result.tools).toHaveLength(11);
+    expect((await legado("tools/list")).result.tools).toHaveLength(12);
     expect((await legado("ping")).result).toEqual({});
   });
 
@@ -140,7 +140,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_videos", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "ver_transcricao", "ver_silencios", "enviar_arquivo", "exportar", "acompanhar_exportacao"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_videos", "listar_avatares", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "ver_transcricao", "ver_silencios", "enviar_arquivo", "exportar", "acompanhar_exportacao"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });

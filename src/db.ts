@@ -471,6 +471,17 @@ export class Db {
     return (await this.d1.prepare("SELECT x.* FROM avatar_assets x JOIN avatars a ON a.id = x.avatar_id WHERE a.user_id = ? ORDER BY x.created_at DESC").bind(userId).all<AvatarAsset>()).results;
   }
 
+  /** Um ativo de qualquer avatar da pessoa, pelo id (a API dos projetos não pede o avatar). */
+  assetOfUser(userId: number, id: string): Promise<AvatarAsset | null> {
+    return this.d1.prepare("SELECT x.* FROM avatar_assets x JOIN avatars a ON a.id = x.avatar_id WHERE a.user_id = ? AND x.id = ?").bind(userId, id).first<AvatarAsset>();
+  }
+
+  /** O arquivo do ativo no R2: o enviado ou, se gerado, a versão que vale do vídeo. */
+  async assetKey(asset: AvatarAsset): Promise<string> {
+    const video = asset.source_video ? await this.videoById(asset.source_video) : null;
+    return (video && (video.edited_key ?? video.processed_key ?? video.video_key)) || asset.key;
+  }
+
   asset(avatarId: string, id: string): Promise<AvatarAsset | null> {
     return this.d1.prepare("SELECT * FROM avatar_assets WHERE avatar_id = ? AND id = ?").bind(avatarId, id).first<AvatarAsset>();
   }

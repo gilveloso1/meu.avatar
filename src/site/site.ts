@@ -231,7 +231,7 @@ export class Site {
         await this.db.deleteAsset(asset.id);
         return redirect(`/avatares/${avatar.id}`);
       }
-      if (!assetAction && !post) return this.object(request, await this.assetFile(asset), "private, max-age=86400", url.searchParams.has("baixar") ? asset.name.replace(/[^\w.-]+/g, "-") : undefined);
+      if (!assetAction && !post) return this.object(request, await this.db.assetKey(asset), "private, max-age=86400", url.searchParams.has("baixar") ? asset.name.replace(/[^\w.-]+/g, "-") : undefined);
     }
     return new Response("não encontrado", { status: 404 });
   }
@@ -464,12 +464,6 @@ ${error ? snackbar(error) : ""}`;
   /** Liga o vídeo aos ativos do avatar, sem copiar o arquivo. */
   private async linkVideo(saving: SavableVideo, avatarId: string): Promise<void> {
     await this.db.insertAsset({ id: crypto.randomUUID(), avatar_id: avatarId, kind: "video", key: saving.key, name: videoAssetName(saving), type: "video/mp4", size: saving.size, source_video: saving.video.id });
-  }
-
-  /** O arquivo do ativo: o enviado ou, se gerado, a versão que vale do vídeo. */
-  private async assetFile(asset: AvatarAsset): Promise<string> {
-    const video = asset.source_video ? await this.db.videoById(asset.source_video) : null;
-    return (video && (video.edited_key ?? video.processed_key ?? video.video_key)) || asset.key;
   }
 
   /** Tela inicial: um card por estrutura que a pessoa pode usar; a busca filtra pelo nome. */
