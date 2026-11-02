@@ -6,7 +6,7 @@
 import { baseGaps, finalRate, groups, members, output, versionName, versions } from "./canvas/modelo.js";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
-import type { Db, Project, User, Video } from "./db";
+import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
 import { canUse, InputError, STRUCTURES, structureById } from "./structures";
@@ -21,6 +21,9 @@ const MAX_BYTES = 1024 * 1024;
 /** Ler o MP4 inteiro para saber a duração só vale até aqui; acima, fica a duração pedida. */
 const MAX_LEITURA = 64 * 1024 * 1024;
 const MAX_QUADROS = 12;
+
+const KINDS: Record<AssetKind, Fonte["kind"]> = { imagem: "image", video: "video", audio: "audio" };
+const assetSrc = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
 
 const falha = (status: number, erro: string, extra: Record<string, unknown> = {}) => Response.json({ erro, ...extra }, { status });
 
@@ -38,6 +41,7 @@ export class Api {
   async handle(request: Request, user: User, path: string, url: URL): Promise<Response> {
     const post = request.method === "POST";
     if (path === "/api/v1/videos" && !post) return this.videos(user, url);
+    if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
     const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
@@ -52,6 +56,21 @@ export class Api {
     const videos = (await this.db.videosByStructures(usable, (url.searchParams.get("q") ?? "").trim())).filter(ready);
     return Response.json({
       videos: videos.map((v) => ({ id: v.id, fala: v.prompt, duracao: v.duration, resolucao: v.resolution, formato: v.aspect_ratio, criado: v.created_at, src: `/videos/${v.id}.mp4` })),
+    });
+  }
+
+  /** Os avatares da pessoa com os ativos, para entrar num projeto como os vídeos. */
+  private async avatars(user: User, url: URL): Promise<Response> {
+    const [avatars, assets] = await Promise.all([this.db.avatarsByUser(user.id, (url.searchParams.get("q") ?? "").trim()), this.db.assetsByUser(user.id)]);
+    return Response.json({
+      avatares: avatars.map((a) => ({
+        id: a.id,
+        nome: a.name,
+        descricao: a.description,
+        ativos: assets
+          .filter((x) => x.avatar_id === a.id)
+          .map((x) => ({ id: x.id, nome: x.name, tipo: x.kind, origem: x.source_video ? "gerado" : "enviado", foto: x.id === a.photo_asset, voz: x.id === a.voice_asset, src: assetSrc(x) })),
+      })),
     });
   }
 
@@ -103,7 +122,7 @@ export class Api {
           if (!memo.has(src)) memo.set(src, await this.silences(user, project, src));
           return memo.get(src)!;
         },
-        rosto: (src) => this.face(src),
+        rosto: (src) => this.face(user, src),
       });
       const text = JSON.stringify(data);
       if (text.length > MAX_BYTES) return falha(413, "projeto_grande_demais");
@@ -116,8 +135,15 @@ export class Api {
     }
   }
 
-  /** O arquivo de um bloco novo: um vídeo que a pessoa pode usar ou um arquivo deste projeto. */
+  /** O arquivo de um bloco novo: um vídeo que a pessoa pode usar, um ativo de um avatar dela ou um arquivo deste projeto. */
   private async source(user: User, project: Project, c: Record<string, unknown>): Promise<Fonte | null> {
+    if (typeof c.ativo === "string") {
+      const a = await this.db.assetOfUser(user.id, c.ativo);
+      if (!a) return null;
+      // O vídeo gerado tem a duração conhecida; o enviado, como o arquivo do projeto, pede dur.
+      const video = a.source_video ? await this.db.videoById(a.source_video) : null;
+      return { src: assetSrc(a), kind: KINDS[a.kind], dur: video ? await this.duration(video) : null, name: a.name };
+    }
     if (typeof c.video === "string") {
       const v = await this.db.videoById(c.video);
       const structure = v && structureById(v.structure);
@@ -156,10 +182,11 @@ export class Api {
     return res.json();
   }
 
-  /** O ponto entre os olhos, achado pelo agendamento (videos.face). */
-  private async face(src: string): Promise<{ x: number; y: number } | null> {
+  /** O ponto entre os olhos, achado pelo agendamento (videos.face e avatar_assets.face). */
+  private async face(user: User, src: string): Promise<{ x: number; y: number } | null> {
     const id = /^\/videos\/([0-9a-f-]{36})/.exec(src)?.[1];
-    const face = id ? (await this.db.videoById(id))?.face : null;
+    const asset = /^\/avatares\/[0-9a-f-]{36}\/arquivos\/([0-9a-f-]{36})$/.exec(src)?.[1];
+    const face = id ? (await this.db.videoById(id))?.face : asset ? (await this.db.assetOfUser(user.id, asset))?.face : null;
     if (!face) return null;
     try {
       const { x, y } = JSON.parse(face) as { x?: unknown; y?: unknown };

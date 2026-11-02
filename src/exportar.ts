@@ -195,7 +195,7 @@ export class Exports {
     return result;
   }
 
-  /** O arquivo de um bloco no R2: só um vídeo que a pessoa pode usar ou um arquivo deste projeto. */
+  /** O arquivo de um bloco no R2: só um vídeo que a pessoa pode usar, um ativo de avatar de quem é dono do projeto ou um arquivo deste projeto. */
   async source(project: Project, role: Role, src: unknown): Promise<string> {
     const path = typeof src === "string" ? src : "";
     const video = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.mp4$/.exec(path);
@@ -211,6 +211,11 @@ export class Exports {
       const row = await this.db.exportById(exported[2]!);
       const version = row?.project_id === project.id && row.status === "done" ? (JSON.parse(row.plan) as ExportPlan).versoes[Number(exported[3])] : undefined;
       if (version) return version.chave;
+    }
+    const asset = /^\/avatares\/([0-9a-f-]{36})\/arquivos\/([0-9a-f-]{36})$/.exec(path);
+    if (asset) {
+      const a = await this.db.assetOfUser(project.user_id, asset[2]!);
+      if (a?.avatar_id === asset[1]) return this.db.assetKey(a);
     }
     const file = /^\/projetos\/([0-9a-f-]{36})\/arquivos\/([0-9a-f-]{36})$/.exec(path);
     if (file?.[1] === project.id) {

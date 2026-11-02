@@ -403,6 +403,87 @@ describe("transcrição", () => {
   });
 });
 
+describe("ativos de avatar", () => {
+  type Vista = { revisao: number; criados: string[]; canvas: { blocks: { id: string; kind: string; src: string; dur: number; tout: number; frame?: { keys?: { x: number; y: number }[] } }[] } };
+  const AVATAR = "55555555-5555-4555-8555-555555555555";
+  const ALHEIO = "66666666-6666-4666-8666-666666666666";
+  const FOTO = "77777777-7777-4777-8777-777777777777";
+  const ENVIADO = "88888888-8888-4888-8888-888888888888";
+  const GERADO = "99999999-9999-4999-8999-999999999999";
+  const DE_OUTRO = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  async function avatar(id: string, userId: number, nome: string, foto: string | null = null) {
+    const agora = new Date().toISOString();
+    await env.DB.prepare("INSERT INTO avatars (id, user_id, name, photo_asset, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id, userId, nome, foto, agora, agora).run();
+  }
+  async function ativo(id: string, avatarId: string, kind: string, type: string, sourceVideo: string | null = null, face: string | null = null) {
+    await env.DB.prepare("INSERT INTO avatar_assets (id, avatar_id, kind, key, name, type, size, source_video, face, created_at) VALUES (?, ?, ?, ?, ?, ?, 3, ?, ?, ?)")
+      .bind(id, avatarId, kind, `avatares-ativos/${avatarId}/${id}`, `${kind}-${id.slice(0, 4)}`, type, sourceVideo, face, new Date().toISOString())
+      .run();
+  }
+
+  beforeEach(async () => {
+    const { id: adminId } = (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin'").first<{ id: number }>())!;
+    await memberCookie();
+    const { id: membroId } = (await env.DB.prepare("SELECT id FROM users WHERE role = 'member'").first<{ id: number }>())!;
+    await avatar(AVATAR, adminId, "Marina", FOTO);
+    await avatar(ALHEIO, membroId, "Outro");
+    await ativo(FOTO, AVATAR, "imagem", "image/jpeg", null, JSON.stringify({ x: 0.4, y: 0.3 }));
+    await ativo(ENVIADO, AVATAR, "video", "video/mp4");
+    await ativo(GERADO, AVATAR, "video", "video/mp4", VIDEO);
+    await ativo(DE_OUTRO, ALHEIO, "imagem", "image/png");
+  });
+
+  it("lista só os avatares da conta, com os ativos e o src de cada um", async () => {
+    const r = await (await api("/api/v1/avatares", admin)).json<{ avatares: { id: string; nome: string; ativos: { id: string; tipo: string; origem: string; foto: boolean; src: string }[] }[] }>();
+    expect(r.avatares.map((a) => a.nome)).toEqual(["Marina"]);
+    const foto = r.avatares[0]!.ativos.find((x) => x.id === FOTO)!;
+    expect(foto).toMatchObject({ tipo: "imagem", origem: "enviado", foto: true, src: `/avatares/${AVATAR}/arquivos/${FOTO}` });
+    expect(r.avatares[0]!.ativos.find((x) => x.id === GERADO)!.origem).toBe("gerado");
+  });
+
+  it("adicionar ativo: imagem e vídeo gerado sem dur; vídeo enviado pede dur; de outra conta não entra", async () => {
+    const { id, revisao } = await novo();
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", ativo: GERADO }, { tipo: "adicionar", ativo: FOTO, sobre: "@v", em: 0 }].map((c, i) => (i === 0 ? { ...c, rotulo: "v" } : c)))).json<Vista>();
+    expect(a.canvas.blocks.map((b) => [b.kind, b.src])).toEqual([
+      ["video", `/avatares/${AVATAR}/arquivos/${GERADO}`],
+      ["image", `/avatares/${AVATAR}/arquivos/${FOTO}`],
+    ]);
+    expect(a.canvas.blocks[0]!.dur).toBe(10);
+    expect(await (await comandos(id, a.revisao, [{ tipo: "adicionar", ativo: ENVIADO }])).json()).toEqual({ erro: "duracao_obrigatoria", comando: 0 });
+    expect((await comandos(id, a.revisao, [{ tipo: "adicionar", ativo: ENVIADO, dur: 5 }])).status).toBe(200);
+    expect(await (await comandos(id, a.revisao + 1, [{ tipo: "adicionar", ativo: DE_OUTRO }])).json()).toEqual({ erro: "arquivo_indisponivel", comando: 0 });
+  });
+
+  it("o rosto do ativo serve ao enquadrar", async () => {
+    const { id, revisao } = await novo();
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", ativo: FOTO, rotulo: "f" }, { tipo: "enquadrar", bloco: "@f", zoom: 2, rosto: true }])).json<Vista>();
+    expect(a.canvas.blocks[0]!.frame!.keys![0]).toMatchObject({ x: 0.4, y: 0.3 });
+  });
+
+  it("quadros e transcrição: o ativo gerado usa o vídeo; o de outra conta não existe", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    await env.MIDIA.put(`avatares-ativos/${ALHEIO}/${DE_OUTRO}`, new Uint8Array([1]));
+    const { id } = await novo();
+    const fake = new FakeExportApi();
+    const q = await api(`/api/v1/projetos/${id}/quadros?src=/avatares/${AVATAR}/arquivos/${GERADO}&instantes=1`, admin, undefined, fake);
+    expect(q.status).toBe(200);
+    await q.arrayBuffer();
+    expect((await api(`/api/v1/projetos/${id}/transcricao?src=/avatares/${AVATAR}/arquivos/${GERADO}`, admin, undefined, fake, new FakeTranscriber())).status).toBe(200);
+    expect((await api(`/api/v1/projetos/${id}/quadros?src=/avatares/${ALHEIO}/arquivos/${DE_OUTRO}&instantes=1`, admin, undefined, fake)).status).toBe(404);
+    // O id do ativo com o avatar errado também não passa.
+    expect((await api(`/api/v1/projetos/${id}/quadros?src=/avatares/${ALHEIO}/arquivos/${GERADO}&instantes=1`, admin, undefined, fake)).status).toBe(404);
+  });
+
+  it("a exportação aceita o ativo do dono do projeto", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    await comandos(id, revisao, [{ tipo: "adicionar", ativo: GERADO, fim: 4 }]);
+    const res = await api(`/projetos/${id}/exportar`, admin, { final: "final" }, new FakeExportApi());
+    expect(res.status).toBe(201);
+  });
+});
+
 describe("a tela e a API no mesmo projeto", () => {
   const save = (id: string, session: string, body: unknown) => call(new Request(`${SITE}/projetos/${id}/salvar`, { method: "POST", body: JSON.stringify(body), headers: { origin: SITE, cookie: session } }));
   const data = { blocks: [], finals: [], edges: [] };

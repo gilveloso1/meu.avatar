@@ -32,7 +32,7 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - **Clientes antigos** (`initialize`, até 2025-11-25) seguem funcionando no mesmo endereço. Por
   padrão, até o SDK v2 ainda conecta assim.
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
-- Ferramentas: `listar_videos`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
+- Ferramentas: `listar_videos`, `listar_avatares`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`,
   `exportar` e `acompanhar_exportacao`. Não apagam projeto e não geram vídeo.
 
@@ -54,6 +54,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | Rota | O que faz |
 |---|---|
 | `GET /api/v1/videos?q=` | Vídeos prontos que a conta pode usar |
+| `GET /api/v1/avatares?q=` | Avatares da conta com os ativos: `id`, `nome`, `tipo` (`imagem`, `video`, `audio`), `origem` (`gerado`, `enviado`), `foto`, `voz` e `src` |
 | `GET /api/v1/projetos?q=` | Projetos da conta |
 | `POST /api/v1/projetos` `{nome}` | Cria um projeto |
 | `GET /api/v1/projetos/<id>` | Revisão, grupos, Finais com as variações, arquivos e o canvas |
@@ -62,8 +63,8 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida |
 | `GET /api/v1/projetos/<id>/transcricao?src=` | A fala com o tempo de cada palavra: `{idioma, duracao, texto, palavras: [{palavra, inicio, fim}]}` |
 
-Nas três, `src` aceita também o `href` de uma exportação pronta deste projeto: é como o agente
-confere o que exportou.
+Nas três, `src` aceita também o `src` de um ativo de avatar da conta e o `href` de uma exportação
+pronta deste projeto: é como o agente confere o que exportou.
 
 | Rota | O que faz |
 |---|---|
@@ -94,7 +95,7 @@ recusado. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
 
 | `tipo` | Campos | Efeito |
 |---|---|---|
-| `adicionar` | `video` ou `arquivo`; `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo`); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: bloco solto, à direita de tudo |
+| `adicionar` | `video`, `arquivo` ou `ativo` (de `listar_avatares`); `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo` e de ativo enviado; o ativo gerado usa a duração do vídeo); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: bloco solto, à direita de tudo |
 | `cortar` | `bloco`, `inicio`, `fim` | Trecho do arquivo, em segundos; a sequência fica encostada |
 | `dividir` | `bloco`, `em` | Dois blocos, no instante `em` do arquivo; 0,5 s no mínimo de cada lado |
 | `mover` | `bloco`, `depois` ou `antes` | Muda a ordem, sem buraco; a cobertura e o som somado vão junto |
@@ -117,8 +118,7 @@ A resposta traz `criados`, com os ids novos na ordem dos comandos.
 ## Limites de agora
 
 - A transcrição não acha sozinha os vícios e as repetições: quem decide é o agente, pelo texto.
-- Só entram vídeos gerados e arquivos do projeto; os ativos de avatar ainda não
-  (`Exports.source`).
+- Os ativos de avatar entram pela API, mas o "Seus vídeos" do canvas ainda não os lista.
 - Sem limite de uso por conta: exportar custa contêiner, e isso precisa de regra antes
   de abrir a outras contas.
 - Velocidade e enquadramento ainda não têm campos nos Ajustes: só pela API, e a prévia mostra.
