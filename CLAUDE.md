@@ -266,6 +266,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   sessão cloud publicar o `main`, dizendo no pedido que o usuário autorizou.
   Quando `container/` mudar, confira que o digest da imagem mudou, não só a
   versão do Worker.
+- `MEU_AVATAR_TOKEN` no ambiente é o token do administrador para o MCP
+  (`https://meuavatar.ia.br/mcp`, `Authorization: Bearer`). Depois de publicar
+  algo que o MCP usa, confira no ar com uma chamada de verdade (as que não
+  gastam créditos: listar, ver, quadros, silêncios). Nunca mostre o valor.
 - Branch novo sempre a partir do `main` do GitHub (`git fetch` e
   `git checkout -b <nome> origin/main`). Antes de publicar de um branch,
   confira que `git log HEAD..origin/main` sai vazio.
