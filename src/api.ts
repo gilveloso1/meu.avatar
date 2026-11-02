@@ -217,7 +217,7 @@ export class Api {
       if (revision === null) return falha(409, "conflito");
       return Response.json({ criados, ...(await this.view({ ...project, data: text, revision })) });
     } catch (err) {
-      if (err instanceof ComandoError) return falha(400, err.codigo, { comando: err.indice });
+      if (err instanceof ComandoError) return falha(400, err.codigo, { comando: err.indice, ...err.extra });
       throw err;
     }
   }

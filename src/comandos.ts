@@ -7,14 +7,42 @@ import { arrange, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, lin
 import type { Block, CanvasProject, Frame, FrameKey, Group } from "./canvas/modelo.js";
 import { PAUSES, planParts, RULES } from "./quickedit";
 
-/** Comando recusado: o código e a posição dele no lote. */
+/** Comando recusado: o código, a posição dele no lote e o que ajuda a corrigir. */
 export class ComandoError extends Error {
   constructor(
     readonly codigo: string,
     readonly indice: number,
+    readonly extra: Record<string, unknown> = {},
   ) {
     super(codigo);
   }
+}
+
+/** Os tipos que `aplicar` conhece; o teste confere que cada um tem o seu caso. */
+export const TIPOS = ["adicionar", "rascunho", "renomear", "trocar", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "remover", "som", "final", "organizar"];
+
+/** Quantas letras trocar, pôr ou tirar para ir de uma palavra à outra. */
+function distancia(a: string, b: string): number {
+  let antes = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const linha = [i];
+    for (let j = 1; j <= b.length; j++) linha[j] = Math.min(antes[j]! + 1, linha[j - 1]! + 1, antes[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    antes = linha;
+  }
+  return antes[b.length]!;
+}
+
+/** O tipo que o agente quis dizer ("troca", "Cortar", "remover_pausas"), ou null se nenhum chega perto. */
+export function sugestao(tipo: unknown): string | null {
+  if (typeof tipo !== "string" || !tipo.trim()) return null;
+  const limpo = tipo.trim().toLowerCase().replace(/[_\s-]/g, "");
+  let melhor: string | null = null;
+  let menor = Math.max(2, Math.floor(limpo.length / 3)) + 1;
+  for (const t of TIPOS) {
+    const d = distancia(limpo, t.toLowerCase());
+    if (d < menor) [melhor, menor] = [t, d];
+  }
+  return melhor;
 }
 
 /** O arquivo de um bloco novo, depois de conferido quem pode usar. */
@@ -57,7 +85,7 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
   const criados: string[] = [];
   const rotulos = new Map<string, string>();
   for (const [i, bruto] of comandos.entries()) {
-    const falha = (codigo: string) => new ComandoError(codigo, i);
+    const falha = (codigo: string, extra?: Record<string, unknown>) => new ComandoError(codigo, i, extra);
     const c = comRotulos(bruto, rotulos, falha);
     const antesDeCriar = criados.length;
     switch (c.tipo) {
@@ -172,8 +200,10 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
       case "organizar":
         project = arrange(project);
         break;
-      default:
-        throw falha("comando_desconhecido");
+      default: {
+        const s = sugestao(c.tipo);
+        throw falha("comando_desconhecido", s ? { sugestao: s } : { tipos: TIPOS });
+      }
     }
     if (typeof bruto.rotulo === "string" && criados.length > antesDeCriar) rotulos.set(bruto.rotulo, criados[antesDeCriar]!);
   }

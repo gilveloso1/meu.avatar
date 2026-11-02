@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
+import { sugestao, TIPOS } from "../src/comandos";
 import { normalizar } from "../src/transcricao";
 import { call, cookie, FakeExportApi, FakeRenderApi, FakeTranscriber, FakeVideoApi, memberCookie, SITE } from "./helpers";
 
@@ -151,9 +152,27 @@ describe("comandos", () => {
   it("um lote com erro não muda nada", async () => {
     const { id, revisao } = await novo();
     const res = await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }, { tipo: "nada" }]);
-    expect(await res.json()).toEqual({ erro: "comando_desconhecido", comando: 1 });
+    expect(await res.json()).toEqual({ erro: "comando_desconhecido", comando: 1, tipos: TIPOS });
     const salvo = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ revisao: number; canvas: { blocks: unknown[] } }>();
     expect(salvo).toMatchObject({ revisao, canvas: { blocks: [] } });
+  });
+
+  it("comando com o nome quase certo sugere o certo", async () => {
+    const { id, revisao } = await novo();
+    expect(await (await comandos(id, revisao, [{ tipo: "troca", bloco: "x" }])).json()).toEqual({ erro: "comando_desconhecido", comando: 0, sugestao: "trocar" });
+    expect(sugestao("remover_pausas")).toBe("removerPausas");
+    expect(sugestao("Cortar")).toBe("cortar");
+    expect(sugestao("remove")).toBe("remover");
+    expect(sugestao("legendar")).toBeNull();
+    expect(sugestao(undefined)).toBeNull();
+  });
+
+  it("todo tipo da lista tem o seu caso", async () => {
+    const { id, revisao } = await novo();
+    for (const tipo of TIPOS) {
+      const r = await (await comandos(id, revisao, [{ tipo }])).json<{ erro?: string }>();
+      expect(r.erro, tipo).not.toBe("comando_desconhecido");
+    }
   });
 
   it("vídeo que não existe ou arquivo de outro projeto não entra", async () => {
