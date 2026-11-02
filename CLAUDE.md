@@ -260,6 +260,16 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 - O Claude roda as migrations e publica **sempre depois de pedir autorização**
   ao usuário no chat. A autorização vale só para aquela vez.
 - Ordem: primeiro `npm run db:migrar`, depois `npm run deploy`.
+- Publicar é sempre numa sessão cloud, no ambiente "Meu Avatar" (nunca o padrão
+  da conta, "ANB Bot"): o computador do usuário não tem Docker, e o deploy monta
+  as imagens dos contêineres. De uma sessão local, faça o merge e mande uma
+  sessão cloud publicar o `main`, dizendo no pedido que o usuário autorizou.
+  Quando `container/` mudar, confira que o digest da imagem mudou, não só a
+  versão do Worker.
+- `MEU_AVATAR_TOKEN` no ambiente é o token do administrador para o MCP
+  (`https://meuavatar.ia.br/mcp`, `Authorization: Bearer`). Depois de publicar
+  algo que o MCP usa, confira no ar com uma chamada de verdade (as que não
+  gastam créditos: listar, ver, quadros, silêncios). Nunca mostre o valor.
 - Branch novo sempre a partir do `main` do GitHub (`git fetch` e
   `git checkout -b <nome> origin/main`). Antes de publicar de um branch,
   confira que `git log HEAD..origin/main` sai vazio.
