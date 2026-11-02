@@ -10,6 +10,8 @@
 import { getContainer } from "@cloudflare/containers";
 import { SleepyContainer } from "./conteiner";
 
+/** As fontes da imagem de render (container/render/servidor.mjs, FAMILIAS), pelo nome do CSS. */
+export const FONTES = ["TikTok Sans", "Inter", "Montserrat", "Roboto", "Open Sans", "Oswald", "Playfair Display", "Poppins", "Anton", "Bebas Neue", "Archivo Black", "Courier Prime", "Pacifico"];
 export const MAX_HTML_BYTES = 1024 * 1024;
 export const MAX_RENDER_SECONDS = 60;
 /** 60 s de vídeo levam uns 90 s; a folga cobre a fila de um render por vez. */

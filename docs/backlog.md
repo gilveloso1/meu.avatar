@@ -35,11 +35,10 @@ o tempo de cada palavra: é o que falta para fazer a edição inteira sozinho (i
 de cada palavra já existe (`ver_transcricao`).
 
 1. **Texto e gráficos com o HyperFrames**: o render do HTML do agente já existe
-   (`renderizar_html`, contêiner próprio, 13 fontes livres, ver [api.md](api.md)). Falta:
-   legenda palavra a palavra montada da transcrição, com as regras do caso real (Inter Black
-   de 44 px numa coluna de 420 px, no máximo duas linhas, some onde já há texto), modelos por
-   marca (títulos, lower thirds, selos) e conferir no ar o render, o tempo da primeira partida
-   e o custo.
+   (`renderizar_html`, contêiner próprio, 13 fontes livres, conferido no ar em 02/11/2026: 3 s
+   em 26 s com a partida, e o contêiner dorme), e a legenda palavra a palavra sai pronta da
+   transcrição (`legendar`, com as regras do caso real, ver [api.md](api.md)). Falta: modelos
+   por marca (títulos, lower thirds, selos) e refazer o Ação na Bolsa só com o MCP.
 2. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
 3. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
    licenciada ou geração por API (a do caso real foi sintetizada, só para teste),

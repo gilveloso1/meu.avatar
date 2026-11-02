@@ -541,6 +541,65 @@ describe("vídeo do HTML", () => {
   });
 });
 
+describe("legenda do grupo", () => {
+  type Simulado = { duracao: number; palavras: { palavra: string; inicio: number; fim: number; bloco?: string }[]; trechos: { texto: string; inicio: number; fim: number }[] };
+  const legenda = (id: string, body: unknown, t: FakeTranscriber | null = new FakeTranscriber(), r: FakeRenderApi | null = new FakeRenderApi()) => api(`/api/v1/projetos/${id}/legenda`, admin, body, new FakeExportApi(), t, r);
+
+  /** Um grupo de 6 s: o vídeo inteiro de 0 a 3 s e, em 2×, de 2,5 s a 8,5 s do mesmo arquivo. */
+  async function falando() {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 3, rotulo: "a" }, { tipo: "adicionar", video: VIDEO, inicio: 2.5, fim: 8.5, depois: "@a", rotulo: "b" }, { tipo: "velocidade", bloco: "@b", velocidade: 2 }])).json<{ revisao: number; criados: string[] }>();
+    return { id, grupo: a.criados[0]!, b: a.criados[1]! };
+  }
+
+  it("simular traz as palavras no tempo do grupo e os trechos, sem fazer vídeo", async () => {
+    const { id, grupo, b } = await falando();
+    const r = new FakeRenderApi();
+    const s = await (await legenda(id, { grupo, simular: true }, new FakeTranscriber(), r)).json<Simulado>();
+    expect(s.duracao).toBe(6);
+    // A fala falsa (test/helpers.ts) termina em "hoje vou mostrar" (2,5 s a 3,6 s). O primeiro bloco corta em 3 s
+    // (sem o "mostrar"); o segundo repete o fim, acelerado, e as palavras seguidas formam um trecho de 4.
+    expect(s.palavras.filter((p) => p.bloco === b)).toEqual([
+      { palavra: "hoje", bloco: b, inicio: 3, fim: 3.15 },
+      { palavra: "vou", bloco: b, inicio: 3.15, fim: 3.25 },
+      { palavra: "mostrar", bloco: b, inicio: 3.25, fim: 3.55 },
+    ]);
+    expect(s.trechos.map((t) => t.texto)).toEqual(["Oi,", "gente,", "é,", "hoje vou hoje vou", "mostrar"]);
+    expect(r.calls).toHaveLength(0);
+  });
+
+  it("faz o WebM do tamanho do grupo, com as palavras corrigidas pelo agente", async () => {
+    const { id, grupo } = await falando();
+    const r = new FakeRenderApi();
+    const res = await legenda(id, { grupo, palavras: [{ palavra: "Brasil.", inicio: 0.2, fim: 0.8 }], estilo: { fonte: "TikTok Sans", destaque: "#ffd400" } }, null, r);
+    expect(res.status).toBe(201);
+    const out = await res.json<{ arquivo: { src: string }; duracao: number; trechos: { texto: string }[] }>();
+    expect(out.duracao).toBe(6);
+    expect(out.trechos.map((t) => t.texto)).toEqual(["Brasil."]);
+    expect(r.calls[0]).toMatchObject({ largura: 720, altura: 1280, duracao: 6 });
+    expect(r.calls[0]!.html).toContain("BRASIL.");
+    expect(r.calls[0]!.html).toContain('"TikTok Sans"');
+    expect(r.calls[0]!.html).toContain('"#ffd400"');
+  });
+
+  it("recusa grupo que não existe, estilo fora da lista e palavras malformadas", async () => {
+    const { id, grupo } = await falando();
+    expect(await (await legenda(id, { grupo: "x", simular: true })).json()).toEqual({ erro: "grupo_inexistente" });
+    expect(await (await legenda(id, { grupo, estilo: { fonte: "Comic Sans" } })).json()).toEqual({ erro: "estilo_invalido" });
+    expect(await (await legenda(id, { grupo, estilo: { cor: "red" } })).json()).toEqual({ erro: "estilo_invalido" });
+    expect(await (await legenda(id, { grupo, palavras: [{ palavra: "x" }] })).json()).toEqual({ erro: "palavras_invalidas" });
+    expect(await (await legenda(id, { grupo, semTexto: [[2, 1]] })).json()).toEqual({ erro: "sem_texto_invalido" });
+    expect(await (await legenda(id, { grupo, simular: true }, null)).json()).toEqual({ erro: "transcricao_indisponivel" });
+  });
+
+  it("grupo sem bloco que fala não tem legenda", async () => {
+    const { id, revisao } = await novo();
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 3 }, { tipo: "som", bloco: "@x", mudo: true }].map((c, i) => (i === 0 ? { ...c, rotulo: "x" } : c)))).json<{ criados: string[] }>();
+    expect(await (await legenda(id, { grupo: a.criados[0], simular: true })).json()).toEqual({ erro: "sem_fala" });
+  });
+});
+
 describe("a tela e a API no mesmo projeto", () => {
   const save = (id: string, session: string, body: unknown) => call(new Request(`${SITE}/projetos/${id}/salvar`, { method: "POST", body: JSON.stringify(body), headers: { origin: SITE, cookie: session } }));
   const data = { blocks: [], finals: [], edges: [] };

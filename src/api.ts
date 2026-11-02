@@ -4,14 +4,15 @@
  * criou. Exportar e baixar usam as rotas do site, com o mesmo token.
  */
 import { baseGaps, finalRate, groups, members, output, versionName, versions } from "./canvas/modelo.js";
+import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, trechos } from "./legenda";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
 import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
 import { canUse, InputError, STRUCTURES, structureById } from "./structures";
-import { RenderError } from "./render";
-import { AudioLongoError } from "./transcricao";
+import { FONTES, MAX_RENDER_SECONDS, RenderError } from "./render";
+import { AudioLongoError, type Palavra } from "./transcricao";
 
 export const API_PATH = /^\/api\/v1(\/|$)/;
 /** O que o site já faz e o token também alcança: exportar, baixar e mandar arquivos. */
@@ -27,6 +28,13 @@ const KINDS: Record<AssetKind, Fonte["kind"]> = { imagem: "image", video: "video
 const assetSrc = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
 
 const falha = (status: number, erro: string, extra: Record<string, unknown> = {}) => Response.json({ erro, ...extra }, { status });
+
+const nomeDoArquivo = (v: unknown, padrao: string) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : padrao);
+const COR = /^#[0-9a-f]{3}([0-9a-f]{3})?([0-9a-f]{2})?$/i;
+
+function estiloValido(e: Estilo): boolean {
+  return FONTES.includes(e.fonte) && COR.test(e.cor) && COR.test(e.destaque) && typeof e.maiusculas === "boolean" && typeof e.tamanho === "number" && e.tamanho >= 16 && e.tamanho <= 120 && typeof e.altura === "number" && e.altura >= 0.05 && e.altura <= 0.95;
+}
 
 export function bearerToken(request: Request): string | null {
   return /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") ?? "")?.[1] ?? null;
@@ -44,11 +52,12 @@ export class Api {
     if (path === "/api/v1/videos" && !post) return this.videos(user, url);
     if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "html") return post ? this.renderHtml(request, project) : falha(405, "metodo_invalido");
+    if (m[2] === "legenda") return post ? this.caption(request, user, project) : falha(405, "metodo_invalido");
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project));
   }
@@ -113,16 +122,68 @@ export class Api {
   /** O HTML do agente vira um WebM transparente no projeto; o log volta quando o HTML não roda. */
   private async renderHtml(request: Request, project: Project): Promise<Response> {
     const body = await json(request);
-    const nome = typeof body?.nome === "string" && body.nome.trim() ? body.nome.trim().slice(0, 200) : "camada.webm";
+    return this.render(project, { nome: nomeDoArquivo(body?.nome, "camada.webm"), html: typeof body?.html === "string" ? body.html : "", duracao: typeof body?.duracao === "number" ? body.duracao : NaN, final: typeof body?.final === "string" ? body.final : undefined });
+  }
+
+  /** O WebM no projeto, com os erros do render em códigos para o agente. */
+  private async render(project: Project, c: { nome: string; html: string; duracao: number; final?: string }, extra: Record<string, unknown> = {}): Promise<Response> {
     try {
-      const r = await this.exports.renderHtml(project, { nome, html: typeof body?.html === "string" ? body.html : "", duracao: typeof body?.duracao === "number" ? body.duracao : NaN, final: typeof body?.final === "string" ? body.final : undefined });
+      const r = await this.exports.renderHtml(project, c);
       if (r === null) return falha(503, "render_indisponivel");
       if (typeof r === "string") return falha(r === "html_grande_demais" || r === "video_grande_demais" ? 413 : 400, r);
-      return Response.json({ arquivo: { id: r.file.id, nome: r.file.name, tipo: r.file.type, src: `/projetos/${project.id}/arquivos/${r.file.id}` }, largura: r.largura, altura: r.altura }, { status: 201 });
+      return Response.json({ arquivo: { id: r.file.id, nome: r.file.name, tipo: r.file.type, src: `/projetos/${project.id}/arquivos/${r.file.id}` }, duracao: c.duracao, largura: r.largura, altura: r.altura, ...extra }, { status: 201 });
     } catch (err) {
       if (err instanceof RenderError) return falha(422, "render_falhou", { detalhe: err.message });
       throw err;
     }
+  }
+
+  /**
+   * A legenda palavra a palavra de um grupo: as palavras vêm da transcrição dos blocos que falam
+   * (ou do agente, corrigidas) e viram um WebM do tamanho do grupo. simular mostra os trechos sem fazer o vídeo.
+   */
+  private async caption(request: Request, user: User, project: Project): Promise<Response> {
+    const body = await json(request);
+    const data = JSON.parse(project.data) as CanvasProject;
+    const g = groups(data).find((o) => o.id === body?.grupo);
+    if (!g) return falha(400, "grupo_inexistente");
+    if (g.dur > MAX_RENDER_SECONDS) return falha(400, "grupo_longo_demais");
+    const semTexto = Array.isArray(body?.semTexto) ? (body.semTexto as unknown[]) : [];
+    if (!semTexto.every((t) => Array.isArray(t) && t.length === 2 && t.every((v) => typeof v === "number") && t[0] < t[1])) return falha(400, "sem_texto_invalido");
+    const estilo = { ...ESTILO_PADRAO, ...(typeof body?.estilo === "object" && body.estilo ? body.estilo : {}) } as Estilo;
+    if (!estiloValido(estilo)) return falha(400, "estilo_invalido");
+    let palavras: Palavra[];
+    if (body?.palavras !== undefined) {
+      const lista = Array.isArray(body.palavras) ? (body.palavras as Record<string, unknown>[]) : [];
+      if (!lista.length || !lista.every((p) => typeof p?.palavra === "string" && p.palavra.trim() && typeof p.inicio === "number" && typeof p.fim === "number" && p.inicio >= 0 && p.fim >= p.inicio && p.inicio < g.dur)) return falha(400, "palavras_invalidas");
+      palavras = lista.map((p) => ({ palavra: (p.palavra as string).trim(), inicio: p.inicio as number, fim: p.fim as number }));
+    } else {
+      const ids = Array.isArray(body?.fontes) ? (body.fontes as unknown[]).filter((v): v is string => typeof v === "string") : undefined;
+      const quem = falantes(g, ids);
+      if (!quem.length) return falha(400, "sem_fala");
+      palavras = [];
+      try {
+        for (const b of quem) {
+          const t = await this.exports.transcribe(await this.exports.source(project, user.role, b.src));
+          if (!t) return falha(503, "transcricao_indisponivel");
+          palavras.push(...noGrupo(g, b, t.palavras));
+        }
+      } catch (err) {
+        if (err instanceof InputError) return falha(404, "arquivo_indisponivel");
+        if (err instanceof AudioLongoError) return falha(413, "audio_longo_demais");
+        throw err;
+      }
+    }
+    const ts = trechos(palavras, semTexto as number[][], g.dur);
+    const resumo = { palavras, trechos: ts.map((t) => ({ texto: t.palavras.map((p) => p.palavra).join(" "), inicio: t.inicio, fim: t.fim })) };
+    const duracao = +g.dur.toFixed(3);
+    if (body?.simular === true) return Response.json({ duracao, ...resumo });
+    if (!ts.length) return falha(400, "sem_fala");
+    const final = typeof body?.final === "string" ? body.final : undefined;
+    const f = final === undefined ? data.finals[0] : data.finals.find((o) => o.id === final);
+    if (final !== undefined && !f) return falha(400, "final_inexistente");
+    const { width, height } = output(f!);
+    return this.render(project, { nome: nomeDoArquivo(body?.nome, "legenda.webm"), html: legendaHtml(ts, estilo, width, height), duracao, final }, resumo);
   }
 
   /** Um lote de comandos sobre uma revisão: tudo ou nada, e quem partiu de uma revisão velha lê de novo. */

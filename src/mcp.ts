@@ -8,11 +8,13 @@
  * handshake. Quem chega com `initialize` ou sem esse _meta é cliente de antes dela, e
  * recebe o protocolo antigo no mesmo endereço, sem cabeçalhos novos.
  */
+import { FONTES } from "./render";
+
 const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.5.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.6.0" };
 /** A lista de ferramentas não depende de quem pede. */
 const CACHE = { ttlMs: 3_600_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
@@ -37,7 +39,7 @@ organizar {}
 Em adicionar e dividir, rotulo: "nome" permite citar esse bloco como "@nome" nos comandos seguintes do mesmo lote.
 O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele. Tempos de inicio, fim e em são do arquivo; t das chaves é do bloco.`;
 
-const RENDER = `Regras do HTML: anime só pela linha do tempo tl (GSAP 3, já criada e pausada), com tempos em segundos: tl.to(...), tl.fromTo(..., 1.2), tl.set(..., 3); nada de setTimeout, requestAnimationFrame, Math.random ou relógio. Posicione dentro de #root (position: relative, do tamanho do Final; cor padrão branca, fonte padrão Inter). Sem internet: nada de link, CDN ou imagem externa. Fontes: TikTok Sans, Inter, Montserrat, Roboto, Open Sans, Oswald, Playfair Display, Poppins (400 a 900), Anton, Bebas Neue, Archivo Black, Courier Prime (400 e 700) e Pacifico, pelo nome no CSS. Desfoque grande, 3D e vídeo dentro do HTML ficam lentos. Se falhar, render_falhou traz o log em detalhe.`;
+const RENDER = `Regras do HTML: anime só pela linha do tempo tl (GSAP 3, já criada e pausada), com tempos em segundos: tl.to(...), tl.fromTo(..., 1.2), tl.set(..., 3); nada de setTimeout, requestAnimationFrame, Math.random ou relógio. Posicione dentro de #root (position: relative, do tamanho do Final; cor padrão branca, fonte padrão Inter). Sem internet: nada de link, CDN ou imagem externa. Fontes, pelo nome no CSS: ${FONTES.join(", ")}. Desfoque grande, 3D e vídeo dentro do HTML ficam lentos. Se falhar, render_falhou traz o log em detalhe.`;
 
 const texto = (descricao: string) => ({ type: "string", description: descricao });
 const objeto = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
@@ -86,6 +88,24 @@ const FERRAMENTAS = [
     ),
   },
   {
+    name: "legendar",
+    description: `Legenda palavra a palavra de um grupo, pronta: as palavras vêm da transcrição dos blocos que falam, já no tempo do grupo (corte e velocidade valem), e viram um WebM transparente no projeto. Depois, adicionar {arquivo, dur: duracao, sobre: grupo, em: 0}. Faça depois dos cortes: mudar o grupo pede legenda nova. Use simular: true para ver palavras e trechos sem fazer o vídeo; corrija a grafia (a da tela é o português correto) e mande as palavras de volta em palavras. Padrão do caso aprovado: Inter Black de 44 px, maiúsculas, palavra dita em verde, no máximo duas linhas. Onde já houver texto na tela, passe o intervalo em semTexto.`,
+    inputSchema: objeto(
+      {
+        projeto,
+        grupo: texto("Id do grupo, de ver_projeto."),
+        nome: texto('Nome do arquivo, como "legenda.webm".'),
+        simular: { type: "boolean", description: "Só devolve palavras e trechos, sem fazer o vídeo." },
+        palavras: { type: "array", items: { type: "object" }, description: "[{palavra, inicio, fim}] em segundos do grupo, como simular devolve; sem isso, a transcrição." },
+        semTexto: { type: "array", items: { type: "array", items: { type: "number" } }, description: "[[de, ate]] em segundos do grupo onde já há texto na tela." },
+        fontes: { type: "array", items: { type: "string" }, description: "Ids dos blocos que falam; sem isso, os de vídeo da sequência com som." },
+        estilo: { type: "object", description: `{fonte, tamanho (numa tela de 720 de largura), cor, destaque, maiusculas, altura (0 topo a 1 base)}. Fontes: ${FONTES.join(", ")}.` },
+        final: texto("Id do Final cujo tamanho vale; sem isso, o primeiro."),
+      },
+      ["projeto", "grupo"],
+    ),
+  },
+  {
     name: "exportar",
     description: "Começa a exportação de um Final. Depois, chame acompanhar_exportacao até ficar pronta.",
     inputSchema: objeto({ projeto, final: texto("Id do Final."), versoes: { type: "array", items: { type: "integer" }, description: "Posições das variações; sem isso, todas." } }, ["projeto", "final"]),
@@ -131,6 +151,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("GET", `${p}/silencios?src=${seguro(a.src)}`);
     case "renderizar_html":
       return chama("POST", `${p}/html`, json({ nome: a.nome, html: a.html, duracao: a.duracao, final: a.final }));
+    case "legendar":
+      return chama("POST", `${p}/legenda`, json({ grupo: a.grupo, nome: a.nome, simular: a.simular, palavras: a.palavras, semTexto: a.semTexto, fontes: a.fontes, estilo: a.estilo, final: a.final }));
     case "exportar":
       return chama("POST", `${site}/exportar`, json({ final: a.final, versoes: a.versoes }));
     case "acompanhar_exportacao":
