@@ -176,13 +176,14 @@ export class Api {
     }
     const ts = trechos(palavras, semTexto as number[][], g.dur);
     const resumo = { palavras, trechos: ts.map((t) => ({ texto: t.palavras.map((p) => p.palavra).join(" "), inicio: t.inicio, fim: t.fim })) };
-    if (body?.simular === true) return Response.json({ duracao: g.dur, ...resumo });
+    const duracao = +g.dur.toFixed(3);
+    if (body?.simular === true) return Response.json({ duracao, ...resumo });
     if (!ts.length) return falha(400, "sem_fala");
     const final = typeof body?.final === "string" ? body.final : undefined;
     const f = final === undefined ? data.finals[0] : data.finals.find((o) => o.id === final);
     if (final !== undefined && !f) return falha(400, "final_inexistente");
     const { width, height } = output(f!);
-    return this.render(project, { nome: nomeDoArquivo(body?.nome, "legenda.webm"), html: legendaHtml(ts, estilo, width, height), duracao: +g.dur.toFixed(3), final }, resumo);
+    return this.render(project, { nome: nomeDoArquivo(body?.nome, "legenda.webm"), html: legendaHtml(ts, estilo, width, height), duracao, final }, resumo);
   }
 
   /** Um lote de comandos sobre uma revisão: tudo ou nada, e quem partiu de uma revisão velha lê de novo. */
