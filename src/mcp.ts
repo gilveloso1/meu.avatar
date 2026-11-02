@@ -15,8 +15,11 @@ const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
 const SERVIDOR = { name: "meu-avatar", version: "1.8.0" };
-/** A lista de ferramentas não depende de quem pede. */
-const CACHE = { ttlMs: 3_600_000, cacheScope: "public" };
+/**
+ * A lista de ferramentas não depende de quem pede. Curto: com 1 h, uma sessão aberta antes de
+ * publicar seguiu com a descrição velha (sem rascunho e trocar) no teste de 02/11/2026.
+ */
+export const CACHE = { ttlMs: 5 * 60_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
