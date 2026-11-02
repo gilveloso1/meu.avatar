@@ -75,8 +75,11 @@ confere o que exportou.
 A transcrição é do Whisper do Workers AI (`whisper-large-v3-turbo`, `src/transcricao.ts`): o
 contêiner de exportação tira o som em MP3 mono de 16 kHz (`/audio`), e o Worker manda ao Whisper.
 Custa US$ 0,0005 por minuto de áudio (os primeiros ~214 min por dia são grátis) e fica guardada
-no R2 (`transcricoes/`) pelo etag do arquivo: pedir de novo não paga de novo. Os tempos são
-aproximados (uns 0,1 s); antes de cortar, confira as bordas com os silêncios. Sem o Whisper ou o
+no R2 (`transcricoes/`) pelo etag do arquivo: pedir de novo não paga de novo. No primeiro teste no
+ar (02/11/2026, vídeo de 7,9 s: 10 s na primeira vez, 1,5 s da cópia guardada), o fim da palavra
+antes de uma pausa caiu a até 0,04 s do silêncio, mas a palavra depois da pausa começou até 0,34 s
+antes da hora (o Whisper põe o silêncio dentro dela). Para cortar, use o fim das palavras e, no
+começo, o fim do silêncio de `silencios`. Sem o Whisper ou o
 contêiner, `503 transcricao_indisponivel`; som acima de 10 MB (uns 40 min), `413 audio_longo_demais`.
 
 `avisos`, em `ver_projeto` e na resposta dos comandos, aponta o que está aceito mas sairá errado.
