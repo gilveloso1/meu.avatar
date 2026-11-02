@@ -7,6 +7,7 @@ import type { Env } from "./env";
 import { OpenRouterVideo, verifySignature, type VideoApi } from "./openrouter";
 import { Site } from "./site/site";
 import { Studio } from "./studio";
+import { type Transcriber, WorkersAiTranscriber } from "./transcricao";
 
 export { AudioFixer } from "./audio";
 export { Exporter } from "./exportar";
@@ -16,11 +17,13 @@ export interface Deps {
   audio?: AudioApi | null;
   heygen?: HeyGenApi | null;
   exporter?: ExportApi | null;
+  transcriber?: Transcriber | null;
 }
 
 export function createExports(env: Env, deps: Deps = {}): Exports {
   const api = deps.exporter !== undefined ? deps.exporter : env.EXPORTAR ? new ContainerExport(env.EXPORTAR) : null;
-  return new Exports(new Db(env.DB), env.MIDIA, api);
+  const transcriber = deps.transcriber !== undefined ? deps.transcriber : env.AI ? new WorkersAiTranscriber(env.AI) : null;
+  return new Exports(new Db(env.DB), env.MIDIA, api, transcriber);
 }
 
 export function createStudio(env: Env, deps: Deps = {}): Studio {

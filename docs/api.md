@@ -33,7 +33,7 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   padrão, até o SDK v2 ainda conecta assim.
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
 - Ferramentas: `listar_videos`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
-  `editar_projeto`, `ver_quadros` (devolve imagem), `ver_silencios`, `enviar_arquivo`,
+  `editar_projeto`, `ver_quadros` (devolve imagem), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`,
   `exportar` e `acompanhar_exportacao`. Não apagam projeto e não geram vídeo.
 
 ```bash
@@ -60,8 +60,9 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) |
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida |
+| `GET /api/v1/projetos/<id>/transcricao?src=` | A fala com o tempo de cada palavra: `{idioma, duracao, texto, palavras: [{palavra, inicio, fim}]}` |
 
-Nas duas, `src` aceita também o `href` de uma exportação pronta deste projeto: é como o agente
+Nas três, `src` aceita também o `href` de uma exportação pronta deste projeto: é como o agente
 confere o que exportou.
 
 | Rota | O que faz |
@@ -70,6 +71,16 @@ confere o que exportou.
 | `POST /projetos/<id>/exportar` `{final, versoes?}` | Começa a exportação |
 | `POST /projetos/<id>/exportacoes/<e>` | Faz o próximo passo; sem isso, o agendamento termina |
 | `GET /projetos/<id>/exportacoes/<e>` | Estado e endereços para baixar |
+
+A transcrição é do Whisper do Workers AI (`whisper-large-v3-turbo`, `src/transcricao.ts`): o
+contêiner de exportação tira o som em MP3 mono de 16 kHz (`/audio`), e o Worker manda ao Whisper.
+Custa US$ 0,0005 por minuto de áudio (os primeiros ~214 min por dia são grátis) e fica guardada
+no R2 (`transcricoes/`) pelo etag do arquivo: pedir de novo não paga de novo. No primeiro teste no
+ar (02/11/2026, vídeo de 7,9 s: 10 s na primeira vez, 1,5 s da cópia guardada), o fim da palavra
+antes de uma pausa caiu a até 0,04 s do silêncio, mas a palavra depois da pausa começou até 0,34 s
+antes da hora (o Whisper põe o silêncio dentro dela). Para cortar, use o fim das palavras e, no
+começo, o fim do silêncio de `silencios`. Sem o Whisper ou o
+contêiner, `503 transcricao_indisponivel`; som acima de 10 MB (uns 40 min), `413 audio_longo_demais`.
 
 `avisos`, em `ver_projeto` e na resposta dos comandos, aponta o que está aceito mas sairá errado.
 Hoje há um: `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),
@@ -88,6 +99,7 @@ recusado. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
 | `dividir` | `bloco`, `em` | Dois blocos, no instante `em` do arquivo; 0,5 s no mínimo de cada lado |
 | `mover` | `bloco`, `depois` ou `antes` | Muda a ordem, sem buraco; a cobertura e o som somado vão junto |
 | `velocidade` | `bloco`, `velocidade` (0,25 a 4) | Mantém o tom da voz; o resto da sequência acompanha |
+| `removerTrechos` | `bloco`, `trechos: [[inicio, fim], ...]` (até 200) | Tira esses trechos do arquivo (vícios, repetições, frases, pelos tempos da transcrição) e o resto encosta. Sobra menor que 0,5 s é recusada (`sobra_curta`): junte-a ao trecho do lado |
 | `removerPausas` | `bloco` (sem ele, todos), `pausa` (`curta`, `media`, `longa`) | Tira as pausas com a regra da Edição rápida |
 | `enquadrar` | `bloco`; `zoom` (1 a 8), `focoX`, `focoY` (0 a 1) ou `rosto: true`; `chaves: [{t, zoom, focoX, focoY}]`; `encaixe` (`preencher`, `caber`, `desfocar`); `recorte: {esquerda, topo, direita, base}`; `espelharH`, `espelharV`, `girar` (0, 90, 180, 270); `limpar` | Só muda o que vier. `t` é o tempo do bloco (negativo continua um movimento do bloco anterior); entre as chaves, a curva é suave |
 | `ligar` | `de`, `para` | Liga blocos (ou um Final); recusa círculo, repetida e passar de 48 variações |
@@ -104,7 +116,7 @@ A resposta traz `criados`, com os ids novos na ordem dos comandos.
 
 ## Limites de agora
 
-- Não há edição por palavra: falta a transcrição com tempos.
+- A transcrição não acha sozinha os vícios e as repetições: quem decide é o agente, pelo texto.
 - Só entram vídeos gerados e arquivos do projeto; os ativos de avatar ainda não
   (`Exports.source`).
 - Sem limite de uso por conta: exportar custa contêiner, e isso precisa de regra antes

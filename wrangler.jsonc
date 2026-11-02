@@ -27,6 +27,8 @@
     }
   ],
   "r2_buckets": [{ "binding": "MIDIA", "bucket_name": "meu-avatar" }],
+  // Workers AI: o Whisper que transcreve a fala dos arquivos dos projetos (src/transcricao.ts).
+  "ai": { "binding": "AI" },
   // Contêiner que trata o áudio (src/audio.ts, container/). "basic": 1/4 de vCPU
   // e 1 GiB; um vídeo de 25 s leva uns 2 min. Uma instância basta (um vídeo por vez).
   "containers": [

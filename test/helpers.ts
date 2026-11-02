@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import type { Transcriber, Transcricao } from "../src/transcricao";
 import { handle } from "../src/index";
 import type { AudioApi, ContainerPlan, Face } from "../src/audio";
 import type { ExportApi } from "../src/exportar";
@@ -204,7 +205,7 @@ export class FakeExportApi implements ExportApi {
   silences = { duracao: 10, silencios: [[3, 4]] };
   async inspect(path: string, body: ReadableStream) {
     await new Response(body).arrayBuffer();
-    const out = new TextEncoder().encode(path === "/silencios" ? JSON.stringify(this.silences) : "jpg");
+    const out = new TextEncoder().encode(path === "/silencios" ? JSON.stringify(this.silences) : path === "/audio" ? "mp3" : "jpg");
     return new Response(out, { headers: { "content-length": String(out.byteLength) } });
   }
   async join(_job: string, body: ReadableStream, sizes: number[]) {
@@ -212,6 +213,28 @@ export class FakeExportApi implements ExportApi {
     if (this.fail) throw new Error(this.fail);
     this.joins.push(sizes);
     return new Response(new TextEncoder().encode("mp4ok"), { headers: { "content-length": "5", "x-crc32": "123" } });
+  }
+}
+
+/** Whisper de mentira: devolve sempre a mesma fala e conta as chamadas. */
+export class FakeTranscriber implements Transcriber {
+  calls: string[] = [];
+  result: Transcricao = {
+    idioma: "pt",
+    duracao: 10,
+    texto: "Oi, gente, é, hoje vou mostrar",
+    palavras: [
+      { palavra: "Oi,", inicio: 0.2, fim: 0.5 },
+      { palavra: "gente,", inicio: 0.5, fim: 1 },
+      { palavra: "é,", inicio: 1.6, fim: 2 },
+      { palavra: "hoje", inicio: 2.5, fim: 2.8 },
+      { palavra: "vou", inicio: 2.8, fim: 3 },
+      { palavra: "mostrar", inicio: 3, fim: 3.6 },
+    ],
+  };
+  async transcribe(mp3: Uint8Array) {
+    this.calls.push(new TextDecoder().decode(mp3));
+    return this.result;
   }
 }
 
@@ -350,8 +373,8 @@ export class FakeHeyGenApi implements HeyGenApi {
   }
 }
 
-export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null, exporter: ExportApi | null = null): Promise<Response> {
-  return handle(request, { ...env, SITE_URL: SITE }, { api, audio, heygen, exporter });
+export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null, exporter: ExportApi | null = null, transcriber: Transcriber | null = null): Promise<Response> {
+  return handle(request, { ...env, SITE_URL: SITE }, { api, audio, heygen, exporter, transcriber });
 }
 
 export function form(fields: Record<string, string | File>): FormData {

@@ -90,6 +90,12 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
         criados.push(...novo.ids);
         break;
       }
+      case "removerTrechos": {
+        const novo = removerTrechos(project, c, falha);
+        project = novo.project;
+        criados.push(...novo.ids);
+        break;
+      }
       case "enquadrar":
         project = await enquadrar(project, c, ctx, falha);
         break;
@@ -260,15 +266,47 @@ async function removerPausas(project: CanvasProject, c: Comando, ctx: Contexto, 
     // Do trecho do bloco para o tempo dele, e de volta para o arquivo.
     const partes = planParts(silencios.map(([a, b]) => [a! - alvo.tin, b! - alvo.tin]), alvo.tout - alvo.tin, pausa.pause, [1], RULES).map(([a, b]) => [a + alvo.tin, b + alvo.tin] as const);
     if (partes.length < 2 && (!partes[0] || (partes[0][0] === alvo.tin && partes[0][1] === alvo.tout))) continue;
-    const seq = sequencia(p, alvo.id)!;
-    const [primeira, ...outras] = partes;
-    const novos: Block[] = outras.map(([a, b]) => ({ ...alvo, id: newId("b"), tin: a, tout: b }));
-    const depois = { ...p, blocks: p.blocks.flatMap((b) => (b.id === alvo.id ? [{ ...b, tin: primeira![0], tout: primeira![1] }, ...novos] : [b])) };
-    const ordem = seq.blocks.flatMap((b) => (b.id === alvo.id ? [b.id, ...novos.map((n) => n.id)] : [b.id]));
-    p = relay(p, depois, ordem, seq.x, seq.blocks[0]!.y);
-    ids.push(...novos.map((n) => n.id));
+    const novo = manterPartes(p, alvo, partes);
+    p = novo.project;
+    ids.push(...novo.ids);
   }
   return { project: p, ids };
+}
+
+const MAX_TRECHOS = 200;
+
+/** Tira do bloco os trechos do arquivo pedidos (vícios, repetições, palavras da transcrição); o resto encosta. */
+function removerTrechos(project: CanvasProject, c: Comando, falha: (c: string) => ComandoError): { project: CanvasProject; ids: string[] } {
+  const alvo = project.blocks.find((b) => b.id === c.bloco);
+  if (!alvo) throw falha("bloco_inexistente");
+  if (alvo.kind === "image" || !sequencia(project, alvo.id)) throw falha("posicao_invalida");
+  if (!Array.isArray(c.trechos) || !c.trechos.length || c.trechos.length > MAX_TRECHOS) throw falha("trechos_invalidos");
+  const trechos = (c.trechos as unknown[]).map((t) => {
+    const [a, b] = Array.isArray(t) ? t.map(numero) : [null, null];
+    if (a == null || b == null || a >= b || b <= alvo.tin || a >= alvo.tout) throw falha("trechos_invalidos");
+    return [Math.max(a, alvo.tin), Math.min(b, alvo.tout)] as const;
+  });
+  trechos.sort((x, y) => x[0] - y[0]);
+  const partes: (readonly [number, number])[] = [];
+  let de = alvo.tin;
+  for (const [a, b] of trechos) {
+    if (a > de) partes.push([de, a]);
+    de = Math.max(de, b);
+  }
+  if (de < alvo.tout) partes.push([de, alvo.tout]);
+  // Sobra menor que um bloco: quem pede junta ao trecho do lado, sem palavra cortada às escondidas.
+  if (!partes.length || partes.some(([a, b]) => b - a < MIN_LEN)) throw falha("sobra_curta");
+  return manterPartes(project, alvo, partes);
+}
+
+/** O bloco vira estas partes do arquivo, em ordem, e a sequência encosta. */
+function manterPartes(project: CanvasProject, alvo: Block, partes: readonly (readonly [number, number])[]): { project: CanvasProject; ids: string[] } {
+  const seq = sequencia(project, alvo.id)!;
+  const [primeira, ...outras] = partes;
+  const novos: Block[] = outras.map(([a, b]) => ({ ...alvo, id: newId("b"), tin: a, tout: b }));
+  const depois = { ...project, blocks: project.blocks.flatMap((b) => (b.id === alvo.id ? [{ ...b, tin: primeira![0], tout: primeira![1] }, ...novos] : [b])) };
+  const ordem = seq.blocks.flatMap((b) => (b.id === alvo.id ? [b.id, ...novos.map((n) => n.id)] : [b.id]));
+  return { project: relay(project, depois, ordem, seq.x, seq.blocks[0]!.y), ids: novos.map((n) => n.id) };
 }
 
 const ENCAIXES: Record<string, Frame["fit"]> = { preencher: "cover", caber: "contain", desfocar: "blur" };

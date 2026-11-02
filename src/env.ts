@@ -15,6 +15,8 @@ export interface Env {
   AUDIO?: DurableObjectNamespace<AudioFixer>;
   /** Contêiner que monta os vídeos dos projetos (src/exportar.ts). Sem ele, o Exportar avisa que está indisponível. */
   EXPORTAR?: DurableObjectNamespace<Exporter>;
+  /** Workers AI: o Whisper que transcreve a fala dos arquivos dos projetos (src/transcricao.ts). */
+  AI?: Ai;
   /** Custo do bcrypt das senhas; padrão 12 (os testes usam 4, para ir rápido). */
   BCRYPT_COST?: string;
   /** Endereço público do Worker, sem barra no fim: vira o callback_url e a URL das fotos. */

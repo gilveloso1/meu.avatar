@@ -10,6 +10,7 @@ import type { Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
 import { canUse, InputError, STRUCTURES, structureById } from "./structures";
+import { AudioLongoError } from "./transcricao";
 
 export const API_PATH = /^\/api\/v1(\/|$)/;
 /** O que o site já faz e o token também alcança: exportar, baixar e mandar arquivos. */
@@ -38,7 +39,7 @@ export class Api {
     const post = request.method === "POST";
     if (path === "/api/v1/videos" && !post) return this.videos(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
@@ -130,17 +131,22 @@ export class Api {
     return { src: `/projetos/${project.id}/arquivos/${file.id}`, kind, dur: null, name: file.name };
   }
 
-  /** Quadros de um arquivo, lado a lado, ou os silêncios dele: o que o agente usa para decidir. */
+  /** Quadros de um arquivo, lado a lado, os silêncios ou a fala dele: o que o agente usa para decidir. */
   private async inspect(user: User, project: Project, what: string, url: URL): Promise<Response> {
     const src = url.searchParams.get("src") ?? "";
     try {
       if (what === "silencios") return Response.json(await this.silences(user, project, src));
+      if (what === "transcricao") {
+        const t = await this.exports.transcribe(await this.exports.source(project, user.role, src));
+        return t ? Response.json(t) : falha(503, "transcricao_indisponivel");
+      }
       const instants = (url.searchParams.get("instantes") ?? "").split(",").filter(Boolean).map(Number);
       if (!instants.length || instants.length > MAX_QUADROS || !instants.every((t) => Number.isFinite(t) && t >= 0)) return falha(400, "instantes_invalidos");
       const res = await this.exports.inspect(await this.exports.source(project, user.role, src), "/quadros", instants.join(","));
       return new Response(res.body, { headers: { "content-type": "image/jpeg", "content-length": res.headers.get("content-length")!, "cache-control": "private, no-store" } });
     } catch (err) {
       if (err instanceof InputError) return falha(404, "arquivo_indisponivel");
+      if (err instanceof AudioLongoError) return falha(413, "audio_longo_demais");
       throw err;
     }
   }
