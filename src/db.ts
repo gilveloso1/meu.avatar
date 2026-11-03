@@ -680,6 +680,15 @@ export class Db {
     return (await this.d1.prepare("SELECT * FROM project_files WHERE project_id = ? ORDER BY created_at DESC").bind(projectId).all<ProjectFile>()).results;
   }
 
+  /** Apaga esses arquivos do projeto no banco e devolve as chaves deles no R2 (para apagar lá também). */
+  async deleteProjectFiles(projectId: string, ids: string[]): Promise<string[]> {
+    if (!ids.length) return [];
+    const marks = ids.map(() => "?").join(", ");
+    const keys = (await this.d1.prepare(`SELECT key FROM project_files WHERE project_id = ? AND id IN (${marks})`).bind(projectId, ...ids).all<{ key: string }>()).results.map((r) => r.key);
+    await this.d1.prepare(`DELETE FROM project_files WHERE project_id = ? AND id IN (${marks})`).bind(projectId, ...ids).run();
+    return keys;
+  }
+
   async projectFile(projectId: string, id: string): Promise<ProjectFile | null> {
     return this.d1.prepare("SELECT * FROM project_files WHERE project_id = ? AND id = ?").bind(projectId, id).first<ProjectFile>();
   }

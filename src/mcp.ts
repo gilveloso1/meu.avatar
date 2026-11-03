@@ -127,6 +127,11 @@ const FERRAMENTAS = [
     ),
   },
   {
+    name: "limpar_arquivos",
+    description: "Os arquivos do projeto que nenhum bloco usa (como os WebMs de animações refeitas), com o tamanho. Com apagar: true, apaga de vez. Confira a lista antes; durante uma exportação, recusa.",
+    inputSchema: objeto({ projeto, apagar: { type: "boolean", description: "Apaga de vez os arquivos da lista; sem isso, só mostra." } }, ["projeto"]),
+  },
+  {
     name: "exportar",
     description: "Começa a exportação de um Final. Depois, chame acompanhar_exportacao até ficar pronta.",
     inputSchema: objeto({ projeto, final: texto("Id do Final."), versoes: { type: "array", items: { type: "integer" }, description: "Posições das variações; sem isso, todas." } }, ["projeto", "final"]),
@@ -174,6 +179,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("POST", `${p}/html`, json({ nome: a.nome, html: a.html, duracao: a.duracao, final: a.final }));
     case "legendar":
       return chama("POST", `${p}/legenda`, json({ grupo: a.grupo, nome: a.nome, simular: a.simular, palavras: a.palavras, semTexto: a.semTexto, fontes: a.fontes, estilo: a.estilo, final: a.final }));
+    case "limpar_arquivos":
+      return chama("POST", `${p}/limpar`, json({ apagar: a.apagar }));
     case "exportar":
       return chama("POST", `${site}/exportar`, json({ final: a.final, versoes: a.versoes }));
     case "acompanhar_exportacao":

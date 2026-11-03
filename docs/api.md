@@ -36,7 +36,7 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
 - Ferramentas: `listar_videos`, `listar_avatares`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`,
-  `renderizar_html`, `legendar`,
+  `renderizar_html`, `legendar`, `limpar_arquivos`,
   `exportar` e `acompanhar_exportacao`. Não apagam projeto e não geram vídeo.
 
 ```bash
@@ -66,6 +66,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida: `{duracao, silencios, som}`; arquivo sem faixa de áudio (como o WebM do render) vem com `som: false` e nenhum silêncio |
 | `POST /api/v1/projetos/<id>/html` `{nome, html, duracao, final?}` | Faz um WebM transparente do HTML e o guarda nos arquivos do projeto: `{arquivo: {id, nome, tipo, src}, largura, altura}` |
 | `POST /api/v1/projetos/<id>/legenda` `{grupo, simular?, palavras?, semTexto?, fontes?, estilo?, final?, nome?}` | Legenda palavra a palavra do grupo, em WebM transparente: `{arquivo, duracao, largura, altura, palavras, trechos}`; com `simular`, só `{duracao, palavras, trechos}` |
+| `POST /api/v1/projetos/<id>/limpar` `{apagar?}` | Os arquivos do projeto que nenhum bloco usa: `{arquivos: [{id, nome, tipo, tamanho}], tamanho}`. Com `apagar: true`, apaga de vez (do banco e do R2); durante uma exportação, `409 exportando` |
 | `GET /api/v1/projetos/<id>/transcricao?src=` | A fala com o tempo de cada palavra: `{idioma, duracao, texto, palavras: [{palavra, inicio, fim}]}` |
 
 Nas três, `src` aceita também o `src` de um ativo de avatar da conta e o `href` de uma exportação
