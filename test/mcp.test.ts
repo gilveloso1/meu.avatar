@@ -188,6 +188,13 @@ describe("ferramentas", () => {
     expect(dados(q)).toEqual({ erro: "conteiner_falhou" });
   });
 
+  it("listar_videos passa a busca, a data, o limite e o continuar", async () => {
+    const um = dados<{ videos: { id: string }[]; continuar?: string }>(await ferramenta("listar_videos", { busca: "Oi", desde: "2020-01-01", limite: 1 }));
+    expect(um.videos.map((v) => v.id)).toEqual([VIDEO]);
+    expect(um.continuar).toBeUndefined();
+    expect(dados<{ videos: unknown[] }>(await ferramenta("listar_videos", { ate: "2020-01-01" })).videos).toEqual([]);
+  });
+
   it("enviar_arquivo guarda no projeto; base64 ruim é recusado", async () => {
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "A" }));
     const ok = await ferramenta("enviar_arquivo", { projeto: id, nome: "camada ação.webm", tipo: "video/webm", base64: btoa("webm") });

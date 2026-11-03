@@ -23,6 +23,16 @@ const MAX_BYTES = 1024 * 1024;
 /** Ler o MP4 inteiro para saber a duração só vale até aqui; acima, fica a duração pedida. */
 const MAX_LEITURA = 64 * 1024 * 1024;
 const MAX_QUADROS = 12;
+const PAGINA_VIDEOS = 20;
+const MAX_PAGINA_VIDEOS = 100;
+
+/** "2026-11-02" ou uma data ISO, no fuso UTC; um dia só vale inteiro no ate. Null se não é data. */
+function data(v: string, ate: boolean): string | null {
+  const dia = /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const t = Date.parse(dia ? `${v}T00:00:00Z` : v);
+  if (!Number.isFinite(t)) return null;
+  return new Date(dia && ate ? t + 86_400_000 : t).toISOString();
+}
 
 const KINDS: Record<AssetKind, Fonte["kind"]> = { imagem: "image", video: "video", audio: "audio" };
 const assetSrc = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
@@ -103,11 +113,27 @@ export class Api {
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(",")));
   }
 
+  /**
+   * Os vídeos prontos, do mais novo ao mais antigo, uma página por vez (o histórico inteiro custava
+   * 17 mil caracteres ao agente). desde e ate filtram pela data; continuar traz a página seguinte.
+   */
   private async videos(user: User, url: URL): Promise<Response> {
+    const p = url.searchParams;
+    const limite = p.has("limite") ? Number(p.get("limite")) : PAGINA_VIDEOS;
+    if (!Number.isInteger(limite) || limite < 1 || limite > MAX_PAGINA_VIDEOS) return falha(400, "limite_invalido");
+    const desde = p.get("desde") ? data(p.get("desde")!, false) : undefined;
+    const ate = p.get("ate") ? data(p.get("ate")!, true) : undefined;
+    if (desde === null || ate === null) return falha(400, "data_invalida");
+    const [criado, id] = (p.get("continuar") ?? "").split("|");
+    if (p.get("continuar") && (!criado || !id)) return falha(400, "continuar_invalido");
     const usable = STRUCTURES.filter((s) => canUse(s, user.role)).map((s) => s.id);
-    const videos = (await this.db.videosByStructures(usable, (url.searchParams.get("q") ?? "").trim())).filter(ready);
+    // Um a mais que o pedido diz se há outra página.
+    const videos = await this.db.readyVideos(usable, { q: (p.get("q") ?? "").trim(), desde, ate, depois: criado && id ? { criado, id } : undefined, limite: limite + 1 });
+    const pagina = videos.slice(0, limite);
+    const ultimo = pagina[pagina.length - 1];
     return Response.json({
-      videos: videos.map((v) => ({ id: v.id, fala: v.prompt, duracao: v.duration, resolucao: v.resolution, formato: v.aspect_ratio, criado: v.created_at, src: `/videos/${v.id}.mp4` })),
+      videos: pagina.map((v) => ({ id: v.id, fala: v.prompt, duracao: v.duration, resolucao: v.resolution, formato: v.aspect_ratio, criado: v.created_at, src: `/videos/${v.id}.mp4` })),
+      ...(videos.length > limite && ultimo ? { continuar: `${ultimo.created_at}|${ultimo.id}` } : {}),
     });
   }
 

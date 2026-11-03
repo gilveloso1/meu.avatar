@@ -45,8 +45,7 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Respostas menores*: `editar_projeto`, no conflito, o que mudou; `listar_videos` com data e
-     paginação; remover arquivos sem uso.
+   - *Respostas menores*: `editar_projeto`, no conflito, o que mudou; remover arquivos sem uso.
    - *Animação como código* (desenho de 02/11/2026, ainda não começado): o projeto guarda o
      código da animação, não o WebM pronto, e só renderiza o vídeo na exportação. Cobre a camada
      que acompanha o bloco, a prévia sem salvar, ler o HTML para editar e é a base dos templates
