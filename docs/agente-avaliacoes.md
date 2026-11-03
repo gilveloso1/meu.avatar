@@ -23,6 +23,7 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   exceção. Corrigido: novas tentativas sozinhas e `conteiner_falhou` no lugar da queda.)
 - O `editar_projeto` deu conflito duas vezes porque a pessoa editava o canvas ao mesmo tempo. A
   resposta só traz o número da revisão, e foi preciso reler o projeto inteiro.
+  (Agora o conflito traz o resumo do projeto como está, com a revisão nova.)
 - A descrição das ferramentas estava desatualizada: não citava o `rascunho` e o `trocar`. Um teste
   com `troca` recebeu `comando_desconhecido`, sem sugestão do nome certo.
   (Causa: a lista de ferramentas vai com cache de 1 h, `CACHE` em `src/mcp.ts`, e a sessão começou

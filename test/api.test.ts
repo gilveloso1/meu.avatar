@@ -256,12 +256,14 @@ describe("comandos", () => {
     expect(await (await comandos(id, revisao, [{ tipo: "adicionar", arquivo, dur: 5 }])).json()).toEqual({ erro: "arquivo_indisponivel", comando: 0 });
   });
 
-  it("revisão velha: 409 com a revisão atual, e nada é escrito", async () => {
+  it("revisão velha: 409 com o projeto como está agora, e nada é escrito", async () => {
     const { id, revisao } = await novo();
-    await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }]);
+    const feito = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }])).json<{ criados: string[] }>();
     const res = await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO2 }]);
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ erro: "conflito", revisao: revisao + 1 });
+    const r = await res.json<Record<string, unknown>>();
+    expect(Object.keys(r).sort()).toEqual(["avisos", "erro", "finais", "grupos", "revisao"]);
+    expect(r).toMatchObject({ erro: "conflito", revisao: revisao + 1, grupos: [{ blocos: [{ id: feito.criados[0] }] }] });
   });
 });
 
