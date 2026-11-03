@@ -55,7 +55,7 @@ export function pagina(conteudo, largura, altura, duracao) {
 <style>
 ${fontes}
 html,body{margin:0;width:${largura}px;height:${altura}px;overflow:hidden;background:transparent}
-#root{position:relative;width:${largura}px;height:${altura}px;overflow:hidden;font-family:"${PADRAO}",sans-serif;color:#fff}
+#root{position:relative;width:${largura}px;height:${altura}px;overflow:hidden;font-family:"${PADRAO}","Noto Color Emoji",sans-serif;color:#fff}
 </style>
 <script src="gsap.min.js"></script>
 <script>window.__timelines={};const tl=gsap.timeline({paused:true});window.__timelines.main=tl;</script>

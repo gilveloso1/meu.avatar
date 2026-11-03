@@ -28,6 +28,7 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   (Causa: a lista de ferramentas vai com cache de 1 h, `CACHE` em `src/mcp.ts`, e a sessão começou
   antes da publicação. O cache agora é de 5 min, e o `comando_desconhecido` traz `sugestao`.)
 - Emojis (📅, ✓) viram quadradinhos no `renderizar_html`: a imagem de render não tem fonte de emoji.
+  (Corrigido na imagem 2 do render, com a Noto Color Emoji no sistema.)
 
 ### 2. O que mais atrapalhou e gerou retrabalho
 

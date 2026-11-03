@@ -2,7 +2,8 @@
 # Baixa para esta pasta o que a imagem de render usa, conferindo o SHA-256:
 # - ffmpeg e ffprobe: build estática do BtbN (a mesma de container/baixar-binarios.sh);
 # - fontes/: as fontes livres que o agente pode usar (Google Fonts, licença SIL OFL 1.1,
-#   num commit fixo), com nomes simples e a licença de cada família.
+#   num commit fixo), com nomes simples e a licença de cada família, e a Noto Color Emoji, que a
+#   imagem instala no sistema para os emojis saírem em qualquer fonte.
 # Os arquivos não vão para o git (.gitignore).
 set -eu
 cd "$(dirname "$0")"
@@ -50,9 +51,10 @@ dd9a89a019b4849f66ab75455fe7bdf931311042cbb0f0f97acc061539703180 ArchivoBlack.tt
 72f793376f8e2841656bf21d77a5de010f2929bd6956a22ee848ad0c7eb978af CourierPrime-400.ttf courierprime/CourierPrime-Regular.ttf
 ff1f38786c849d1c41fa8e447960abdb2bd75fdfb0cfcdeb524fad65a5af3638 CourierPrime-700.ttf courierprime/CourierPrime-Bold.ttf
 5b6c0d5334a7bf77dea52b975c5a0c408878c0f7115ed5b6fb151f634b7bf701 Pacifico.ttf pacifico/Pacifico-Regular.ttf
+4d82a18d8d95f60ba883ce242bbadbf84a576e987745dd7ba38d71c67cff2d73 NotoColorEmoji.ttf notocoloremoji/NotoColorEmoji-Regular.ttf
 LISTA
 
 # A licença de cada família vai junto com os arquivos.
-for d in tiktoksans inter montserrat roboto opensans oswald playfairdisplay poppins anton bebasneue archivoblack courierprime pacifico; do
+for d in tiktoksans inter montserrat roboto opensans oswald playfairdisplay poppins anton bebasneue archivoblack courierprime pacifico notocoloremoji; do
   [ -f "fontes/OFL-$d.txt" ] || curl -fsSL -o "fontes/OFL-$d.txt" "https://raw.githubusercontent.com/google/fonts/$COMMIT/ofl/$d/OFL.txt"
 done

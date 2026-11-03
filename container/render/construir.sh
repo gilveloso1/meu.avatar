@@ -22,6 +22,7 @@ docker run -d --name render-teste --network none --cpus 2 --memory 8g "$NOME" >/
 trap 'docker rm -f render-teste >/dev/null 2>&1 || true' EXIT
 T=$(mktemp -d)
 for i in $(seq 1 30); do docker exec render-teste node -e 'fetch("http://127.0.0.1:8080/saude").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))' && break; sleep 1; done
+docker exec render-teste fc-list | grep -q "Noto Color Emoji" || { echo "A fonte de emoji não está no sistema." >&2; exit 1; }
 docker cp exemplo.html render-teste:/tmp/exemplo.html
 docker exec render-teste sh -c 'node -e "
 const fs=require(\"fs\");

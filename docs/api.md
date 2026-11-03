@@ -95,7 +95,8 @@ existem. A animação é só pela linha do tempo `tl` do GSAP 3, já criada e pa
 `tl.fromTo`, `tl.set`, com o tempo em segundos): nada de `setTimeout`, relógio ou sorteio, para
 o vídeo sair igual toda vez. Sem internet: nada de CDN, link ou imagem de fora. Fontes pelo nome
 no CSS: TikTok Sans, Inter (a padrão), Montserrat, Roboto, Open Sans, Oswald, Playfair Display,
-Poppins, Anton, Bebas Neue, Archivo Black, Courier Prime e Pacifico. Até 60 s e 1 MB de HTML.
+Poppins, Anton, Bebas Neue, Archivo Black, Courier Prime e Pacifico. Emojis saem coloridos em
+qualquer uma (Noto Color Emoji, instalada no sistema da imagem). Até 60 s e 1 MB de HTML.
 Uns 16 s para 10 s de vídeo; a primeira vez depois de publicar demora mais. HTML que não roda:
 `422 render_falhou`, com o log do HyperFrames em `detalhe`. Sem o contêiner,
 `503 render_indisponivel`. O WebM entra com `adicionar {arquivo, dur, sobre, em}`.
