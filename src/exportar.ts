@@ -13,6 +13,7 @@ import type { Db, ExportRow, Project, ProjectFile, Role } from "./db";
 import { ligado, SleepyContainer } from "./conteiner";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
+import { CABECALHO_BYTES, temSom } from "./som";
 import { MAX_VIDEO_BYTES } from "./studio";
 import { output } from "./canvas/modelo.js";
 import type { CanvasProject } from "./canvas/modelo.js";
@@ -122,6 +123,13 @@ export class Exports {
     private readonly transcriber: Transcriber | null = null,
     private readonly renderer: RenderApi | null = null,
   ) {}
+
+  /** Se o vídeo guardado tem som, pelo começo do arquivo no R2; null quando não dá para saber. */
+  async hasSound(key: string, type: string): Promise<boolean | null> {
+    if (!type.startsWith("video/")) return null;
+    const head = await this.media.get(key, { range: { offset: 0, length: CABECALHO_BYTES } });
+    return head ? temSom(await head.arrayBuffer(), type) : null;
+  }
 
   /** Guarda um arquivo no projeto: o que vem do computador e o vídeo feito do HTML. */
   async saveFile(projectId: string, name: string, type: string, bytes: ArrayBuffer): Promise<ProjectFile> {

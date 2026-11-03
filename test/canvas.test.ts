@@ -4,7 +4,7 @@ import { ERROS } from "../src/erros";
 import { MAX_IMAGE_BYTES } from "../src/studio";
 import { Db } from "../src/db";
 import { Exports } from "../src/exportar";
-import { call, cookie, FakeExportApi, FakeVideoApi, memberCookie, SITE } from "./helpers";
+import { call, cookie, FakeExportApi, FakeVideoApi, memberCookie, mp4Bytes, SITE, webmBytes } from "./helpers";
 
 const get = async (path: string, session?: string) => call(new Request(`${SITE}${path}`, { headers: session === undefined ? {} : { cookie: session } }), new FakeVideoApi());
 const post = (path: string, session: string, body: BodyInit | null = null, headers: Record<string, string> = {}) =>
@@ -81,6 +81,9 @@ describe("projetos do canvas", () => {
     expect(src).toMatch(new RegExp(`^/projetos/${id}/arquivos/[0-9a-f-]{36}$`));
     const file = await get(src, admin);
     expect([file.status, file.headers.get("content-type"), [...new Uint8Array(await file.arrayBuffer())]]).toEqual([200, "video/mp4", [1, 2, 3, 4]]);
+    // A tela usa o som da resposta: vídeo sem som entra sem a camada de áudio.
+    expect(await (await post(`/projetos/${id}/arquivos`, admin, webmBytes(false), { "content-type": "video/webm" })).json()).toMatchObject({ som: false });
+    expect(await (await post(`/projetos/${id}/arquivos`, admin, mp4Bytes(true), { "content-type": "video/mp4" })).json()).toMatchObject({ som: true });
     const tipo = await post(`/projetos/${id}/arquivos`, admin, new Uint8Array([1]), { "content-type": "application/pdf" });
     expect([tipo.status, await tipo.text()]).toEqual([400, ERROS.canvasArquivo]);
     const grande = await post(`/projetos/${id}/arquivos`, admin, new Uint8Array(MAX_IMAGE_BYTES + 1), { "content-type": "image/png" });

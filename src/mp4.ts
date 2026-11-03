@@ -46,7 +46,7 @@ export function mp4Size(bytes: ArrayBuffer): { width: number; height: number } |
 }
 
 /** A primeira caixa `type` entre `from` e `to`: onde começa e termina o conteúdo dela. */
-function findBox(view: DataView, from: number, to: number, type: string): { start: number; end: number } | null {
+export function findBox(view: DataView, from: number, to: number, type: string): { start: number; end: number } | null {
   let at = from;
   while (at + 8 <= to) {
     let size = view.getUint32(at);

@@ -27,6 +27,7 @@ import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
 import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
+import { temSom } from "../som";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { MAX_VERSOES } from "../canvas/modelo.js";
@@ -711,7 +712,8 @@ ${CANVAS_BODY}
       name = decodeURIComponent(request.headers.get("x-nome") ?? "").slice(0, 200) || name;
     } catch {}
     const { id } = await this.exports.saveFile(project.id, name, type, bytes);
-    return Response.json({ src: `/projetos/${project.id}/arquivos/${id}` }, { status: 201 });
+    // som: false avisa a tela que o vídeo entra sem a camada de áudio (o WebM de uma animação).
+    return Response.json({ src: `/projetos/${project.id}/arquivos/${id}`, ...(kind === "video" ? { som: temSom(bytes, type) } : {}) }, { status: 201 });
   }
 
   /** Os vídeos de todos os modelos que a pessoa pode usar, com filtro por status, busca pela fala e grade ou lista. */

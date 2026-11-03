@@ -83,6 +83,9 @@ menos custo.
   faixa puxando por ele (`lane`, `setLane`). Se a faixa pedida estiver ocupada, fica na mais
   perto com lugar. `upgrade` acerta projetos antigos, em que o som de quem estava por cima
   ficava entre a imagem e a sequência.
+  Vídeo sem faixa de som (o WebM do render, uma animação) entra com `audio: "none"`, sem essa
+  camada: o servidor lê o cabeçalho do arquivo (`src/som.ts`) no envio e no `adicionar`. Os
+  blocos que já estavam no canvas não mudam.
 - **Exceções, e por quê**: só som tem limite de faixas (`MAX_FAIXAS`, a exportação soma todos);
   som solto não tem área de vídeo, então o conector dele fica na altura dele; a prévia junta as
   trilhas de vídeo acima da primeira numa camada, porque cada uma cobre a imagem inteira.

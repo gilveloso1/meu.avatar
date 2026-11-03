@@ -812,7 +812,7 @@ function duplicate() {
   render();
 }
 
-/** No site, o arquivo vai para o projeto no servidor (não some ao recarregar); devolve o endereço dele. */
+/** No site, o arquivo vai para o projeto no servidor (não some ao recarregar); devolve o endereço e se o vídeo tem som. */
 async function upload(file) {
   if (!PROJETO) return null;
   const image = file.type.startsWith("image/");
@@ -820,7 +820,7 @@ async function upload(file) {
   if (max && file.size > max) throw new Error(image ? CONFIG.erros?.grandeImagem : CONFIG.erros?.grandeVideo);
   const res = await fetch(PROJETO.arquivos, { method: "POST", headers: { "content-type": file.type, "x-nome": encodeURIComponent(file.name) }, body: file });
   if (!res.ok) throw new Error(res.status === 413 || res.status === 400 ? await res.text() : CONFIG.erros?.enviar);
-  return (await res.json()).src;
+  return res.json();
 }
 
 async function importFiles(files, at) {
@@ -833,10 +833,11 @@ async function importFiles(files, at) {
       // O arquivo do navegador (blob:) só serviu para medir: no site fica o do servidor.
       if (sent) URL.revokeObjectURL(local.src);
       const { kind, dur } = local;
-      const src = sent ?? local.src;
+      const src = sent?.src ?? local.src;
       const before = project;
       project = structuredClone(project);
-      const b = { id: M.newId("b"), tone: M.nextTone(project, kind, src), kind, name: file.name.replace(/\.[^.]+$/, ""), src, dur: kind === "image" ? M.IMAGE_MAX : dur, tin: 0, tout: Math.min(dur, kind === "image" ? 3 : dur), x: at.x, y, mute: false, vol: 1 };
+      // Vídeo sem som (a animação em WebM) entra sem a camada de áudio embaixo.
+      const b = { id: M.newId("b"), tone: M.nextTone(project, kind, src), kind, name: file.name.replace(/\.[^.]+$/, ""), src, dur: kind === "image" ? M.IMAGE_MAX : dur, tin: 0, tout: Math.min(dur, kind === "image" ? 3 : dur), x: at.x, y, mute: false, vol: 1, ...(kind === "video" && sent?.som === false ? { audio: "none" } : {}) };
       project.blocks.push(b);
       const first = M.linkFirst(project, b);
       sel = { type: "block", id: b.id };
