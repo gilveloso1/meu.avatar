@@ -73,7 +73,7 @@ const FERRAMENTAS = [
     description: "A fala de um arquivo com o tempo de cada palavra, para editar pelo texto: tirar vícios, repetições e frases com removerTrechos. Os tempos são aproximados: confira as bordas com ver_silencios.",
     inputSchema: objeto({ projeto, src }, ["projeto", "src"]),
   },
-  { name: "ver_silencios", description: "Duração e silêncios de um arquivo, com a regra da Edição rápida.", inputSchema: objeto({ projeto, src }, ["projeto", "src"]) },
+  { name: "ver_silencios", description: "Duração e silêncios de um arquivo, com a regra da Edição rápida; som: false quando o arquivo não tem áudio (nada a cortar).", inputSchema: objeto({ projeto, src }, ["projeto", "src"]) },
   {
     name: "enviar_arquivo",
     description: "Guarda um arquivo no projeto (imagem até 10 MB; vídeo e áudio até 50 MB, limitados aqui a 10 MB pelo base64). WebM com transparência serve de camada sobre o vídeo.",

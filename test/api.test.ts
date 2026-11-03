@@ -298,7 +298,7 @@ describe("edição fina", () => {
     await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
     const { id, revisao } = await novo();
     const fake = new FakeExportApi();
-    fake.silences = { duracao: 10, silencios: [[3, 5]] };
+    fake.silences = { duracao: 10, silencios: [[3, 5]], som: true };
     const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }], fake)).json<Vista>();
     const r = await (await comandos(id, a.revisao, [{ tipo: "removerPausas", bloco: a.criados[0], pausa: "curta" }], fake)).json<Vista>();
     expect(r.canvas.blocks).toHaveLength(2);
@@ -373,6 +373,18 @@ describe("edição fina", () => {
     expect(await (await api(`/api/v1/projetos/${id}/silencios?src=/videos/${VIDEO}.mp4`, admin, undefined, fake)).json()).toEqual(fake.silences);
     expect((await api(`/api/v1/projetos/${id}/quadros?src=/videos/${OCULTO}.mp4&instantes=1`, admin, undefined, fake)).status).toBe(404);
     expect((await api(`/api/v1/projetos/${id}/quadros?src=/videos/${VIDEO}.mp4&instantes=x`, admin, undefined, fake)).status).toBe(400);
+  });
+
+  it("remover pausas num arquivo sem som não corta nada", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [], som: false };
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }], fake)).json<{ revisao: number; criados: string[] }>();
+    const r = await comandos(id, a.revisao, [{ tipo: "removerPausas", bloco: a.criados[0], pausa: "curta" }], fake);
+    expect(r.status).toBe(200);
+    expect((await r.json<{ canvas: { blocks: unknown[] } }>()).canvas.blocks).toHaveLength(1);
+    expect(await (await api(`/api/v1/projetos/${id}/silencios?src=/videos/${VIDEO}.mp4`, admin, undefined, fake)).json()).toEqual({ duracao: 10, silencios: [], som: false });
   });
 
   it("contêiner que não responde é um erro com código, não uma queda", async () => {

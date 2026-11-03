@@ -59,7 +59,7 @@ type Comando = Record<string, unknown>;
 export interface Contexto {
   fonte(c: Comando): Promise<Fonte | null>;
   /** Os silêncios e a duração do arquivo, ou null se a análise não estiver disponível. */
-  silencios(src: string): Promise<{ duracao: number; silencios: number[][] } | null>;
+  silencios(src: string): Promise<{ duracao: number; silencios: number[][]; som: boolean } | null>;
   /** O ponto entre os olhos, de 0 a 1, ou null se não houver. */
   rosto(src: string): Promise<{ x: number; y: number } | null>;
 }

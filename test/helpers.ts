@@ -203,7 +203,7 @@ export class FakeExportApi implements ExportApi {
     this.segments.push({ sizes, plan: new TextDecoder().decode(bytes.slice(0, sizes[0])) });
     return new Response(new TextEncoder().encode(`trecho${this.segments.length}`), { headers: { "content-length": "7" } });
   }
-  silences = { duracao: 10, silencios: [[3, 4]] };
+  silences = { duracao: 10, silencios: [[3, 4]], som: true };
   async inspect(path: string, body: ReadableStream) {
     await new Response(body).arrayBuffer();
     if (this.fail) throw new Error(this.fail);

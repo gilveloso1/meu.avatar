@@ -286,13 +286,18 @@ def mosaico(saida, arquivo, instantes):
 
 
 def silencios(saida, arquivo):
-    """Onde o som do arquivo para, com a regra da Edição rápida."""
+    """Onde o som do arquivo para, com a regra da Edição rápida; arquivo sem som não tem silêncio a cortar."""
+    faixas = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-i", arquivo], capture_output=True, text=True, timeout=60).stderr
+    if "Audio:" not in faixas:
+        with open(saida, "w") as f:
+            json.dump({"duracao": duracao_do(faixas), "silencios": [], "som": False}, f)
+        return
     r = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-i", arquivo, "-af", f"silencedetect=n={RUIDO}dB:d={SILENCIO_MIN}", "-vn", "-f", "null", "-"], capture_output=True, text=True, check=True, timeout=300)
     duracao = duracao_do(r.stderr)
     inicios = [float(v) for v in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
     fins = [float(v) for v in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
     with open(saida, "w") as f:
-        json.dump({"duracao": duracao, "silencios": [[a, fins[i] if i < len(fins) else duracao] for i, a in enumerate(inicios)]}, f)
+        json.dump({"duracao": duracao, "silencios": [[a, fins[i] if i < len(fins) else duracao] for i, a in enumerate(inicios)], "som": True}, f)
 
 
 def audio(saida, arquivo):

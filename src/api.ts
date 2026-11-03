@@ -209,7 +209,7 @@ export class Api {
     if (typeof body.revisao !== "number") return falha(400, "revisao_obrigatoria");
     if (body.revisao !== project.revision) return falha(409, "conflito", { revisao: project.revision });
     try {
-      const memo = new Map<string, { duracao: number; silencios: number[][] }>();
+      const memo = new Map<string, { duracao: number; silencios: number[][]; som: boolean }>();
       const { project: data, criados } = await aplicar(JSON.parse(project.data) as CanvasProject, body.comandos as Record<string, unknown>[], {
         fonte: (c) => this.source(user, project, c),
         silencios: async (src) => {
@@ -272,7 +272,8 @@ export class Api {
     }
   }
 
-  private async silences(user: User, project: Project, src: string): Promise<{ duracao: number; silencios: number[][] }> {
+  /** som: false é arquivo sem faixa de áudio (o WebM do render): não há silêncio a cortar. */
+  private async silences(user: User, project: Project, src: string): Promise<{ duracao: number; silencios: number[][]; som: boolean }> {
     const res = await this.exports.inspect(await this.exports.source(project, user.role, src), "/silencios");
     return res.json();
   }
