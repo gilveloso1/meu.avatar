@@ -3,7 +3,7 @@
  * mesmo modelo da tela. Só o administrador, como o canvas; cada projeto é só de quem o
  * criou. Exportar e baixar usam as rotas do site, com o mesmo token.
  */
-import { baseGaps, finalRate, groups, members, output, versionName, versions } from "./canvas/modelo.js";
+import { baseGaps, finalRate, groups, members, output, PX, versionName, versions, width } from "./canvas/modelo.js";
 import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, trechos } from "./legenda";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
@@ -46,11 +46,29 @@ export function bearerToken(request: Request): string | null {
   return /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") ?? "")?.[1] ?? null;
 }
 
-/** O que o projeto significa: grupos, Finais com as variações e avisos. É a resposta dos comandos. */
+const TIPOS_DE_BLOCO = { video: "video", image: "imagem", audio: "audio" } as const;
+const segundos = (px: number) => +(px / PX).toFixed(3);
+
+/**
+ * O que o projeto significa: grupos com os blocos (onde cada um começa e termina no grupo),
+ * Finais com as variações e avisos. É a resposta dos comandos e o padrão do ver_projeto.
+ */
 function resumo(data: CanvasProject) {
   const gs = groups(data);
   return {
-    grupos: gs.map((g) => ({ id: g.id, nome: g.label, duracao: g.dur, blocos: members(g).map((b) => b.id) })),
+    grupos: gs.map((g) => ({
+      id: g.id,
+      nome: g.label,
+      duracao: g.dur,
+      blocos: members(g).map((b) => ({
+        id: b.id,
+        nome: b.name,
+        tipo: b.draft ? "rascunho" : TIPOS_DE_BLOCO[b.kind],
+        camada: g.blocks.includes(b) ? "base" : g.covers.includes(b) ? "cobertura" : "audio",
+        inicio: segundos(b.x - g.x),
+        fim: segundos(b.x + width(b) - g.x),
+      })),
+    })),
     finais: data.finals.map((f) => {
       const { resolution, format } = output(f);
       const vs = versions(data, f.id);
@@ -82,7 +100,7 @@ export class Api {
     if (m[2] === "html") return post ? this.renderHtml(request, project) : falha(405, "metodo_invalido");
     if (m[2] === "legenda") return post ? this.caption(request, user, project) : falha(405, "metodo_invalido");
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
-    return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project));
+    return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(",")));
   }
 
   private async videos(user: User, url: URL): Promise<Response> {
@@ -120,18 +138,21 @@ export class Api {
     return Response.json(await this.view(project), { status: 201 });
   }
 
-  /** O projeto salvo, com o que ele significa e, no fim, os arquivos e o canvas inteiro. */
-  private async view(project: Project) {
+  /**
+   * O projeto salvo, com o que ele significa. Os arquivos e o canvas inteiro (o maior gasto do
+   * agente: uns 7 e 10 mil caracteres no projeto da Lara Resende) só vêm quando pedidos em incluir.
+   */
+  private async view(project: Project, incluir: string[] = []) {
     const data = JSON.parse(project.data) as CanvasProject;
-    const files = await this.db.projectFiles(project.id);
+    const files = incluir.includes("arquivos") ? await this.db.projectFiles(project.id) : null;
     return {
       id: project.id,
       nome: project.name,
       revisao: project.revision,
       atualizado: project.updated_at,
       ...resumo(data),
-      arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })),
-      canvas: data,
+      ...(files ? { arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })) } : {}),
+      ...(incluir.includes("canvas") ? { canvas: data } : {}),
     };
   }
 

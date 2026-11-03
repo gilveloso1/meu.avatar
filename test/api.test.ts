@@ -58,7 +58,7 @@ async function comandos(id: string, revisao: number, lista: unknown[], exporter:
   const res = await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao, comandos: lista }, exporter);
   if (!res.ok) return res;
   const resposta = await res.json<Record<string, unknown>>();
-  const salvo = await (await api(`/api/v1/projetos/${id}`, admin)).json<Record<string, unknown>>();
+  const salvo = await (await api(`/api/v1/projetos/${id}?incluir=arquivos,canvas`, admin)).json<Record<string, unknown>>();
   return Response.json({ ...salvo, ...resposta });
 }
 
@@ -128,10 +128,10 @@ describe("comandos", () => {
     const { id, revisao } = await novo();
     const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4 }])).json<{ criados: string[]; revisao: number }>();
     const base = a.criados[0]!;
-    const b = await (await comandos(id, a.revisao, [{ tipo: "adicionar", video: VIDEO2, fim: 2, depois: base }, { tipo: "adicionar", video: VIDEO2, inicio: 2, fim: 3, sobre: base, em: 1, semSom: true }])).json<{ grupos: { blocos: string[]; duracao: number }[]; criados: string[] }>();
+    const b = await (await comandos(id, a.revisao, [{ tipo: "adicionar", video: VIDEO2, fim: 2, depois: base }, { tipo: "adicionar", video: VIDEO2, inicio: 2, fim: 3, sobre: base, em: 1, semSom: true }])).json<{ grupos: { blocos: { id: string }[]; duracao: number }[]; criados: string[] }>();
     expect(b.grupos).toHaveLength(1);
     expect(b.grupos[0]!.duracao).toBe(6);
-    expect(b.grupos[0]!.blocos).toEqual(expect.arrayContaining([base, ...b.criados]));
+    expect(b.grupos[0]!.blocos.map((o) => o.id)).toEqual(expect.arrayContaining([base, ...b.criados]));
   });
 
   it("cortar segue as regras do modelo e recusa o que passa do arquivo", async () => {
@@ -154,6 +154,25 @@ describe("comandos", () => {
     expect(await (await comandos(id, b.revisao, [{ tipo: "ligar", de: y, para: x }])).json()).toEqual({ erro: "ligacao_ciclo", comando: 0 });
   });
 
+  it("ver o projeto: os blocos com início e fim no grupo; arquivos e canvas só pedidos", async () => {
+    const { id, revisao } = await novo();
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4 }])).json<{ revisao: number; criados: string[] }>();
+    const base = a.criados[0]!;
+    const b = await (await comandos(id, a.revisao, [{ tipo: "rascunho", fala: "Depois", duracao: 2, depois: base }, { tipo: "adicionar", video: VIDEO2, inicio: 2, fim: 3, sobre: base, em: 1, semSom: true }])).json<{ criados: string[] }>();
+    const [texto, cobre] = b.criados;
+    const enxuto = await (await api(`/api/v1/projetos/${id}`, admin)).json<Record<string, unknown> & { grupos: { blocos: unknown[] }[] }>();
+    expect(enxuto).not.toHaveProperty("canvas");
+    expect(enxuto).not.toHaveProperty("arquivos");
+    expect(enxuto.grupos[0]!.blocos).toEqual([
+      expect.objectContaining({ id: base, tipo: "video", camada: "base", inicio: 0, fim: 4 }),
+      expect.objectContaining({ id: texto, tipo: "rascunho", camada: "base", inicio: 4, fim: 6 }),
+      expect.objectContaining({ id: cobre, tipo: "video", camada: "cobertura", inicio: 1, fim: 2 }),
+    ]);
+    const tudo = await (await api(`/api/v1/projetos/${id}?incluir=arquivos,canvas`, admin)).json<Record<string, unknown>>();
+    expect(tudo).toHaveProperty("canvas");
+    expect(tudo).toHaveProperty("arquivos");
+  });
+
   it("a resposta é o resumo: sem os arquivos e o canvas inteiro", async () => {
     const { id, revisao } = await novo();
     const res = await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao, comandos: [{ tipo: "rascunho", fala: "Oi, gente", duracao: 2 }] });
@@ -166,7 +185,7 @@ describe("comandos", () => {
     const { id, revisao } = await novo();
     const res = await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }, { tipo: "nada" }]);
     expect(await res.json()).toEqual({ erro: "comando_desconhecido", comando: 1, tipos: TIPOS });
-    const salvo = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ revisao: number; canvas: { blocks: unknown[] } }>();
+    const salvo = await (await api(`/api/v1/projetos/${id}?incluir=arquivos,canvas`, admin)).json<{ revisao: number; canvas: { blocks: unknown[] } }>();
     expect(salvo).toMatchObject({ revisao, canvas: { blocks: [] } });
   });
 
@@ -208,7 +227,7 @@ describe("comandos", () => {
 
 describe("edição fina", () => {
   type Bloco = { id: string; x: number; y: number; tin: number; tout: number; speed?: number; frame?: Record<string, unknown> };
-  type Vista = { revisao: number; criados: string[]; grupos: { blocos: string[]; duracao: number }[]; finais: { variacoes: { duracao: number }[] }[]; canvas: { blocks: Bloco[]; finals: { speed?: number }[] } };
+  type Vista = { revisao: number; criados: string[]; grupos: { blocos: { id: string }[]; duracao: number }[]; finais: { variacoes: { duracao: number }[] }[]; canvas: { blocks: Bloco[]; finals: { speed?: number }[] } };
   const lote = async (id: string, revisao: number, lista: unknown[]) => (await comandos(id, revisao, lista)).json<Vista>();
   const bloco = (v: Vista, id: string) => v.canvas.blocks.find((b) => b.id === id)!;
 
@@ -326,7 +345,7 @@ describe("edição fina", () => {
       cmd.push({ tipo: "adicionar", video: VIDEO2, fim: 3, sobre: `@${n}`, em: 0, semSom: true });
       cmd.push({ tipo: "adicionar", arquivo, dur: 9, fim: 3, sobre: `@${n}`, em: 0 });
     }
-    const r = await (await comandos(id, revisao, cmd)).json<{ grupos: { blocos: string[]; duracao: number }[]; avisos: unknown[] }>();
+    const r = await (await comandos(id, revisao, cmd)).json<{ grupos: { blocos: { id: string }[]; duracao: number }[]; avisos: unknown[] }>();
     expect(r.grupos.map((g) => [g.blocos.length, g.duracao])).toEqual([[3, 3], [3, 3], [3, 3]]);
     expect(r.avisos).toEqual([]);
   });
@@ -585,7 +604,7 @@ describe("vídeo do HTML", () => {
     const res = await html(id, { html: "<script>gsapp.to()</script>", duracao: 2 }, r);
     expect(res.status).toBe(422);
     expect(await res.json()).toEqual({ erro: "render_falhou", detalhe: "ReferenceError: gsapp is not defined" });
-    expect((await (await api(`/api/v1/projetos/${id}`, admin)).json<{ arquivos: unknown[] }>()).arquivos).toEqual([]);
+    expect((await (await api(`/api/v1/projetos/${id}?incluir=arquivos`, admin)).json<{ arquivos: unknown[] }>()).arquivos).toEqual([]);
   });
 
   it("contêiner que não responde é um erro com código, sem guardar arquivo", async () => {
@@ -595,7 +614,7 @@ describe("vídeo do HTML", () => {
     const res = await html(id, { html: "<p>x</p>", duracao: 2 }, r);
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ erro: "conteiner_falhou" });
-    expect((await (await api(`/api/v1/projetos/${id}`, admin)).json<{ arquivos: unknown[] }>()).arquivos).toEqual([]);
+    expect((await (await api(`/api/v1/projetos/${id}?incluir=arquivos`, admin)).json<{ arquivos: unknown[] }>()).arquivos).toEqual([]);
   });
 
   it("projeto de outra conta não existe", async () => {
@@ -668,7 +687,7 @@ describe("legenda do grupo", () => {
 
 describe("rascunho", () => {
   type Bloco = { id: string; kind: string; src: string; x: number; tin: number; tout: number; draft?: { fala: string }; speed?: number };
-  type Vista = { revisao: number; criados: string[]; grupos: { id: string; duracao: number; blocos: string[] }[]; avisos: { tipo: string; bloco?: string; fala?: string; segundos?: number }[]; canvas: { blocks: Bloco[] } };
+  type Vista = { revisao: number; criados: string[]; grupos: { id: string; duracao: number; blocos: { id: string }[] }[]; avisos: { tipo: string; bloco?: string; fala?: string; segundos?: number }[]; canvas: { blocks: Bloco[] } };
   const lote = async (id: string, revisao: number, lista: unknown[]) => (await comandos(id, revisao, lista)).json<Vista>();
 
   it("marca o lugar com a fala e a duração estimada, e avisa que falta o vídeo", async () => {
@@ -771,6 +790,6 @@ describe("a tela e a API no mesmo projeto", () => {
 
 /** As linhas do projeto, para os testes refazerem as ligações. */
 async function edges(id: string): Promise<string[]> {
-  const p = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ canvas: { edges: { id: string }[] } }>();
+  const p = await (await api(`/api/v1/projetos/${id}?incluir=arquivos,canvas`, admin)).json<{ canvas: { edges: { id: string }[] } }>();
   return p.canvas.edges.map((e) => e.id);
 }

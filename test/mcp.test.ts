@@ -192,7 +192,7 @@ describe("ferramentas", () => {
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "A" }));
     const ok = await ferramenta("enviar_arquivo", { projeto: id, nome: "camada ação.webm", tipo: "video/webm", base64: btoa("webm") });
     expect(dados<{ src: string }>(ok).src).toContain(`/projetos/${id}/arquivos/`);
-    expect(dados<{ arquivos: { nome: string }[] }>(await ferramenta("ver_projeto", { projeto: id })).arquivos[0]!.nome).toBe("camada ação.webm");
+    expect(dados<{ arquivos: { nome: string }[] }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["arquivos"] })).arquivos[0]!.nome).toBe("camada ação.webm");
     expect((await ferramenta("enviar_arquivo", { projeto: id, nome: "x", tipo: "video/webm", base64: "@@@" })).isError).toBe(true);
   });
 
@@ -206,7 +206,7 @@ describe("ferramentas", () => {
     const arquivo = (src: string) => src.split("/").pop();
     const r = await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", arquivo: arquivo(mudo.src), dur: 2 }, { tipo: "adicionar", arquivo: arquivo(falado.src), dur: 2 }] });
     expect(r.isError).toBe(false);
-    const { canvas } = dados<{ canvas: { blocks: { name: string; audio: string }[] } }>(await ferramenta("ver_projeto", { projeto: id }));
+    const { canvas } = dados<{ canvas: { blocks: { name: string; audio: string }[] } }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["canvas"] }));
     expect(canvas.blocks.map((b) => [b.name, b.audio])).toEqual([["titulo.webm", "none"], ["fala.webm", "linked"]]);
   });
 });

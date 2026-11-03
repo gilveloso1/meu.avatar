@@ -51,17 +51,21 @@ const RENDER = `Regras do HTML: anime só pela linha do tempo tl (GSAP 3, já cr
 const texto = (descricao: string) => ({ type: "string", description: descricao });
 const objeto = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
 const projeto = texto("Id do projeto.");
-const src = texto('Endereço do arquivo: "/videos/<id>.mp4" de listar_videos, o src de um ativo de listar_avatares, um arquivo de ver_projeto ou o href de uma exportação pronta.');
+const src = texto('Endereço do arquivo: "/videos/<id>.mp4" de listar_videos, o src de um ativo de listar_avatares, um arquivo de ver_projeto (incluir: arquivos) ou o href de uma exportação pronta.');
 
 const FERRAMENTAS = [
   { name: "listar_videos", description: "Vídeos prontos que podem entrar num projeto, com a fala e a duração.", inputSchema: objeto({ busca: texto("Parte da fala.") }) },
   { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   { name: "listar_projetos", description: "Projetos da conta, o editado por último primeiro.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   { name: "criar_projeto", description: "Cria um projeto vazio.", inputSchema: objeto({ nome: texto("Nome do projeto.") }, ["nome"]) },
-  { name: "ver_projeto", description: "Revisão, grupos, Finais com as variações, arquivos, avisos e o canvas do projeto.", inputSchema: objeto({ projeto }, ["projeto"]) },
+  {
+    name: "ver_projeto",
+    description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo), Finais com as variações e avisos. Os arquivos e o canvas inteiro são grandes: peça em incluir só quando precisar.",
+    inputSchema: objeto({ projeto, incluir: { type: "array", items: { type: "string", enum: ["arquivos", "canvas"] }, description: "arquivos: os arquivos do projeto (id e src para adicionar); canvas: o modelo inteiro, com posições e ajustes de cada bloco." } }, ["projeto"]),
+  },
   {
     name: "editar_projeto",
-    description: "Aplica um lote de comandos sobre uma revisão. A tela de quem estiver com o projeto aberto acompanha sozinha. A resposta é o resumo: revisão, ids criados, grupos, Finais com as variações e avisos; os arquivos e o canvas ficam no ver_projeto.",
+    description: "Aplica um lote de comandos sobre uma revisão. A tela de quem estiver com o projeto aberto acompanha sozinha. A resposta é o resumo, igual ao ver_projeto sem incluir: revisão, ids criados, grupos com os blocos, Finais com as variações e avisos.",
     inputSchema: objeto({ projeto, revisao: { type: "integer", description: "A revisão lida em ver_projeto." }, comandos: { type: "array", items: { type: "object" }, description: COMANDOS } }, ["projeto", "revisao", "comandos"]),
   },
   {
@@ -147,7 +151,7 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
     case "criar_projeto":
       return chama("POST", "/api/v1/projetos", json({ nome: a.nome }));
     case "ver_projeto":
-      return chama("GET", p);
+      return chama("GET", `${p}?incluir=${seguro(Array.isArray(a.incluir) ? a.incluir.join(",") : "")}`);
     case "editar_projeto":
       return chama("POST", `${p}/comandos`, json({ revisao: a.revisao, comandos: a.comandos }));
     case "ver_quadros":

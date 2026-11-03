@@ -47,7 +47,8 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
 
 - As respostas do `editar_projeto` e do `ver_projeto`: cada uma devolve o projeto inteiro, com uns
   30 arquivos antigos e todos os blocos do canvas. De longe o maior gasto.
-  (O `editar_projeto` agora devolve só o resumo, sem arquivos e canvas.)
+  (O `editar_projeto` agora devolve só o resumo, sem arquivos e canvas; o `ver_projeto` também, com
+  o início e o fim de cada bloco no grupo, e os arquivos e o canvas só pedidos em `incluir`.)
 - Reenviar o HTML completo a cada correção: 3 a 5 mil caracteres por cena, com o mesmo CSS do
   painel repetido em todas.
 - O raciocínio de layout e de tempos: coordenadas do SVG, posições das moedas, a matemática do
