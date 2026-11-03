@@ -1,6 +1,6 @@
 #!/bin/sh
 # Baixa para esta pasta o que a imagem de render usa, conferindo o SHA-256:
-# - ffmpeg e ffprobe: build estática do BtbN (a mesma de container/baixar-binarios.sh);
+# - ffmpeg e ffprobe: build estática do BtbN, a mesma versão fixa de container/baixar-binarios.sh;
 # - fontes/: as fontes livres que o agente pode usar (Google Fonts, licença SIL OFL 1.1,
 #   num commit fixo), com nomes simples e a licença de cada família, e a Noto Color Emoji, que a
 #   imagem instala no sistema para os emojis saírem em qualquer fonte.
@@ -11,15 +11,20 @@ cd "$(dirname "$0")"
 if sha256sum --version 2>/dev/null | grep -q GNU; then confere() { sha256sum -c --quiet; }; else confere() { shasum -a 256 -c --quiet; }; fi
 if tar --version | grep -q GNU; then CURINGA=--wildcards; else CURINGA=; fi
 
-if [ ! -f ffmpeg ] || [ ! -f ffprobe ]; then
-  BASE=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest
-  PACOTE=ffmpeg-master-latest-linux64-gpl.tar.xz
+# ffmpeg: a build do fim de outubro de 2026 do BtbN, com o SHA-256 fixo. A "latest" mudava a cada
+# deploy numa máquina nova (o digest da imagem trocava sem nada mudar aqui); a do fim de cada mês o
+# BtbN guarda, as diárias somem em umas duas semanas. Trocar de versão é mudar as três linhas.
+FFMPEG_RELEASE=autobuild-2026-10-31-12-59
+FFMPEG=ffmpeg-N-128227-g4811625b5f-linux64-gpl.tar.xz
+FFMPEG_SHA256=67929be39bbb696f41d3295686597a439aeac902f61d82be660ccc1453c1fdfb
+FFMPEG_VERSAO=$FFMPEG_RELEASE/$FFMPEG
+if [ ! -f ffmpeg ] || [ ! -f ffprobe ] || [ "$(cat ffmpeg.versao 2>/dev/null)" != "$FFMPEG_VERSAO" ]; then
   T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-  curl -fsSL -o "$T/$PACOTE" "$BASE/$PACOTE"
-  curl -fsSL -o "$T/checksums.sha256" "$BASE/checksums.sha256"
-  (cd "$T" && grep " $PACOTE\$" checksums.sha256 | confere)
-  tar -xJf "$T/$PACOTE" -C "$T" --strip-components=2 $CURINGA '*/bin/ffmpeg' '*/bin/ffprobe'
+  curl -fsSL -o "$T/$FFMPEG" "https://github.com/BtbN/FFmpeg-Builds/releases/download/$FFMPEG_RELEASE/$FFMPEG"
+  (cd "$T" && echo "$FFMPEG_SHA256  $FFMPEG" | confere)
+  tar -xJf "$T/$FFMPEG" -C "$T" --strip-components=2 $CURINGA '*/bin/ffmpeg' '*/bin/ffprobe'
   mv "$T/ffmpeg" "$T/ffprobe" . && chmod +x ffmpeg ffprobe
+  echo "$FFMPEG_VERSAO" > ffmpeg.versao
 fi
 
 # google/fonts em 02/11/2026. Cada linha: SHA-256, nome aqui, caminho em ofl/.
