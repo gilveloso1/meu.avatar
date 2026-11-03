@@ -403,3 +403,20 @@ export async function sign(body: string, secret = "segredo-webhook", t = Math.fl
   const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t},${body}`)));
   return `t=${t},v1=${[...mac].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
+
+/** O começo de um WebM (cabeçalho, faixas e o primeiro Cluster), com ou sem a faixa de som. */
+export function webmBytes(som: boolean): Uint8Array {
+  const codec = (id: string) => [0x86, 0x80 | id.length, ...[...id].map((c) => c.charCodeAt(0))];
+  return new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x84, 0x42, 0x82, 0x81, 0x77, ...codec("V_VP9"), ...(som ? codec("A_OPUS") : []), 0x1f, 0x43, 0xb6, 0x75, 0x00]);
+}
+
+/** Um MP4 só com o moov: uma trilha de imagem e, se pedir, uma de som. */
+export function mp4Bytes(som: boolean): Uint8Array {
+  const box = (type: string, ...partes: Uint8Array[]) => {
+    const corpo = partes.reduce((a, b) => new Uint8Array([...a, ...b]), new Uint8Array());
+    const n = 8 + corpo.length;
+    return new Uint8Array([n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255, ...[...type].map((c) => c.charCodeAt(0)), ...corpo]);
+  };
+  const trak = (handler: string) => box("trak", box("mdia", box("hdlr", new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, ...[...handler].map((c) => c.charCodeAt(0)), ...new Array(13).fill(0)]))));
+  return box("moov", trak("vide"), ...(som ? [trak("soun")] : []));
+}

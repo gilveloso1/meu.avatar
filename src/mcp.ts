@@ -43,6 +43,7 @@ som {bloco, volume: 0 a 4, mudo}
 final {id, resolucao, formato, velocidade}
 organizar {}
 Em adicionar, rascunho e dividir, rotulo: "nome" permite citar esse bloco como "@nome" nos comandos seguintes do mesmo lote.
+Vídeo de arquivo sem faixa de som (o WebM do render) entra sem a camada de áudio sozinho; semSom faz o mesmo com qualquer vídeo.
 O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele. Tempos de inicio, fim e em são do arquivo; t das chaves é do bloco.`;
 
 const RENDER = `Regras do HTML: anime só pela linha do tempo tl (GSAP 3, já criada e pausada), com tempos em segundos: tl.to(...), tl.fromTo(..., 1.2), tl.set(..., 3); nada de setTimeout, requestAnimationFrame, Math.random ou relógio. Posicione dentro de #root (position: relative, do tamanho do Final; cor padrão branca, fonte padrão Inter). Sem internet: nada de link, CDN ou imagem externa. Fontes, pelo nome no CSS: ${FONTES.join(", ")}; emojis saem coloridos em qualquer uma. Desfoque grande, 3D e vídeo dentro do HTML ficam lentos. Se falhar, render_falhou traz o log em detalhe.`;

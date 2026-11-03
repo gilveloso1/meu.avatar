@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
-import { call, cookie, FakeExportApi, FakeVideoApi, memberCookie, SITE } from "./helpers";
+import { call, cookie, FakeExportApi, FakeVideoApi, memberCookie, SITE, webmBytes } from "./helpers";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
 
@@ -194,5 +194,19 @@ describe("ferramentas", () => {
     expect(dados<{ src: string }>(ok).src).toContain(`/projetos/${id}/arquivos/`);
     expect(dados<{ arquivos: { nome: string }[] }>(await ferramenta("ver_projeto", { projeto: id })).arquivos[0]!.nome).toBe("camada ação.webm");
     expect((await ferramenta("enviar_arquivo", { projeto: id, nome: "x", tipo: "video/webm", base64: "@@@" })).isError).toBe(true);
+  });
+
+  it("WebM sem som entra sem a camada de áudio; com som, ligado a ela", async () => {
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "A" }));
+    const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u));
+    const envia = async (nome: string, som: boolean) => dados<{ src: string; som: boolean }>(await ferramenta("enviar_arquivo", { projeto: id, nome, tipo: "video/webm", base64: b64(webmBytes(som)) }));
+    const mudo = await envia("titulo.webm", false);
+    const falado = await envia("fala.webm", true);
+    expect([mudo.som, falado.som]).toEqual([false, true]);
+    const arquivo = (src: string) => src.split("/").pop();
+    const r = await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", arquivo: arquivo(mudo.src), dur: 2 }, { tipo: "adicionar", arquivo: arquivo(falado.src), dur: 2 }] });
+    expect(r.isError).toBe(false);
+    const { canvas } = dados<{ canvas: { blocks: { name: string; audio: string }[] } }>(await ferramenta("ver_projeto", { projeto: id }));
+    expect(canvas.blocks.map((b) => [b.name, b.audio])).toEqual([["titulo.webm", "none"], ["fala.webm", "linked"]]);
   });
 });

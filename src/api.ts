@@ -249,7 +249,7 @@ export class Api {
     const file = await this.db.projectFile(project.id, c.arquivo);
     if (!file) return null;
     const kind = file.type.startsWith("image/") ? "image" : file.type.startsWith("audio/") ? "audio" : "video";
-    return { src: `/projetos/${project.id}/arquivos/${file.id}`, kind, dur: null, name: file.name };
+    return { src: `/projetos/${project.id}/arquivos/${file.id}`, kind, dur: null, name: file.name, som: await this.exports.hasSound(file.key, file.type) };
   }
 
   /** Quadros de um arquivo, lado a lado, os silêncios ou a fala dele: o que o agente usa para decidir. */

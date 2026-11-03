@@ -51,6 +51,8 @@ export interface Fonte {
   kind: Block["kind"];
   dur: number | null;
   name: string;
+  /** false: o vídeo não tem faixa de som (entra sem a camada de áudio); sem isso, tem. */
+  som?: boolean | null;
 }
 
 type Comando = Record<string, unknown>;
@@ -246,7 +248,7 @@ function adicionar(project: CanvasProject, c: Comando, f: Fonte, falha: (c: stri
     mute: false,
     vol: 1,
     tone: nextTone(project, f.kind, f.src),
-    ...(f.kind === "video" ? { audio: c.semSom === true ? "none" : "linked" } : {}),
+    ...(f.kind === "video" ? { audio: c.semSom === true || f.som === false ? "none" : "linked" } : {}),
   };
   const antes = texto(c.depois);
   const sobre = texto(c.sobre);
@@ -310,7 +312,7 @@ async function trocar(project: CanvasProject, c: Comando, ctx: Contexto, falha: 
       tone: nextTone(project, f.kind, f.src),
       // O enquadramento de um rascunho não diz nada sobre o vídeo; o de um arquivo trocado, sim.
       ...(frame && !draft ? { frame } : {}),
-      ...(f.kind === "video" ? { audio: c.semSom === true ? "none" : "linked" } : {}),
+      ...(f.kind === "video" ? { audio: c.semSom === true || f.som === false ? "none" : "linked" } : {}),
     };
   });
 }

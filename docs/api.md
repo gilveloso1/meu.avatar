@@ -73,7 +73,7 @@ pronta deste projeto: é como o agente confere o que exportou.
 
 | Rota | O que faz |
 |---|---|
-| `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas) |
+| `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas): `{src}` e, em vídeo, `som` (`false` quando o arquivo não tem faixa de som) |
 | `POST /projetos/<id>/exportar` `{final, versoes?}` | Começa a exportação |
 | `POST /projetos/<id>/exportacoes/<e>` | Faz o próximo passo; sem isso, o agendamento termina |
 | `GET /projetos/<id>/exportacoes/<e>` | Estado e endereços para baixar |
@@ -131,7 +131,7 @@ HTML e legenda: tente de novo em instantes. Chamadas em paralelo esperam a vez n
 
 | `tipo` | Campos | Efeito |
 |---|---|---|
-| `adicionar` | `video`, `arquivo` ou `ativo` (de `listar_avatares`); `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo` e de ativo enviado; o ativo gerado usa a duração do vídeo); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: bloco solto, à direita de tudo |
+| `adicionar` | `video`, `arquivo` ou `ativo` (de `listar_avatares`); `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo` e de ativo enviado; o ativo gerado usa a duração do vídeo); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: bloco solto, à direita de tudo. Vídeo de `arquivo` sem faixa de som (o WebM do render, uma animação) entra sem a camada de áudio, como com `semSom` |
 | `rascunho` | `fala`, `duracao` (0,5 a 30); `nome`; `depois` ou `sobre` e `em`; `rotulo` | O lugar de um vídeo que ainda não existe: um bloco sem arquivo, com a fala, do tamanho estimado. Sem `nome`, Texto 1, Texto 2..., como os blocos. No canvas e na prévia, um cartão com a fala. A exportação é recusada enquanto houver rascunho |
 | `trocar` | `bloco`; `video`, `arquivo` ou `ativo`; `inicio`, `fim`, `dur`, `nome`, `semSom` | Põe o arquivo no lugar do bloco (o vídeo pronto no lugar do rascunho): a posição e o que está por cima ficam, e a sequência acompanha a duração nova. Sem `fim`, o vídeo entra inteiro |
 | `renomear` | `bloco`, `nome` | Muda o nome do bloco, como o campo Nome dos Ajustes |
