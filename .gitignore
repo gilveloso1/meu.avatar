@@ -7,5 +7,6 @@ __pycache__/
 
 # Render (container/render/baixar.sh)
 container/render/ffmpeg
+container/render/ffmpeg.versao
 container/render/ffprobe
 container/render/fontes/

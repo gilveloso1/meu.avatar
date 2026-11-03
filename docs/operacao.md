@@ -293,7 +293,11 @@ npx wrangler deploy --containers-rollout=none < /dev/null
 Mudou algo em `container/`: aí precisa do `npm run deploy` com o Docker rodando, no
 ambiente cloud **Meu Avatar** (o padrão da conta é outro projeto: escolha sempre este). Depois
 do deploy, confira que o digest da imagem mudou (`npx wrangler containers info <id>`): uma
-versão nova do Worker não prova que o contêiner foi trocado.
+versão nova do Worker não prova que o contêiner foi trocado. O contrário também vale: sem mudança
+em `container/`, o digest fica o mesmo, porque o ffmpeg (uma build do BtbN), as rodas, o
+DeepFilterNet e a imagem base do Python têm versão fixa (desde 02/11/2026). Trocar o ffmpeg é mudar
+as três linhas `FFMPEG_*` de `container/baixar-binarios.sh` e de `container/render/baixar.sh`; use a
+build do fim de um mês, que o BtbN não apaga.
 
 Teste local da imagem (25/10/2026), com os limites do tipo "basic"
 (`docker run --cpus 0.25 --memory 1g`): vídeo de 25 s em 720p tratado em

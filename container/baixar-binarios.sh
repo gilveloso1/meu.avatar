@@ -1,8 +1,7 @@
 #!/bin/sh
 # Baixa para esta pasta os binários que a imagem usa, conferindo o SHA-256:
 # - deep-filter: DeepFilterNet 3 (Rust, estático, modelo embutido), versão fixa;
-# - ffmpeg: build estática do BtbN (GitHub), conferida contra o checksums.sha256
-#   da mesma release;
+# - ffmpeg: build estática do BtbN (GitHub), versão e SHA-256 fixos;
 # - OpenCV (headless) e numpy para o Python 3.12 da imagem, versões fixas (PyPI);
 # - yunet.onnx: o detector de rosto YuNet (opencv_zoo, 2023mar).
 # O build da imagem não usa apt: a rede do ambiente cloud bloqueia o
@@ -23,15 +22,20 @@ if ! echo "$DF_SHA256  deep-filter" | confere 2>/dev/null; then
   chmod +x deep-filter
 fi
 
-if [ ! -f ffmpeg ]; then
-  BASE=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest
-  PACOTE=ffmpeg-master-latest-linux64-gpl.tar.xz
+# ffmpeg: a build do fim de outubro de 2026 do BtbN, com o SHA-256 fixo. A "latest" mudava a cada
+# deploy numa máquina nova (o digest da imagem trocava sem nada mudar aqui); a do fim de cada mês o
+# BtbN guarda, as diárias somem em umas duas semanas. Trocar de versão é mudar as três linhas.
+FFMPEG_RELEASE=autobuild-2026-10-31-12-59
+FFMPEG=ffmpeg-N-128227-g4811625b5f-linux64-gpl.tar.xz
+FFMPEG_SHA256=67929be39bbb696f41d3295686597a439aeac902f61d82be660ccc1453c1fdfb
+FFMPEG_VERSAO=$FFMPEG_RELEASE/$FFMPEG
+if [ ! -f ffmpeg ] || [ "$(cat ffmpeg.versao 2>/dev/null)" != "$FFMPEG_VERSAO" ]; then
   T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-  curl -fsSL -o "$T/$PACOTE" "$BASE/$PACOTE"
-  curl -fsSL -o "$T/checksums.sha256" "$BASE/checksums.sha256"
-  (cd "$T" && grep " $PACOTE\$" checksums.sha256 | confere)
-  tar -xJf "$T/$PACOTE" -C "$T" --strip-components=2 $CURINGA '*/bin/ffmpeg'
+  curl -fsSL -o "$T/$FFMPEG" "https://github.com/BtbN/FFmpeg-Builds/releases/download/$FFMPEG_RELEASE/$FFMPEG"
+  (cd "$T" && echo "$FFMPEG_SHA256  $FFMPEG" | confere)
+  tar -xJf "$T/$FFMPEG" -C "$T" --strip-components=2 $CURINGA '*/bin/ffmpeg'
   mv "$T/ffmpeg" ffmpeg && chmod +x ffmpeg
+  echo "$FFMPEG_VERSAO" > ffmpeg.versao
 fi
 
 # Rodas do Python, conferidas pelo SHA-256 (pip download não confere sozinho).

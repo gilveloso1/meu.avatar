@@ -2,7 +2,8 @@
 # DeepFilterNet 3, OpenCV com o detector de rosto YuNet e um servidor HTTP em Python.
 # Antes do build: ./baixar-binarios.sh (npm run deploy já chama). As rodas do
 # OpenCV e do numpy vêm baixadas e conferidas (pasta rodas/): o build não usa a rede.
-FROM mirror.gcr.io/library/python:3.12-slim-bookworm
+# A imagem base pelo digest (02/11/2026): a tag sozinha muda com o tempo, e cada deploy mudaria a imagem.
+FROM mirror.gcr.io/library/python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337
 WORKDIR /app
 COPY ffmpeg deep-filter /usr/local/bin/
 RUN --mount=type=bind,source=rodas,target=/tmp/rodas pip install --no-cache-dir --no-index --root-user-action=ignore /tmp/rodas/*.whl
