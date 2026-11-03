@@ -124,7 +124,7 @@ describe("protocolo", () => {
     const { result } = await legado("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
     expect(result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "meu-avatar" } });
     expect((await legado("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-11-25");
-    expect((await legado("tools/list")).result.tools).toHaveLength(14);
+    expect((await legado("tools/list")).result.tools).toHaveLength(15);
     expect((await legado("ping")).result).toEqual({});
   });
 
@@ -142,7 +142,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_videos", "listar_avatares", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "ver_transcricao", "ver_silencios", "enviar_arquivo", "renderizar_html", "legendar", "exportar", "acompanhar_exportacao"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_videos", "listar_avatares", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "ver_transcricao", "ver_silencios", "enviar_arquivo", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });
@@ -193,6 +193,22 @@ describe("ferramentas", () => {
     expect(um.videos.map((v) => v.id)).toEqual([VIDEO]);
     expect(um.continuar).toBeUndefined();
     expect(dados<{ videos: unknown[] }>(await ferramenta("listar_videos", { ate: "2020-01-01" })).videos).toEqual([]);
+  });
+
+  it("limpar_arquivos mostra os sem uso e só apaga com apagar: true", async () => {
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "A" }));
+    const envia = async (nome: string) => dados<{ src: string }>(await ferramenta("enviar_arquivo", { projeto: id, nome, tipo: "video/webm", base64: btoa("webm") })).src;
+    const usado = await envia("usado.webm");
+    const velho = await envia("velho.webm");
+    await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", arquivo: usado.split("/").pop(), dur: 2 }] });
+    const lista = dados<{ arquivos: { nome: string }[]; tamanho: number }>(await ferramenta("limpar_arquivos", { projeto: id }));
+    expect(lista).toEqual({ arquivos: [expect.objectContaining({ nome: "velho.webm" })], tamanho: 4 });
+    expect((await env.MIDIA.list({ prefix: `projetos/${id}/` })).objects).toHaveLength(2);
+    expect(dados(await ferramenta("limpar_arquivos", { projeto: id, apagar: true }))).toMatchObject({ apagados: true });
+    const { arquivos } = dados<{ arquivos: { src: string }[] }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["arquivos"] }));
+    expect(arquivos.map((f) => f.src)).toEqual([usado]);
+    expect((await env.MIDIA.list({ prefix: `projetos/${id}/` })).objects).toHaveLength(1);
+    expect(velho).not.toBe(usado);
   });
 
   it("enviar_arquivo guarda no projeto; base64 ruim é recusado", async () => {

@@ -69,6 +69,7 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   salvar o arquivo.
 - `listar_videos`: filtro por data e paginação.
 - Arquivos: um comando para remover os que não são usados (o projeto tem mais de 30).
+  (Feito: `limpar_arquivos`, que mostra a lista e só apaga com `apagar: true`.)
 
 ### 5. Ferramentas que faltam
 

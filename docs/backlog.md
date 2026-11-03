@@ -45,8 +45,6 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Respostas menores*: remover arquivos sem uso. (No conflito, o `editar_projeto` já traz o projeto
-     como está agora; o que mudou peça a peça depende do histórico de versões, no item 8.)
    - *Animação como código* (desenho de 02/11/2026, ainda não começado): o projeto guarda o
      código da animação, não o WebM pronto, e só renderiza o vídeo na exportação. Cobre a camada
      que acompanha o bloco, a prévia sem salvar, ler o HTML para editar e é a base dos templates
@@ -74,8 +72,9 @@ Próximos passos, nesta ordem:
    repetir, reenquadrar seguindo o rosto, tela dividida, picture-in-picture, opacidade,
    mistura, tremido e estabilização.
 8. **Agente mais autônomo**: detectar cenas e o que aparece nelas, prévia rápida de um
-   trecho, plano sem aplicar com o custo, desfazer pela API, histórico de versões, medir
-   gancho, ritmo e áreas seguras.
+   trecho, plano sem aplicar com o custo, desfazer pela API, histórico de versões (com ele, o
+   conflito do `editar_projeto` pode dizer o que mudou peça a peça), medir gancho, ritmo e áreas
+   seguras.
 9. **Entrega**: variações por plataforma, capa, limites por rede, presets e publicar direto.
 10. **Abrir para todos**: limite de uso, custo do contêiner por pessoa e tela de tokens.
 

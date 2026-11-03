@@ -213,6 +213,15 @@ describe("comandos", () => {
     expect(tudo).toHaveProperty("arquivos");
   });
 
+  it("limpar arquivos espera a exportação acabar", async () => {
+    const { id } = await novo();
+    const agora = new Date().toISOString();
+    await env.DB.prepare("INSERT INTO exports (id, project_id, total, plan, created_at, expires_at) VALUES ('e1', ?, 1, '{}', ?, ?)").bind(id, agora, agora).run();
+    expect((await api(`/api/v1/projetos/${id}/limpar`, admin, {})).status).toBe(200);
+    const res = await api(`/api/v1/projetos/${id}/limpar`, admin, { apagar: true });
+    expect([res.status, await res.json()]).toEqual([409, { erro: "exportando" }]);
+  });
+
   it("a resposta é o resumo: sem os arquivos e o canvas inteiro", async () => {
     const { id, revisao } = await novo();
     const res = await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao, comandos: [{ tipo: "rascunho", fala: "Oi, gente", duracao: 2 }] });

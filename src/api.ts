@@ -109,12 +109,13 @@ export class Api {
     if (path === "/api/v1/videos" && !post) return this.videos(user, url);
     if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "html") return post ? this.renderHtml(request, project) : falha(405, "metodo_invalido");
     if (m[2] === "legenda") return post ? this.caption(request, user, project) : falha(405, "metodo_invalido");
+    if (m[2] === "limpar") return post ? this.cleanFiles(request, project) : falha(405, "metodo_invalido");
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(",")));
   }
@@ -186,6 +187,23 @@ export class Api {
       ...(files ? { arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })) } : {}),
       ...(incluir.includes("canvas") ? { canvas: data } : {}),
     };
+  }
+
+  /**
+   * Os arquivos do projeto que nenhum bloco usa (os WebMs refeitos se acumulam: mais de 30 no projeto
+   * da Lara Resende). Sem apagar: true, só a lista. Durante uma exportação, recusa: ela lê os arquivos.
+   */
+  private async cleanFiles(request: Request, project: Project): Promise<Response> {
+    const body = await json(request);
+    const data = JSON.parse(project.data) as CanvasProject;
+    const usados = new Set(data.blocks.map((b) => b.src));
+    const semUso = (await this.db.projectFiles(project.id)).filter((f) => !usados.has(`/projetos/${project.id}/arquivos/${f.id}`));
+    const lista = { arquivos: semUso.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, tamanho: f.size })), tamanho: semUso.reduce((t, f) => t + f.size, 0) };
+    if (body?.apagar !== true) return Response.json(lista);
+    if ((await this.db.latestExport(project.id))?.status === "running") return falha(409, "exportando");
+    const keys = await this.db.deleteProjectFiles(project.id, semUso.map((f) => f.id));
+    if (keys.length) await this.media.delete(keys);
+    return Response.json({ ...lista, apagados: true });
   }
 
   /** O HTML do agente vira um WebM transparente no projeto; o log volta quando o HTML não roda. */
