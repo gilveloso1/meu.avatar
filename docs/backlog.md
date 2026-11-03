@@ -47,15 +47,20 @@ Próximos passos, nesta ordem:
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
    - *Respostas menores*: `editar_projeto`, no conflito, o que mudou; `ver_projeto` com filtros e
      o início de cada bloco no grupo; `listar_videos` com data e paginação; remover arquivos sem uso.
-   - *Tempo que acompanha*: `sobre` ancorado no bloco (não só no grupo), camada que acompanha o
-     bloco quando ele muda de tamanho ou de vídeo, encaixe do vídeo no rascunho cortando o
-     silêncio, remover pausas acima de X s em todos os blocos com realinhamento; `ligar` e
-     `remover` sem desfazer as variações sem querer.
-   - *Ver o resultado*: quadros do Final montado sem exportar, prévia do `renderizar_html` sem
-     salvar, ler o HTML de um arquivo já renderizado para editar.
-   - *Pronto para usar*: templates de layout com parâmetros, kit de marca por perfil, biblioteca de
-     animações didáticas, preset de legenda numa chamada, onde fica o rosto de cada avatar,
-     modelo de projeto com ganchos ligados ao corpo, música por URL ou da biblioteca do site.
+   - *Animação como código* (desenho de 02/11/2026, ainda não começado): o projeto guarda o
+     código da animação, não o WebM pronto, e só renderiza o vídeo na exportação. Cobre a camada
+     que acompanha o bloco, a prévia sem salvar, ler o HTML para editar e é a base dos templates
+     com parâmetros. Desenho abaixo, em "Animação como código".
+   - *Tempo que acompanha*: `sobre` ancorado no bloco (não só no grupo), encaixe do vídeo no
+     rascunho cortando o silêncio, remover pausas acima de X s em todos os blocos com
+     realinhamento; `ligar` e `remover` sem desfazer as variações sem querer. (A camada que
+     acompanha o bloco quando ele muda de tamanho sai da animação como código.)
+   - *Ver o resultado*: quadros do Final montado sem exportar. (A prévia e o HTML para editar saem
+     da animação como código.)
+   - *Pronto para usar*: templates de layout com parâmetros (sobre a animação como código), kit de
+     marca por perfil, biblioteca de animações didáticas, preset de legenda numa chamada, onde fica
+     o rosto de cada avatar, modelo de projeto com ganchos ligados ao corpo, música por URL ou da
+     biblioteca do site.
 2. **Fechar o HyperFrames**: modelos por marca (títulos, lower thirds, selos) e um projeto real
    feito só pelo MCP, do roteiro à exportação (o da Lara Resende está em andamento).
 3. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
@@ -73,6 +78,40 @@ Próximos passos, nesta ordem:
    gancho, ritmo e áreas seguras.
 9. **Entrega**: variações por plataforma, capa, limites por rede, presets e publicar direto.
 10. **Abrir para todos**: limite de uso, custo do contêiner por pessoa e tela de tokens.
+
+## Animação como código (desenho, 02/11/2026)
+
+Hoje o `renderizar_html` faz o WebM na hora e o guarda no projeto: cada correção é um render novo
+(15 a 90 s), o agente reenvia o HTML inteiro (3 a 5 mil caracteres por cena), o arquivo não
+muda de tamanho com o bloco e os WebMs velhos se acumulam (mais de 30 no projeto da Lara Resende).
+A ideia é guardar o código e renderizar só no fim, seguindo a direção de usar o que já existe (o
+HyperFrames e o GSAP), sem pipeline novo.
+
+- **Bloco de código**: um tipo de bloco novo no modelo do canvas (`src/canvas/modelo.js`), com o
+  HTML (elementos, `<style>` e a linha do tempo `tl`), a duração e, depois, parâmetros (texto,
+  cor, número). Entra por cima do vídeo como qualquer cobertura; a duração acompanha o bloco.
+- **Prévia no canvas**: o próprio navegador roda o código num iframe com `sandbox` (sem acesso ao
+  site), com as mesmas fontes e a mesma versão do GSAP da imagem de render, e o player leva a
+  linha do tempo ao instante (`tl.seek`). Só a camada que está na tela roda, para não pesar.
+- **Agente**: lê e edita o código guardado (sem reenviar tudo) e vê o resultado pelos quadros: o
+  contêiner de render tira fotos da página nos instantes pedidos, sem fazer o vídeo (segundos, não
+  minutos). É a prévia sem salvar e o "ler o HTML" do teste da Lara Resende.
+- **Exportação**: antes de montar, o contêiner de render faz o WebM de cada bloco de código no
+  tamanho e na duração finais, guardado pelo hash (código, parâmetros, tamanho, duração): a mesma
+  animação não renderiza duas vezes. Depois, a emenda é a de hoje, com o WebM por cima.
+- **Legenda**: o `legendar` já gera HTML; vira um bloco de código igual.
+- **Cuidados**: a prévia tem de bater com o render (mesmas fontes e GSAP; o Chrome de quem usa
+  pode diferir um pouco do da imagem); o código do agente roda no navegador de quem abre o canvas,
+  por isso o `sandbox`; a exportação ganha um passo e espera os renders.
+
+PRs, nesta ordem, um de cada vez:
+
+1. Bloco de código no modelo e na API (`adicionar {html, duracao}`, ler e trocar o código), com a
+   prévia no canvas.
+2. Quadros do bloco de código para o agente, pelo contêiner de render.
+3. Exportação: render dos blocos de código com cache pelo hash.
+4. Legenda como bloco de código; o `renderizar_html` antigo fica para quem precisa do arquivo.
+5. Parâmetros no bloco, base dos templates de layout.
 
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 
