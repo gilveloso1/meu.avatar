@@ -45,9 +45,8 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Respostas menores*: `editar_projeto` resumido (revisão, criados, avisos) e, no conflito, o
-     que mudou; `ver_projeto` com filtros e o início de cada bloco no grupo; `listar_videos` com
-     data e paginação; remover arquivos sem uso.
+   - *Respostas menores*: `editar_projeto`, no conflito, o que mudou; `ver_projeto` com filtros e
+     o início de cada bloco no grupo; `listar_videos` com data e paginação; remover arquivos sem uso.
    - *Tempo que acompanha*: `sobre` ancorado no bloco (não só no grupo), camada que acompanha o
      bloco quando ele muda de tamanho ou de vídeo, encaixe do vídeo no rascunho cortando o
      silêncio, remover pausas acima de X s em todos os blocos com realinhamento; `ligar` e

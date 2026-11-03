@@ -53,8 +53,13 @@ async function novo(): Promise<{ id: string; revisao: number }> {
   expect(res.status).toBe(201);
   return res.json();
 }
-async function comandos(id: string, revisao: number, lista: unknown[]) {
-  return api(`/api/v1/projetos/${id}/comandos`, admin, { revisao, comandos: lista });
+/** O lote e, para os testes conferirem o canvas, o projeto lido logo depois (a resposta dos comandos é só o resumo). */
+async function comandos(id: string, revisao: number, lista: unknown[], exporter: FakeExportApi | null = null) {
+  const res = await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao, comandos: lista }, exporter);
+  if (!res.ok) return res;
+  const resposta = await res.json<Record<string, unknown>>();
+  const salvo = await (await api(`/api/v1/projetos/${id}`, admin)).json<Record<string, unknown>>();
+  return Response.json({ ...salvo, ...resposta });
 }
 
 describe("acesso à API", () => {
@@ -147,6 +152,14 @@ describe("comandos", () => {
     const b = await (await comandos(id, a.revisao, [{ tipo: "ligar", de: x, para: y }])).json<{ revisao: number }>();
     expect(await (await comandos(id, b.revisao, [{ tipo: "ligar", de: x, para: y }])).json()).toEqual({ erro: "ligacao_repetida", comando: 0 });
     expect(await (await comandos(id, b.revisao, [{ tipo: "ligar", de: y, para: x }])).json()).toEqual({ erro: "ligacao_ciclo", comando: 0 });
+  });
+
+  it("a resposta é o resumo: sem os arquivos e o canvas inteiro", async () => {
+    const { id, revisao } = await novo();
+    const res = await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao, comandos: [{ tipo: "rascunho", fala: "Oi, gente", duracao: 2 }] });
+    const r = await res.json<Record<string, unknown>>();
+    expect(Object.keys(r).sort()).toEqual(["avisos", "criados", "finais", "grupos", "revisao"]);
+    expect(r).toMatchObject({ revisao: revisao + 1, avisos: [{ tipo: "rascunho", fala: "Oi, gente" }] });
   });
 
   it("um lote com erro não muda nada", async () => {
@@ -286,8 +299,8 @@ describe("edição fina", () => {
     const { id, revisao } = await novo();
     const fake = new FakeExportApi();
     fake.silences = { duracao: 10, silencios: [[3, 5]] };
-    const a = await (await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao, comandos: [{ tipo: "adicionar", video: VIDEO }] }, fake)).json<Vista>();
-    const r = await (await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao: a.revisao, comandos: [{ tipo: "removerPausas", bloco: a.criados[0], pausa: "curta" }] }, fake)).json<Vista>();
+    const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }], fake)).json<Vista>();
+    const r = await (await comandos(id, a.revisao, [{ tipo: "removerPausas", bloco: a.criados[0], pausa: "curta" }], fake)).json<Vista>();
     expect(r.canvas.blocks).toHaveLength(2);
     expect(r.grupos).toHaveLength(1);
     expect(r.grupos[0]!.duracao).toBeLessThan(9);
