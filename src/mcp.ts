@@ -27,6 +27,8 @@ const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, o
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro. Cada um tem "tipo":
 adicionar {video|arquivo|ativo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos}
+adicionar {html, duracao: 0,5 a 60, nome, depois: bloco | sobre: bloco, em: segundos} (animação em código, guardada no projeto: títulos, selos, gráficos, legendas; as regras do HTML são as do renderizar_html; sem nome, Animação 1, Animação 2...; a tela mostra na prévia, e ainda não sai na exportação)
+editarCodigo {bloco, html | trocas: [{de, para}]} (troca o código de uma animação inteiro ou só trechos; cada de aparece uma vez só no código, como está; leia o código com ver_projeto incluir: codigo)
 rascunho {fala, duracao: 0,5 a 30, nome, depois: bloco | sobre: bloco, em: segundos} (o lugar de um vídeo que ainda não existe: um cartão com a fala; sem nome, Texto 1, Texto 2...; a exportação espera a troca)
 renomear {bloco, nome}
 trocar {bloco, video|arquivo|ativo, inicio, fim, dur, nome} (põe o arquivo no lugar do bloco, como o vídeo pronto no do rascunho; o que está em cima fica e a sequência acompanha)
@@ -70,8 +72,8 @@ const FERRAMENTAS = [
   { name: "criar_projeto", description: "Cria um projeto vazio.", inputSchema: objeto({ nome: texto("Nome do projeto.") }, ["nome"]) },
   {
     name: "ver_projeto",
-    description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo), Finais com as variações e avisos. Os arquivos e o canvas inteiro são grandes: peça em incluir só quando precisar.",
-    inputSchema: objeto({ projeto, incluir: { type: "array", items: { type: "string", enum: ["arquivos", "canvas"] }, description: "arquivos: os arquivos do projeto (id e src para adicionar); canvas: o modelo inteiro, com posições e ajustes de cada bloco." } }, ["projeto"]),
+    description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo), Finais com as variações e avisos. Os arquivos, o código das animações e o canvas inteiro são grandes: peça em incluir só quando precisar.",
+    inputSchema: objeto({ projeto, incluir: { type: "array", items: { type: "string", enum: ["arquivos", "codigo", "canvas"] }, description: "arquivos: os arquivos do projeto (id e src para adicionar); codigo: o HTML de cada animação, para editar com editarCodigo; canvas: o modelo inteiro, com posições e ajustes de cada bloco." } }, ["projeto"]),
   },
   {
     name: "editar_projeto",

@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+  A animação em código na prévia do canvas (docs/canvas.md): a página que o render monta
+  (container/render/servidor.mjs, pagina()), aqui num iframe com sandbox, sem acesso ao site.
+  O canvas manda o código ({tipo: "carregar", html, largura, altura, duracao}) e depois o
+  instante ({tipo: "tempo", t}); a página responde {tipo: "pronto"} ou {tipo: "erro", motivo}.
+  O GSAP é o mesmo da imagem de render; as fontes, as mesmas famílias, pelo Google Fonts.
+  npm run canvas põe o GSAP no lugar da marca abaixo.
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+html, body { margin: 0; overflow: hidden; background: transparent; }
+#root { position: relative; overflow: hidden; font-family: "Inter", "Noto Color Emoji", sans-serif; color: #fff; }
+</style>
+<script>/*GSAP*/</script>
+<script>
+(() => {
+  // As famílias do render (FAMILIAS em container/render/servidor.mjs), com os mesmos pesos.
+  const FAMILIAS = {
+    "TikTok Sans": "wght@300..900",
+    Inter: "wght@100..900",
+    Montserrat: "wght@100..900",
+    Roboto: "wght@100..900",
+    "Open Sans": "wght@300..800",
+    Oswald: "wght@200..700",
+    "Playfair Display": "wght@400..900",
+    Poppins: "wght@400;500;600;700;800;900",
+    Anton: "",
+    "Bebas Neue": "",
+    "Archivo Black": "",
+    "Courier Prime": "wght@400;700",
+    Pacifico: "",
+  };
+  const PADRAO = "Inter";
+  let tl = null;
+  let pedido = 0;
+
+  const avisa = (m) => parent.postMessage(m, "*");
+  addEventListener("error", (e) => avisa({ tipo: "erro", motivo: String(e.message ?? e) }));
+
+  /** Só as fontes citadas, como no render; os emojis, só se houver. */
+  function fontes(html) {
+    const citadas = Object.keys(FAMILIAS).filter((f) => f === PADRAO || html.toLowerCase().includes(f.toLowerCase()));
+    const familias = citadas.map((f) => `family=${encodeURIComponent(f)}${FAMILIAS[f] ? `:${FAMILIAS[f]}` : ""}`);
+    if (/\p{Extended_Pictographic}/u.test(html)) familias.push("family=Noto+Color+Emoji");
+    const link = Object.assign(document.createElement("link"), { rel: "stylesheet", href: `https://fonts.googleapis.com/css2?${familias.join("&")}&display=block` });
+    return new Promise((pronto) => {
+      link.onload = link.onerror = pronto;
+      document.head.append(link);
+    });
+  }
+
+  async function carregar({ html, largura, altura, duracao }) {
+    const vez = ++pedido;
+    document.body.replaceChildren();
+    const root = Object.assign(document.createElement("div"), { id: "root" });
+    Object.assign(root.dataset, { compositionId: "main", start: "0", duration: String(duracao), width: String(largura), height: String(altura) });
+    Object.assign(root.style, { width: `${largura}px`, height: `${altura}px` });
+    document.body.append(root);
+    // A linha do tempo já existe, pausada, como no render: o código só acrescenta.
+    window.__timelines = {};
+    tl = window.tl = gsap.timeline({ paused: true });
+    window.__timelines.main = tl;
+    const molde = document.createElement("template");
+    molde.innerHTML = html;
+    const scripts = [...molde.content.querySelectorAll("script")];
+    for (const s of scripts) s.remove();
+    const carregando = fontes(html);
+    root.append(molde.content);
+    for (const s of scripts) {
+      // Script posto por innerHTML não roda: cada um vira um novo, na ordem.
+      const novo = document.createElement("script");
+      novo.textContent = s.textContent;
+      document.body.append(novo);
+    }
+    tl.set({}, {}, duracao);
+    await carregando;
+    root.offsetHeight;
+    await document.fonts.ready;
+    if (vez !== pedido) return;
+    tl.seek(0, false);
+    avisa({ tipo: "pronto" });
+  }
+
+  addEventListener("message", (e) => {
+    if (e.source !== parent) return;
+    const m = e.data ?? {};
+    if (m.tipo === "carregar") carregar(m).catch((err) => avisa({ tipo: "erro", motivo: String(err?.message ?? err) }));
+    if (m.tipo === "tempo" && tl) tl.seek(m.t, false);
+  });
+})();
+</script>
+</head>
+<body></body>
+</html>

@@ -806,6 +806,67 @@ describe("rascunho", () => {
   });
 });
 
+describe("animação em código", () => {
+  type Bloco = { id: string; kind: string; src: string; name: string; tin: number; tout: number; dur: number; code?: { html: string } };
+  type Vista = { revisao: number; criados: string[]; grupos: { id: string; blocos: { id: string; tipo: string; camada: string; inicio: number; fim: number }[] }[]; canvas: { blocks: Bloco[] } };
+  const lote = async (id: string, revisao: number, lista: unknown[]) => (await comandos(id, revisao, lista)).json<Vista>();
+  const CENA = `<div id="t">Oi</div><script>tl.from("#t", { opacity: 0, duration: 0.5 }, 0.2);</script>`;
+
+  it("guarda o código por cima do vídeo, do tamanho pedido, e o ver_projeto o traz em incluir: codigo", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", video: VIDEO, fim: 6, rotulo: "a" },
+      { tipo: "adicionar", html: CENA, duracao: 3, sobre: "@a", em: 1 },
+      { tipo: "adicionar", html: CENA, duracao: 45 },
+    ]);
+    const [, cena, longa] = r.criados;
+    expect(r.canvas.blocks.find((b) => b.id === cena)).toMatchObject({ kind: "image", src: "", name: "Animação 1", tin: 0, tout: 3, code: { html: CENA } });
+    expect(r.canvas.blocks.find((b) => b.id === longa)).toMatchObject({ name: "Animação 2", tout: 45 });
+    expect(r.grupos[0]!.blocos[1]).toMatchObject({ id: cena, tipo: "animacao", camada: "cobertura", inicio: 1, fim: 4 });
+    const v = await (await api(`/api/v1/projetos/${id}?incluir=codigo`, admin)).json<{ codigo: unknown[] }>();
+    expect(v.codigo).toEqual([
+      { bloco: cena, nome: "Animação 1", duracao: 3, html: CENA },
+      { bloco: longa, nome: "Animação 2", duracao: 45, html: CENA },
+    ]);
+    // A animação vai até 60 s, mais que a imagem.
+    const c = await lote(id, r.revisao, [{ tipo: "cortar", bloco: longa, fim: 60 }]);
+    expect(c.canvas.blocks.find((b) => b.id === longa)!.tout).toBe(60);
+  });
+
+  it("editarCodigo troca o código inteiro ou só os trechos pedidos", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [{ tipo: "adicionar", html: CENA, duracao: 2 }]);
+    const cena = r.criados[0]!;
+    const t = await lote(id, r.revisao, [{ tipo: "editarCodigo", bloco: cena, trocas: [{ de: ">Oi<", para: ">Olá<" }, { de: "0.2);", para: "0.4);" }] }]);
+    expect(t.canvas.blocks[0]!.code!.html).toBe(CENA.replace(">Oi<", ">Olá<").replace("0.2);", "0.4);"));
+    const n = await lote(id, t.revisao, [{ tipo: "editarCodigo", bloco: cena, html: "<b>Novo</b>" }]);
+    expect(n.canvas.blocks[0]!.code!.html).toBe("<b>Novo</b>");
+  });
+
+  it("recusa código vazio, grande demais, trecho que não existe ou se repete e bloco sem código", async () => {
+    const { id, revisao } = await novo();
+    const erro = async (lista: unknown[], rev = revisao) => (await comandos(id, rev, lista)).json();
+    expect(await erro([{ tipo: "adicionar", html: " ", duracao: 2 }])).toEqual({ erro: "codigo_invalido", comando: 0 });
+    expect(await erro([{ tipo: "adicionar", html: "x".repeat(100_001), duracao: 2 }])).toEqual({ erro: "codigo_grande_demais", comando: 0, maximo: 100_000 });
+    expect(await erro([{ tipo: "adicionar", html: CENA, duracao: 61 }])).toEqual({ erro: "duracao_invalida", comando: 0 });
+    const r = await lote(id, revisao, [{ tipo: "adicionar", html: "<i>a</i><i>a</i>", duracao: 2 }, { tipo: "adicionar", video: VIDEO, fim: 4 }]);
+    const [cena, video] = r.criados;
+    expect(await erro([{ tipo: "editarCodigo", bloco: cena, trocas: [{ de: "<i>a</i>", para: "" }] }], r.revisao)).toEqual({ erro: "trecho_nao_unico", comando: 0, troca: 0, vezes: 2 });
+    expect(await erro([{ tipo: "editarCodigo", bloco: cena, trocas: [{ de: "nada", para: "" }] }], r.revisao)).toEqual({ erro: "trecho_nao_unico", comando: 0, troca: 0, vezes: 0 });
+    expect(await erro([{ tipo: "editarCodigo", bloco: cena, html: "<b>x</b>", trocas: [] }], r.revisao)).toEqual({ erro: "codigo_invalido", comando: 0 });
+    expect(await erro([{ tipo: "editarCodigo", bloco: video, html: "<b>x</b>" }], r.revisao)).toEqual({ erro: "sem_codigo", comando: 0 });
+    expect(await erro([{ tipo: "enquadrar", bloco: cena, zoom: 2 }], r.revisao)).toEqual({ erro: "enquadramento_invalido", comando: 0 });
+  });
+
+  it("ainda não exporta, com a frase que diz o porquê", async () => {
+    const { id, revisao } = await novo();
+    await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" }, { tipo: "adicionar", html: CENA, duracao: 2, sobre: "@a", em: 0 }]);
+    const res = await api(`/projetos/${id}/exportar`, admin, { final: "final" }, new FakeExportApi());
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("animações");
+  });
+});
+
 describe("a tela e a API no mesmo projeto", () => {
   const save = (id: string, session: string, body: unknown) => call(new Request(`${SITE}/projetos/${id}/salvar`, { method: "POST", body: JSON.stringify(body), headers: { origin: SITE, cookie: session } }));
   const data = { blocks: [], finals: [], edges: [] };

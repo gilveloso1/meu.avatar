@@ -1,12 +1,12 @@
 /** O pedaço do modelo do canvas que o Worker usa (src/exportar.ts, src/comandos.ts). */
-export interface ExportItem { tipo: "video" | "imagem" | "audio"; camada: string; src: string; entra: number; dura: number; corte: number; volume: number }
+export interface ExportItem { tipo: "video" | "imagem" | "audio"; camada: string; src: string; entra: number; dura: number; corte: number; volume: number; codigo?: string }
 export interface ExportWork {
   largura: number;
   altura: number;
   trechos: { duracao: number; itens: ExportItem[] }[];
   versoes: { nome: string; trechos: number[] }[];
 }
-export interface Block { id: string; kind: "video" | "image" | "audio"; name: string; src: string; dur: number; tin: number; tout: number; x: number; y: number; mute: boolean; vol: number; tone: number; audio?: string; speed?: number; frame?: Frame; draft?: { fala: string } }
+export interface Block { id: string; kind: "video" | "image" | "audio"; name: string; src: string; dur: number; tin: number; tout: number; x: number; y: number; mute: boolean; vol: number; tone: number; audio?: string; speed?: number; frame?: Frame; draft?: { fala: string }; code?: { html: string } }
 export interface FrameKey { t: number; z: number; x: number; y: number }
 export interface Frame { fit?: "cover" | "contain" | "blur"; flipH?: boolean; flipV?: boolean; rotate?: number; crop?: { l: number; t: number; r: number; b: number }; keys?: FrameKey[] }
 export interface CanvasFinal { id: string; x: number; y: number; resolution?: string; format?: string; speed?: number }
@@ -16,6 +16,7 @@ export interface Group { id: string; x: number; y: number; dur: number; bottom: 
 
 export const MAX_VERSOES: number;
 export const IMAGE_MAX: number;
+export const CODE_MAX: number;
 export const PX: number;
 export const MIN_LEN: number;
 export const SPEED_MIN: number;
@@ -33,6 +34,7 @@ export function versionName(i: number): string;
 export function output(final: CanvasFinal): { resolution: string; format: string; width: number; height: number };
 export function width(b: Block): number;
 export function len(b: Block): number;
+export function maxEnd(b: Block): number;
 export function sounds(b: Block): boolean;
 export function finalRate(final?: CanvasFinal): number;
 export function split(project: CanvasProject, id: string, at: number): { project: CanvasProject; id: string };

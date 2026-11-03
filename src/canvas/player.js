@@ -11,16 +11,21 @@
  * - se um trecho que está tocando precisa carregar, o relógio da prévia espera
  *   por ele em vez de pular (e o resto pausa junto);
  * - acerto de sincronia só com folga grande e nunca durante outro acerto.
+ *
+ * A animação em código é uma página isolada (iframe com sandbox, src/canvas/animacao.html) no
+ * tamanho do Final, reduzida para o quadro; só a que está na tela é levada ao instante.
  */
 import { placement, sounds } from "./modelo.js";
 import { draftCard } from "./miniaturas.js";
 
 const READY = 2; // HAVE_CURRENT_DATA: já há quadro para mostrar.
 const FLOWING = 3; // HAVE_FUTURE_DATA: dá para seguir tocando.
+const FRAME_WAIT_MS = 8000;
 
 export class Player {
-  constructor(stage, { onTick = () => {}, onEnd = () => {} } = {}) {
+  constructor(stage, { onTick = () => {}, onEnd = () => {}, frameSrc = null } = {}) {
     this.stage = stage;
+    this.frameSrc = frameSrc;
     this.onTick = onTick;
     this.onEnd = onEnd;
     this.items = [];
@@ -30,16 +35,26 @@ export class Player {
     this.waiting = false;
     this.shown = { 0: null, 1: null };
     this.loop = this.loop.bind(this);
+    // Só vale o que vem de um quadro desta prévia; o resto da página não ouve o código.
+    addEventListener("message", (e) => {
+      const i = this.items.find((o) => o.el.contentWindow && o.el.contentWindow === e.source);
+      if (!i) return;
+      if (e.data?.tipo === "pronto") (i.ready = true), (i.sent = null), this.show();
+      if (e.data?.tipo === "erro") console.warn("Animação com erro:", i.block.name, e.data.motivo);
+    });
   }
 
-  load(tl) {
+  /** size: o tamanho do Final ({ width, height }), em que a animação se desenha. */
+  load(tl, size = { width: 720, height: 1280 }) {
     this.pause();
+    this.size = size;
     this.stage.querySelectorAll(".pv-media").forEach((el) => el.remove());
     this.duration = tl.duration;
     this.shown = { 0: null, 1: null };
     this.back ??= this.stage.appendChild(Object.assign(document.createElement("canvas"), { className: "pv-back", width: 36, height: 64 }));
     this.back.hidden = true;
     this.items = tl.items.map((i) => {
+      if (i.block.code && this.frameSrc) return this.frame(i);
       const k = i.block.kind;
       const el = document.createElement(k === "image" ? "img" : k === "audio" ? "audio" : "video");
       el.className = "pv-media";
@@ -64,6 +79,25 @@ export class Player {
       return { ...i, el, active: false };
     });
     this.seek(0);
+  }
+
+  /** A animação: o quadro carrega a página e recebe o código; fica pronta quando ela avisa. */
+  frame(i) {
+    const el = document.createElement("iframe");
+    el.className = "pv-media pv-frame";
+    el.dataset.layer = String(i.layer);
+    el.setAttribute("sandbox", "allow-scripts");
+    el.setAttribute("aria-hidden", "true");
+    el.tabIndex = -1;
+    const { width, height } = this.size;
+    Object.assign(el.style, { width: `${width}px`, height: `${height}px` });
+    el.addEventListener("load", () => el.contentWindow.postMessage({ tipo: "carregar", html: i.block.code.html, largura: width, altura: height, duracao: i.block.tout }, "*"), { once: true });
+    el.src = this.frameSrc;
+    this.stage.append(el);
+    const item = { ...i, el, active: false, ready: false, sent: null };
+    // Sem resposta (quadro bloqueado, código que trava), a prévia segue sem a animação.
+    setTimeout(() => !item.ready && ((item.failed = true), this.show()), FRAME_WAIT_MS);
+    return item;
   }
 
   play() {
@@ -139,8 +173,8 @@ export class Player {
   show() {
     const t = Math.min(this.t, this.duration - 0.001);
     // Na mesma camada, vale quem está na trilha mais alta: é o último da lista.
-    const at = (layer) => this.items.findLast((i) => i.layer === layer && !i.el.error && t >= i.start && t < i.start + i.len);
-    const ready = (i) => (i.el.tagName === "IMG" ? i.el.complete : i.el.readyState >= READY && !i.el.seeking);
+    const at = (layer) => this.items.findLast((i) => i.layer === layer && !i.el.error && !i.failed && t >= i.start && t < i.start + i.len);
+    const ready = (i) => (i.el.tagName === "IFRAME" ? i.ready : i.el.tagName === "IMG" ? i.el.complete : i.el.readyState >= READY && !i.el.seeking);
     const top = at(1);
     const base = at(0);
     // Quem deve aparecer ainda sem imagem: fica o que estava, senão outra coisa pisca na tela.
@@ -161,6 +195,7 @@ export class Player {
 
   /** O bloco com enquadramento fica onde a exportação põe; sem ele, vale o CSS (cobre o quadro). */
   place(i) {
+    if (i.el.tagName === "IFRAME") return this.placeFrame(i);
     const frame = i.block.frame;
     const [vw, vh] = [i.el.videoWidth ?? i.el.naturalWidth, i.el.videoHeight ?? i.el.naturalHeight];
     if (!frame || !vw) return;
@@ -168,6 +203,13 @@ export class Player {
     const local = Math.max(this.t - i.start, 0) * (i.rate ?? 1);
     const { matrix, clip } = placement(frame, vw, vh, W, H, local);
     Object.assign(i.el.style, { inset: "auto", left: "0", top: "0", width: `${vw}px`, height: `${vh}px`, maxWidth: "none", maxHeight: "none", objectFit: "fill", transformOrigin: "0 0", transform: `matrix(${matrix.join(",")})`, clipPath: clip });
+  }
+
+  /** A animação cobre o quadro, reduzida do tamanho do Final, no instante dela. */
+  placeFrame(i) {
+    i.el.style.transform = `scale(${this.stage.clientWidth / this.size.width})`;
+    const t = +(i.tin + Math.max(this.t - i.start, 0)).toFixed(3);
+    if (i.ready && i.sent !== t) i.el.contentWindow.postMessage({ tipo: "tempo", t }, "*"), (i.sent = t);
   }
 
   /** Fundo desfocado: um quadro pequeno, esticado e borrado pelo CSS, sem outro vídeo tocando. */

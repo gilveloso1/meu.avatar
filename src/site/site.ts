@@ -29,7 +29,7 @@ import { canUse, type Defaults, estimate, type Field, type Option, prices, type 
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { temSom } from "../som";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
-import { CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
+import { CANVAS_ANIMACAO, CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { MAX_VERSOES } from "../canvas/modelo.js";
 import { type ExportPlan, type Exports, fileName, zipFits } from "../exportar";
 import { CSS } from "./style";
@@ -49,7 +49,7 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today", "check", "check_circle",
+  "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today", "check", "check_circle",
   "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
   "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
   "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
@@ -502,6 +502,7 @@ ${error ? snackbar(error) : ""}`;
   private async projects(request: Request, user: User, path: string, url: URL): Promise<Response> {
     const post = request.method === "POST";
     if (path === "/canvas") return redirect("/projetos");
+    if (path === "/canvas/animacao" && !post) return animationFrame();
     if (path === "/projetos") {
       if (!post) return this.projectsPage(user, url);
       const project = await this.db.insertProject({ id: crypto.randomUUID(), user_id: user.id, name: "Projeto sem nome", data: EMPTY_PROJECT });
@@ -597,6 +598,7 @@ ${error ? snackbar(error) : ""}`;
     const latest = await this.db.latestExport(project.id);
     const config = {
       videos,
+      animacao: ANIMACAO_SRC,
       projeto: { id: project.id, name: project.name, data, criado: formatDate(project.created_at), modificado: formatDate(project.updated_at), autor: user.name, revisao: project.revision, salvar: `/projetos/${project.id}/salvar`, estado: `/projetos/${project.id}/estado`, arquivos: `/projetos/${project.id}/arquivos`, exportar: `/projetos/${project.id}/exportar` },
       exportacao: latest ? this.exports.state(project, latest) : null,
       limites: { imagem: MAX_IMAGE_BYTES, video: MAX_VIDEO_BYTES },
@@ -3060,10 +3062,40 @@ const SECURITY_HEADERS = {
 };
 
 /** Só o script da própria página (com o nonce); a foto e o vídeo de origem escolhidos aparecem de blob:. */
-type CspExtra = { img?: string; connect?: string };
+type CspExtra = { img?: string; connect?: string; frame?: string };
 
 /** O canvas desenha as miniaturas e a onda do som em data: e lê a onda de um arquivo escolhido (blob:). */
-const CANVAS_CSP: CspExtra = { img: "data:", connect: "blob:" };
+const CANVAS_CSP: CspExtra = { img: "data:", connect: "blob:", frame: "'self'" };
+
+/** O endereço muda com a página: guardada pelo navegador, a versão velha nunca fica. */
+const ANIMACAO_SRC = `/canvas/animacao?v=${[...CANVAS_ANIMACAO].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) | 0, 7) >>> 0}`;
+
+/**
+ * A animação em código na prévia do canvas (src/canvas/animacao.html): roda o código do agente
+ * num iframe com sandbox, sem a origem do site. Por isso a página não pede nada à rede além das
+ * fontes, e só o canvas a põe num quadro.
+ */
+function animationFrame(): Response {
+  return new Response(CANVAS_ANIMACAO, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "private, max-age=86400",
+      "x-robots-tag": "noindex, nofollow",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "content-security-policy": [
+        "default-src 'none'",
+        "script-src 'unsafe-inline'",
+        "style-src 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src https://fonts.gstatic.com",
+        "img-src data: blob:",
+        "form-action 'none'",
+        "frame-ancestors 'self'",
+        "base-uri 'none'",
+      ].join("; "),
+    },
+  });
+}
 
 function csp(nonce: string, extra: CspExtra = {}): string {
   return [
@@ -3075,6 +3107,8 @@ function csp(nonce: string, extra: CspExtra = {}): string {
     "media-src 'self' blob:",
     // A prévia da edição rápida baixa o vídeo para achar os silêncios.
     `connect-src 'self'${extra.connect ? ` ${extra.connect}` : ""}`,
+    // O canvas põe a animação em código num quadro isolado (animationFrame).
+    ...(extra.frame ? [`frame-src ${extra.frame}`] : []),
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",

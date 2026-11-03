@@ -79,7 +79,7 @@ function resumo(data: CanvasProject) {
       blocos: members(g).map((b) => ({
         id: b.id,
         nome: b.name,
-        tipo: b.draft ? "rascunho" : TIPOS_DE_BLOCO[b.kind],
+        tipo: b.draft ? "rascunho" : b.code ? "animacao" : TIPOS_DE_BLOCO[b.kind],
         camada: g.blocks.includes(b) ? "base" : g.covers.includes(b) ? "cobertura" : "audio",
         inicio: segundos(b.x - g.x),
         fim: segundos(b.x + width(b) - g.x),
@@ -172,7 +172,7 @@ export class Api {
   }
 
   /**
-   * O projeto salvo, com o que ele significa. Os arquivos e o canvas inteiro (o maior gasto do
+   * O projeto salvo, com o que ele significa. Os arquivos, o código das animações e o canvas inteiro (o maior gasto do
    * agente: uns 7 e 10 mil caracteres no projeto da Lara Resende) só vêm quando pedidos em incluir.
    */
   private async view(project: Project, incluir: string[] = []) {
@@ -185,6 +185,7 @@ export class Api {
       atualizado: project.updated_at,
       ...resumo(data),
       ...(files ? { arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })) } : {}),
+      ...(incluir.includes("codigo") ? { codigo: data.blocks.filter((b) => b.code).map((b) => ({ bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), html: b.code!.html })) } : {}),
       ...(incluir.includes("canvas") ? { canvas: data } : {}),
     };
   }
