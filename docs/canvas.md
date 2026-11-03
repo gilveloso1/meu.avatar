@@ -21,6 +21,20 @@ menos custo.
   muda no campo Nome ou com `renomear`): no canvas mostra a fala (editável nos Ajustes), na prévia um cartão,
   e a exportação espera até ele ser trocado pelo vídeo (`trocar`). Serve para
   montar a estrutura inteira e gerar só os vídeos que faltam.
+- **Animação em código**: o HTML do agente (elementos, `<style>` e a linha do tempo `tl` do
+  GSAP), guardado no bloco (`code: {html}`, comandos `adicionar {html, duracao}` e
+  `editarCodigo`, [api.md](api.md)). É um bloco de imagem sem arquivo, como o rascunho, que vai até
+  60 s (`CODE_MAX`, o que o render faz de uma vez) e cobre o vídeo como qualquer cobertura; o
+  tempo do bloco é o da linha do tempo. Na prévia, cada animação é uma página própria
+  (`/canvas/animacao`, de `src/canvas/animacao.html`) num iframe com `sandbox="allow-scripts"`:
+  sem a origem do site, sem rede além das fontes e só posta pelo canvas (`frame-ancestors 'self'`).
+  Ela monta a página do render (`container/render/servidor.mjs`) com o mesmo GSAP (3.15.0,
+  embutido pelo `npm run canvas`) e as mesmas famílias e pesos, pelo Google Fonts (a versão de
+  cada fonte pode diferir um pouco da guardada na imagem). O player manda o código e, a cada
+  quadro, o instante (`tl.seek`), só para a que está na tela, no tamanho do Final e reduzida para
+  o quadro. Sem resposta em 8 s (código que trava, quadro barrado), a prévia segue sem ela. O
+  navegador do app Claude barra iframes com `sandbox`: lá a animação não aparece; no Chrome e
+  no Safari, sim. A exportação ainda recusa projetos com animação.
 - **Juntar**: blocos encostados lado a lado formam uma sequência fixa (corte
   seco), como numa linha do tempo. Juntos, viram um grupo.
 - **Sobrepor**: um bloco em cima de outro cobre a imagem dele naquele trecho,

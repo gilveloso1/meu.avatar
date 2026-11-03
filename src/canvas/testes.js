@@ -470,3 +470,13 @@ test("baseGaps: acha o fim sem base e o buraco na sequência, e ignora arredonda
   assert.deepEqual(M.baseGaps({ x: 0, dur: 5, blocks: [b(0, 2), b(120, 2)] }), [[2, 3]]);
   assert.deepEqual(M.baseGaps({ x: 0, dur: 3.01, blocks: [b(0, 3)] }), []);
 });
+
+test("a animação em código vai até a duração dela, e a exportação recebe o código", () => {
+  const code = { id: "a", kind: "image", name: "Animação 1", src: "", dur: M.CODE_MAX, tin: 0, tout: 3, x: 0, y: 0, mute: false, vol: 1, tone: 1, code: { html: "<b>Oi</b>" } };
+  const foto = { ...code, id: "f", dur: M.IMAGE_MAX, code: undefined, x: 400 };
+  const p = { blocks: [code, foto], finals: [{ id: "final", x: 900, y: 0 }], edges: [{ id: "e", from: "a", to: "final" }] };
+  assert.equal(M.trim(p, "a", "r", 100).blocks[0].tout, M.CODE_MAX);
+  assert.equal(M.trim(p, "f", "r", 100).blocks[1].tout, M.IMAGE_MAX);
+  const work = M.exportWork(p, "final");
+  assert.equal(work.trechos[0].itens.find((i) => i.src === "" && i.codigo).codigo, "<b>Oi</b>");
+});

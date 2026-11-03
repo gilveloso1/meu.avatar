@@ -6,7 +6,8 @@
  * { amostra: true } (o protótipo, com o exemplo) ou, no site, { videos: [...] }
  * (os vídeos prontos de quem usa: id, name, src, when), projeto ({ id, name,
  * data, criado, modificado, autor, salvar, arquivos }: o que está salvo e para onde salvar e enviar
- * arquivos, exportar), exportacao (a última, para retomar) e limites ({ imagem, video }, em bytes); e as frases de erro em
+ * arquivos, exportar), animacao (a página isolada que roda as animações em código na prévia),
+ * exportacao (a última, para retomar) e limites ({ imagem, video }, em bytes); e as frases de erro em
  * erros, que vêm do catálogo src/erros.ts.
  */
 import * as M from "./modelo.js";
@@ -56,6 +57,7 @@ const pv = {
   title: $("#pv-title"),
 };
 const player = new Player(pv.stage, {
+  frameSrc: CONFIG.animacao ?? null,
   onTick(t, d) {
     pv.time.textContent = `${clock(t)} / ${clock(d)}`;
     pv.slider.max = d;
@@ -107,11 +109,11 @@ function loadPreview() {
     }
   }
   tl ??= v ? M.timeline(v, M.finalRate(previewFinal())) : { duration: 0, items: [] };
-  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.block.draft?.fala, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
+  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.block.draft?.fala, i.block.code?.html, i.block.tout, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
   pv.title.textContent = title;
   if (key === loadedKey) return playhead(player.t);
   loadedKey = key;
-  player.load(tl);
+  player.load(tl, M.output(previewFinal()));
   setPlayIcon();
 }
 
@@ -412,13 +414,13 @@ function render({ side = true } = {}) {
       blockEls.set(b.id, el);
     }
     // A miniatura muda com o arquivo: o rascunho trocado pelo vídeo pronto mantém o mesmo bloco.
-    const fonte = b.draft ? `rascunho:${b.draft.fala}` : b.src;
+    const fonte = b.draft ? `rascunho:${b.draft.fala}` : b.code ? "codigo" : b.src;
     if (el.fonte !== fonte) {
       el.fonte = fonte;
       const m = $(".blk__media", el);
       m.textContent = "";
       m.style.backgroundImage = "";
-      if (!b.draft)
+      if (!b.draft && !b.code)
         thumb(b).then((u) => {
           if (!u || el.fonte !== fonte) return;
           // O áudio é uma máscara: a onda pega a cor do bloco.
@@ -449,7 +451,7 @@ function render({ side = true } = {}) {
     const media = $(".blk__media", el);
     if (M.linked(b)) paintWave($(".blk__wave", el), b);
     if (b.kind === "audio") paintWave(media, b);
-    $(".blk__kind", el).textContent = b.draft ? "edit_note" : { video: "movie", image: "image", audio: "music_note" }[b.kind];
+    $(".blk__kind", el).textContent = b.draft ? "edit_note" : b.code ? "animation" : { video: "movie", image: "image", audio: "music_note" }[b.kind];
     $(".blk__name", el).textContent = b.name;
     if (b.draft) media.replaceChildren(Object.assign(document.createElement("span"), { className: "blk__fala", textContent: b.draft.fala }));
     $(".blk__dur", el).textContent = fmt(M.len(b));
@@ -601,13 +603,15 @@ function renderSide(gs) {
     else if (vs.length && PROJETO) actions += btn("filled", 'data-export="one"', "download", "Baixar");
   } else if (sel.type === "block") {
     const b = project.blocks.find((b) => b.id === sel.id);
-    title = b.draft ? "Rascunho" : { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
+    title = b.draft ? "Rascunho" : b.code ? "Animação" : { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
     h += field("f-name", "Nome", b.name);
     // O lugar de um vídeo que ainda não existe: a fala vai para o modelo, e o vídeo pronto entra aqui.
     // O mesmo campo de texto que cresce da página do modelo.
     if (b.draft)
       h += `<div class="text-field"><textarea class="text-field__input" id="f-fala" rows="1" maxlength="${MAX_FALA}" placeholder=" " aria-describedby="f-fala-ajuda">${esc(b.draft.fala)}</textarea><label class="text-field__label" for="f-fala">Fala</label><p class="text-field__supporting" id="f-fala-ajuda"><span>Gere o vídeo com esta fala.</span><span id="f-fala-n">${b.draft.fala.length}/${MAX_FALA}</span></p></div>`;
-    if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.IMAGE_MAX}"`);
+    if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.maxEnd(b)}"`);
+    // A animação em código vem do agente; a prévia já mostra, a exportação ainda não.
+    if (b.code) h += `<p class="sheet-hint">Esta animação aparece na prévia, mas ainda não sai na exportação.</p>`;
     else
       h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
     if (b.kind === "video" && !M.linked(b))

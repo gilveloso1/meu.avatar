@@ -121,6 +121,7 @@ export const ERROS = {
   exportarArquivo: erro("Um arquivo do projeto não está disponível.", "Troque o bloco e exporte de novo."),
   exportarFalhou: erro("Não foi possível exportar os vídeos.", "Toque em Exportar para tentar de novo."),
   exportarRascunho: erro("Este vídeo ainda tem rascunhos.", "Troque cada rascunho pelo vídeo e exporte de novo."),
+  exportarAnimacao: erro("As animações ainda não saem na exportação.", "Tire as animações para exportar agora."),
   exportarIndisponivel: erro("Exportação indisponível agora.", "Tente mais tarde."),
   exportarExpirou: erro("Este vídeo não está mais disponível.", "Toque em Exportar para gerar de novo."),
 

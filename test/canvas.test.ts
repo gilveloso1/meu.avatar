@@ -144,6 +144,28 @@ describe("projetos do canvas", () => {
 
   it("as outras páginas continuam sem data: nas imagens", async () => {
     expect((await get("/", await cookie())).headers.get("content-security-policy")).toContain("img-src 'self' blob:;");
+    expect((await get("/", await cookie())).headers.get("content-security-policy")).not.toContain("frame-src");
+  });
+
+  it("a animação em código roda numa página à parte, que só o canvas põe num quadro e não fala com a rede", async () => {
+    const admin = await cookie();
+    const id = await novo(admin);
+    const canvas = await get(`/canvas/${id}`, admin);
+    expect(canvas.headers.get("content-security-policy")).toContain("frame-src 'self'");
+    const src = config(await canvas.text()).animacao as string;
+    expect(src).toMatch(/^\/canvas\/animacao\?v=\d+$/);
+    const res = await get(src, admin);
+    expect(res.status).toBe(200);
+    const csp = res.headers.get("content-security-policy")!;
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("frame-ancestors 'self'");
+    expect(csp).not.toContain("connect-src");
+    expect(res.headers.get("x-frame-options")).toBeNull();
+    const page = await res.text();
+    expect(page).toContain("GSAP 3.15.0");
+    expect(page).not.toContain("/*GSAP*/");
+    // Como o canvas: só o administrador.
+    expect((await get(src, await memberCookie())).status).toBe(404);
   });
 });
 

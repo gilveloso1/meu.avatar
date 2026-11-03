@@ -3,7 +3,7 @@
  * vídeo depois daquele"), não a geometria do canvas. Tudo passa pelo mesmo modelo da tela
  * (src/canvas/modelo.js), com as mesmas regras. Um lote vale inteiro ou não vale nada.
  */
-import { arrange, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, linkFirst, linkProblem, MIN_LEN, newId, nextTone, PX, relay, removeItems, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
+import { arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, linkFirst, linkProblem, maxEnd, MIN_LEN, newId, nextTone, PX, relay, removeItems, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
 import type { Block, CanvasProject, Frame, FrameKey, Group } from "./canvas/modelo.js";
 import { PAUSES, planParts, RULES } from "./quickedit";
 
@@ -19,7 +19,7 @@ export class ComandoError extends Error {
 }
 
 /** Os tipos que `aplicar` conhece; o teste confere que cada um tem o seu caso. */
-export const TIPOS = ["adicionar", "rascunho", "renomear", "trocar", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "remover", "som", "final", "organizar"];
+export const TIPOS = ["adicionar", "rascunho", "editarCodigo", "renomear", "trocar", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "remover", "som", "final", "organizar"];
 
 /** Quantas letras trocar, pôr ou tirar para ir de uma palavra à outra. */
 function distancia(a: string, b: string): number {
@@ -68,11 +68,14 @@ export interface Contexto {
 
 export const MAX_COMANDOS = 100;
 const MAX_FALA = 2000;
+/** O código de uma animação: as cenas do caso real têm 3 a 5 mil caracteres; o projeto inteiro vai até 1 MB. */
+export const MAX_CODIGO = 100_000;
+const MAX_TROCAS = 50;
 
-/** O nome do rascunho novo, como o dos blocos: Texto 1, Texto 2... depois do maior que já existe. */
-function proximoTexto(project: CanvasProject): string {
-  const usados = project.blocks.filter((b) => b.draft).map((b) => Number(/^Texto (\d+)$/.exec(b.name)?.[1] ?? 0));
-  return `Texto ${Math.max(0, ...usados) + 1}`;
+/** O nome do bloco sem arquivo, como o dos blocos: Texto 1 (rascunho), Animação 1... depois do maior que já existe. */
+function proximoNome(project: CanvasProject, prefixo: string, dele: (b: Block) => unknown): string {
+  const usados = project.blocks.filter(dele).map((b) => Number(new RegExp(`^${prefixo} (\\d+)$`).exec(b.name)?.[1] ?? 0));
+  return `${prefixo} ${Math.max(0, ...usados) + 1}`;
 }
 /** Entre um bloco solto e o que já está no canvas: longe, para não virarem um grupo só. */
 const LINHA = 160;
@@ -92,6 +95,17 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
     const antesDeCriar = criados.length;
     switch (c.tipo) {
       case "adicionar": {
+        if (c.html !== undefined) {
+          // A animação em código: guardada como está, roda na prévia e vira vídeo só na exportação.
+          const html = codigo(c.html, falha);
+          const duracao = numero(c.duracao);
+          if (duracao === null || duracao < MIN_LEN || duracao > CODE_MAX) throw falha("duracao_invalida");
+          const nome = texto(c.nome) ?? proximoNome(project, "Animação", (b) => b.code);
+          const novo = adicionar(project, { ...c, inicio: 0, fim: duracao }, { src: "", kind: "image", dur: CODE_MAX, name: nome }, falha);
+          project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, code: { html } } : b)) };
+          criados.push(novo.id);
+          break;
+        }
         const f = await ctx.fonte(c);
         if (!f) throw falha("arquivo_indisponivel");
         const novo = adicionar(project, c, f, falha);
@@ -105,12 +119,15 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
         const duracao = numero(c.duracao);
         if (!fala) throw falha("fala_invalida");
         if (duracao === null || duracao < MIN_LEN || duracao > IMAGE_MAX) throw falha("duracao_invalida");
-        const nome = texto(c.nome) ?? proximoTexto(project);
+        const nome = texto(c.nome) ?? proximoNome(project, "Texto", (b) => b.draft);
         const novo = adicionar(project, { ...c, inicio: 0, fim: duracao }, { src: "", kind: "image", dur: null, name: nome }, falha);
         project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, draft: { fala } } : b)) };
         criados.push(novo.id);
         break;
       }
+      case "editarCodigo":
+        project = editarCodigo(project, c, falha);
+        break;
       case "trocar":
         project = await trocar(project, c, ctx, falha);
         break;
@@ -230,7 +247,8 @@ function comRotulos(c: Comando, rotulos: Map<string, string>, falha: (c: string)
 
 /** Bloco novo: depois de outro, sobre um grupo (imagem por cima ou som embaixo) ou numa linha nova. */
 function adicionar(project: CanvasProject, c: Comando, f: Fonte, falha: (c: string) => ComandoError): { project: CanvasProject; id: string } {
-  const dur = f.kind === "image" ? IMAGE_MAX : (numero(c.dur) ?? f.dur);
+  // A imagem vai até IMAGE_MAX; a animação diz até onde vai.
+  const dur = f.kind === "image" ? (f.dur ?? IMAGE_MAX) : (numero(c.dur) ?? f.dur);
   if (dur === null || dur <= 0) throw falha("duracao_obrigatoria");
   const inicio = numero(c.inicio) ?? 0;
   const fim = numero(c.fim) ?? (f.kind === "image" ? IMAGEM_PADRAO : dur);
@@ -300,7 +318,7 @@ async function trocar(project: CanvasProject, c: Comando, ctx: Contexto, falha: 
   const fim = numero(c.fim) ?? (f.kind === "image" ? Math.min(b.tout - b.tin, IMAGE_MAX) : dur);
   if (inicio < 0 || fim <= inicio || fim > dur || fim - inicio < MIN_LEN || (f.kind === "image" && inicio !== 0)) throw falha("corte_invalido");
   return alterar(project, b.id, (o) => {
-    const { draft, frame, audio, ...resto } = o;
+    const { draft, code, frame, audio, ...resto } = o;
     return {
       ...resto,
       kind: f.kind,
@@ -311,10 +329,42 @@ async function trocar(project: CanvasProject, c: Comando, ctx: Contexto, falha: 
       name: texto(c.nome) ?? f.name,
       tone: nextTone(project, f.kind, f.src),
       // O enquadramento de um rascunho não diz nada sobre o vídeo; o de um arquivo trocado, sim.
-      ...(frame && !draft ? { frame } : {}),
+      ...(frame && !draft && !code ? { frame } : {}),
       ...(f.kind === "video" ? { audio: c.semSom === true || f.som === false ? "none" : "linked" } : {}),
     };
   });
+}
+
+/** O código da animação, conferido: texto, não vazio e no limite. */
+function codigo(v: unknown, falha: (c: string, extra?: Record<string, unknown>) => ComandoError): string {
+  if (typeof v !== "string" || !v.trim()) throw falha("codigo_invalido");
+  if (v.length > MAX_CODIGO) throw falha("codigo_grande_demais", { maximo: MAX_CODIGO });
+  return v;
+}
+
+/**
+ * Troca o código de uma animação: inteiro (html) ou só trechos (trocas: [{de, para}]), para o
+ * agente não reenviar a cena toda. Cada de tem de aparecer uma vez só, como está.
+ */
+function editarCodigo(project: CanvasProject, c: Comando, falha: (c: string, extra?: Record<string, unknown>) => ComandoError): CanvasProject {
+  const b = project.blocks.find((o) => o.id === c.bloco);
+  if (!b) throw falha("bloco_inexistente");
+  if (!b.code) throw falha("sem_codigo");
+  if ((c.html === undefined) === (c.trocas === undefined)) throw falha("codigo_invalido");
+  let html = b.code.html;
+  if (c.html !== undefined) html = codigo(c.html, falha);
+  else {
+    if (!Array.isArray(c.trocas) || !c.trocas.length || c.trocas.length > MAX_TROCAS) throw falha("trocas_invalidas");
+    for (const [i, t] of (c.trocas as unknown[]).entries()) {
+      const { de, para } = (t ?? {}) as Record<string, unknown>;
+      if (typeof de !== "string" || !de || typeof para !== "string") throw falha("trocas_invalidas", { troca: i });
+      const vezes = html.split(de).length - 1;
+      if (vezes !== 1) throw falha("trecho_nao_unico", { troca: i, vezes });
+      html = html.replace(de, () => para);
+    }
+    html = codigo(html, falha);
+  }
+  return { ...project, blocks: project.blocks.map((o) => (o === b ? { ...o, code: { html } } : o)) };
 }
 
 /** O grupo em que o bloco faz parte da sequência (e não da cobertura ou do som). */
@@ -413,7 +463,8 @@ const MAX_ZOOM = 8;
 async function enquadrar(project: CanvasProject, c: Comando, ctx: Contexto, falha: (c: string) => ComandoError): Promise<CanvasProject> {
   const b = project.blocks.find((o) => o.id === c.bloco);
   if (!b) throw falha("bloco_inexistente");
-  if (b.kind === "audio") throw falha("enquadramento_invalido");
+  // A animação já se desenha no tamanho do Final: o enquadramento é o do próprio código.
+  if (b.kind === "audio" || b.code) throw falha("enquadramento_invalido");
   const frame: Frame = c.limpar === true ? {} : { ...b.frame };
   if (c.encaixe !== undefined) {
     const fit = ENCAIXES[c.encaixe as string];
@@ -460,7 +511,7 @@ function cortar(project: CanvasProject, c: Comando, falha: (c: string) => Comand
   if (!b) throw falha("bloco_inexistente");
   const inicio = c.inicio === undefined ? b.tin : numero(c.inicio);
   const fim = c.fim === undefined ? b.tout : numero(c.fim);
-  const maximo = b.kind === "image" ? IMAGE_MAX : b.dur;
+  const maximo = maxEnd(b);
   if (inicio === null || fim === null || inicio < 0 || fim <= inicio || fim > maximo || (b.kind === "image" && inicio !== 0)) throw falha("corte_invalido");
   if (fim - inicio < MIN_LEN) throw falha("corte_invalido");
   return alterar(project, b.id, (o) => ({ ...o, tin: inicio, tout: fim }));

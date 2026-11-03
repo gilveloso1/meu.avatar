@@ -45,7 +45,7 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Animação como código* (desenho de 02/11/2026, ainda não começado): o projeto guarda o
+   - *Animação como código* (desenho de 02/11/2026; o PR 1, o bloco com a prévia, está feito): o projeto guarda o
      código da animação, não o WebM pronto, e só renderiza o vídeo na exportação. Cobre a camada
      que acompanha o bloco, a prévia sem salvar, ler o HTML para editar e é a base dos templates
      com parâmetros. Desenho abaixo, em "Animação como código".
@@ -103,14 +103,14 @@ HyperFrames e o GSAP), sem pipeline novo.
   pode diferir um pouco do da imagem); o código do agente roda no navegador de quem abre o canvas,
   por isso o `sandbox`; a exportação ganha um passo e espera os renders.
 
-PRs, nesta ordem, um de cada vez:
+Feito: o bloco de código no modelo e na API (`adicionar {html, duracao}`, `editarCodigo` e
+`incluir: codigo`), com a prévia no canvas ([canvas.md](canvas.md)). Faltam, nesta ordem, um PR de cada vez:
 
-1. Bloco de código no modelo e na API (`adicionar {html, duracao}`, ler e trocar o código), com a
-   prévia no canvas.
-2. Quadros do bloco de código para o agente, pelo contêiner de render.
-3. Exportação: render dos blocos de código com cache pelo hash.
-4. Legenda como bloco de código; o `renderizar_html` antigo fica para quem precisa do arquivo.
-5. Parâmetros no bloco, base dos templates de layout.
+1. Quadros do bloco de código para o agente, pelo contêiner de render.
+2. Exportação: render dos blocos de código com cache pelo hash (até lá, a exportação recusa
+   projeto com animação, `ERROS.exportarAnimacao`).
+3. Legenda como bloco de código; o `renderizar_html` antigo fica para quem precisa do arquivo.
+4. Parâmetros no bloco, base dos templates de layout.
 
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 

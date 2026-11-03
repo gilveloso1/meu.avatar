@@ -173,6 +173,8 @@ export class Exports {
       console.error("Projeto ilegível na exportação", project.id, err);
     }
     if (!work?.versoes.length) throw new InputError(ERROS.exportarSemVersao);
+    // A animação em código vira vídeo na exportação, no passo que ainda vem (docs/backlog.md).
+    if (work.trechos.some((t) => t.itens.some((i) => i.codigo !== undefined))) throw new InputError(ERROS.exportarAnimacao);
     // O rascunho não tem arquivo: marca o lugar de um vídeo que ainda não foi feito.
     if (work.trechos.some((t) => t.itens.some((i) => !i.src))) throw new InputError(ERROS.exportarRascunho);
     const id = crypto.randomUUID();

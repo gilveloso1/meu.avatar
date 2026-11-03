@@ -5,6 +5,8 @@
  * Projeto: { blocks, finals, edges }
  *   bloco: { id, kind: "video" | "image" | "audio", name, src, dur, tin, tout,
  *     draft? ({ fala }: o rascunho, uma imagem sem arquivo no lugar de um vídeo que falta),
+ *     code? ({ html }: a animação em código, uma imagem sem arquivo que o navegador roda na
+ *            prévia; o tempo do bloco é o da linha do tempo `tl` dela, até CODE_MAX),
  *            x, y, mute, vol, tone, audio, speed, frame }   (dur: duração do
  *            arquivo; tin/tout: o corte; tone: 1 a TONES, o tom da cor do tipo;
  *            audio, só no vídeo: "linked" (o som dele numa faixa presa embaixo,
@@ -47,6 +49,8 @@ const LANE_ABOVE = 70;
 const LANE_BELOW = 30;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
+/** A animação em código vai até o que o render faz de uma vez (src/render.ts, MAX_RENDER_SECONDS). */
+export const CODE_MAX = 60;
 /** Quantas variações cada bloco final tem; é também o que uma exportação monta de uma vez. */
 export const MAX_VERSOES = 48;
 export const TONES = 6;
@@ -81,6 +85,8 @@ export const SPEED_MAX = 4;
 /** O tempo do bloco na tela: o trecho do arquivo, na velocidade dele. */
 export const len = (b) => (b.tout - b.tin) / (b.speed ?? 1);
 export const width = (b) => len(b) * PX;
+/** Até onde o bloco pode ir no arquivo: a imagem fica até IMAGE_MAX, a animação até a duração dela. */
+export const maxEnd = (b) => (b.kind === "image" && !b.code ? IMAGE_MAX : b.dur);
 export const linked = (b) => b.kind === "video" && (b.audio ?? "linked") === "linked";
 export const height = (b) => (visual(b) ? VIS_H : AUD_H);
 /** O som que o bloco toca: o próprio áudio, ou o do vídeo enquanto vinculado. */
@@ -352,6 +358,7 @@ export function exportWork(project, finalId, pick) {
           corte: +i.tin.toFixed(3),
           volume: sounds(i.block) ? i.block.vol : 0,
           velocidade: +i.speed.toFixed(4),
+          ...(i.block.code ? { codigo: i.block.code.html } : {}),
           ...(i.block.frame && i.block.kind !== "audio" ? { quadro: { ...i.block.frame, ...(i.block.frame.keys ? { keys: i.block.frame.keys.map((k) => ({ ...k, t: k.t / i.rate })) } : {}) } } : {}),
         })),
       });
@@ -596,7 +603,7 @@ export function trim(project, id, side, timelineSeconds) {
   const seconds = timelineSeconds * (b.speed ?? 1);
   const g = groupIndex(groups(p)).get(id);
   const oldEnd = b.x + width(b);
-  const max = b.kind === "image" ? IMAGE_MAX : b.dur;
+  const max = maxEnd(b);
   // Na mesma trilha, quem vem encostado depois acompanha, para não abrir buraco.
   const track = g ? members(g).filter((o) => o.id !== id && near(o.y, b.y)) : [];
   const followed = track.some((o) => near(o.x, oldEnd));
