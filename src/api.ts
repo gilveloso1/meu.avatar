@@ -46,6 +46,23 @@ export function bearerToken(request: Request): string | null {
   return /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") ?? "")?.[1] ?? null;
 }
 
+/** O que o projeto significa: grupos, Finais com as variações e avisos. É a resposta dos comandos. */
+function resumo(data: CanvasProject) {
+  const gs = groups(data);
+  return {
+    grupos: gs.map((g) => ({ id: g.id, nome: g.label, duracao: g.dur, blocos: members(g).map((b) => b.id) })),
+    finais: data.finals.map((f) => {
+      const { resolution, format } = output(f);
+      const vs = versions(data, f.id);
+      return { id: f.id, resolucao: resolution, formato: format, variacoes: vs.map((v, i) => ({ nome: versionName(i), grupos: v.map((g) => g.id), duracao: v.reduce((t, g) => t + g.dur, 0) / finalRate(f) })) };
+    }),
+    avisos: [
+      ...gs.filter((g) => g.blocks.length).flatMap((g) => baseGaps(g).map(([de, ate]) => ({ tipo: "sem_video_de_base", grupo: g.id, de, ate, segundos: +(ate! - de!).toFixed(3) }))),
+      ...data.blocks.filter((b) => b.draft).map((b) => ({ tipo: "rascunho", bloco: b.id, fala: b.draft!.fala, segundos: +(b.tout - b.tin).toFixed(3) })),
+    ],
+  };
+}
+
 export class Api {
   constructor(
     private readonly db: Db,
@@ -103,27 +120,17 @@ export class Api {
     return Response.json(await this.view(project), { status: 201 });
   }
 
-  /** O projeto salvo, com o que ele significa: grupos, Finais e variações. */
+  /** O projeto salvo, com o que ele significa e, no fim, os arquivos e o canvas inteiro. */
   private async view(project: Project) {
     const data = JSON.parse(project.data) as CanvasProject;
-    const gs = groups(data);
     const files = await this.db.projectFiles(project.id);
     return {
       id: project.id,
       nome: project.name,
       revisao: project.revision,
       atualizado: project.updated_at,
-      grupos: gs.map((g) => ({ id: g.id, nome: g.label, duracao: g.dur, blocos: members(g).map((b) => b.id) })),
-      finais: data.finals.map((f) => {
-        const { resolution, format } = output(f);
-        const vs = versions(data, f.id);
-        return { id: f.id, resolucao: resolution, formato: format, variacoes: vs.map((v, i) => ({ nome: versionName(i), grupos: v.map((g) => g.id), duracao: v.reduce((t, g) => t + g.dur, 0) / finalRate(f) })) };
-      }),
+      ...resumo(data),
       arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })),
-      avisos: [
-        ...gs.filter((g) => g.blocks.length).flatMap((g) => baseGaps(g).map(([de, ate]) => ({ tipo: "sem_video_de_base", grupo: g.id, de, ate, segundos: +(ate! - de!).toFixed(3) }))),
-        ...data.blocks.filter((b) => b.draft).map((b) => ({ tipo: "rascunho", bloco: b.id, fala: b.draft!.fala, segundos: +(b.tout - b.tin).toFixed(3) })),
-      ],
       canvas: data,
     };
   }
@@ -215,7 +222,8 @@ export class Api {
       if (text.length > MAX_BYTES) return falha(413, "projeto_grande_demais");
       const revision = await this.db.saveProject(project.id, { data: text }, body.revisao);
       if (revision === null) return falha(409, "conflito");
-      return Response.json({ criados, ...(await this.view({ ...project, data: text, revision })) });
+      // Só o que o lote mudou: os arquivos e o canvas inteiro ficam no ver_projeto (o maior gasto do agente).
+      return Response.json({ revisao: revision, criados, ...resumo(data) });
     } catch (err) {
       if (err instanceof ComandoError) return falha(400, err.codigo, { comando: err.indice, ...err.extra });
       throw err;

@@ -60,7 +60,7 @@ const FERRAMENTAS = [
   { name: "ver_projeto", description: "Revisão, grupos, Finais com as variações, arquivos, avisos e o canvas do projeto.", inputSchema: objeto({ projeto }, ["projeto"]) },
   {
     name: "editar_projeto",
-    description: "Aplica um lote de comandos sobre uma revisão. A tela de quem estiver com o projeto aberto acompanha sozinha. A resposta traz o projeto, com os avisos.",
+    description: "Aplica um lote de comandos sobre uma revisão. A tela de quem estiver com o projeto aberto acompanha sozinha. A resposta é o resumo: revisão, ids criados, grupos, Finais com as variações e avisos; os arquivos e o canvas ficam no ver_projeto.",
     inputSchema: objeto({ projeto, revisao: { type: "integer", description: "A revisão lida em ver_projeto." }, comandos: { type: "array", items: { type: "object" }, description: COMANDOS } }, ["projeto", "revisao", "comandos"]),
   },
   {
