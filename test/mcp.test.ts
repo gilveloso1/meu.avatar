@@ -166,7 +166,7 @@ describe("ferramentas", () => {
     await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", video: VIDEO }] });
     const r = await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "organizar" }] });
     expect(r.isError).toBe(true);
-    expect(dados(r)).toEqual({ erro: "conflito", revisao: revisao + 1 });
+    expect(dados(r)).toMatchObject({ erro: "conflito", revisao: revisao + 1, grupos: [{ blocos: [{ tipo: "video" }] }] });
   });
 
   it("ver_quadros devolve imagem, e ver_silencios, os silêncios", async () => {

@@ -125,7 +125,10 @@ recusado. Em `comando_desconhecido`, `sugestao` traz o tipo com o nome mais pare
 (`troca` → `trocar`) ou, se nenhum chega perto, `tipos` traz a lista. Quando o contêiner não responde (subindo, indo dormir ou ocupado), o site tenta de novo
 sozinho duas vezes; se ainda falhar, `503 conteiner_falhou` em quadros, silêncios, transcrição,
 HTML e legenda: tente de novo em instantes. Chamadas em paralelo esperam a vez no contêiner. Em
-`quadros`, instante depois do fim mostra o último quadro. Em 409, `revisao` traz a atual: leia o projeto e refaça o lote.
+`quadros`, instante depois do fim mostra o último quadro. Em 409 (`conflito`: outra pessoa, como o canvas, salvou antes), a resposta traz o projeto como
+está agora, igual ao resumo do `ver_projeto`, com a `revisao` nova: compare com o que você tinha e
+refaça o lote, sem ler o projeto de novo. O que cada um mudou, peça a peça, pede o histórico de
+versões (item 8 do backlog).
 
 ## Comandos
 

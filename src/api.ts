@@ -23,6 +23,12 @@ const MAX_BYTES = 1024 * 1024;
 /** Ler o MP4 inteiro para saber a duração só vale até aqui; acima, fica a duração pedida. */
 const MAX_LEITURA = 64 * 1024 * 1024;
 const MAX_QUADROS = 12;
+/**
+ * Outra pessoa (o canvas) salvou antes: vai o resumo do projeto como está agora, na revisão nova.
+ * O agente compara com o que já tem e refaz o lote sem ler o projeto de novo.
+ */
+const conflito = (project: Project) => falha(409, "conflito", { ...resumo(JSON.parse(project.data) as CanvasProject), revisao: project.revision });
+
 const PAGINA_VIDEOS = 20;
 const MAX_PAGINA_VIDEOS = 100;
 
@@ -254,7 +260,7 @@ export class Api {
     const body = await json(request);
     if (!Array.isArray(body?.comandos) || !body.comandos.length || body.comandos.length > MAX_COMANDOS) return falha(400, "comandos_invalidos");
     if (typeof body.revisao !== "number") return falha(400, "revisao_obrigatoria");
-    if (body.revisao !== project.revision) return falha(409, "conflito", { revisao: project.revision });
+    if (body.revisao !== project.revision) return conflito(project);
     try {
       const memo = new Map<string, { duracao: number; silencios: number[][]; som: boolean }>();
       const { project: data, criados } = await aplicar(JSON.parse(project.data) as CanvasProject, body.comandos as Record<string, unknown>[], {
@@ -268,7 +274,10 @@ export class Api {
       const text = JSON.stringify(data);
       if (text.length > MAX_BYTES) return falha(413, "projeto_grande_demais");
       const revision = await this.db.saveProject(project.id, { data: text }, body.revisao);
-      if (revision === null) return falha(409, "conflito");
+      if (revision === null) {
+        const atual = await this.db.projectById(project.id);
+        return atual ? conflito(atual) : falha(404, "nao_encontrado");
+      }
       // Só o que o lote mudou: os arquivos e o canvas inteiro ficam no ver_projeto (o maior gasto do agente).
       return Response.json({ revisao: revision, criados, ...resumo(data) });
     } catch (err) {
