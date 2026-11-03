@@ -45,7 +45,6 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Erros*: fonte de emoji na imagem de render.
    - *Respostas menores*: `editar_projeto` resumido (revisão, criados, avisos) e, no conflito, o
      que mudou; `ver_projeto` com filtros e o início de cada bloco no grupo; `listar_videos` com
      data e paginação; remover arquivos sem uso.
@@ -277,6 +276,12 @@ próprio admin, hoje o caminho é apagar a conta no D1 e cadastrar de novo
 (`docs/operacao.md`). Fazer junto com o item 4.
 
 ## Pendências pequenas
+
+- **ffmpeg com versão fixa**: `container/baixar-binarios.sh` e `container/render/baixar.sh` baixam a
+  build `latest` do BtbN (o SHA-256 confere só contra a lista da própria release). Cada deploy numa
+  máquina nova monta a imagem com o ffmpeg do dia: em 02/11/2026 o digest do Exporter mudou sem
+  nada em `container/`. Fixar uma release com data e o SHA-256, como o DeepFilterNet, e a imagem
+  base do Python pelo digest.
 
 - **Canvas**: o "Seus vídeos" da tela só lista vídeos gerados; os ativos de avatar entram pela
   API e aparecem na prévia, mas a tela ainda não tem onde escolhê-los.
