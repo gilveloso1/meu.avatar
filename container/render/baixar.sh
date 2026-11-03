@@ -12,7 +12,7 @@ if sha256sum --version 2>/dev/null | grep -q GNU; then confere() { sha256sum -c 
 if tar --version | grep -q GNU; then CURINGA=--wildcards; else CURINGA=; fi
 
 # ffmpeg: a build do fim de outubro de 2026 do BtbN, com o SHA-256 fixo. A "latest" mudava a cada
-# deploy numa máquina nova (o digest da imagem trocava sem nada mudar aqui); a do fim de cada mês o
+# deploy numa máquina nova (o ffmpeg trocava sem nada mudar aqui); a do fim de cada mês o
 # BtbN guarda, as diárias somem em umas duas semanas. Trocar de versão é mudar as três linhas.
 FFMPEG_RELEASE=autobuild-2026-10-31-12-59
 FFMPEG=ffmpeg-N-128227-g4811625b5f-linux64-gpl.tar.xz
