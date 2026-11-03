@@ -56,7 +56,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 
 | Rota | O que faz |
 |---|---|
-| `GET /api/v1/videos?q=` | Vídeos prontos que a conta pode usar |
+| `GET /api/v1/videos?q=&desde=&ate=&limite=&continuar=` | Vídeos prontos que a conta pode usar, do mais novo ao mais antigo, 20 por vez (`limite` até 100). `desde` e `ate` são datas (`2026-11-02`, UTC; o dia do `ate` vale inteiro). Com mais vídeos, a resposta traz `continuar`, que vai no pedido seguinte |
 | `GET /api/v1/avatares?q=` | Avatares da conta com os ativos: `id`, `nome`, `tipo` (`imagem`, `video`, `audio`), `origem` (`gerado`, `enviado`), `foto`, `voz` e `src` |
 | `GET /api/v1/projetos?q=` | Projetos da conta |
 | `POST /api/v1/projetos` `{nome}` | Cria um projeto |

@@ -54,7 +54,17 @@ const projeto = texto("Id do projeto.");
 const src = texto('Endereço do arquivo: "/videos/<id>.mp4" de listar_videos, o src de um ativo de listar_avatares, um arquivo de ver_projeto (incluir: arquivos) ou o href de uma exportação pronta.');
 
 const FERRAMENTAS = [
-  { name: "listar_videos", description: "Vídeos prontos que podem entrar num projeto, com a fala e a duração.", inputSchema: objeto({ busca: texto("Parte da fala.") }) },
+  {
+    name: "listar_videos",
+    description: "Vídeos prontos que podem entrar num projeto, com a fala, a duração e a data, do mais novo ao mais antigo, 20 por vez. Filtre pela fala e pela data; continuar traz os próximos.",
+    inputSchema: objeto({
+      busca: texto("Parte da fala."),
+      desde: texto('Data, como "2026-11-02" (UTC): só os feitos nesse dia ou depois.'),
+      ate: texto('Data, como "2026-11-02" (UTC): só os feitos até o fim desse dia.'),
+      limite: { type: "integer", description: "Quantos por vez, de 1 a 100; sem isso, 20." },
+      continuar: texto("O continuar da resposta anterior, para a página seguinte."),
+    }),
+  },
   { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   { name: "listar_projetos", description: "Projetos da conta, o editado por último primeiro.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   { name: "criar_projeto", description: "Cria um projeto vazio.", inputSchema: objeto({ nome: texto("Nome do projeto.") }, ["nome"]) },
@@ -143,7 +153,7 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
   const site = `/projetos/${seguro(a.projeto)}`;
   switch (nome) {
     case "listar_videos":
-      return chama("GET", `/api/v1/videos?q=${seguro(a.busca ?? "")}`);
+      return chama("GET", `/api/v1/videos?${new URLSearchParams(Object.entries({ q: a.busca, desde: a.desde, ate: a.ate, limite: a.limite, continuar: a.continuar }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "listar_avatares":
       return chama("GET", `/api/v1/avatares?q=${seguro(a.busca ?? "")}`);
     case "listar_projetos":

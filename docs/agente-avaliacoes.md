@@ -54,6 +54,7 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
 - O raciocínio de layout e de tempos: coordenadas do SVG, posições das moedas, a matemática do
   velocímetro e os `em` acumulados.
 - `listar_videos` sem filtro, que devolveu o histórico inteiro da conta.
+  (Agora vem 20 por vez, com filtro de data e `continuar`.)
 
 ### 4. Ferramentas que precisam de ajuste
 

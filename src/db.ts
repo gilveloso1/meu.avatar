@@ -268,6 +268,30 @@ export class Db {
     ).results;
   }
 
+  /**
+   * Os vídeos prontos (com arquivo) das estruturas, do mais novo ao mais antigo, uma página por vez.
+   * `depois` é o último da página anterior (criado e id): a página seguinte começa logo depois dele.
+   */
+  async readyVideos(structures: string[], f: { q?: string; desde?: string; ate?: string; depois?: { criado: string; id: string }; limite: number }): Promise<Video[]> {
+    if (!structures.length) return [];
+    const where = [`structure IN (${structures.map(() => "?").join(", ")})`, "status = 'completed'", "video_key IS NOT NULL", "prompt LIKE ? ESCAPE '\\'"];
+    const binds: (string | number)[] = [...structures, `%${(f.q ?? "").replace(/[\\%_]/g, (c) => `\\${c}`)}%`];
+    if (f.desde) {
+      where.push("created_at >= ?");
+      binds.push(f.desde);
+    }
+    if (f.ate) {
+      where.push("created_at < ?");
+      binds.push(f.ate);
+    }
+    if (f.depois) {
+      where.push("(created_at < ? OR (created_at = ? AND id < ?))");
+      binds.push(f.depois.criado, f.depois.criado, f.depois.id);
+    }
+    return (await this.d1.prepare(`SELECT * FROM videos WHERE ${where.join(" AND ")} ORDER BY created_at DESC, id DESC LIMIT ?`).bind(...binds, f.limite).all<Video>()).results;
+  }
+
+
   /** Quantos vídeos cada estrutura tem. */
   /** Um vídeo pronto (e com o áudio já tratado, se for o caso) que ainda não teve o rosto procurado. */
   async nextWithoutFace(): Promise<Video | null> {

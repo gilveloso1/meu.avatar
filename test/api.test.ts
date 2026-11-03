@@ -108,6 +108,46 @@ describe("leitura", () => {
   });
 });
 
+describe("listar vídeos", () => {
+  type Lista = { videos: { id: string; criado: string }[]; continuar?: string };
+  const lista = async (q = "") => (await api(`/api/v1/videos${q}`, admin)).json<Lista>();
+  /** Cinco vídeos prontos, um por dia, de 1 a 5 de outubro (os do beforeEach são de hoje). */
+  async function porDia() {
+    for (let d = 1; d <= 5; d++) {
+      const quando = `2026-10-0${d}T12:00:00.000Z`;
+      await env.DB.prepare("INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES (?, 'completed', ?, 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)")
+        .bind(`dia-${d}`, `Fala do dia ${d}`, `videos/dia-${d}.mp4`, quando, quando)
+        .run();
+    }
+  }
+
+  it("página por página, do mais novo ao mais antigo, sem repetir nem pular", async () => {
+    await porDia();
+    const vistos: string[] = [];
+    let r = await lista("?limite=3");
+    for (let i = 0; i < 5 && r; i++) {
+      vistos.push(...r.videos.map((v) => v.id));
+      r = r.continuar ? await lista(`?limite=3&continuar=${encodeURIComponent(r.continuar)}`) : (null as unknown as Lista);
+    }
+    expect(vistos.slice(2)).toEqual(["dia-5", "dia-4", "dia-3", "dia-2", "dia-1"]);
+    expect(new Set(vistos).size).toBe(7);
+    expect((await lista()).continuar).toBeUndefined();
+  });
+
+  it("desde e ate pela data, com o dia do ate inteiro", async () => {
+    await porDia();
+    expect((await lista("?desde=2026-10-02&ate=2026-10-04")).videos.map((v) => v.id)).toEqual(["dia-4", "dia-3", "dia-2"]);
+    expect((await lista("?ate=2026-10-01")).videos.map((v) => v.id)).toEqual(["dia-1"]);
+  });
+
+  it("recusa limite, data e continuar errados", async () => {
+    for (const [q, erro] of [["?limite=0", "limite_invalido"], ["?limite=101", "limite_invalido"], ["?desde=ontem", "data_invalida"], ["?continuar=x", "continuar_invalido"]]) {
+      const res = await api(`/api/v1/videos${q}`, admin);
+      expect([res.status, await res.json()]).toEqual([400, { erro }]);
+    }
+  });
+});
+
 describe("comandos", () => {
   it("monta 2 ganchos × 1 corpo e mostra as variações", async () => {
     const { id, revisao } = await novo();
