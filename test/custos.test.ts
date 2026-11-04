@@ -153,7 +153,7 @@ describe("aba Custos com a infraestrutura", () => {
     expect(costs.pedidos).toEqual([7]);
     expect(page).toContain(">OpenRouter<");
     expect(page).toContain("US$ 24,97");
-    expect(page).toContain("US$ 50,00 de US$ 50,00 por semana");
+    expect(page).toContain("US$ 50,00 de 50,00 por semana");
     expect(page).toContain("US$ 35,03");
     expect(page).toContain(">HeyGen<");
     expect(page).toContain("Sem chave no site");

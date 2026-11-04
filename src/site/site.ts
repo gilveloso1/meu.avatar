@@ -481,10 +481,12 @@ ${error ? snackbar(error) : ""}`;
     const period = PANEL_PERIODS.find((p) => p.id === url.searchParams.get("periodo")) ?? PANEL_PERIODS[1]!;
     const since = period.days ? new Date(Date.now() - period.days * 86_400_000).toISOString() : null;
     const activity = tab === "atividade";
+    // A página da lista de falhas (?pagina=), de 1 em diante.
+    const pageNumber = Math.max(1, Math.floor(Number(url.searchParams.get("pagina")) || 1));
     const [stats, external, failures, tokens, alarm] = await Promise.all([
       this.db.panelStats(since),
       tab === "custos" && this.costs ? this.costs.custos(period.days || null) : Promise.resolve(null),
-      activity ? this.db.panelFailures(since) : Promise.resolve([]),
+      activity ? this.db.panelFailures(since, PANEL_PAGE, (pageNumber - 1) * PANEL_PAGE) : Promise.resolve({ items: [], total: 0 }),
       activity ? this.db.panelTokens() : Promise.resolve([]),
       activity ? this.db.alarm<Alarme>(ALARME) : Promise.resolve(null),
     ]);
@@ -498,14 +500,14 @@ ${error ? snackbar(error) : ""}`;
       (p) => `<a class="chip interactive" href="${here}?periodo=${p.id}"${p === period ? ' aria-current="true"' : ""}>${p === period ? '<span class="icon">check</span>' : ""}${esc(p.label)}</a>`,
     ).join("");
     const body = `
-<main class="page" id="conteudo">
+<main class="page page--dash" id="conteudo">
   <nav class="tabs tabs--start" aria-label="Seções do painel">${tabs}</nav>
   <nav class="chip-set library__tools" aria-label="Período">${chips}</nav>
   ${
     tab === "custos"
       ? panelCosts(stats, external, !!this.config.local)
       : activity
-        ? panelActivity(stats, { failures, tokens, alarm, machines, since, local: !!this.config.local, from: `/painel/atividade${query}`, userId: user.id })
+        ? panelActivity(stats, { failures, page: pageNumber, tokens, alarm, machines, since, local: !!this.config.local, from: `/painel/atividade${query}`, userId: user.id })
         : panelOverview(stats, query)
   }
 </main>`;
@@ -1895,8 +1897,8 @@ function panelOverview(s: PanelStats, query: string): string {
 }
 
 /**
- * Custos: os números do período no topo (como na Visão geral), todos os modelos, uma linha cada, e
- * a infraestrutura num mosaico: os contêineres (o card alto) ao lado do OpenRouter e do R2.
+ * Custos: os números do período no topo (como na Visão geral) e dois painéis (docs/layout.md): no
+ * principal, o gasto por modelo e a Cloudflare, listas com barras; no de apoio, os provedores.
  */
 function panelCosts(s: PanelStats, external: CustosExternos | null, local: boolean): string {
   const total = s.models.reduce((sum, m) => sum + m.cost, 0);
@@ -1909,11 +1911,14 @@ function panelCosts(s: PanelStats, external: CustosExternos | null, local: boole
       ${statCard("schedule", "Por minuto", minutes ? money(total / minutes) : "—", `${minutes.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} min prontos`)}
       ${statCard("error", "Vídeos com falha", count(s.videos.failed), "não entram no gasto")}
     </div>
-    <section class="viewer__card" aria-labelledby="card-modelos">
-      <h2 class="qe-result__title" id="card-modelos">Gasto por modelo</h2>
-      ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
-    </section>
-    ${external ? panelInfra(external, s.platforms, local) : ""}
+    ${panes(
+      `<h2 class="dash__section">Gasto por modelo</h2>
+      <section class="viewer__card" aria-label="Gasto por modelo">
+        ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+      </section>
+      ${external ? cloudflareSection(external, local) : ""}`,
+      external ? providersSection(external, s.platforms) : "",
+    )}
   </div>`;
 }
 
@@ -1943,7 +1948,7 @@ function listItem(o: { icon: string; title: string; meta: string[]; end: string;
  */
 function panelActivity(
   s: PanelStats,
-  o: { failures: PanelFailure[]; tokens: PanelToken[]; alarm: Alarme | null; machines: Awaited<ReturnType<MaquinasApi["estados"]>>; since: string | null; local: boolean; from: string; userId: number },
+  o: { failures: { items: PanelFailure[]; total: number }; page: number; tokens: PanelToken[]; alarm: Alarme | null; machines: Awaited<ReturnType<MaquinasApi["estados"]>>; since: string | null; local: boolean; from: string; userId: number },
 ): string {
   const v = s.videos;
   const failed = v.failed + v.audioFailed + v.editFailed + s.projects.exportsFailed;
@@ -1968,7 +1973,7 @@ function panelActivity(
       : o.alarm?.semPainel
         ? ERROS.alarmeSemPainel
         : null;
-  const failures = o.failures.map((f) => {
+  const failures = o.failures.items.map((f) => {
     const kind = FAILURE_KINDS[f.kind];
     // A página do vídeo abre para o administrador; o projeto, só para o dono.
     const href = f.kind === "export" ? (f.user_id === o.userId ? `/canvas/${f.ref}` : undefined) : `/video/${f.ref}?de=${encodeURIComponent(o.from)}`;
@@ -1984,20 +1989,22 @@ function panelActivity(
       ${statCard("key", "Agentes ativos", count(used), `de ${plural(o.tokens.length, "token", "tokens")}`)}
       ${statCard("memory", "Máquinas ligadas", count(on), `de ${o.machines.length} agora`)}
     </div>
-    <h2 class="dash__section">Máquinas agora</h2>
-    <section class="viewer__card" aria-label="Máquinas agora">
-      <ul class="dash__list dash__list--machines">${machines.join("")}</ul>
-      ${alarmNote ? `<p class="qe-result__note">${esc(alarmNote)}</p>` : ""}
-    </section>
-    <h2 class="dash__section">Últimas falhas</h2>
-    <section class="viewer__card" aria-label="Últimas falhas">
-      ${failures.length ? `<ul class="dash__list dash__list--failures">${failures.join("")}</ul>` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
-    </section>
-    <h2 class="dash__section">API e MCP</h2>
-    <section class="viewer__card" aria-label="Tokens de API e MCP">
-      ${tokens.length ? `<ul class="dash__list dash__list--tokens">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
-      <p class="qe-result__note">O último uso é gravado no máximo uma vez por hora.</p>
-    </section>
+    ${panes(
+      `<h2 class="dash__section">Últimas falhas</h2>
+      <section class="viewer__card" aria-label="Últimas falhas">
+        ${failures.length ? `<ul class="dash__list dash__list--failures">${failures.join("")}</ul>${pager(o.failures.total, o.page, o.from)}` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
+      </section>`,
+      `<h2 class="dash__section">Máquinas agora</h2>
+      <section class="viewer__card" aria-label="Máquinas agora">
+        <ul class="dash__list dash__list--machines">${machines.join("")}</ul>
+        ${alarmNote ? `<p class="qe-result__note">${esc(alarmNote)}</p>` : ""}
+      </section>
+      <h2 class="dash__section">API e MCP</h2>
+      <section class="viewer__card" aria-label="Tokens de API e MCP">
+        ${tokens.length ? `<ul class="dash__list dash__list--tokens">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
+        <p class="qe-result__note">O último uso é gravado no máximo uma vez por hora.</p>
+      </section>`,
+    )}
   </div>`;
 }
 
@@ -2026,10 +2033,12 @@ const PROVIDER_STATUS = {
 
 const LIMIT_PERIODS: Record<string, string> = { daily: "por dia", weekly: "por semana", monthly: "por mês" };
 
-/** "US$ 50,00 de US$ 50,00 por semana": o que resta do limite da chave, de quanto e quando volta. */
+/** "US$ 50,00 de 50,00 por semana": o que resta do limite da chave, de quanto e quando volta. */
 function limitValue(l: Limite | null): string {
   if (!l) return "—";
-  return `${money(l.restante)} de ${money(l.valor)}${l.periodo && LIMIT_PERIODS[l.periodo] ? ` ${LIMIT_PERIODS[l.periodo]}` : ""}`;
+  // Sem repetir a moeda: a linha cabe no painel de apoio (docs/layout.md, item 9).
+  const of = l.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${money(l.restante)} de ${of}${l.periodo && LIMIT_PERIODS[l.periodo] ? ` ${LIMIT_PERIODS[l.periodo]}` : ""}`;
 }
 
 function providerValue(v: Valor | null): string {
@@ -2042,8 +2051,8 @@ function providerValue(v: Valor | null): string {
  * API não informa fica "—"), lado a lado como um feed; e a Cloudflare num card só, um serviço por
  * linha, como o gasto por modelo.
  */
-function panelInfra(e: CustosExternos, platforms: PanelStats["platforms"], local: boolean): string {
-  const n1 = (x: number) => x.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+/** Os provedores de vídeo, um card igual para cada, empilhados no painel de apoio. */
+function providersSection(e: CustosExternos, platforms: PanelStats["platforms"]): string {
   const providers = e.provedores.map((p) => {
     const spent = platforms.find((x) => x.platform === p.id);
     return providerCard(p.nome, {
@@ -2057,6 +2066,13 @@ function panelInfra(e: CustosExternos, platforms: PanelStats["platforms"], local
       ],
     });
   });
+  return `<h2 class="dash__section">Provedores de vídeo</h2>
+    <div class="dash__feed">${providers.join("")}</div>`;
+}
+
+/** A Cloudflare num card só: um serviço por linha, como o gasto por modelo, e os totais. */
+function cloudflareSection(e: CustosExternos, local: boolean): string {
+  const n1 = (x: number) => x.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
   const c = e.cloudflare;
   let cloudflare: string;
   if (c === null || c === "falhou") {
@@ -2085,10 +2101,39 @@ function panelInfra(e: CustosExternos, platforms: PanelStats["platforms"], local
       </dl>
       <p class="qe-result__note">Últimos ${c.dias} dias, antes do que o plano inclui.</p>`;
   }
-  return `<h2 class="dash__section">Provedores de vídeo</h2>
-    <div class="dash__feed">${providers.join("")}</div>
-    <h2 class="dash__section">Cloudflare</h2>
+  return `<h2 class="dash__section">Cloudflare</h2>
     <section class="viewer__card" aria-label="Cloudflare">${cloudflare}</section>`;
+}
+
+/** Itens por página nas listas do painel que crescem sem limite (as falhas). */
+const PANEL_PAGE = 15;
+
+/**
+ * A paginação de uma lista, no pé do card (a das tabelas de dados do Material): "16–30 de 65" e as
+ * setas de anterior e próxima, links com ?pagina= sobre o endereço da aba (que já leva o período).
+ */
+function pager(total: number, page: number, from: string): string {
+  if (total <= PANEL_PAGE) return "";
+  const last = Math.ceil(total / PANEL_PAGE);
+  const current = Math.min(page, last);
+  const first = (current - 1) * PANEL_PAGE + 1;
+  const href = (n: number) => `${from}${from.includes("?") ? "&" : "?"}pagina=${n}`;
+  const arrow = (n: number, icon: string, label: string) =>
+    n >= 1 && n <= last
+      ? `<a class="icon-button interactive" href="${href(n)}" aria-label="${label}" title="${label}"><span class="icon">${icon}</span></a>`
+      : `<span class="icon-button" aria-disabled="true" aria-label="${label}"><span class="icon">${icon}</span></span>`;
+  return `<nav class="pager" aria-label="Páginas">
+      <span class="pager__range">${count(first)}–${count(Math.min(current * PANEL_PAGE, total))} de ${count(total)}</span>
+      ${arrow(current - 1, "chevron_left", "Página anterior")}${arrow(current + 1, "chevron_right", "Próxima página")}
+    </nav>`;
+}
+
+/**
+ * Dois painéis (docs/layout.md): o principal com 2/3 e o de apoio com 1/3 a partir de 840 px; abaixo
+ * disso, um embaixo do outro. São colunas independentes: podem terminar em alturas diferentes.
+ */
+function panes(main: string, support: string): string {
+  return `<div class="dash__panes"><div class="dash__pane">${main}</div><div class="dash__pane">${support}</div></div>`;
 }
 
 const SERVICE_ICONS: Record<string, string> = { "Áudio": "graphic_eq", "Exportação": "download", "Animações": "animation", "Armazenamento": "cloud" };

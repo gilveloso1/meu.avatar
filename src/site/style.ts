@@ -440,6 +440,36 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
    Um número herói por tela (display-large); os outros em display-small. */
 .dash { display: flex; flex-direction: column; gap: 8px; }
 .dash__kpis { display: grid; grid-template-columns: 2fr repeat(3, minmax(0, 1fr)); gap: 8px; }
+/* O painel do administrador fica em até 1296 px com as margens (docs/layout.md, item 1): telas
+   maiores ganham margem, não cards maiores. */
+.page.page--dash { max-width: 1296px; }
+/* Dois painéis a partir de 840 px (M3): o principal com 2/3 e o de apoio com 1/3, 24 px entre eles.
+   Cada painel é um contêiner: as listas dentro dele escolhem uma ou duas linhas pela largura dele. */
+.dash__panes { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; gap: 24px; }
+.dash__pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; container-type: inline-size; }
+.dash__pane > .dash__section:first-child { margin-top: 0; }
+@media (max-width: 839px) { .dash__panes { grid-template-columns: minmax(0, 1fr); } }
+/* Layout fixo a partir de 840 px (como a página do vídeo): a página tem a altura da janela e não rola;
+   abas, chips e números ficam parados, e cada painel (ou o mosaico) ocupa o resto e rola por dentro.
+   No celular e no tablet, a página rola inteira. */
+@media (min-width: 840px) {
+  .page.page--dash { flex: none; height: calc(100dvh - var(--bar-height, 72px)); overflow: hidden; padding-bottom: 24px; }
+  .page--dash > .dash { flex: 1; min-height: 0; }
+  .page--dash .dash__panes, .page--dash .dash__mosaic { flex: 1; min-height: 0; }
+  .page--dash .dash__panes { grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .page--dash .dash__pane, .page--dash .dash__mosaic { overflow-y: auto; overscroll-behavior: contain; }
+  .page--dash .dash__mosaic { align-content: start; }
+  /* O título do grupo fica preso no alto do painel enquanto a lista rola. */
+  .page--dash .dash__pane > .dash__section { position: sticky; top: 0; z-index: 1; margin-top: 0; padding: 8px 0; background: var(--md-sys-color-surface); }
+  .page--dash .dash__pane > .dash__section:first-child { padding-top: 0; }
+}
+/* Paginação no pé do card (a das tabelas de dados do Material): o intervalo e as setas, à direita. */
+.pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 -8px -8px 0; }
+.pager__range { margin-right: 12px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.pager .icon-button[aria-disabled="true"] { opacity: 0.38; }
+/* Rótulos das linhas nunca quebram (docs/layout.md, item 9): o valor longo encolhe com reticências. */
+.dash .qe-result__label { flex: none; white-space: nowrap; }
+.dash .qe-result__value { flex: 1; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Mosaico do M3: o card alto ocupa duas linhas da grade, e as bases se alinham pela grade. */
 .dash__mosaic { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
 .dash__tall { grid-row: span 2; }
@@ -487,7 +517,7 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 }
 /* Em Custos, na tela média para cima: uma linha por modelo (nome, barra, vídeos e parte, valor), com
    as colunas alinhadas de cima a baixo; a barra usa a largura que sobra. */
-@media (min-width: 840px) {
+@container (min-width: 600px) {
   .rank--wide { gap: 4px; }
   .rank--wide .rank__item { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) auto 110px; align-items: center; column-gap: 24px; min-height: 48px; }
   .rank--wide .rank__head { display: contents; }
@@ -950,7 +980,8 @@ a.frame { display: block; }
    item é uma grade própria, então nenhuma coluna tem largura "auto"):
    ícone, título, as colunas de dash__meta (display: contents, viram colunas da grade) e o fim. */
 .dash__list .avatar-option { display: grid; grid-template-columns: var(--cols); align-items: center; column-gap: 16px; min-height: 56px; text-decoration: none; }
-.dash__list--failures { --cols: 24px minmax(0, 2fr) 112px minmax(0, 120px) minmax(0, 3fr) 88px; }
+/* O título (a fala) é o mais importante: a maior fração (docs/layout.md, item 7). */
+.dash__list--failures { --cols: 24px minmax(0, 3fr) 104px minmax(0, 96px) minmax(0, 2fr) 88px; }
 .dash__list--tokens { --cols: 24px minmax(0, 1fr) minmax(0, 160px) 160px 136px; }
 .dash__list--machines { --cols: 24px minmax(0, 200px) minmax(0, 1fr) 160px; }
 /* A máquina ligada sem trabalho há muito tempo (a que gasta à toa): ícone e estado na cor de erro. */
@@ -961,9 +992,9 @@ a.frame { display: block; }
 .dash__meta { display: contents; }
 .dash__cell { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .dash__list .avatar-option__end { padding-left: 0; text-align: right; }
-/* Abaixo da tela expandida do M3 (840 px) não cabe numa linha: o título e o fim em cima, as colunas
-   embaixo, separadas por "·". */
-@media (max-width: 839px) {
+/* Painel com menos de 600 px (pela largura dele, não da janela: no painel de apoio a lista é
+   estreita mesmo numa tela larga): o título e o fim em cima, as colunas embaixo, separadas por "·". */
+@container (max-width: 599px) {
   .dash__list .avatar-option { grid-template-columns: 24px minmax(0, 1fr) auto; row-gap: 2px; min-height: 64px; }
   .dash__list .avatar-option > .icon { grid-row: span 2; }
   .dash__meta { display: flex; grid-column: 2 / -1; min-width: 0; }

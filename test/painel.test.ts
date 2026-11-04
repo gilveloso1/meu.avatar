@@ -122,7 +122,8 @@ describe("aba Atividade", () => {
       .bind("d0000000-0000-4000-8000-000000000003", at(24 * 10), at(24 * 10))
       .run();
 
-    const failures = await new Db(env.DB).panelFailures(new Date(now - 7 * 86_400_000).toISOString());
+    const { items: failures, total } = await new Db(env.DB).panelFailures(new Date(now - 7 * 86_400_000).toISOString());
+    expect(total).toBe(3);
     expect(failures.map((f) => [f.kind, f.title])).toEqual([
       ["video", "Fala que falhou"],
       ["audio", "Áudio que falhou"],
@@ -137,6 +138,28 @@ describe("aba Atividade", () => {
     expect(page).toContain(">Sem fala<");
     expect(page).toContain(`href="/video/d0000000-0000-4000-8000-000000000001?de=${encodeURIComponent("/painel/atividade?periodo=7")}"`);
     expect(page).toMatch(/href="\/painel\/atividade\?periodo=7" aria-current="page"/);
+  });
+
+  it("pagina as falhas de 15 em 15, com o intervalo e as setas", async () => {
+    const admin = await cookie();
+    for (let i = 0; i < 20; i++) {
+      const at = new Date(Date.now() - (i + 1) * 60_000).toISOString();
+      await env.DB.prepare(
+        "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES (?, 'failed', ?, 'm', 10, '480p', '9:16', 'wan', 'x', ?, ?)",
+      )
+        .bind(`f0000000-0000-4000-8000-0000000000${String(i).padStart(2, "0")}`, `Falha ${i + 1}`, at, at)
+        .run();
+    }
+    const first = await (await get("/painel/atividade?periodo=7", admin)).text();
+    expect(first).toContain("1–15 de 20");
+    expect(first).toContain(">Falha 15<");
+    expect(first).not.toContain(">Falha 16<");
+    expect(first).toContain('href="/painel/atividade?periodo=7&pagina=2"');
+
+    const second = await (await get("/painel/atividade?periodo=7&pagina=2", admin)).text();
+    expect(second).toContain("16–20 de 20");
+    expect(second).toContain(">Falha 16<");
+    expect(second).not.toContain(">Falha 1<");
   });
 
   it("a exportação que falhou só tem link para o dono do projeto, e os tokens mostram o último uso", async () => {

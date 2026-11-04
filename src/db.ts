@@ -248,14 +248,10 @@ export interface PanelToken {
 export class Db {
   constructor(private readonly d1: D1Database) {}
 
-  /** As falhas mais novas do período: vídeos, áudio, edição rápida e exportações, juntas por data. */
-  async panelFailures(since: string | null, limit = 20): Promise<PanelFailure[]> {
+  /** As falhas do período, das mais novas, uma página: vídeos, áudio, edição rápida e exportações, juntas por data; e o total. */
+  async panelFailures(since: string | null, limit = 15, offset = 0): Promise<{ items: PanelFailure[]; total: number }> {
     const from = since ?? "";
-    return (
-      await this.d1
-        .prepare(
-          `SELECT f.*, u.name AS owner FROM (
-             SELECT 'video' AS kind, id AS ref, user_id, prompt AS title, error AS reason, updated_at AS at FROM videos
+    const all = `SELECT 'video' AS kind, id AS ref, user_id, prompt AS title, error AS reason, updated_at AS at FROM videos
                WHERE status IN ('failed', 'cancelled', 'expired') AND updated_at >= ?1
              UNION ALL
              SELECT 'audio', id, user_id, prompt, audio_error, updated_at FROM videos WHERE audio_status = 'failed' AND updated_at >= ?1
@@ -263,13 +259,12 @@ export class Db {
              SELECT 'edit', id, user_id, prompt, edit_error, updated_at FROM videos WHERE edit_status = 'failed' AND updated_at >= ?1
              UNION ALL
              SELECT 'export', p.id, p.user_id, p.name, e.error, e.created_at FROM exports e JOIN projects p ON p.id = e.project_id
-               WHERE e.status = 'failed' AND e.created_at >= ?1
-           ) f LEFT JOIN users u ON u.id = f.user_id
-           ORDER BY f.at DESC LIMIT ?2`,
-        )
-        .bind(from, limit)
-        .all<PanelFailure>()
-    ).results;
+               WHERE e.status = 'failed' AND e.created_at >= ?1`;
+    const [items, total] = await this.d1.batch([
+      this.d1.prepare(`SELECT f.*, u.name AS owner FROM (${all}) f LEFT JOIN users u ON u.id = f.user_id ORDER BY f.at DESC LIMIT ?2 OFFSET ?3`).bind(from, limit, offset),
+      this.d1.prepare(`SELECT COUNT(*) AS n FROM (${all})`).bind(from),
+    ]);
+    return { items: items!.results as PanelFailure[], total: (total!.results[0] as { n: number }).n };
   }
 
   /** Os tokens de API de todas as contas, os usados por último primeiro. */
