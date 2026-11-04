@@ -21,7 +21,7 @@
 import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { handleMcp } from "../mcp";
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
-import type { AssetKind, Avatar, AvatarAsset, Db, PanelStats, Project, User, Video, VideoStatus } from "../db";
+import type { AssetKind, Avatar, AvatarAsset, Db, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
 import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
@@ -54,7 +54,7 @@ const ICONS = [
   "account_balance_wallet", "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today", "check", "check_circle",
   "checkroom", "chevron_left", "chevron_right", "close", "cloud", "content_copy", "content_cut", "crop_square", "date_range", "delete", "download", "drag_indicator",
   "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
-  "image", "info", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
+  "image", "info", "layers", "link", "link_off", "lock", "key", "logout", "memory", "mic", "monitor_heart", "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
   "person", "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
   "send", "space_dashboard", "speed", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
@@ -145,8 +145,8 @@ export class Site {
     if (!post && path === "/") return this.home(user, url);
     if (!post && path === "/videos") return this.videosPage(user, url);
     // O painel do administrador: para os outros, a página nem existe.
-    const panel = /^\/painel(?:\/(custos))?$/.exec(path);
-    if (!post && panel) return user.role === "admin" ? this.panelPage(user, url, panel[1] === "custos" ? "custos" : "geral") : new Response("não encontrado", { status: 404 });
+    const panel = /^\/painel(?:\/(custos|atividade))?$/.exec(path);
+    if (!post && panel) return user.role === "admin" ? this.panelPage(user, url, (panel[1] as PanelTab | undefined) ?? "geral") : new Response("não encontrado", { status: 404 });
     // Endereços da versão anterior.
     if (!post && path === "/novo") return redirect("/");
     const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
@@ -478,9 +478,13 @@ ${error ? snackbar(error) : ""}`;
   private async panelPage(user: User, url: URL, tab: PanelTab): Promise<Response> {
     const period = PANEL_PERIODS.find((p) => p.id === url.searchParams.get("periodo")) ?? PANEL_PERIODS[1]!;
     const since = period.days ? new Date(Date.now() - period.days * 86_400_000).toISOString() : null;
-    const [stats, external] = await Promise.all([
+    const activity = tab === "atividade";
+    const [stats, external, failures, tokens, alarm] = await Promise.all([
       this.db.panelStats(since),
       tab === "custos" && this.costs ? this.costs.custos(period.days || null) : Promise.resolve(null),
+      activity ? this.db.panelFailures(since) : Promise.resolve([]),
+      activity ? this.db.panelTokens() : Promise.resolve([]),
+      activity ? this.db.alarm<Alarme>(ALARME) : Promise.resolve(null),
     ]);
     const query = `?periodo=${period.id}`;
     const tabs = PANEL_TABS.map(
@@ -494,7 +498,13 @@ ${error ? snackbar(error) : ""}`;
 <main class="page" id="conteudo">
   <nav class="tabs tabs--start" aria-label="Seções do painel">${tabs}</nav>
   <nav class="chip-set library__tools" aria-label="Período">${chips}</nav>
-  ${tab === "custos" ? panelCosts(stats, external, !!this.config.local) : panelOverview(stats, query)}
+  ${
+    tab === "custos"
+      ? panelCosts(stats, external, !!this.config.local)
+      : activity
+        ? panelActivity(stats, { failures, tokens, alarm, since, local: !!this.config.local, from: `/painel/atividade${query}`, userId: user.id })
+        : panelOverview(stats, query)
+  }
 </main>`;
     return html(page(`Painel · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Painel" } }));
   }
@@ -1786,10 +1796,11 @@ function money(n: number): string {
   return `US$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-type PanelTab = "geral" | "custos";
+type PanelTab = "geral" | "custos" | "atividade";
 const PANEL_TABS: { id: PanelTab; href: string; label: string; icon: string }[] = [
   { id: "geral", href: "/painel", label: "Visão geral", icon: "space_dashboard" },
   { id: "custos", href: "/painel/custos", label: "Custos", icon: "payments" },
+  { id: "atividade", href: "/painel/atividade", label: "Atividade", icon: "monitor_heart" },
 ];
 /** Na Visão geral, os modelos que mais gastaram; o resto vira "Outros" (a lista inteira fica em Custos). */
 const PANEL_TOP_MODELS = 5;
@@ -1900,6 +1911,74 @@ function panelCosts(s: PanelStats, external: CustosExternos | null, local: boole
       ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
     </section>
     ${external ? panelInfra(external, s.platforms, local) : ""}
+  </div>`;
+}
+
+const FAILURE_KINDS: Record<PanelFailure["kind"], { icon: string; label: string }> = {
+  video: { icon: "movie", label: "Vídeo" },
+  audio: { icon: "graphic_eq", label: "Áudio" },
+  edit: { icon: "content_cut", label: "Edição rápida" },
+  export: { icon: "download", label: "Exportação" },
+};
+
+/** Um item da lista do M3 (o mesmo da escolha de avatar): ícone, duas linhas e o texto no fim; link quando houver. */
+function listItem(o: { icon: string; headline: string; support: string; end: string; href?: string }): string {
+  const content = `<span class="icon" aria-hidden="true">${o.icon}</span><span class="avatar-option__text"><span class="vrow__headline">${esc(o.headline)}</span><span class="vrow__support" title="${esc(o.support)}">${esc(o.support)}</span></span><span class="avatar-option__end">${esc(o.end)}</span>`;
+  return `<li>${o.href ? `<a class="avatar-option interactive" href="${o.href}">${content}</a>` : `<div class="avatar-option avatar-option--static">${content}</div>`}</li>`;
+}
+
+/**
+ * Atividade: os números de saúde no topo (as falhas como herói), a lista das últimas falhas com o
+ * motivo técnico (só o administrador vê; ele não vai para a tela de mais ninguém) e os tokens de
+ * API e MCP com o último uso. Cards na largura toda, um embaixo do outro: nada a alinhar.
+ */
+function panelActivity(s: PanelStats, o: { failures: PanelFailure[]; tokens: PanelToken[]; alarm: Alarme | null; since: string | null; local: boolean; from: string; userId: number }): string {
+  const v = s.videos;
+  const failed = v.failed + v.audioFailed + v.editFailed + s.projects.exportsFailed;
+  const used = o.tokens.filter((t) => t.last_used_at && (!o.since || t.last_used_at >= o.since)).length;
+  const alarm = o.local
+    ? { value: "—", note: "só roda no ar" }
+    : o.alarm?.ligados.length
+      ? { value: "Avisou", note: plural(o.alarm.ligados.length, "serviço parado", "serviços parados") }
+      : o.alarm?.semPainel
+        ? { value: "Sem acesso", note: "sem leitura do painel" }
+        : { value: "Em dia", note: "nada ligado à toa" };
+  const failures = o.failures.map((f) => {
+    const kind = FAILURE_KINDS[f.kind];
+    // A página do vídeo abre para o administrador; o projeto, só para o dono.
+    const href = f.kind === "export" ? (f.user_id === o.userId ? `/canvas/${f.ref}` : undefined) : `/video/${f.ref}?de=${encodeURIComponent(o.from)}`;
+    return listItem({
+      icon: kind.icon,
+      headline: `${kind.label} · ${f.title}`,
+      support: `${f.owner ?? "Sem dono"} · ${f.reason ?? "Sem motivo registrado"}`,
+      end: formatDate(f.at),
+      href,
+    });
+  });
+  const tokens = o.tokens.map((t) =>
+    listItem({
+      icon: "key",
+      headline: t.name,
+      support: `${t.owner} · criado em ${formatDate(t.created_at)}`,
+      end: t.last_used_at ? `usado em ${formatDate(t.last_used_at)}` : "nunca usado",
+    }),
+  );
+  return `<div class="dash">
+    <div class="dash__kpis">
+      ${statCard("error", "Falhas no período", count(failed), "em vídeos, áudio, edição e exportações", true)}
+      ${statCard("hourglass_top", "Em andamento", count(v.busy), "na fila ou gerando")}
+      ${statCard("key", "Agentes ativos", count(used), `de ${plural(o.tokens.length, "token", "tokens")}`)}
+      ${statCard("monitor_heart", "Alarme", alarm.value, alarm.note)}
+    </div>
+    <h2 class="dash__section">Últimas falhas</h2>
+    <section class="viewer__card" aria-label="Últimas falhas">
+      ${failures.length ? `<ul class="dash__list">${failures.join("")}</ul>` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
+    </section>
+    <h2 class="dash__section">API e MCP</h2>
+    <section class="viewer__card" aria-label="Tokens de API e MCP">
+      ${tokens.length ? `<ul class="dash__list">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
+      <p class="qe-result__note">O último uso é gravado no máximo uma vez por hora.</p>
+    </section>
   </div>`;
 }
 

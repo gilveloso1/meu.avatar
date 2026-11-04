@@ -300,8 +300,9 @@ Fora da ordem acima, pedido pelo dono: uma página com os números do site, só 
    no período em destaque (OpenRouter: saldo pela chave de gestão `OPENROUTER_MANAGEMENT_KEY`;
    HeyGen: saldo da carteira ou do plano; o gasto no período vem do banco, pelo provedor de cada
    vídeo) e a Cloudflare (contêineres pelo painel do alarme, até 30 dias, e o R2).
-3. **Saúde e atividade**, numa aba nova: últimas falhas com o motivo técnico e o link, o estado do alarme de
-   contêiner e o uso da API e do MCP (tokens e último uso).
+3. **Saúde e atividade** (feito): aba Atividade com as falhas do período (vídeo, áudio, edição
+   rápida e exportação, com o motivo técnico e o link), o estado do alarme de contêiner e os tokens
+   de API e MCP com o último uso.
 4. **Cloudflare Access** na frente de `/painel*` (código por e-mail antes de chegar ao Worker):
    configurado pelo dono no painel da Cloudflare, sem código.
 

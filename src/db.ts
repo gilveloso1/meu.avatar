@@ -224,8 +224,65 @@ export interface PanelStats {
   accounts: { users: number; avatars: number; assets: number };
 }
 
+/** Uma falha recente, para a aba Atividade do painel: o que falhou, de quem, o motivo técnico e quando. */
+export interface PanelFailure {
+  kind: "video" | "audio" | "edit" | "export";
+  /** O vídeo (video, audio, edit) ou o projeto (export). */
+  ref: string;
+  user_id: number | null;
+  owner: string | null;
+  /** A fala do vídeo ou o nome do projeto. */
+  title: string;
+  reason: string | null;
+  at: string;
+}
+
+/** Um token de API (MCP e agentes), com o dono e o último uso (gravado no máximo uma vez por hora). */
+export interface PanelToken {
+  name: string;
+  owner: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
 export class Db {
   constructor(private readonly d1: D1Database) {}
+
+  /** As falhas mais novas do período: vídeos, áudio, edição rápida e exportações, juntas por data. */
+  async panelFailures(since: string | null, limit = 20): Promise<PanelFailure[]> {
+    const from = since ?? "";
+    return (
+      await this.d1
+        .prepare(
+          `SELECT f.*, u.name AS owner FROM (
+             SELECT 'video' AS kind, id AS ref, user_id, prompt AS title, error AS reason, updated_at AS at FROM videos
+               WHERE status IN ('failed', 'cancelled', 'expired') AND updated_at >= ?1
+             UNION ALL
+             SELECT 'audio', id, user_id, prompt, audio_error, updated_at FROM videos WHERE audio_status = 'failed' AND updated_at >= ?1
+             UNION ALL
+             SELECT 'edit', id, user_id, prompt, edit_error, updated_at FROM videos WHERE edit_status = 'failed' AND updated_at >= ?1
+             UNION ALL
+             SELECT 'export', p.id, p.user_id, p.name, e.error, e.created_at FROM exports e JOIN projects p ON p.id = e.project_id
+               WHERE e.status = 'failed' AND e.created_at >= ?1
+           ) f LEFT JOIN users u ON u.id = f.user_id
+           ORDER BY f.at DESC LIMIT ?2`,
+        )
+        .bind(from, limit)
+        .all<PanelFailure>()
+    ).results;
+  }
+
+  /** Os tokens de API de todas as contas, os usados por último primeiro. */
+  async panelTokens(): Promise<PanelToken[]> {
+    return (
+      await this.d1
+        .prepare(
+          `SELECT t.name, u.name AS owner, t.created_at, t.last_used_at FROM api_tokens t JOIN users u ON u.id = t.user_id
+           ORDER BY t.last_used_at IS NULL, t.last_used_at DESC, t.created_at DESC`,
+        )
+        .all<PanelToken>()
+    ).results;
+  }
 
   async panelStats(since: string | null): Promise<PanelStats> {
     // Sem período, a data mínima pega tudo (as datas são ISO, em texto).

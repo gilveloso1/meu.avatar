@@ -941,6 +941,15 @@ a.frame { display: block; }
 .avatar-option:disabled { opacity: 0.38; cursor: default; }
 .avatar-option.is-busy { opacity: 1; }
 .avatar-option__text { display: flex; flex-direction: column; min-width: 0; }
+/* O texto no fim do item (a data, nas listas do painel) e o item sem link. */
+.avatar-option__end { flex: none; margin-left: auto; padding-left: 16px; font: var(--md-sys-typescale-label-small); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
+.avatar-option--static { cursor: default; }
+/* As listas do painel: itens de duas linhas, a segunda sempre visível; 8 px da borda do card para o item. */
+.dash__list { display: flex; flex-direction: column; margin: -8px; padding: 0; list-style: none; }
+.dash__list .avatar-option { min-height: 64px; text-decoration: none; }
+.dash__list .avatar-option > .icon { color: var(--md-sys-color-on-surface-variant); }
+.dash__list .avatar-option__text { flex: 1; }
+.dash__list .vrow__support { display: block; }
 
 /* Avatares: a capa do card tem o tamanho do ícone dos cards de Modelos. */
 .avatar-cover { width: 48px; height: 48px; border-radius: 14px; object-fit: cover; }
