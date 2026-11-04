@@ -440,12 +440,14 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
    Um número herói por tela (display-large); os outros em display-small. */
 .dash { display: flex; flex-direction: column; gap: 8px; }
 .dash__kpis { display: grid; grid-template-columns: 2fr repeat(3, minmax(0, 1fr)); gap: 8px; }
-.dash__cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; gap: 8px; }
-.dash__col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* Mosaico do M3: o card alto ocupa duas linhas da grade, e as bases se alinham pela grade. */
+.dash__mosaic { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
+.dash__tall { grid-row: span 2; }
 @media (max-width: 839px) {
   .dash__kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dash__kpis > .stat-card--hero { grid-column: 1 / -1; }
-  .dash__cols { grid-template-columns: minmax(0, 1fr); }
+  .dash__mosaic { grid-template-columns: minmax(0, 1fr); }
+  .dash__tall { grid-row: auto; }
 }
 @media (max-width: 599px) {
   .dash__kpis { grid-template-columns: minmax(0, 1fr); }
@@ -459,13 +461,31 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 /* Barras horizontais ordenadas: 8 px, ponta de 4 px arredondada e reta na base, uma cor só; "Outros" em cinza. */
 .rank { display: flex; flex-direction: column; gap: 12px; margin: 4px 0 0; padding: 0; list-style: none; }
 .rank__head { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.rank__head .icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); }
+.rank__label { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rank__label .icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); }
 .rank__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface); }
 .rank__meta { flex: 1; white-space: nowrap; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .rank__value { white-space: nowrap; font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface); }
 .rank__bar { display: block; width: max(4px, calc(var(--size) * 100%)); height: 8px; margin-top: 8px; border-radius: 0 4px 4px 0; background: var(--md-sys-color-primary); }
 .rank__item--other .rank__bar { background: var(--md-sys-color-outline); }
-.viewer__card-actions { display: flex; justify-content: flex-end; margin: 0 -12px -8px 0; }
+.viewer__card-actions { display: flex; justify-content: flex-end; margin: auto -12px -8px 0; }
+/* No celular, os vídeos e a parte do total descem para baixo do nome, que não se corta. */
+@media (max-width: 599px) {
+  .rank__head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; }
+  .rank__meta { grid-column: 1; grid-row: 2; padding-left: 32px; }
+  .rank__value { grid-column: 2; grid-row: 1; }
+}
+/* Em Custos, na tela média para cima: uma linha por modelo (nome, barra, vídeos e parte, valor), com
+   as colunas alinhadas de cima a baixo; a barra usa a largura que sobra. */
+@media (min-width: 840px) {
+  .rank--wide { gap: 4px; }
+  .rank--wide .rank__item { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) 150px 110px; align-items: center; column-gap: 24px; min-height: 48px; }
+  .rank--wide .rank__head { display: contents; }
+  .rank--wide .rank__label { grid-column: 1; }
+  .rank--wide .rank__bar { grid-column: 2; grid-row: 1; margin: 0; }
+  .rank--wide .rank__meta { grid-column: 3; text-align: right; font-variant-numeric: tabular-nums; }
+  .rank--wide .rank__value { grid-column: 4; text-align: right; font-variant-numeric: tabular-nums; }
+}
 /* As abas do painel são links (uma página para cada) e ficam no começo, cada uma do tamanho do texto. */
 .tabs--start .tabs__tab { flex: none; text-decoration: none; }
 .tabs__tab[aria-current="page"] { color: var(--md-sys-color-primary); }

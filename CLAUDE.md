@@ -227,10 +227,12 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   administrador): abas que são links (Visão geral em `/painel`, Custos em `/painel/custos`) e os
   chips de período (7 dias, 30 dias, tudo) valendo para todas. Regras de layout (da skill dataviz e
   do M3): um número herói por tela (`.stat-card--hero`, display-large) e os outros em
-  display-small; colunas que crescem cada uma com o seu conteúdo, nunca esticadas para igualar
-  alturas; a Visão geral tem linhas contadas (até 5 modelos e "Outros"; listas inteiras ficam
+  display-small, e cada aba abre com essa fileira de números; o card não estica para igualar
+  alturas (M3: o tamanho vem do conteúdo): quando um card alto fica ao lado de dois, é um mosaico
+  (`.dash__mosaic`, o alto em duas linhas da grade) e as bases se alinham pela grade; a Visão geral
+  tem linhas contadas (até 5 modelos e "Outros"; listas inteiras ficam
   numa aba); parte de um todo em barras horizontais ordenadas (`.rank`, uma cor só, "Outros" em
-  cinza). Para simular volume: `npm run exemplos:painel`.
+  cinza; em Custos, uma linha por modelo com as colunas alinhadas, para não esticar só a barra). Para simular volume: `npm run exemplos:painel`.
 
 ## Contas
 

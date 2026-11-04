@@ -1806,7 +1806,7 @@ function statCard(icon: string, label: string, value: string, supporting: string
  * ocupa a largura toda), com o nome, os vídeos, a parte do total e o valor em texto. Com `top`, o
  * que passa vira uma linha "Outros", em cinza.
  */
-function modelBars(models: PanelStats["models"], top?: number): string {
+function modelBars(models: PanelStats["models"], top?: number, wide = false): string {
   const total = models.reduce((sum, m) => sum + m.cost, 0);
   const rows = models.map((m) => {
     const found = structureById(m.structure);
@@ -1817,13 +1817,12 @@ function modelBars(models: PanelStats["models"], top?: number): string {
     rows.push({ icon: "more_horiz", name: `Outros ${rest.length} modelos`, videos: rest.reduce((s, r) => s + r.videos, 0), cost: rest.reduce((s, r) => s + r.cost, 0), other: true });
   }
   const max = Math.max(...rows.map((r) => r.cost), 0);
-  return `<ul class="rank">${rows
+  return `<ul class="rank${wide ? " rank--wide" : ""}">${rows
     .map((r) => {
       const share = total > 0 ? Math.round((r.cost / total) * 100) : 0;
       return `<li class="rank__item${r.other ? " rank__item--other" : ""}">
         <div class="rank__head">
-          <span class="icon" aria-hidden="true">${r.icon}</span>
-          <span class="rank__name">${esc(r.name)}</span>
+          <span class="rank__label"><span class="icon" aria-hidden="true">${r.icon}</span><span class="rank__name">${esc(r.name)}</span></span>
           <span class="rank__meta">${plural(r.videos, "vídeo", "vídeos")} · ${share}%</span>
           <span class="rank__value">${money(r.cost)}</span>
         </div>
@@ -1844,8 +1843,9 @@ function panelFailures(s: PanelStats): string {
 
 /**
  * A Visão geral, sempre do mesmo tamanho (nada nela cresce com os dados): o gasto como número
- * herói e três números ao lado; embaixo, duas colunas que não se esticam (o gasto por modelo, até
- * 6 linhas, e as Falhas e o Conteúdo, 4 linhas cada).
+ * herói e três números ao lado; embaixo, um mosaico (M3): o gasto por modelo, até 6 linhas, ocupa
+ * duas linhas da grade, ao lado das Falhas e do Conteúdo, 4 linhas cada. As bases se alinham pela
+ * grade, e o "Ver todos" fica no pé do card.
  */
 function panelOverview(s: PanelStats, query: string): string {
   const v = s.videos;
@@ -1858,15 +1858,12 @@ function panelOverview(s: PanelStats, query: string): string {
       ${statCard("schedule", "Minutos de vídeo", minutes, "dos vídeos prontos")}
       ${statCard("download", "Exportações", count(s.projects.exports), `de ${plural(s.projects.created, "projeto novo", "projetos novos")}`)}
     </div>
-    <div class="dash__cols">
-      <div class="dash__col">
-        <section class="viewer__card" aria-labelledby="card-gasto">
+    <div class="dash__mosaic">
+        <section class="viewer__card dash__tall" aria-labelledby="card-gasto">
           <h2 class="qe-result__title" id="card-gasto">Gasto por modelo</h2>
           ${s.models.length ? modelBars(s.models, PANEL_TOP_MODELS) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
           ${s.models.length > PANEL_TOP_MODELS + 1 ? `<div class="viewer__card-actions"><a class="button button--text interactive" href="/painel/custos${query}">Ver todos os modelos</a></div>` : ""}
         </section>
-      </div>
-      <div class="dash__col">
         ${panelFailures(s)}
         ${detailsCard("Conteúdo", [
           { icon: "folder_open", term: "Projetos novos", value: count(s.projects.created) },
@@ -1874,33 +1871,26 @@ function panelOverview(s: PanelStats, query: string): string {
           { icon: "face", term: "Avatares", value: count(s.accounts.avatars) },
           { icon: "photo_library", term: "Ativos", value: count(s.accounts.assets) },
         ])}
-      </div>
     </div>
   </div>`;
 }
 
-/** Custos: todos os modelos (esta lista cresce; a coluna do lado, não) e o resumo do período. */
+/** Custos: os números do período no topo (como na Visão geral) e todos os modelos, uma linha cada. */
 function panelCosts(s: PanelStats): string {
   const total = s.models.reduce((sum, m) => sum + m.cost, 0);
-  const charged = s.videos.done;
+  const done = s.videos.done;
   const minutes = s.videos.seconds / 60;
   return `<div class="dash">
-    <div class="dash__cols">
-      <div class="dash__col">
-        <section class="viewer__card" aria-labelledby="card-modelos">
-          <h2 class="qe-result__title" id="card-modelos">Gasto por modelo</h2>
-          ${s.models.length ? modelBars(s.models) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
-        </section>
-      </div>
-      <div class="dash__col">
-        ${detailsCard("Resumo", [
-          { icon: "payments", term: "Total", value: money(total) },
-          { icon: "check_circle", term: "Vídeos prontos", value: count(charged) },
-          { icon: "movie", term: "Por vídeo", value: charged ? money(total / charged) : "—" },
-          { icon: "schedule", term: "Por minuto", value: minutes ? money(total / minutes) : "—" },
-        ])}
-      </div>
+    <div class="dash__kpis">
+      ${statCard("payments", "Gasto em vídeos", money(total), `em ${plural(s.models.length, "modelo", "modelos")}`, true)}
+      ${statCard("movie", "Por vídeo", done ? money(total / done) : "—", `${plural(done, "vídeo pronto", "vídeos prontos")}`)}
+      ${statCard("schedule", "Por minuto", minutes ? money(total / minutes) : "—", `${minutes.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} min prontos`)}
+      ${statCard("error", "Vídeos com falha", count(s.videos.failed), "não entram no gasto")}
     </div>
+    <section class="viewer__card" aria-labelledby="card-modelos">
+      <h2 class="qe-result__title" id="card-modelos">Gasto por modelo</h2>
+      ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+    </section>
   </div>`;
 }
 
