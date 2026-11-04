@@ -30,6 +30,20 @@ const MAX_QUADROS = 12;
 const conflito = (project: Project) => falha(409, "conflito", { ...resumo(JSON.parse(project.data) as CanvasProject), revisao: project.revision });
 
 const PAGINA_VIDEOS = 20;
+const PAGINA_ANIMACOES = 20;
+const MAX_PAGINA_ANIMACOES = 100;
+
+/** O texto que a animação mostra, sem estilo, script nem marcação: o que ajuda a escolher uma. */
+function textoNaTela(html: string): string {
+  const t = html
+    .replace(/<(style|script)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+  return t.length > 160 ? `${t.slice(0, 159)}…` : t;
+}
 const MAX_PAGINA_VIDEOS = 100;
 
 /** "2026-11-02" ou uma data ISO, no fuso UTC; um dia só vale inteiro no ate. Null se não é data. */
@@ -108,6 +122,7 @@ export class Api {
     const post = request.method === "POST";
     if (path === "/api/v1/videos" && !post) return this.videos(user, url);
     if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
+    if (path === "/api/v1/animacoes" && !post) return this.animations(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
     const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
@@ -146,6 +161,36 @@ export class Api {
   }
 
   /** Os avatares da pessoa com os ativos, para entrar num projeto como os vídeos. */
+  /**
+   * As animações em código já feitas nos projetos da pessoa, para o próximo agente partir de uma
+   * delas: do mesmo projeto, dos projetos que usam um avatar (pelos vídeos e ativos dele) ou pela
+   * busca no texto. Sem o código, que custa caro: só o que ajuda a escolher. A cópia é adicionar {animacao}.
+   */
+  private async animations(user: User, url: URL): Promise<Response> {
+    const p = url.searchParams;
+    const limite = p.has("limite") ? Number(p.get("limite")) : PAGINA_ANIMACOES;
+    if (!Number.isInteger(limite) || limite < 1 || limite > MAX_PAGINA_ANIMACOES) return falha(400, "limite_invalido");
+    const projeto = p.get("projeto") ?? "";
+    const avatar = p.get("avatar") ?? "";
+    const busca = (p.get("q") ?? "").trim().toLowerCase();
+    const projetos = (await this.db.projectsByUser(user.id)).filter((o) => !projeto || o.id === projeto);
+    const dados = projetos.map((o) => ({ projeto: o, data: JSON.parse(o.data) as CanvasProject }));
+    const videos = [...new Set(dados.flatMap((d) => d.data.blocks.map((b) => /^\/videos\/([0-9a-f-]{36})/.exec(b.src)?.[1]).filter((v): v is string => !!v)))];
+    const avatarDoVideo = await this.db.videoAvatars(videos);
+    const lista = [];
+    for (const { projeto: o, data } of dados) {
+      const avatares = [...new Set(data.blocks.map((b) => /^\/avatares\/([0-9a-f-]{36})\//.exec(b.src)?.[1] ?? avatarDoVideo.get(/^\/videos\/([0-9a-f-]{36})/.exec(b.src)?.[1] ?? "")).filter((v): v is string => !!v))];
+      if (avatar && !avatares.includes(avatar)) continue;
+      for (const b of data.blocks) {
+        if (!b.code) continue;
+        const texto = textoNaTela(b.code.html);
+        if (busca && !`${b.name} ${texto} ${Object.values(b.code.params ?? {}).join(" ")}`.toLowerCase().includes(busca)) continue;
+        lista.push({ projeto: { id: o.id, nome: o.name }, bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), texto, ...(b.code.params ? { parametros: b.code.params } : {}), avatares, atualizado: o.updated_at });
+      }
+    }
+    return Response.json({ animacoes: lista.slice(0, limite), ...(lista.length > limite ? { mais: lista.length - limite } : {}) });
+  }
+
   private async avatars(user: User, url: URL): Promise<Response> {
     const [avatars, assets] = await Promise.all([this.db.avatarsByUser(user.id, (url.searchParams.get("q") ?? "").trim()), this.db.assetsByUser(user.id)]);
     return Response.json({
@@ -325,6 +370,12 @@ export class Api {
           return memo.get(src)!;
         },
         rosto: (src) => this.face(user, src),
+        animacao: async (projeto, bloco) => {
+          // Só dos projetos de quem edita, como o resto da API.
+          const o = projeto === project.id ? project : await this.db.projectById(projeto);
+          const b = o && o.user_id === user.id ? (JSON.parse(o.data) as CanvasProject).blocks.find((x) => x.id === bloco) : undefined;
+          return b?.code ? { html: b.code.html, params: b.code.params, duracao: +(b.tout - b.tin).toFixed(3), nome: b.name } : null;
+        },
       });
       const text = JSON.stringify(data);
       if (text.length > MAX_BYTES) return falha(413, "projeto_grande_demais");

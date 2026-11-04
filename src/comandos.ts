@@ -64,6 +64,8 @@ export interface Contexto {
   silencios(src: string): Promise<{ duracao: number; silencios: number[][]; som: boolean } | null>;
   /** O ponto entre os olhos, de 0 a 1, ou null se não houver. */
   rosto(src: string): Promise<{ x: number; y: number } | null>;
+  /** Uma animação já feita num projeto de quem edita (para reusar), ou null. */
+  animacao(projeto: string, bloco: string): Promise<{ html: string; params?: Record<string, string | number>; duracao: number; nome: string } | null>;
 }
 
 export const MAX_COMANDOS = 100;
@@ -116,13 +118,18 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
     const antesDeCriar = criados.length;
     switch (c.tipo) {
       case "adicionar": {
-        if (c.html !== undefined) {
+        if (c.html !== undefined || c.animacao !== undefined) {
           // A animação em código: guardada como está, roda na prévia e vira vídeo só na exportação.
-          const html = codigo(c.html, falha);
-          const duracao = numero(c.duracao);
+          // Com animacao, parte de uma já feita (código, valores, tempo e nome), e o que vier aqui muda.
+          if (c.html !== undefined && c.animacao !== undefined) throw falha("codigo_invalido");
+          const ref = (c.animacao ?? null) as Record<string, unknown> | null;
+          const base = ref ? (typeof ref.projeto === "string" && typeof ref.bloco === "string" ? await ctx.animacao(ref.projeto, ref.bloco) : null) : null;
+          if (ref && !base) throw falha("animacao_inexistente");
+          const html = base ? base.html : codigo(c.html, falha);
+          const duracao = c.duracao === undefined && base ? base.duracao : numero(c.duracao);
           if (duracao === null || duracao < MIN_LEN || duracao > CODE_MAX) throw falha("duracao_invalida");
-          const nome = texto(c.nome) ?? proximoNome(project, "Animação", (b) => b.code);
-          const params = parametros(c.parametros, undefined, falha);
+          const nome = texto(c.nome) ?? base?.nome ?? proximoNome(project, "Animação", (b) => b.code);
+          const params = parametros(c.parametros, base?.params, falha);
           const novo = adicionar(project, { ...c, inicio: 0, fim: duracao }, { src: "", kind: "image", dur: CODE_MAX, name: nome }, falha);
           project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, code: { html, ...(params ? { params } : {}) } } : b)) };
           criados.push(novo.id);

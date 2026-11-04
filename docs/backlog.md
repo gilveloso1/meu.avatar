@@ -55,12 +55,14 @@ Próximos passos, nesta ordem:
      acompanha o bloco quando ele muda de tamanho sai da animação como código.)
    - *Ver o resultado*: quadros do Final montado sem exportar. (A prévia e o HTML para editar saem
      da animação como código.)
-   - *Pronto para usar*: templates de layout com parâmetros (sobre a animação como código), kit de
-     marca por perfil, biblioteca de animações didáticas, preset de legenda numa chamada, onde fica
+   - *Pronto para usar*: em vez de templates adivinhados, o agente reusa o que já fez
+     (`listar_animacoes` e `adicionar {animacao}`, feito em 04/11/2026, ver "Reusar animações" em
+     [api.md](api.md)). Faltam: kit de marca por perfil, preset de legenda numa chamada, onde fica
      o rosto de cada avatar, modelo de projeto com ganchos ligados ao corpo, música por URL ou da
      biblioteca do site.
-2. **Fechar o HyperFrames**: modelos por marca (títulos, lower thirds, selos) e um projeto real
-   feito só pelo MCP, do roteiro à exportação (o da Lara Resende está em andamento).
+2. **Fechar o HyperFrames**: um projeto real feito só pelo MCP, do roteiro à exportação (o da Lara
+   Resende está em andamento). Os modelos por marca (títulos, lower thirds, selos) saem do reuso:
+   o que um agente fizer para a marca, o próximo copia.
 3. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
 4. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
    licenciada ou geração por API (a do caso real foi sintetizada, só para teste),

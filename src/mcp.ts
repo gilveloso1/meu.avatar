@@ -23,11 +23,12 @@ export const CACHE = { ttlMs: 5 * 60_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação do zero, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar e parta dela com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro. Cada um tem "tipo":
 adicionar {video|arquivo|ativo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos}
 adicionar {html, duracao: 0,5 a 60, parametros, nome, depois: bloco | sobre: bloco, em: segundos} (animação em código, guardada no projeto: títulos, selos, gráficos, legendas; as regras do HTML são as do renderizar_html; sem nome, Animação 1, Animação 2...; a tela mostra na prévia, e a exportação faz o vídeo dela)
+adicionar {animacao: {projeto, bloco}, parametros, duracao, nome, depois: bloco | sobre: bloco, em: segundos} (copia uma animação já feita, de listar_animacoes: o código, os parametros, a duração e o nome; o que vier aqui muda, e os parametros se juntam aos dela; a cópia é independente)
 editarCodigo {bloco, html | trocas: [{de, para}], parametros} (troca o código de uma animação inteiro ou só trechos; cada de aparece uma vez só no código, como está; leia o código com ver_projeto incluir: codigo)
 parametros: {chave: texto ou número}, até 30, os valores que mudam sem reescrever o código (nome, preço, cor da marca): no HTML, {{chave}} fora dos scripts vira o valor; nos scripts, params.chave. Em editarCodigo, junta aos que já existem, e null tira. Faça o template uma vez e repita o bloco só trocando parametros; a pessoa também troca os valores nos Ajustes do canvas.
 rascunho {fala, duracao: 0,5 a 30, nome, depois: bloco | sobre: bloco, em: segundos} (o lugar de um vídeo que ainda não existe: um cartão com a fala; sem nome, Texto 1, Texto 2...; a exportação espera a troca)
@@ -69,6 +70,16 @@ const FERRAMENTAS = [
     }),
   },
   { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
+  {
+    name: "listar_animacoes",
+    description: "Animações em código já feitas nos projetos da conta, para reusar com adicionar {animacao: {projeto, bloco}}: do mesmo projeto, dos projetos que usam um avatar ou pela busca. Cada uma traz o projeto, o bloco, o nome, a duração, o texto na tela e os parametros, sem o código (leia com ver_projeto incluir: codigo).",
+    inputSchema: objeto({
+      projeto: texto("Só as deste projeto."),
+      avatar: texto("Só as dos projetos que usam este avatar (vídeos e ativos dele), de listar_avatares."),
+      busca: texto("Parte do nome, do texto na tela ou de um valor de parâmetro."),
+      limite: { type: "integer", description: "Quantas, de 1 a 100; sem isso, 20, do projeto editado por último ao mais antigo." },
+    }),
+  },
   { name: "listar_projetos", description: "Projetos da conta, o editado por último primeiro.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   { name: "criar_projeto", description: "Cria um projeto vazio.", inputSchema: objeto({ nome: texto("Nome do projeto.") }, ["nome"]) },
   {
@@ -181,6 +192,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("GET", `/api/v1/videos?${new URLSearchParams(Object.entries({ q: a.busca, desde: a.desde, ate: a.ate, limite: a.limite, continuar: a.continuar }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "listar_avatares":
       return chama("GET", `/api/v1/avatares?q=${seguro(a.busca ?? "")}`);
+    case "listar_animacoes":
+      return chama("GET", `/api/v1/animacoes?${new URLSearchParams(Object.entries({ projeto: a.projeto, avatar: a.avatar, q: a.busca, limite: a.limite }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "listar_projetos":
       return chama("GET", `/api/v1/projetos?q=${seguro(a.busca ?? "")}`);
     case "criar_projeto":
