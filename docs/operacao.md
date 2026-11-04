@@ -328,6 +328,33 @@ do alarme, com o contêiner seguindo ligado. Agora:
 - `test/conteiner.test.ts` roda o alarme de verdade da biblioteca num Durable Object de
   teste (`test/worker.ts`, só o contêiner é falso, e ele ignora o SIGTERM).
 
+**Como provar que um contêiner dorme, em produção.** Vale para o `AudioFixer`, o `Exporter` e o
+`Renderer`, antes e depois de publicar algo que mude um deles. Não espere uma linha nova
+dizendo zero: contêiner desligado pode não gerar linha nenhuma no painel, e ninguém precisa
+usar o contêiner para a prova valer. O que prova:
+
+1. **O último uso e o fim das linhas.** Anote a hora do último pedido ao contêiner (o seu teste,
+   ou o último trabalho que aparece no banco ou nos logs). No `containersUsageAdaptiveGroups`,
+   por minuto, a memória alocada desse contêiner tem de terminar alguns minutos depois disso
+   (o `sleepAfter` dele, mais a volta do alarme): depois, ou não há linha, ou ela é zero. Os
+   dois querem dizer desligado.
+2. **O painel em dia.** O painel chega com minutos de atraso, e painel vazio por atraso parece
+   contêiner desligado. Só vale a prova se a mesma consulta já trouxer dados mais novos que o
+   fim do contêiner, de outra coisa: as requisições do Worker, ou outro contêiner ligado. Sem
+   isso, espere e consulte de novo; não conclua.
+3. **A Cloudflare confirma.** A lista de instâncias da aplicação (`npx wrangler containers
+   list` ou o painel de Containers) com nenhuma ligada, e nos logs do Worker (API de
+   Observability) um aviso "Activity expired, signalling container to stop" só. O mesmo aviso
+   repetido a cada volta do alarme quer dizer que ele não parou, como em 26/10.
+
+Se a memória alocada segue aparecendo sem trabalho em andamento, o contêiner não dormiu: é o
+caso de 26/10, e o motivo costuma ser um pedido sem resposta lida ou o SIGTERM ignorado.
+
+Os campos do `containersUsageAdaptiveGroups` não estão na documentação pública da Cloudflare
+(conferido em 03/11/2026). Descubra pela própria API, com o token do ambiente, antes de
+montar a consulta: a introspecção do GraphQL (`__type(name: ...)`) lista os filtros, as
+dimensões e as somas. Quando uma consulta funcionar, anote-a aqui.
+
 Para a API, o mesmo contêiner responde `POST /quadros` e `POST /silencios`
 ([api.md](api.md)). Mudou o `exportar.py`: precisa do deploy com Docker, no ambiente cloud.
 
@@ -363,9 +390,8 @@ endereço; ponha a versão nova no `image` do `Renderer` em `wrangler.jsonc` e p
 `container/render/` muda; os outros deploys usam a imagem que já está no registro.
 
 **Depois de publicar, confira que ele dorme** (o `AudioFixer` e o `Exporter` já ficaram uma
-semana ligados sem trabalho, ver "Contêiner que dorme de verdade" acima): faça um render e, uns
-5 minutos depois, veja no `containersUsageAdaptiveGroups` que a memória alocada do `Renderer`
-voltou a zero. O que garante isso: o `servidor.mjs` sai no SIGTERM (o `construir.sh` confere),
+semana ligados sem trabalho): faça um render ou uma inspeção e siga "Como provar que um
+contêiner dorme, em produção", acima. O `Renderer` dorme 30 s depois do último pedido. O que garante isso: o `servidor.mjs` sai no SIGTERM (o `construir.sh` confere),
 o `Renderer` herda o `SleepyContainer` (dorme 30 s depois do último pedido; pedido com mais de
 6 min conta como abandonado), o `servidor.mjs` mata o render que passa de 5 min, e o Worker
 sempre lê ou cancela o corpo da resposta.
@@ -380,8 +406,8 @@ Sem o contêiner (precisa do Node e de `npm ci` em `container/render/`, e do
 `npx hyperframes browser ensure`): `PORT=8090 node container/render/servidor.mjs` e um
 `POST /render` com o `exemplo.html` (cabeçalhos `x-largura`, `x-altura`, `x-duracao`).
 
-Para conferir em produção: `containersUsageAdaptiveGroups` na API GraphQL, por minuto (sem
-trabalho, a memória alocada vai a zero), e os logs do Worker na API de Observability
+Para conferir em produção: `containersUsageAdaptiveGroups` na API GraphQL, por minuto, lido como
+diz "Como provar que um contêiner dorme, em produção", acima, e os logs do Worker na API de Observability
 (`/workers/observability/telemetry/query`; o `wrangler tail` não passa pelo proxy do
 ambiente cloud).
 
