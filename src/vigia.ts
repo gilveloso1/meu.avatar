@@ -108,7 +108,7 @@ export class Painel {
       dimensions { applicationId } sum { allocatedMemory allocatedDisk cpuTimeSec }
     }
     r2StorageAdaptiveGroups(limit: 1, filter: {datetime_geq: $ontem, datetime_leq: $ate, bucketName: $bucket}, orderBy: [datetime_DESC]) {
-      max { payloadSize objectCount }
+      dimensions { datetime } max { payloadSize objectCount }
     }
   } }
 }`;
