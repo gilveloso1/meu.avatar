@@ -18,7 +18,7 @@ import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
 import { CABECALHO_BYTES, temSom } from "./som";
 import { MAX_VIDEO_BYTES } from "./studio";
-import { codeHtml, output } from "./canvas/modelo.js";
+import { codeHtml, missingParams, output } from "./canvas/modelo.js";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { type InspecaoDaAnimacao, MAX_HTML_BYTES, MAX_RENDER_SECONDS, type RenderApi } from "./render";
 import { AudioLongoError, type Transcriber, type Transcricao } from "./transcricao";
@@ -190,7 +190,15 @@ export class Exports {
     if (c.final !== undefined && !final) return "final_inexistente";
     if (!this.renderer) return null;
     const { width, height } = output(final!);
-    return this.renderer.inspect(codeHtml(block.code), width, height, duracao, instantes, c.quadros);
+    const r = await this.renderer.inspect(codeHtml(block.code), width, height, duracao, instantes, c.quadros);
+    // O código pede um valor que o bloco não tem: só se vê lendo o código com os parâmetros.
+    const semValor = missingParams(block.code).map((f) => ({
+      tipo: "parametro_sem_valor",
+      alvo: f.alvo,
+      t: [],
+      detalhe: f.alvo.startsWith("{{") ? `sem ${f.chave} em parametros, o texto sai como está` : `sem ${f.chave} em parametros, o script recebe undefined`,
+    }));
+    return semValor.length ? { ...r, problemas: [...semValor, ...r.problemas] } : r;
   }
 
   /** Começa a exportação de um Final, sempre a partir do projeto salvo; os arquivos são conferidos aqui. */

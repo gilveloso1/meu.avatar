@@ -892,6 +892,20 @@ describe("animação em código", () => {
     expect(fake.inspections[1]).toMatchObject({ instantes: [0, 0.5, 1, 1.5, 2], quadros: true });
   });
 
+  it("a inspeção aponta parâmetro que o código usa sem valor, no texto e nos scripts", async () => {
+    const { id, revisao } = await novo();
+    const html = '<b>{{nome}}</b><i>{{preco}}</i><script>tl.to("b", { x: params.x }, 0);</script>';
+    const r = await lote(id, revisao, [{ tipo: "adicionar", html, duracao: 2, parametros: { nome: "Ana" } }]);
+    const fake = new FakeRenderApi();
+    const res = await (await api(`/api/v1/projetos/${id}/animacao?bloco=${r.criados[0]}&instantes=1`, admin, undefined, null, null, fake)).json<{ problemas: { tipo: string; alvo: string }[] }>();
+    expect(res.problemas.filter((p) => p.tipo === "parametro_sem_valor")).toEqual([
+      { tipo: "parametro_sem_valor", alvo: "{{preco}}", t: [], detalhe: "sem preco em parametros, o texto sai como está" },
+      { tipo: "parametro_sem_valor", alvo: "params.x", t: [], detalhe: "sem x em parametros, o script recebe undefined" },
+    ]);
+    // O contêiner recebe o código já com os valores que existem.
+    expect(fake.inspections[0]!.html).toContain("<b>Ana</b><i>{{preco}}</i>");
+  });
+
   it("a inspeção recusa bloco sem código, instante fora do bloco e avisa sem contêiner ou com a página quebrada", async () => {
     const { id, revisao } = await novo();
     const r = await lote(id, revisao, [{ tipo: "adicionar", html: CENA, duracao: 2 }, { tipo: "adicionar", video: VIDEO, fim: 4 }]);

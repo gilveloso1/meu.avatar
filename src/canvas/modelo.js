@@ -101,6 +101,21 @@ export function codeHtml(code) {
   return `<script>var params = ${JSON.stringify(params).replace(/</g, "\\u003c")};</script>\n${html}`;
 }
 
+/**
+ * Os parâmetros que o código usa e não têm valor: {{chave}} fora dos scripts (aparece como está no
+ * vídeo) e params.chave ou params["chave"] nos scripts (vira undefined). Na ordem em que aparecem.
+ */
+export function missingParams(code) {
+  const params = code.params ?? {};
+  const faltam = [];
+  const falta = (k, alvo) => !(k in params) && !faltam.some((f) => f.alvo === alvo) && faltam.push({ chave: k, alvo });
+  code.html.split(/(<script\b[\s\S]*?<\/script>)/i).forEach((p, i) => {
+    if (i % 2) for (const m of p.matchAll(/\bparams\s*(?:\.\s*([a-zA-Z_][a-zA-Z0-9_]*)|\[\s*["']([a-zA-Z_][a-zA-Z0-9_]*)["']\s*\])/g)) falta(m[1] ?? m[2], `params.${m[1] ?? m[2]}`);
+    else for (const m of p.matchAll(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g)) falta(m[1], `{{${m[1]}}}`);
+  });
+  return faltam;
+}
+
 /** Até onde o bloco pode ir no arquivo: a imagem fica até IMAGE_MAX, a animação até a duração dela. */
 export const maxEnd = (b) => (b.kind === "image" && !b.code ? IMAGE_MAX : b.dur);
 export const linked = (b) => b.kind === "video" && (b.audio ?? "linked") === "linked";
