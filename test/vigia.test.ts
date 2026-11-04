@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
 import { ERROS } from "../src/erros";
 import { type Alarme, CHAVE, LIMITE_MS, ligadoDesde, Painel, type Vigiado, vigiar } from "../src/vigia";
+import { vigiaConteineres } from "../src/index";
+import type { Env } from "../src/env";
 import { call, cookie, SITE } from "./helpers";
 
 const APPS = [
@@ -129,10 +131,13 @@ describe("alarme de contêiner ligado sem trabalho", () => {
       return Promise.resolve(Response.json({ data: { viewer: { accounts: [{ containersUsageAdaptiveGroups: [], workersInvocationsAdaptive: [{ dimensions: { datetimeMinute: "2026-11-03T11:58:00Z" } }] }] } } }));
     } as typeof fetch;
     try {
-      const p = new Painel("token", "conta");
-      expect((await p.aplicacoes()).get("meu-avatar-renderer")).toBe("app-render");
-      expect((await p.uso(new Date(AGORA.getTime() - 60 * MIN), AGORA)).workerAte).toBe(Date.parse("2026-11-03T11:58:00Z"));
-      expect(chamadas).toBe(2);
+      // Os dois caminhos: o padrão do painel e o do agendamento, que passa o fetch do site.
+      for (const p of [new Painel("token", "conta"), new Painel("token", "conta", fetch)]) {
+        expect((await p.aplicacoes()).get("meu-avatar-renderer")).toBe("app-render");
+        expect((await p.uso(new Date(AGORA.getTime() - 60 * MIN), AGORA)).workerAte).toBe(Date.parse("2026-11-03T11:58:00Z"));
+      }
+      await vigiaConteineres({ ...env, CLOUDFLARE_ANALYTICS_TOKEN: "token", CLOUDFLARE_ACCOUNT_ID: "conta" } as unknown as Env)();
+      expect(chamadas).toBe(6);
     } finally {
       globalThis.fetch = original;
     }
