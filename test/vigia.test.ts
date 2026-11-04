@@ -117,6 +117,27 @@ describe("alarme de contêiner ligado sem trabalho", () => {
     expect((await guardado())?.semPainel).toBe(true);
   });
 
+  it("o fetch de verdade é chamado solto, não como método do painel", async () => {
+    // No Worker, o fetch chamado com outro this falha antes de sair ("Illegal invocation"): foi o que
+    // derrubou o alarme no ar. O falso aqui recusa do mesmo jeito.
+    const original = globalThis.fetch;
+    let chamadas = 0;
+    globalThis.fetch = function (this: unknown, url: RequestInfo | URL) {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+      chamadas++;
+      if (String(url).endsWith("/containers/applications")) return Promise.resolve(Response.json({ success: true, result: APPS }));
+      return Promise.resolve(Response.json({ data: { viewer: { accounts: [{ containersUsageAdaptiveGroups: [], workersInvocationsAdaptive: [{ dimensions: { datetimeMinute: "2026-11-03T11:58:00Z" } }] }] } } }));
+    } as typeof fetch;
+    try {
+      const p = new Painel("token", "conta");
+      expect((await p.aplicacoes()).get("meu-avatar-renderer")).toBe("app-render");
+      expect((await p.uso(new Date(AGORA.getTime() - 60 * MIN), AGORA)).workerAte).toBe(Date.parse("2026-11-03T11:58:00Z"));
+      expect(chamadas).toBe(2);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("minutos pulados no painel contam como o mesmo período ligado", () => {
     const t = (m: number) => AGORA.getTime() - m * MIN;
     expect(ligadoDesde([t(50), t(46), t(42), t(5)], t(2))).toBe(t(5));
