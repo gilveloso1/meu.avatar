@@ -86,7 +86,10 @@ describe("custos de fora", () => {
       "https://api.cloudflare.com/client/v4/accounts/conta/containers/applications": () =>
         Response.json({ success: true, result: [{ id: "a1", name: "meu-avatar-exporter" }, { id: "a2", name: "meu-avatar-audiofixer" }, { id: "a3", name: "outro-site" }] }),
       "https://api.cloudflare.com/client/v4/graphql": (init) => {
-        variaveis = JSON.parse(String(init!.body)).variables;
+        const corpo = JSON.parse(String(init!.body));
+        variaveis = corpo.variables;
+        // O GraphQL da Cloudflare só ordena por uma dimensão pedida: sem ela, recusa (04/11/2026, no ar).
+        expect(corpo.query).toMatch(/r2StorageAdaptiveGroups\([^)]*orderBy: \[datetime_DESC\]\) \{\s*dimensions \{ datetime \}/);
         return Response.json({
           data: {
             viewer: {
