@@ -147,7 +147,8 @@ describe("aba Atividade", () => {
       .run();
 
     const page = await (await get("/painel/atividade?periodo=7", admin)).text();
-    expect(page).toContain("Exportação · Projeto alheio");
+    expect(page).toContain(">Projeto alheio<");
+    expect(page).toContain(">Exportação<");
     expect(page).toContain("ffmpeg: sem memória");
     expect(page).not.toContain('href="/canvas/e0000000-0000-4000-8000-000000000001"');
     expect(page).toContain("Agente de teste");
