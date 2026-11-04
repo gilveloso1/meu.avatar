@@ -72,7 +72,8 @@ export class Painel {
   constructor(
     private readonly token: string,
     private readonly conta: string,
-    private readonly doFetch: typeof fetch = fetch,
+    // Solto, não o próprio fetch: chamado como this.doFetch, o fetch do Worker recusa ("Illegal invocation").
+    private readonly doFetch: typeof fetch = (entrada, opcoes) => fetch(entrada, opcoes),
   ) {}
 
   /** As aplicações de contêiner da conta: nome → id. */
