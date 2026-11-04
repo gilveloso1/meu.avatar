@@ -72,13 +72,18 @@ export class Painel {
   constructor(
     private readonly token: string,
     private readonly conta: string,
-    // Solto, não o próprio fetch: chamado como this.doFetch, o fetch do Worker recusa ("Illegal invocation").
-    private readonly doFetch: typeof fetch = (entrada, opcoes) => fetch(entrada, opcoes),
+    private readonly doFetch: typeof fetch = fetch,
   ) {}
+
+  /** Chama o fetch solto: como this.doFetch, o fetch do Worker recusa ("Illegal invocation"). */
+  private pedir(entrada: string, opcoes: RequestInit): Promise<Response> {
+    const doFetch = this.doFetch;
+    return doFetch(entrada, opcoes);
+  }
 
   /** As aplicações de contêiner da conta: nome → id. */
   async aplicacoes(): Promise<Map<string, string>> {
-    const res = await this.doFetch(`${API}/accounts/${this.conta}/containers/applications`, { headers: { authorization: `Bearer ${this.token}` } });
+    const res = await this.pedir(`${API}/accounts/${this.conta}/containers/applications`, { headers: { authorization: `Bearer ${this.token}` } });
     const body = await corpo<{ success?: boolean; result?: { id: string; name: string }[]; errors?: unknown }>(res, "Lista de contêineres");
     if (!res.ok || !body.result) throw new Error(`Lista de contêineres falhou (HTTP ${res.status}): ${JSON.stringify(body.errors)}`);
     return new Map(body.result.map((a) => [a.name, a.id]));
@@ -95,7 +100,7 @@ export class Painel {
     }
   } }
 }`;
-    const res = await this.doFetch(`${API}/graphql`, {
+    const res = await this.pedir(`${API}/graphql`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },
       body: JSON.stringify({ query, variables: { conta: this.conta, desde: desde.toISOString(), ate: ate.toISOString(), worker: WORKER } }),
