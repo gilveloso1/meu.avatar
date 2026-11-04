@@ -262,6 +262,10 @@ colar um segredo no terminal, mudar uma configuração fora do repositório. Nes
 
 - Parta da premissa de que ele não sabe como fazer. Antes de qualquer instrução, pergunte se ele
   quer o passo a passo, com botões (por exemplo "Sim, me guie" e "Já sei fazer").
+- Vale também no fim de um trabalho ou relatório: se sobra algo para ele fazer, diga o que é e
+  por quê, numa frase, e pergunte se quer ser guiado. Não escreva o "como fazer" no relatório.
+- Antes de pedir a ação, confirme o que falta de verdade (leia o estado, os logs, o que já está
+  feito): não mande o usuário refazer o que pode já estar pronto.
 - Com o passo a passo, mande **um passo por mensagem**, numerado ("Passo 2 de 5"). Nunca mande a
   lista inteira de uma vez.
 - Cada passo diz exatamente onde tocar e o que escrever: o link direto da página, o nome do botão
