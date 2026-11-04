@@ -35,7 +35,8 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   padrão, até o SDK v2 ainda conecta assim.
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
 - Ferramentas: `listar_videos`, `listar_avatares`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
-  `editar_projeto`, `ver_quadros` (devolve imagem), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`,
+  `editar_projeto`, `ver_quadros` (devolve imagem), `inspecionar_animacao` (texto; imagem só com
+  `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`,
   `renderizar_html`, `legendar`, `limpar_arquivos`,
   `exportar` e `acompanhar_exportacao`. Não apagam projeto e não geram vídeo.
 
@@ -63,6 +64,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio, e `inicio` e `fim` em segundos do grupo), Finais com as variações e avisos. Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
 | `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) e devolve o resumo: `{revisao, criados, grupos, finais, avisos}`, como o projeto sem `incluir` |
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
+| `GET /api/v1/projetos/<id>/animacao?bloco=&instantes=0,1.5&quadros=1&final=` | Abre o código de um bloco de animação no Chrome do render, sem fazer vídeo, no tamanho do Final (sem `final`, o primeiro), e mede cada instante (até 12, em segundos do bloco; sem `instantes`, o começo, os quartos e o fim). Volta `{largura, altura, duracao: {bloco, animacao}, problemas, instantes, linhaDoTempo}`, e `quadros` (o mosaico, JPG em base64) só com `quadros=1`. Ver "Inspeção da animação", abaixo |
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida: `{duracao, silencios, som}`; arquivo sem faixa de áudio (como o WebM do render) vem com `som: false` e nenhum silêncio |
 | `POST /api/v1/projetos/<id>/html` `{nome, html, duracao, final?}` | Faz um WebM transparente do HTML e o guarda nos arquivos do projeto: `{arquivo: {id, nome, tipo, src}, largura, altura}` |
 | `POST /api/v1/projetos/<id>/legenda` `{grupo, simular?, palavras?, semTexto?, fontes?, estilo?, final?, nome?}` | Legenda palavra a palavra do grupo, em WebM transparente: `{arquivo, duracao, largura, altura, palavras, trechos}`; com `simular`, só `{duracao, palavras, trechos}` |
@@ -130,6 +132,32 @@ HTML e legenda: tente de novo em instantes. Chamadas em paralelo esperam a vez n
 está agora, igual ao resumo do `ver_projeto`, com a `revisao` nova: compare com o que você tinha e
 refaça o lote, sem ler o projeto de novo. O que cada um mudou, peça a peça, pede o histórico de
 versões (item 8 do backlog).
+
+## Inspeção da animação
+
+O agente via o resultado de uma animação por imagem, e os defeitos de um exemplo de 8 s (título
+que quebrou em duas linhas, "%" passando da borda do card, texto cortado embaixo) estavam todos
+na geometria do DOM. O `inspecionar_animacao` (`container/render/inspecionar.mjs`) abre a mesma
+página do render (`pagina()`), leva `tl.seek(t)` a cada instante e responde em texto curto, em
+menos de 1 s; o mosaico vem só com `quadros: true`.
+
+- `instantes`: no primeiro, os `elementos` visíveis; nos outros, só o que `mudou` e o que `saiu`.
+  Cada elemento é uma linha: `seletor x,y LxA op0.5 2linhas "texto"`, em px do Final (`op` só
+  abaixo de 1, `linhas` só acima de 1). Visível é o que tem opacidade, tamanho e um pedaço na tela
+  e no pai que corta; entram os que têm texto próprio, id, fundo, borda ou imagem. O seletor é o
+  id, ou `tag.classe` com `[n]` quando se repete.
+- `problemas` `[{tipo, alvo, t, detalhe}]`, um por elemento com os instantes em que aparece:
+  `quebrou` (mais linhas do que `data-linhas`, `-webkit-line-clamp` ou `nowrap` permitem),
+  `palavra_partida` (mais linhas que palavras), `fora_da_tela` e `cortado_pelo_pai` (quanto passa
+  de cada lado; o pai é o mais próximo com `overflow` que corta), `texto_cortado` (o próprio
+  elemento corta: `scrollHeight > clientHeight`), `texto_sobre_texto` (linhas de dois textos
+  visíveis que se cobrem), `fonte` (a família pedida não existe aqui ou não carregou),
+  `erro_de_script` e `passa_do_bloco` (a linha do tempo termina depois do bloco).
+- `linhaDoTempo`: um tween por linha, `início-fim alvo propriedades` (de `tl.getChildren`).
+- `duracao`: a do bloco e a da animação (o fim do último tween).
+
+No exemplo de 8 s com os três defeitos, a resposta tem uns 1.500 caracteres; o mosaico de quatro
+instantes, uns 14 mil em base64.
 
 ## Comandos
 

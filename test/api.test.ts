@@ -858,6 +858,48 @@ describe("animação em código", () => {
     expect(await erro([{ tipo: "enquadrar", bloco: cena, zoom: 2 }], r.revisao)).toEqual({ erro: "enquadramento_invalido", comando: 0 });
   });
 
+  it("a inspeção abre o código do bloco no tamanho do Final, nos instantes pedidos ou nos quartos", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [{ tipo: "adicionar", html: CENA, duracao: 2, rotulo: "a" }, { tipo: "final", id: "final", resolucao: "1080p", formato: "9:16" }]);
+    const cena = r.criados[0]!;
+    const fake = new FakeRenderApi();
+    const inspeciona = (q: string, f: FakeRenderApi | null = fake) => api(`/api/v1/projetos/${id}/animacao?${q}`, admin, undefined, null, null, f);
+    const res = await inspeciona(`bloco=${cena}&instantes=0.5,1.5`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ largura: 1080, altura: 1920, problemas: [{ tipo: "quebrou", alvo: "#titulo", t: [1.5] }] });
+    expect(fake.inspections[0]).toEqual({ html: CENA, largura: 1080, altura: 1920, duracao: 2, instantes: [0.5, 1.5], quadros: false });
+    await inspeciona(`bloco=${cena}&quadros=1`);
+    expect(fake.inspections[1]).toMatchObject({ instantes: [0, 0.5, 1, 1.5, 2], quadros: true });
+  });
+
+  it("a inspeção recusa bloco sem código, instante fora do bloco e avisa sem contêiner ou com a página quebrada", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [{ tipo: "adicionar", html: CENA, duracao: 2 }, { tipo: "adicionar", video: VIDEO, fim: 4 }]);
+    const [cena, video] = r.criados;
+    const fake = new FakeRenderApi();
+    const inspeciona = async (q: string, f: FakeRenderApi | null = fake) => (await api(`/api/v1/projetos/${id}/animacao?${q}`, admin, undefined, null, null, f)).json();
+    expect(await inspeciona("bloco=nada")).toEqual({ erro: "bloco_inexistente" });
+    expect(await inspeciona(`bloco=${video}`)).toEqual({ erro: "bloco_sem_codigo" });
+    expect(await inspeciona(`bloco=${cena}&instantes=3`)).toEqual({ erro: "instantes_invalidos" });
+    expect(await inspeciona(`bloco=${cena}&instantes=${Array(13).fill(1).join(",")}`)).toEqual({ erro: "instantes_invalidos" });
+    expect(await inspeciona(`bloco=${cena}&final=outro`)).toEqual({ erro: "final_inexistente" });
+    expect(fake.inspections).toHaveLength(0);
+    expect(await inspeciona(`bloco=${cena}`, null)).toEqual({ erro: "render_indisponivel" });
+    fake.log = "Chrome não abriu";
+    expect(await inspeciona(`bloco=${cena}`)).toEqual({ erro: "render_falhou", detalhe: "Chrome não abriu" });
+  });
+
+  it("a inspeção de projeto de outra conta não existe", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [{ tipo: "adicionar", html: CENA, duracao: 2 }]);
+    await memberCookie();
+    const { email } = (await env.DB.prepare("SELECT email FROM users WHERE role = 'member'").first<{ email: string }>())!;
+    const membro = await token(email, "ma_membro");
+    const fake = new FakeRenderApi();
+    expect((await api(`/api/v1/projetos/${id}/animacao?bloco=${r.criados[0]}`, membro, undefined, null, null, fake)).status).toBe(404);
+    expect(fake.inspections).toHaveLength(0);
+  });
+
   it("ainda não exporta, com a frase que diz o porquê", async () => {
     const { id, revisao } = await novo();
     await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" }, { tipo: "adicionar", html: CENA, duracao: 2, sobre: "@a", em: 0 }]);

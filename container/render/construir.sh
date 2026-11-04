@@ -31,6 +31,12 @@ fetch(\"http://127.0.0.1:8080/render\",{method:\"POST\",headers:{\"x-largura\":\
 docker cp render-teste:/tmp/saida.webm "$T/saida.webm"
 ./ffprobe -v error -show_entries stream_tags=alpha_mode -of default=nw=1 "$T/saida.webm" | grep -qi "alpha_mode=1" || { echo "O render saiu sem transparência." >&2; exit 1; }
 echo "Render sem rede: ok ($(wc -c < "$T/saida.webm") bytes)."
+# A inspeção abre a mesma página no Chrome, sem vídeo: o exemplo não pode ter problema.
+docker exec render-teste sh -c 'node -e "
+const fs=require(\"fs\");
+fetch(\"http://127.0.0.1:8080/inspecionar\",{method:\"POST\",headers:{\"x-largura\":\"720\",\"x-altura\":\"1280\",\"x-duracao\":\"3\",\"x-instantes\":\"0,1,2.5\",\"x-quadros\":\"1\"},body:fs.readFileSync(\"/tmp/exemplo.html\")})
+ .then(async r=>{const j=await r.json().catch(()=>null);if(!r.ok||!j||j.problemas.length||!j.quadros||!j.instantes[2].mudou.length){console.error(JSON.stringify(j));process.exit(1)}})"' || { echo "A inspeção falhou." >&2; exit 1; }
+echo "Inspeção sem rede: ok."
 # O "dormir" da Cloudflare só manda SIGTERM: tem de parar na hora, com código 0.
 docker stop -t 5 render-teste >/dev/null
 [ "$(docker inspect -f '{{.State.ExitCode}}' render-teste)" = 0 ] || { echo "O servidor não saiu no SIGTERM." >&2; exit 1; }

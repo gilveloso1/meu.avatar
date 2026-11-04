@@ -29,10 +29,26 @@ export class Renderer extends SleepyContainer {
 /** O HTML não virou vídeo: o motivo é o log do HyperFrames, que o agente lê para corrigir. */
 export class RenderError extends Error {}
 
+/**
+ * A inspeção de uma animação (container/render/inspecionar.mjs): problemas, o que muda em cada
+ * instante e os tweens da linha do tempo, em texto curto; o mosaico (JPG em base64) só se pedido.
+ */
+export interface InspecaoDaAnimacao {
+  largura: number;
+  altura: number;
+  duracao: { bloco: number; animacao: number };
+  problemas: { tipo: string; alvo: string; t: number[]; detalhe: string }[];
+  instantes: { t: number; elementos?: string[]; mudou?: string[]; saiu?: string[]; mais?: number }[];
+  linhaDoTempo: string[];
+  quadros?: string;
+}
+
 /** O que o site usa do contêiner; os testes trocam por um falso. */
 export interface RenderApi {
   /** Devolve o WebM (corpo com content-length) ou lança RenderError. */
   render(html: string, largura: number, altura: number, duracao: number): Promise<Response>;
+  /** Abre o HTML no Chrome sem fazer vídeo e mede cada instante; lança RenderError se a página não abre. */
+  inspect(html: string, largura: number, altura: number, duracao: number, instantes: number[], quadros: boolean): Promise<InspecaoDaAnimacao>;
 }
 
 export class ContainerRender implements RenderApi {
@@ -41,6 +57,26 @@ export class ContainerRender implements RenderApi {
   /** O HTML vai inteiro em cada tentativa: a conexão que cai no meio é refeita do começo. */
   render(html: string, largura: number, altura: number, duracao: number): Promise<Response> {
     return tentando("Render", () => this.once(html, largura, altura, duracao), (err) => err instanceof RenderError);
+  }
+
+  inspect(html: string, largura: number, altura: number, duracao: number, instantes: number[], quadros: boolean): Promise<InspecaoDaAnimacao> {
+    return tentando(
+      "Inspeção da animação",
+      async () => {
+        const container = await ligado(this.ns, "render", START_TIMEOUT_MS);
+        const res = await container.fetch(
+          new Request("http://render/inspecionar", {
+            method: "POST",
+            body: html,
+            headers: { "content-type": "text/html; charset=utf-8", "x-largura": String(largura), "x-altura": String(altura), "x-duracao": String(duracao), "x-instantes": instantes.join(","), "x-quadros": quadros ? "1" : "0" },
+          }),
+        );
+        if (res.status === 500) throw new RenderError((await res.text()).slice(-2000));
+        if (!res.ok) throw new Error(`Inspeção falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
+        return res.json<InspecaoDaAnimacao>();
+      },
+      (err) => err instanceof RenderError,
+    );
   }
 
   private async once(html: string, largura: number, altura: number, duracao: number): Promise<Response> {

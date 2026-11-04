@@ -7,7 +7,9 @@
  * inteira, com o tamanho (x-largura, x-altura), a duração (x-duracao), as fontes de
  * fontes/ e o GSAP. A linha do tempo `tl` já existe, pausada: o agente só acrescenta.
  * As fontes vão por @font-face com o arquivo ao lado: assim o HyperFrames não procura
- * nada na rede (o contêiner não tem internet). GET /saude responde ok.
+ * nada na rede (o contêiner não tem internet). POST /inspecionar abre a mesma página no Chrome,
+ * sem fazer vídeo, e devolve a geometria de cada instante (x-instantes) em JSON, com o mosaico
+ * dos quadros se x-quadros for 1 (inspecionar.mjs). GET /saude responde ok.
  */
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
@@ -16,6 +18,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspecionar } from "./inspecionar.mjs";
 
 const APP = dirname(fileURLToPath(import.meta.url));
 const FONTES = join(APP, "fontes");
@@ -26,6 +29,7 @@ const MAX_DURACAO = 60;
 const MAX_LADO = 1920;
 const PRAZO_MS = 5 * 60_000;
 const PADRAO = "Inter";
+const MAX_INSTANTES = 12;
 
 /** As famílias de fontes/, com o arquivo e os pesos de cada um. */
 export const FAMILIAS = {
@@ -114,7 +118,7 @@ const servidor = createServer(async (req, res) => {
     res.end(corpo);
   };
   if (req.method === "GET" && req.url === "/saude") return responde(200, "ok");
-  if (req.method !== "POST" || req.url !== "/render") return responde(404, "nao encontrado");
+  if (req.method !== "POST" || (req.url !== "/render" && req.url !== "/inspecionar")) return responde(404, "nao encontrado");
   const largura = numero(req.headers["x-largura"], 16, MAX_LADO);
   const altura = numero(req.headers["x-altura"], 16, MAX_LADO);
   const duracao = numero(req.headers["x-duracao"], 0.1, MAX_DURACAO);
@@ -128,6 +132,20 @@ const servidor = createServer(async (req, res) => {
   }
   const conteudo = Buffer.concat(partes).toString("utf8");
   if (!conteudo.trim()) return responde(400, "html vazio");
+  if (req.url === "/inspecionar") {
+    const instantes = String(req.headers["x-instantes"] ?? "").split(",").filter(Boolean).map((t) => numero(t, 0, duracao));
+    if (!instantes.length || instantes.length > MAX_INSTANTES || instantes.includes(null)) return responde(400, "instantes invalidos");
+    const html = pagina(conteudo, largura, altura, duracao);
+    const vez = fila.then(() => inspecionar({ hyperframes: HYPERFRAMES, fontes: FONTES, gsap: GSAP, html, duracao, largura, altura, instantes, quadros: req.headers["x-quadros"] === "1", familias: [...Object.keys(FAMILIAS), "Noto Color Emoji"] }));
+    fila = vez.catch(() => {});
+    try {
+      const corpo = JSON.stringify(await vez);
+      res.writeHead(200, { "content-type": "application/json", "content-length": Buffer.byteLength(corpo) });
+      return res.end(corpo);
+    } catch (err) {
+      return responde(500, String(err.message ?? err).slice(-2000));
+    }
+  }
   const vez = fila.then(() => render(conteudo, largura, altura, duracao));
   fila = vez.catch(() => {});
   let feito;

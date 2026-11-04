@@ -41,7 +41,7 @@
     // HyperFrames com o Chrome, sem GPU. A imagem não é montada no deploy (o apt dela precisa da
     // rede): sai de container/render/construir.sh, que a manda ao registro (docs/operacao.md).
     // Mudou algo em container/render/: nova versão no construir.sh e aqui.
-    { "class_name": "Renderer", "image": "registry.cloudflare.com/89fd8860072dca2486e51cd4ad292f43/meu-avatar-render:2", "instance_type": "standard-3", "max_instances": 1 }
+    { "class_name": "Renderer", "image": "registry.cloudflare.com/89fd8860072dca2486e51cd4ad292f43/meu-avatar-render:3", "instance_type": "standard-3", "max_instances": 1 }
   ],
   "durable_objects": {
     "bindings": [

@@ -45,6 +45,6 @@ RUN --mount=type=secret,id=ca,target=/ca.crt,required=false \
 COPY fontes ./fontes
 # Emoji no sistema (fontconfig): o Chrome o acha para 📅 e ✓ em qualquer fonte, sem @font-face.
 RUN mkdir -p /usr/local/share/fonts && ln -s /app/fontes/NotoColorEmoji.ttf /usr/local/share/fonts/ && fc-cache -f
-COPY servidor.mjs ./
+COPY servidor.mjs inspecionar.mjs ./
 EXPOSE 8080
 CMD ["node", "/app/servidor.mjs"]

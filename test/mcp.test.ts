@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
-import { call, cookie, FakeExportApi, FakeVideoApi, memberCookie, SITE, webmBytes } from "./helpers";
+import { call, cookie, FakeExportApi, FakeRenderApi, FakeVideoApi, memberCookie, SITE, webmBytes } from "./helpers";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
 
@@ -10,17 +10,17 @@ async function token(email: string, code: string) {
   return code;
 }
 
-const post = (body: unknown, code: string | null = "ma_admin", headers: Record<string, string> = {}, exporter: FakeExportApi | null = null) =>
-  call(new Request(`${SITE}/mcp`, { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body), headers: { ...(code ? { authorization: `Bearer ${code}` } : {}), ...headers } }), new FakeVideoApi(), null, null, exporter);
+const post = (body: unknown, code: string | null = "ma_admin", headers: Record<string, string> = {}, exporter: FakeExportApi | null = null, renderer: FakeRenderApi | null = null) =>
+  call(new Request(`${SITE}/mcp`, { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body), headers: { ...(code ? { authorization: `Bearer ${code}` } : {}), ...headers } }), new FakeVideoApi(), null, null, exporter, null, renderer);
 
 type Result = { content: { type: string; text?: string; data?: string; mimeType?: string }[]; isError?: boolean };
 const META = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": { name: "teste", version: "1" } };
 /** Os cabeçalhos obrigatórios da revisão 2026-07-28. */
 const CABECALHOS = (method: string, name?: unknown): Record<string, string> => ({ "mcp-protocol-version": "2026-07-28", "mcp-method": method, ...(name ? { "mcp-name": String(name) } : {}) });
-const rpc = async (method: string, params: Record<string, unknown> = {}, exporter: FakeExportApi | null = null) =>
-  (await (await post({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: META } }, "ma_admin", CABECALHOS(method, params.name), exporter)).json()) as { id: number; result: any; error?: { code: number; data?: unknown } };
+const rpc = async (method: string, params: Record<string, unknown> = {}, exporter: FakeExportApi | null = null, renderer: FakeRenderApi | null = null) =>
+  (await (await post({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: META } }, "ma_admin", CABECALHOS(method, params.name), exporter, renderer)).json()) as { id: number; result: any; error?: { code: number; data?: unknown } };
 const legado = async (method: string, params: unknown = {}) => (await (await post({ jsonrpc: "2.0", id: 1, method, params })).json()) as { result: any; error?: { code: number } };
-const ferramenta = async (name: string, args: unknown = {}, exporter: FakeExportApi | null = null) => (await rpc("tools/call", { name, arguments: args }, exporter)).result as Result;
+const ferramenta = async (name: string, args: unknown = {}, exporter: FakeExportApi | null = null, renderer: FakeRenderApi | null = null) => (await rpc("tools/call", { name, arguments: args }, exporter, renderer)).result as Result;
 const dados = <T>(r: Result) => JSON.parse(r.content[0]!.text!) as T;
 
 beforeEach(async () => {
@@ -124,7 +124,7 @@ describe("protocolo", () => {
     const { result } = await legado("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
     expect(result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "meu-avatar" } });
     expect((await legado("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-11-25");
-    expect((await legado("tools/list")).result.tools).toHaveLength(15);
+    expect((await legado("tools/list")).result.tools).toHaveLength(16);
     expect((await legado("ping")).result).toEqual({});
   });
 
@@ -142,7 +142,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_videos", "listar_avatares", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "ver_transcricao", "ver_silencios", "enviar_arquivo", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_videos", "listar_avatares", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });
@@ -176,6 +176,20 @@ describe("ferramentas", () => {
     const q = await ferramenta("ver_quadros", { projeto: id, src: `/videos/${VIDEO}.mp4`, instantes: [1, 2] }, fake);
     expect(q.content[0]).toEqual({ type: "image", data: btoa("jpg"), mimeType: "image/jpeg" });
     expect(dados(await ferramenta("ver_silencios", { projeto: id, src: `/videos/${VIDEO}.mp4` }, fake))).toEqual(fake.silences);
+  });
+
+  it("inspecionar_animacao responde em texto; com quadros: true, o mosaico vem como imagem", async () => {
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "A" }));
+    const { criados } = dados<{ criados: string[] }>(await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", html: '<div id="titulo">Oi</div>', duracao: 4 }] }));
+    const r = new FakeRenderApi();
+    const texto = await ferramenta("inspecionar_animacao", { projeto: id, bloco: criados[0], instantes: [0, 1] }, null, r);
+    expect(texto.content).toHaveLength(1);
+    expect(dados<{ problemas: { tipo: string }[] }>(texto).problemas[0]!.tipo).toBe("quebrou");
+    expect(r.inspections[0]).toMatchObject({ html: '<div id="titulo">Oi</div>', duracao: 4, instantes: [0, 1], quadros: false });
+    const comImagem = await ferramenta("inspecionar_animacao", { projeto: id, bloco: criados[0], quadros: true }, null, r);
+    expect(comImagem.content[1]).toEqual({ type: "image", data: btoa("jpg"), mimeType: "image/jpeg" });
+    expect(comImagem.content[0]!.text).not.toContain("quadros");
+    expect(r.inspections[1]).toMatchObject({ instantes: [0, 1, 2, 3, 4], quadros: true });
   });
 
   it("contêiner que não responde é erro da ferramenta, e o pedido não cai", async () => {

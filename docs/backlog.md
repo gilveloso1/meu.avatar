@@ -92,9 +92,10 @@ HyperFrames e o GSAP), sem pipeline novo.
 - **Prévia no canvas**: o próprio navegador roda o código num iframe com `sandbox` (sem acesso ao
   site), com as mesmas fontes e a mesma versão do GSAP da imagem de render, e o player leva a
   linha do tempo ao instante (`tl.seek`). Só a camada que está na tela roda, para não pesar.
-- **Agente**: lê e edita o código guardado (sem reenviar tudo) e vê o resultado pelos quadros: o
-  contêiner de render tira fotos da página nos instantes pedidos, sem fazer o vídeo (segundos, não
-  minutos). É a prévia sem salvar e o "ler o HTML" do teste da Lara Resende.
+- **Agente**: lê e edita o código guardado (sem reenviar tudo) e vê o resultado pela inspeção:
+  o contêiner de render abre a página nos instantes pedidos, sem fazer o vídeo (menos de 1 s), e
+  devolve a geometria em texto; os quadros, só pedidos. É a prévia sem salvar e o "ler o HTML"
+  do teste da Lara Resende.
 - **Exportação**: antes de montar, o contêiner de render faz o WebM de cada bloco de código no
   tamanho e na duração finais, guardado pelo hash (código, parâmetros, tamanho, duração): a mesma
   animação não renderiza duas vezes. Depois, a emenda é a de hoje, com o WebM por cima.
@@ -104,13 +105,15 @@ HyperFrames e o GSAP), sem pipeline novo.
   por isso o `sandbox`; a exportação ganha um passo e espera os renders.
 
 Feito: o bloco de código no modelo e na API (`adicionar {html, duracao}`, `editarCodigo` e
-`incluir: codigo`), com a prévia no canvas ([canvas.md](canvas.md)). Faltam, nesta ordem, um PR de cada vez:
+`incluir: codigo`), com a prévia no canvas ([canvas.md](canvas.md)), e o `inspecionar_animacao`:
+o agente vê o resultado em texto (a geometria do DOM em cada instante, com os problemas que no
+exemplo de 8 s só se viram por imagem) e pede os quadros só quando o texto não basta
+([api.md](api.md)). Faltam, nesta ordem, um PR de cada vez:
 
-1. Quadros do bloco de código para o agente, pelo contêiner de render.
-2. Exportação: render dos blocos de código com cache pelo hash (até lá, a exportação recusa
+1. Exportação: render dos blocos de código com cache pelo hash (até lá, a exportação recusa
    projeto com animação, `ERROS.exportarAnimacao`).
-3. Legenda como bloco de código; o `renderizar_html` antigo fica para quem precisa do arquivo.
-4. Parâmetros no bloco, base dos templates de layout.
+2. Legenda como bloco de código; o `renderizar_html` antigo fica para quem precisa do arquivo.
+3. Parâmetros no bloco, base dos templates de layout.
 
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 

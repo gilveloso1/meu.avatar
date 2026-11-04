@@ -109,13 +109,14 @@ export class Api {
     if (path === "/api/v1/videos" && !post) return this.videos(user, url);
     if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "html") return post ? this.renderHtml(request, project) : falha(405, "metodo_invalido");
     if (m[2] === "legenda") return post ? this.caption(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "limpar") return post ? this.cleanFiles(request, project) : falha(405, "metodo_invalido");
+    if (m[2] === "animacao") return post ? falha(405, "metodo_invalido") : this.inspectCode(project, url);
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(",")));
   }
@@ -211,6 +212,25 @@ export class Api {
   private async renderHtml(request: Request, project: Project): Promise<Response> {
     const body = await json(request);
     return this.render(project, { nome: nomeDoArquivo(body?.nome, "camada.webm"), html: typeof body?.html === "string" ? body.html : "", duracao: typeof body?.duracao === "number" ? body.duracao : NaN, final: typeof body?.final === "string" ? body.final : undefined });
+  }
+
+  /**
+   * O código de um bloco aberto no Chrome do render, sem fazer vídeo: problemas, o que muda entre
+   * os instantes e os tweens, em texto curto (o agente vê o resultado sem gastar com imagem).
+   * quadros=1 traz também o mosaico, em base64.
+   */
+  private async inspectCode(project: Project, url: URL): Promise<Response> {
+    const p = url.searchParams;
+    const instantes = (p.get("instantes") ?? "").split(",").filter(Boolean).map(Number);
+    try {
+      const r = await this.exports.inspectCode(project, { bloco: p.get("bloco") ?? "", instantes, quadros: p.get("quadros") === "1", final: p.get("final") ?? undefined });
+      if (r === null) return falha(503, "render_indisponivel");
+      if (typeof r === "string") return falha(400, r);
+      return Response.json(r, { headers: { "cache-control": "private, no-store" } });
+    } catch (err) {
+      if (err instanceof RenderError) return falha(422, "render_falhou", { detalhe: err.message });
+      return conteinerFalhou("Inspeção da animação", err);
+    }
   }
 
   /** O WebM no projeto, com os erros do render em códigos para o agente. */
