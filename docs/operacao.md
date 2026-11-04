@@ -246,7 +246,7 @@ Nenhuma chave fica no repositório.
 | `OPENROUTER_WEBHOOK_SECRET` | Segredo do Worker (recomendado) | Segredo de assinatura do workspace no OpenRouter; com ele, avisos sem assinatura válida são recusados (401) |
 | `HEYGEN_API_KEY` | Segredo do Worker e `.dev.vars` | API direta da HeyGen (o HeyGen Avatar IV com voz pronta, voz clonada ou o áudio da pessoa). **Vence em 27/01/2027**: gere outra em platform.heygen.com → API keys e troque nos dois lugares. Sem ela, o HeyGen segue pelo OpenRouter |
 | `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` | Só onde você publica | Publicar, criar banco e bucket, cadastrar segredos |
-| `CLOUDFLARE_ANALYTICS_TOKEN` | Segredo do Worker | Só leitura do painel e dos contêineres: o alarme de contêiner ligado sem trabalho ("Contêiner que dorme de verdade"). Sem ele, o administrador vê o aviso de alarme sem acesso |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | Segredo do Worker | Só leitura do painel e dos contêineres: o alarme de contêiner ligado sem trabalho ("Contêiner que dorme de verdade") e os custos da Cloudflare na aba Custos do painel. Sem ele, o administrador vê o aviso de alarme sem acesso |
 
 ## Trocar a plataforma do HeyGen
 

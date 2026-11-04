@@ -49,6 +49,14 @@ export interface Alarme {
 
 export const CHAVE = "alarme.conteiner";
 
+/** O que uma aplicação de contêiner gastou no período, como o painel da Cloudflare mede. */
+export interface Consumo {
+  id: string;
+  memoriaByteSeg: number;
+  discoByteSeg: number;
+  cpuSeg: number;
+}
+
 /** Minutos com memória alocada de cada aplicação e o minuto mais novo das invocações do Worker. */
 export interface Uso {
   minutos: Map<string, number[]>;
@@ -87,6 +95,46 @@ export class Painel {
     const body = await corpo<{ success?: boolean; result?: { id: string; name: string }[]; errors?: unknown }>(res, "Lista de contêineres");
     if (!res.ok || !body.result) throw new Error(`Lista de contêineres falhou (HTTP ${res.status}): ${JSON.stringify(body.errors)}`);
     return new Map(body.result.map((a) => [a.name, a.id]));
+  }
+
+  /**
+   * O consumo de cada aplicação de contêiner no período (o painel guarda 32 dias) e o espaço do
+   * bucket do R2 agora (o ponto mais novo do último dia). Para a aba Custos do painel (src/custos.ts).
+   */
+  async consumo(desde: Date, ate: Date, bucket: string): Promise<{ apps: Consumo[]; r2: { bytes: number; objetos: number } | null }> {
+    const query = `query ($conta: String!, $desde: Time!, $ate: Time!, $ontem: Time!, $bucket: String!) {
+  viewer { accounts(filter: {accountTag: $conta}) {
+    containersUsageAdaptiveGroups(limit: 100, filter: {datetimeMinute_geq: $desde, datetimeMinute_leq: $ate}) {
+      dimensions { applicationId } sum { allocatedMemory allocatedDisk cpuTimeSec }
+    }
+    r2StorageAdaptiveGroups(limit: 1, filter: {datetime_geq: $ontem, datetime_leq: $ate, bucketName: $bucket}, orderBy: [datetime_DESC]) {
+      max { payloadSize objectCount }
+    }
+  } }
+}`;
+    const ontem = new Date(ate.getTime() - 24 * 60 * 60_000);
+    const res = await this.pedir(`${API}/graphql`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ query, variables: { conta: this.conta, desde: desde.toISOString(), ate: ate.toISOString(), ontem: ontem.toISOString(), bucket } }),
+    });
+    type Conta = {
+      containersUsageAdaptiveGroups: { dimensions: { applicationId: string }; sum: { allocatedMemory: number; allocatedDisk: number; cpuTimeSec: number } }[];
+      r2StorageAdaptiveGroups: { max: { payloadSize: number; objectCount: number } }[];
+    };
+    const body = await corpo<{ data?: { viewer: { accounts: Conta[] } }; errors?: unknown }>(res, "Painel da Cloudflare");
+    const conta = body.data?.viewer.accounts[0];
+    if (!res.ok || !conta) throw new Error(`Painel da Cloudflare falhou (HTTP ${res.status}): ${JSON.stringify(body.errors)}`);
+    const r2 = conta.r2StorageAdaptiveGroups[0]?.max;
+    return {
+      apps: conta.containersUsageAdaptiveGroups.map((l) => ({
+        id: l.dimensions.applicationId,
+        memoriaByteSeg: l.sum.allocatedMemory,
+        discoByteSeg: l.sum.allocatedDisk,
+        cpuSeg: l.sum.cpuTimeSec,
+      })),
+      r2: r2 ? { bytes: r2.payloadSize, objetos: r2.objectCount } : null,
+    };
   }
 
   async uso(desde: Date, ate: Date): Promise<Uso> {

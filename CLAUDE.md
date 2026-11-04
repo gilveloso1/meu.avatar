@@ -232,7 +232,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   (`.dash__mosaic`, o alto em duas linhas da grade) e as bases se alinham pela grade; a Visão geral
   tem linhas contadas (até 5 modelos e "Outros"; listas inteiras ficam
   numa aba); parte de um todo em barras horizontais ordenadas (`.rank`, uma cor só, "Outros" em
-  cinza; em Custos, uma linha por modelo com as colunas alinhadas, para não esticar só a barra). Para simular volume: `npm run exemplos:painel`.
+  cinza; em Custos, uma linha por modelo com as colunas alinhadas, para não esticar só a barra).
+  Custos também lê os custos de fora (`src/custos.ts`): um card igual por provedor de vídeo
+  (OpenRouter, HeyGen; provedor novo é mais um item em `createCosts`, `src/index.ts`) e a Cloudflare
+  (contêineres e R2) num card só. Para simular volume: `npm run exemplos:painel`.
 
 ## Contas
 
