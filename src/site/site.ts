@@ -21,7 +21,7 @@
 import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { handleMcp } from "../mcp";
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
-import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video, VideoStatus } from "../db";
+import type { AssetKind, Avatar, AvatarAsset, Db, PanelStats, Project, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -53,7 +53,7 @@ const ICONS = [
   "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today", "check", "check_circle",
   "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
   "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
-  "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
+  "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "monitoring", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
   "person", "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
   "send", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
@@ -142,6 +142,8 @@ export class Site {
 
     if (!post && path === "/") return this.home(user, url);
     if (!post && path === "/videos") return this.videosPage(user, url);
+    // O painel do administrador: para os outros, a página nem existe.
+    if (!post && path === "/painel") return user.role === "admin" ? this.panelPage(user, url) : new Response("não encontrado", { status: 404 });
     // Endereços da versão anterior.
     if (!post && path === "/novo") return redirect("/");
     const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
@@ -378,9 +380,7 @@ ${error ? snackbar(error) : ""}`;
     </div>
     <div class="viewer__body"><div class="viewer__panel">
       <section class="viewer__section"><h2 class="viewer__title">Nome</h2><div class="viewer__card"><p class="viewer__text">${esc(asset.name)}</p></div></section>
-      <section class="viewer__card viewer__details"><h2 class="qe-result__title">Detalhes</h2>
-        <dl>${details.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${d.icon}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.value)}</dd></div>`).join("")}</dl>
-      </section>
+      ${detailsCard("Detalhes", details)}
     </div></div>
     <div class="viewer__actions">
       <a class="button button--outlined interactive" href="${src}/apagar"><span class="icon">delete</span>Apagar</a>
@@ -466,6 +466,22 @@ ${error ? snackbar(error) : ""}`;
   /** Liga o vídeo aos ativos do avatar, sem copiar o arquivo. */
   private async linkVideo(saving: SavableVideo, avatarId: string): Promise<void> {
     await this.db.insertAsset({ id: crypto.randomUUID(), avatar_id: avatarId, kind: "video", key: saving.key, name: videoAssetName(saving), type: "video/mp4", size: saving.size, source_video: saving.video.id });
+  }
+
+  /** O painel do administrador: uso e gasto do site inteiro, no período dos chips (30 dias por padrão). */
+  private async panelPage(user: User, url: URL): Promise<Response> {
+    const period = PANEL_PERIODS.find((p) => p.id === url.searchParams.get("periodo")) ?? PANEL_PERIODS[1]!;
+    const since = period.days ? new Date(Date.now() - period.days * 86_400_000).toISOString() : null;
+    const stats = await this.db.panelStats(since);
+    const chips = PANEL_PERIODS.map(
+      (p) => `<a class="chip interactive" href="/painel?periodo=${p.id}"${p === period ? ' aria-current="true"' : ""}>${p === period ? '<span class="icon">check</span>' : ""}${esc(p.label)}</a>`,
+    ).join("");
+    const body = `
+<main class="page" id="conteudo">
+  <nav class="chip-set library__tools" aria-label="Período">${chips}</nav>
+  <div class="panel-grid">${panelCards(stats).join("")}</div>
+</main>`;
+    return html(page(`Painel · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Painel" } }));
   }
 
   /** Tela inicial: um card por estrutura que a pessoa pode usar; a busca filtra pelo nome. */
@@ -976,10 +992,7 @@ ${error ? snackbar(error) : ""}`;
           ${notes
             .map((d) => `<section class="viewer__section"><h2 class="viewer__title">${esc(d.term)}</h2><div class="viewer__card"><p class="viewer__text">${esc(d.description)}</p></div></section>`)
             .join("")}
-          <section class="viewer__card viewer__details" aria-labelledby="detalhes-titulo">
-            <h2 class="qe-result__title" id="detalhes-titulo">Detalhes</h2>
-            <dl>${details.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${DETAIL_ICONS[d.term] ?? "info"}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.description)}</dd></div>`).join("")}</dl>
-          </section>
+          ${detailsCard("Detalhes", details.map((d) => ({ icon: DETAIL_ICONS[d.term] ?? "info", term: d.term, value: d.description })))}
           ${saveButton}
         </div>`;
     const body = `
@@ -1747,6 +1760,62 @@ function generateBar(seconds: string, cost: number | undefined, enabled: boolean
       </div>`;
 }
 
+/** Os períodos do painel; `days` vazio é desde o começo. */
+const PANEL_PERIODS = [
+  { id: "7", label: "Últimos 7 dias", days: 7 },
+  { id: "30", label: "Últimos 30 dias", days: 30 },
+  { id: "tudo", label: "Tudo", days: 0 },
+] as const;
+
+function money(n: number): string {
+  return `US$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** Os cards do painel: gasto por modelo, vídeos, projetos e contas. */
+function panelCards(s: PanelStats): string[] {
+  const n = (x: number) => x.toLocaleString("pt-BR");
+  const total = s.models.reduce((sum, m) => sum + m.cost, 0);
+  const spend = [
+    { icon: "payments", term: "Total", value: money(total) },
+    ...s.models.map((m) => {
+      const found = structureById(m.structure);
+      return { icon: found?.icon ?? "movie", term: found?.name ?? (m.structure || "Sem modelo"), value: `${money(m.cost)} · ${m.videos === 1 ? "1 vídeo" : `${n(m.videos)} vídeos`}` };
+    }),
+  ];
+  const v = s.videos;
+  return [
+    detailsCard("Gasto em vídeos", spend),
+    detailsCard("Vídeos", [
+      { icon: "movie", term: "Pedidos", value: n(v.total) },
+      { icon: "check_circle", term: "Prontos", value: n(v.done) },
+      { icon: "error", term: "Com falha", value: n(v.failed) },
+      { icon: "hourglass_top", term: "Em andamento", value: n(v.busy) },
+      { icon: "schedule", term: "Minutos prontos", value: (v.seconds / 60).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) },
+      { icon: "graphic_eq", term: "Áudio com falha", value: n(v.audioFailed) },
+      { icon: "content_cut", term: "Edição rápida com falha", value: n(v.editFailed) },
+    ]),
+    detailsCard("Projetos", [
+      { icon: "folder_open", term: "Criados", value: n(s.projects.created) },
+      { icon: "download", term: "Exportações", value: n(s.projects.exports) },
+      { icon: "error", term: "Exportações com falha", value: n(s.projects.exportsFailed) },
+    ]),
+    detailsCard("Contas", [
+      { icon: "person", term: "Pessoas", value: n(s.accounts.users) },
+      { icon: "face", term: "Avatares", value: n(s.accounts.avatars) },
+      { icon: "photo_library", term: "Ativos", value: n(s.accounts.assets) },
+    ]),
+  ];
+}
+
+/** O card de linhas (ícone, rótulo, valor): os Detalhes do vídeo e do ativo e os cards do painel. */
+function detailsCard(title: string, rows: { icon: string; term: string; value: string }[]): string {
+  const id = `card-${title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
+  return `<section class="viewer__card viewer__details" aria-labelledby="${id}">
+            <h2 class="qe-result__title" id="${id}">${esc(title)}</h2>
+            <dl>${rows.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${d.icon}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.value)}</dd></div>`).join("")}</dl>
+          </section>`;
+}
+
 function emptyState(icon: string, title: string, text: string): string {
   return `<div class="empty"><span class="icon">${icon}</span><p class="empty__title">${esc(title)}</p><p>${esc(text)}</p></div>`;
 }
@@ -1989,6 +2058,7 @@ function accountActions(user: User): string {
       <div class="menu__list">
         <p class="menu__header"><span class="menu__name">${esc(user.name)}</span><span class="menu__email">${esc(user.email)}</span></p>
         <hr class="menu__divider">
+        ${user.role === "admin" ? `<a class="menu__item interactive" href="/painel"><span class="icon">monitoring</span>Painel</a>` : ""}
         <form method="post" action="/sair"><button class="menu__item interactive" type="submit"><span class="icon">logout</span>Sair</button></form>
       </div>
     </details>`;

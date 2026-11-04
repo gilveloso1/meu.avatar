@@ -64,6 +64,7 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
   - Painel de configuração: `pane pane--config` em `.workspace`, com `formField`, e `filePicker`
     para foto, vídeo e áudio.
   - Item aberto: o molde da página do vídeo (`.viewer`), como a página de um ativo.
+  - Card de linhas (ícone, rótulo, valor): `detailsCard`, nos Detalhes do vídeo e do ativo e nos cards do painel.
   - Escolher um avatar: `avatarPicker` (busca e lista), em `avatarDialog` (diálogo básico do M3, em
     "Salvar no avatar") e em `assetPanel`.
   - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
@@ -221,6 +222,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   sem o cabeçalho da folha; sem vídeo pronto, um card compacto com o status (e o
   motivo da falha, que então não se repete na folha); o FAB "Novo vídeo" preso no
   canto.
+
+- Painel do administrador (`/painel`, pelo item "Painel" do menu do perfil): chips de período
+  (7 dias, 30 dias, tudo) e uma grade de `detailsCard` com o gasto por modelo, os vídeos, os
+  projetos e as contas, de todas as contas. Para quem não é administrador, a página não existe (404).
 
 ## Contas
 

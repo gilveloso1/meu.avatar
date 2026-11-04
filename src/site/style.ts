@@ -434,6 +434,8 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 /* Modelos e vídeos em grade: card preenchido de cantos grandes, com o ícone e o menu em
    cima e o título embaixo. O link cobre o card inteiro; o menu fica por cima dele. */
 .tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+/* O painel do administrador: os cards de linhas (os mesmos dos Detalhes do vídeo), lado a lado. */
+.panel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; gap: 12px; margin-top: 16px; }
 .tile-card {
   position: relative; display: flex; flex-direction: column; min-height: 184px; padding: 28px 24px 24px 32px;
   border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container);
