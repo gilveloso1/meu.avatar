@@ -941,6 +941,34 @@ a.frame { display: block; }
 .avatar-option:disabled { opacity: 0.38; cursor: default; }
 .avatar-option.is-busy { opacity: 1; }
 .avatar-option__text { display: flex; flex-direction: column; min-width: 0; }
+/* O texto no fim do item (a data, nas listas do painel) e o item sem link. */
+.avatar-option__end { flex: none; margin-left: auto; padding-left: 16px; font: var(--md-sys-typescale-label-small); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
+.avatar-option--static { cursor: default; }
+/* As listas do painel: itens de duas linhas, a segunda sempre visível; 8 px da borda do card para o item. */
+.dash__list { display: flex; flex-direction: column; margin: -8px; padding: 0; list-style: none; }
+/* Item de uma linha do M3 (56 px), com as colunas alinhadas de cima a baixo (--cols de cada lista; cada
+   item é uma grade própria, então nenhuma coluna tem largura "auto"):
+   ícone, título, as colunas de dash__meta (display: contents, viram colunas da grade) e o fim. */
+.dash__list .avatar-option { display: grid; grid-template-columns: var(--cols); align-items: center; column-gap: 16px; min-height: 56px; text-decoration: none; }
+.dash__list--failures { --cols: 24px minmax(0, 2fr) 112px minmax(0, 120px) minmax(0, 3fr) 88px; }
+.dash__list--tokens { --cols: 24px minmax(0, 1fr) minmax(0, 160px) 160px 136px; }
+.dash__list .avatar-option > .icon { color: var(--md-sys-color-on-surface-variant); }
+.dash__title, .dash__cell { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash__title { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface); }
+.dash__meta { display: contents; }
+.dash__cell { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.dash__list .avatar-option__end { padding-left: 0; text-align: right; }
+/* Abaixo da tela expandida do M3 (840 px) não cabe numa linha: o título e o fim em cima, as colunas
+   embaixo, separadas por "·". */
+@media (max-width: 839px) {
+  .dash__list .avatar-option { grid-template-columns: 24px minmax(0, 1fr) auto; row-gap: 2px; min-height: 64px; }
+  .dash__list .avatar-option > .icon { grid-row: span 2; }
+  .dash__meta { display: flex; grid-column: 2 / -1; min-width: 0; }
+  .dash__cell { flex: none; max-width: 100%; }
+  .dash__cell:last-child { flex: 1 1 auto; }
+  .dash__cell + .dash__cell::before { content: "·"; padding: 0 6px; }
+  .dash__list .avatar-option__end { grid-column: 3; grid-row: 1; }
+}
 
 /* Avatares: a capa do card tem o tamanho do ícone dos cards de Modelos. */
 .avatar-cover { width: 48px; height: 48px; border-radius: 14px; object-fit: cover; }
