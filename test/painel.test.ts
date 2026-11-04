@@ -19,6 +19,7 @@ describe("painel do administrador", () => {
   it("quem não é administrador não vê o painel nem o item no menu", async () => {
     const member = await memberCookie();
     expect((await get("/painel", member)).status).toBe(404);
+    expect((await get("/painel/custos", member)).status).toBe(404);
     expect(await (await get("/", member)).text()).not.toContain('href="/painel"');
   });
 
@@ -62,5 +63,22 @@ describe("painel do administrador", () => {
     const month = await (await get("/painel", admin)).text();
     expect(month).toContain("US$ 5,00");
     expect(month).toMatch(/href="\/painel\?periodo=30" aria-current="true"/);
+  });
+
+  it("a Visão geral junta a cauda em Outros, e Custos mostra todos os modelos", async () => {
+    const admin = await cookie();
+    const ids = ["wan", "heygen", "seedance", "aleph", "veo", "kling", "luma"];
+    for (const [i, structure] of ids.entries()) {
+      await video(`c0000000-0000-4000-8000-00000000000${i}`, { status: "completed", structure, cost: 10 - i });
+    }
+    const overview = await (await get("/painel?periodo=7", admin)).text();
+    expect(overview).toContain("Outros 2 modelos");
+    expect(overview).not.toContain(">luma<");
+    expect(overview).toContain('href="/painel/custos?periodo=7"');
+
+    const costs = await (await get("/painel/custos?periodo=7", admin)).text();
+    expect(costs).toContain(">luma<");
+    expect(costs).not.toContain("Outros 2 modelos");
+    expect(costs).toMatch(/href="\/painel\/custos\?periodo=7" aria-current="page"/);
   });
 });

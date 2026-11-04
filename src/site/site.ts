@@ -53,9 +53,9 @@ const ICONS = [
   "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today", "check", "check_circle",
   "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
   "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
-  "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "monitoring", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
+  "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
   "person", "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
-  "send", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
+  "send", "space_dashboard", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -143,7 +143,8 @@ export class Site {
     if (!post && path === "/") return this.home(user, url);
     if (!post && path === "/videos") return this.videosPage(user, url);
     // O painel do administrador: para os outros, a página nem existe.
-    if (!post && path === "/painel") return user.role === "admin" ? this.panelPage(user, url) : new Response("não encontrado", { status: 404 });
+    const panel = /^\/painel(?:\/(custos))?$/.exec(path);
+    if (!post && panel) return user.role === "admin" ? this.panelPage(user, url, panel[1] === "custos" ? "custos" : "geral") : new Response("não encontrado", { status: 404 });
     // Endereços da versão anterior.
     if (!post && path === "/novo") return redirect("/");
     const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
@@ -468,18 +469,27 @@ ${error ? snackbar(error) : ""}`;
     await this.db.insertAsset({ id: crypto.randomUUID(), avatar_id: avatarId, kind: "video", key: saving.key, name: videoAssetName(saving), type: "video/mp4", size: saving.size, source_video: saving.video.id });
   }
 
-  /** O painel do administrador: uso e gasto do site inteiro, no período dos chips (30 dias por padrão). */
-  private async panelPage(user: User, url: URL): Promise<Response> {
+  /**
+   * O painel do administrador: uso e gasto do site inteiro. Abas (Visão geral e Custos), cada
+   * uma com o seu endereço; os chips de período valem para as duas (30 dias por padrão).
+   */
+  private async panelPage(user: User, url: URL, tab: PanelTab): Promise<Response> {
     const period = PANEL_PERIODS.find((p) => p.id === url.searchParams.get("periodo")) ?? PANEL_PERIODS[1]!;
     const since = period.days ? new Date(Date.now() - period.days * 86_400_000).toISOString() : null;
     const stats = await this.db.panelStats(since);
+    const query = `?periodo=${period.id}`;
+    const tabs = PANEL_TABS.map(
+      (t) => `<a class="tabs__tab interactive" href="${t.href}${query}"${t.id === tab ? ' aria-current="page"' : ""}><span class="tabs__content"><span class="icon">${t.icon}</span>${esc(t.label)}</span></a>`,
+    ).join("");
+    const here = PANEL_TABS.find((t) => t.id === tab)!.href;
     const chips = PANEL_PERIODS.map(
-      (p) => `<a class="chip interactive" href="/painel?periodo=${p.id}"${p === period ? ' aria-current="true"' : ""}>${p === period ? '<span class="icon">check</span>' : ""}${esc(p.label)}</a>`,
+      (p) => `<a class="chip interactive" href="${here}?periodo=${p.id}"${p === period ? ' aria-current="true"' : ""}>${p === period ? '<span class="icon">check</span>' : ""}${esc(p.label)}</a>`,
     ).join("");
     const body = `
 <main class="page" id="conteudo">
+  <nav class="tabs tabs--start" aria-label="Seções do painel">${tabs}</nav>
   <nav class="chip-set library__tools" aria-label="Período">${chips}</nav>
-  ${panelCards(stats)}
+  ${tab === "custos" ? panelCosts(stats) : panelOverview(stats, query)}
 </main>`;
     return html(page(`Painel · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Painel" } }));
   }
@@ -1771,50 +1781,126 @@ function money(n: number): string {
   return `US$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/**
- * O painel no layout de feed do M3, na grade de 12 colunas (8 no médio, 4 no compacto): primeiro os
- * quatro números principais, grandes; depois o gasto por modelo (2/3) e as falhas (1/3).
- */
-function panelCards(s: PanelStats): string {
-  const n = (x: number) => x.toLocaleString("pt-BR");
-  const plural = (x: number, one: string, many: string) => (x === 1 ? `1 ${one}` : `${n(x)} ${many}`);
-  const total = s.models.reduce((sum, m) => sum + m.cost, 0);
-  const v = s.videos;
-  const minutes = (v.seconds / 60).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
-  const stat = (icon: string, label: string, value: string, supporting: string) => `<section class="stat-card">
+type PanelTab = "geral" | "custos";
+const PANEL_TABS: { id: PanelTab; href: string; label: string; icon: string }[] = [
+  { id: "geral", href: "/painel", label: "Visão geral", icon: "space_dashboard" },
+  { id: "custos", href: "/painel/custos", label: "Custos", icon: "payments" },
+];
+/** Na Visão geral, os modelos que mais gastaram; o resto vira "Outros" (a lista inteira fica em Custos). */
+const PANEL_TOP_MODELS = 5;
+
+const count = (x: number) => x.toLocaleString("pt-BR");
+const plural = (x: number, one: string, many: string) => (x === 1 ? `1 ${one}` : `${count(x)} ${many}`);
+
+/** Um número do painel: rótulo, valor e uma linha de apoio. O herói (um por tela) é maior. */
+function statCard(icon: string, label: string, value: string, supporting: string, hero = false): string {
+  return `<section class="stat-card${hero ? " stat-card--hero" : ""}">
       <p class="stat-card__label"><span class="icon" aria-hidden="true">${icon}</span>${esc(label)}</p>
       <p class="stat-card__value">${esc(value)}</p>
       <p class="stat-card__supporting">${esc(supporting)}</p>
     </section>`;
-  const models = s.models.map((m) => {
+}
+
+/**
+ * Gasto por modelo em barras horizontais ordenadas (do maior para o menor, uma cor só, a maior
+ * ocupa a largura toda), com o nome, os vídeos, a parte do total e o valor em texto. Com `top`, o
+ * que passa vira uma linha "Outros", em cinza.
+ */
+function modelBars(models: PanelStats["models"], top?: number): string {
+  const total = models.reduce((sum, m) => sum + m.cost, 0);
+  const rows = models.map((m) => {
     const found = structureById(m.structure);
-    const share = total > 0 ? m.cost / total : 0;
-    return `<li class="share-list__item">
-        <span class="icon" aria-hidden="true">${found?.icon ?? "movie"}</span>
-        <div class="share-list__text">
-          <p class="share-list__headline">${esc(found?.name ?? (m.structure || "Sem modelo"))}</p>
-          <p class="share-list__supporting">${plural(m.videos, "vídeo", "vídeos")} · ${Math.round(share * 100)}%</p>
-          <div class="linear-progress linear-progress--determinate" style="--progress:${share.toFixed(3)}" role="progressbar" aria-label="Parte do gasto" aria-valuenow="${Math.round(share * 100)}" aria-valuemin="0" aria-valuemax="100"></div>
-        </div>
-        <span class="share-list__value">${money(m.cost)}</span>
-      </li>`;
+    return { icon: found?.icon ?? "movie", name: found?.name ?? (m.structure || "Sem modelo"), videos: m.videos, cost: m.cost, other: false };
   });
-  const failures = [
-    { icon: "movie", term: "Vídeos", value: n(v.failed) },
-    { icon: "graphic_eq", term: "Áudio", value: n(v.audioFailed) },
-    { icon: "content_cut", term: "Edição rápida", value: n(v.editFailed) },
-    { icon: "download", term: "Exportações", value: n(s.projects.exportsFailed) },
-  ];
+  if (top !== undefined && rows.length > top + 1) {
+    const rest = rows.splice(top);
+    rows.push({ icon: "more_horiz", name: `Outros ${rest.length} modelos`, videos: rest.reduce((s, r) => s + r.videos, 0), cost: rest.reduce((s, r) => s + r.cost, 0), other: true });
+  }
+  const max = Math.max(...rows.map((r) => r.cost), 0);
+  return `<ul class="rank">${rows
+    .map((r) => {
+      const share = total > 0 ? Math.round((r.cost / total) * 100) : 0;
+      return `<li class="rank__item${r.other ? " rank__item--other" : ""}">
+        <div class="rank__head">
+          <span class="icon" aria-hidden="true">${r.icon}</span>
+          <span class="rank__name">${esc(r.name)}</span>
+          <span class="rank__meta">${plural(r.videos, "vídeo", "vídeos")} · ${share}%</span>
+          <span class="rank__value">${money(r.cost)}</span>
+        </div>
+        <span class="rank__bar" style="--size:${max > 0 ? (r.cost / max).toFixed(3) : 0}" aria-hidden="true"></span>
+      </li>`;
+    })
+    .join("")}</ul>`;
+}
+
+function panelFailures(s: PanelStats): string {
+  return detailsCard("Falhas", [
+    { icon: "movie", term: "Vídeos", value: count(s.videos.failed) },
+    { icon: "graphic_eq", term: "Áudio", value: count(s.videos.audioFailed) },
+    { icon: "content_cut", term: "Edição rápida", value: count(s.videos.editFailed) },
+    { icon: "download", term: "Exportações", value: count(s.projects.exportsFailed) },
+  ]);
+}
+
+/**
+ * A Visão geral, sempre do mesmo tamanho (nada nela cresce com os dados): o gasto como número
+ * herói e três números ao lado; embaixo, duas colunas que não se esticam (o gasto por modelo, até
+ * 6 linhas, e as Falhas e o Conteúdo, 4 linhas cada).
+ */
+function panelOverview(s: PanelStats, query: string): string {
+  const v = s.videos;
+  const total = s.models.reduce((sum, m) => sum + m.cost, 0);
+  const minutes = (v.seconds / 60).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
   return `<div class="dash">
-    ${stat("payments", "Gasto em vídeos", money(total), `em ${plural(v.total, "vídeo pedido", "vídeos pedidos")}`)}
-    ${stat("check_circle", "Vídeos prontos", n(v.done), `${minutes} min · ${n(v.busy)} em andamento`)}
-    ${stat("folder_open", "Exportações", n(s.projects.exports), `de ${plural(s.projects.created, "projeto novo", "projetos novos")}`)}
-    ${stat("person", "Pessoas", n(s.accounts.users), `${plural(s.accounts.avatars, "avatar", "avatares")} · ${plural(s.accounts.assets, "ativo", "ativos")}`)}
-    <section class="viewer__card dash__wide" aria-labelledby="card-gasto">
-      <h2 class="qe-result__title" id="card-gasto">Gasto por modelo</h2>
-      ${models.length ? `<ul class="share-list">${models.join("")}</ul>` : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
-    </section>
-    ${detailsCard("Falhas", failures, "dash__side")}
+    <div class="dash__kpis">
+      ${statCard("payments", "Gasto em vídeos", money(total), `em ${plural(v.total, "vídeo pedido", "vídeos pedidos")}`, true)}
+      ${statCard("check_circle", "Vídeos prontos", count(v.done), `${count(v.busy)} em andamento`)}
+      ${statCard("schedule", "Minutos de vídeo", minutes, "dos vídeos prontos")}
+      ${statCard("download", "Exportações", count(s.projects.exports), `de ${plural(s.projects.created, "projeto novo", "projetos novos")}`)}
+    </div>
+    <div class="dash__cols">
+      <div class="dash__col">
+        <section class="viewer__card" aria-labelledby="card-gasto">
+          <h2 class="qe-result__title" id="card-gasto">Gasto por modelo</h2>
+          ${s.models.length ? modelBars(s.models, PANEL_TOP_MODELS) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+          ${s.models.length > PANEL_TOP_MODELS + 1 ? `<div class="viewer__card-actions"><a class="button button--text interactive" href="/painel/custos${query}">Ver todos os modelos</a></div>` : ""}
+        </section>
+      </div>
+      <div class="dash__col">
+        ${panelFailures(s)}
+        ${detailsCard("Conteúdo", [
+          { icon: "folder_open", term: "Projetos novos", value: count(s.projects.created) },
+          { icon: "person", term: "Pessoas novas", value: count(s.accounts.users) },
+          { icon: "face", term: "Avatares", value: count(s.accounts.avatars) },
+          { icon: "photo_library", term: "Ativos", value: count(s.accounts.assets) },
+        ])}
+      </div>
+    </div>
+  </div>`;
+}
+
+/** Custos: todos os modelos (esta lista cresce; a coluna do lado, não) e o resumo do período. */
+function panelCosts(s: PanelStats): string {
+  const total = s.models.reduce((sum, m) => sum + m.cost, 0);
+  const charged = s.videos.done;
+  const minutes = s.videos.seconds / 60;
+  return `<div class="dash">
+    <div class="dash__cols">
+      <div class="dash__col">
+        <section class="viewer__card" aria-labelledby="card-modelos">
+          <h2 class="qe-result__title" id="card-modelos">Gasto por modelo</h2>
+          ${s.models.length ? modelBars(s.models) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+        </section>
+      </div>
+      <div class="dash__col">
+        ${detailsCard("Resumo", [
+          { icon: "payments", term: "Total", value: money(total) },
+          { icon: "check_circle", term: "Vídeos prontos", value: count(charged) },
+          { icon: "movie", term: "Por vídeo", value: charged ? money(total / charged) : "—" },
+          { icon: "schedule", term: "Por minuto", value: minutes ? money(total / minutes) : "—" },
+        ])}
+      </div>
+    </div>
   </div>`;
 }
 

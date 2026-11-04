@@ -293,12 +293,12 @@ próprio admin, hoje o caminho é apagar a conta no D1 e cadastrar de novo
 
 Fora da ordem acima, pedido pelo dono: uma página com os números do site, só para o administrador.
 
-1. **A página** (feito): `/painel`, pelo menu do perfil, com o gasto em vídeos por modelo, os
-   vídeos, os projetos e as contas, do próprio banco, em 7 dias, 30 dias ou tudo. 404 para quem
-   não é administrador.
-2. **Custos de fora**: saldo do OpenRouter (API de créditos), minutos de cada contêiner (o mesmo
+1. **A página** (feito): `/painel`, pelo menu do perfil, com as abas Visão geral e Custos (gasto
+   por modelo, vídeos, falhas, projetos e contas, do próprio banco), em 7 dias, 30 dias ou tudo.
+   404 para quem não é administrador.
+2. **Custos de fora**, na aba Custos: saldo do OpenRouter (API de créditos), minutos de cada contêiner (o mesmo
    painel da Cloudflare do alarme) e o espaço no R2; com eles, o custo total do período.
-3. **Saúde e atividade**: últimas falhas com o motivo técnico e o link, o estado do alarme de
+3. **Saúde e atividade**, numa aba nova: últimas falhas com o motivo técnico e o link, o estado do alarme de
    contêiner e o uso da API e do MCP (tokens e último uso).
 4. **Cloudflare Access** na frente de `/painel*` (código por e-mail antes de chegar ao Worker):
    configurado pelo dono no painel da Cloudflare, sem código.
