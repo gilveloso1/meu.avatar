@@ -108,11 +108,11 @@ Feito: o bloco de código no modelo e na API (`adicionar {html, duracao}`, `edit
 `incluir: codigo`), com a prévia no canvas ([canvas.md](canvas.md)), e o `inspecionar_animacao`:
 o agente vê o resultado em texto (a geometria do DOM em cada instante, com os problemas que no
 exemplo de 8 s só se viram por imagem) e pede os quadros só quando o texto não basta
-([api.md](api.md)), e o render na exportação, guardado pelo hash ([canvas.md](canvas.md)).
+([api.md](api.md)), o render na exportação, guardado pelo hash ([canvas.md](canvas.md)), e a legenda do `legendar`
+como animação em código. O `renderizar_html` fica para quem precisa do arquivo.
 Faltam, nesta ordem, um PR de cada vez:
 
-1. Legenda como bloco de código; o `renderizar_html` antigo fica para quem precisa do arquivo.
-2. Parâmetros no bloco, base dos templates de layout.
+1. Parâmetros no bloco, base dos templates de layout.
 
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 
