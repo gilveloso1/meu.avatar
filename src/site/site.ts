@@ -1959,14 +1959,15 @@ function panelActivity(
     // Ligada sem trabalho por metade do prazo do alarme: é o caso que gasta à toa.
     return listItem({ icon: m.icone, title: m.nome, meta: [state], end: last, alert: idle && (idleMin ?? 0) * 60_000 >= LIMITE_MS / 2 });
   });
+  // O alarme só aparece quando fez algo ou não consegue vigiar; no dia a dia, nada a dizer.
   const stopped = o.alarm?.ligados ?? [];
   const alarmNote = o.local
-    ? "O alarme só roda no ar."
+    ? null
     : stopped.length
       ? `Alarme: desligou ${stopped.map((l) => `${MAQUINAS.find((m) => m.classe === l.classe)?.nome ?? l.classe} em ${formatDate(l.em)}`).join(", ")}, por estar ligada sem uso.`
       : o.alarm?.semPainel
         ? ERROS.alarmeSemPainel
-        : "Alarme: nenhuma máquina ligada à toa nas últimas 24 h.";
+        : null;
   const failures = o.failures.map((f) => {
     const kind = FAILURE_KINDS[f.kind];
     // A página do vídeo abre para o administrador; o projeto, só para o dono.
@@ -1986,7 +1987,7 @@ function panelActivity(
     <h2 class="dash__section">Máquinas agora</h2>
     <section class="viewer__card" aria-label="Máquinas agora">
       <ul class="dash__list dash__list--machines">${machines.join("")}</ul>
-      <p class="qe-result__note">${esc(alarmNote)}</p>
+      ${alarmNote ? `<p class="qe-result__note">${esc(alarmNote)}</p>` : ""}
     </section>
     <h2 class="dash__section">Últimas falhas</h2>
     <section class="viewer__card" aria-label="Últimas falhas">

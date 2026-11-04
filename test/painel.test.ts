@@ -188,7 +188,8 @@ describe("máquinas agora, na aba Atividade", () => {
     // 20 min sem trabalho passa da metade do prazo do alarme (30 min): fica em alerta.
     expect(html).toMatch(/<li class="dash__alert">.*?Ligada sem trabalho há 20 min/s);
     expect(html).toContain("Sem resposta agora");
-    expect(html).toContain("Alarme: nenhuma máquina ligada à toa nas últimas 24 h.");
+    // Sem nada a dizer, o alarme não aparece.
+    expect(html).not.toContain("Alarme:");
   });
 
   it("diz qual máquina o alarme desligou", async () => {
