@@ -108,12 +108,11 @@ Feito: o bloco de código no modelo e na API (`adicionar {html, duracao}`, `edit
 `incluir: codigo`), com a prévia no canvas ([canvas.md](canvas.md)), e o `inspecionar_animacao`:
 o agente vê o resultado em texto (a geometria do DOM em cada instante, com os problemas que no
 exemplo de 8 s só se viram por imagem) e pede os quadros só quando o texto não basta
-([api.md](api.md)). Faltam, nesta ordem, um PR de cada vez:
+([api.md](api.md)), e o render na exportação, guardado pelo hash ([canvas.md](canvas.md)).
+Faltam, nesta ordem, um PR de cada vez:
 
-1. Exportação: render dos blocos de código com cache pelo hash (até lá, a exportação recusa
-   projeto com animação, `ERROS.exportarAnimacao`).
-2. Legenda como bloco de código; o `renderizar_html` antigo fica para quem precisa do arquivo.
-3. Parâmetros no bloco, base dos templates de layout.
+1. Legenda como bloco de código; o `renderizar_html` antigo fica para quem precisa do arquivo.
+2. Parâmetros no bloco, base dos templates de layout.
 
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 
@@ -316,11 +315,6 @@ próprio admin, hoje o caminho é apagar a conta no D1 e cadastrar de novo
 (`docs/operacao.md`). Fazer junto com o item 4.
 
 ## Pendências pequenas
-
-- **Alarme de contêiner ligado sem trabalho** (`src/vigia.ts`): pronto, falta criar o token de
-  leitura (`CLOUDFLARE_ANALYTICS_TOKEN`, ver "Contêiner que dorme de verdade" em
-  [operacao.md](operacao.md)) e publicar. Depois, conferir nos logs uma rodada sem aviso e que
-  a página Modelos do administrador não mostra o alarme sem acesso.
 
 - **Canvas**: o "Seus vídeos" da tela só lista vídeos gerados; os ativos de avatar entram pela
   API e aparecem na prévia, mas a tela ainda não tem onde escolhê-los.

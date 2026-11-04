@@ -4,7 +4,10 @@
  * (container/exportar.py). Cada grupo vira um trecho, guardado no R2 pelo hash do
  * conteúdo: mudar um CTA só refaz o CTA. Cada versão é a emenda dos trechos.
  *
- * O trabalho anda um passo por vez (um trecho ou uma versão). Quem pede é a tela,
+ * A animação em código (o bloco com `code`) vira vídeo transparente antes, no contêiner de render,
+ * guardada pelo hash do código, do tamanho e da duração: a mesma animação não renderiza duas vezes.
+ *
+ * O trabalho anda um passo por vez (uma animação, um trecho ou uma versão). Quem pede é a tela,
  * que chama o próximo passo assim que o anterior acaba (começa na hora); se ela
  * fechar, o agendamento termina. Um passo só roda uma vez por causa do claim do banco.
  */
@@ -24,6 +27,8 @@ import { AudioLongoError, type Transcriber, type Transcricao } from "./transcric
 const EXPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 /** Quanto os vídeos prontos ficam para baixar. Os trechos saem pela regra de ciclo de vida do R2. */
 const EXPORT_TTL_MS = 24 * 60 * 60 * 1000;
+/** Muda quando o render das animações passa a sair diferente (outra imagem de render, outro GSAP). */
+const ANIMATION_VERSION = "1";
 /** Muda quando container/exportar.py passa a gerar trechos diferentes: os antigos não servem mais. */
 const SEGMENT_VERSION = "5";
 /** Um passo que ficou sem resposta (Worker caiu) pode ser retomado depois disso. */
@@ -92,8 +97,9 @@ export class ContainerExport implements ExportApi {
   }
 }
 
-/** O que fica em exports.plan. */
+/** O que fica em exports.plan. As animações são os primeiros passos; exportações de antes não têm. */
 export interface ExportPlan {
+  animacoes?: { chave: string; html: string; largura: number; altura: number; duracao: number }[];
   trechos: { chave: string; plano: string; arquivos: string[] }[];
   versoes: { nome: string; trechos: number[]; chave: string; tamanho?: number; crc?: number }[];
 }
@@ -108,6 +114,9 @@ export interface ExportState {
   versoes: { nome: string; href: string }[];
   zip: string | null;
 }
+
+/** No plano, o src de uma animação ainda por fazer: a chave do WebM dela no R2. */
+const ANIMACAO = "animacao:";
 
 const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -194,17 +203,30 @@ export class Exports {
       console.error("Projeto ilegível na exportação", project.id, err);
     }
     if (!work?.versoes.length) throw new InputError(ERROS.exportarSemVersao);
-    // A animação em código vira vídeo na exportação, no passo que ainda vem (docs/backlog.md).
-    if (work.trechos.some((t) => t.itens.some((i) => i.codigo !== undefined))) throw new InputError(ERROS.exportarAnimacao);
     // O rascunho não tem arquivo: marca o lugar de um vídeo que ainda não foi feito.
-    if (work.trechos.some((t) => t.itens.some((i) => !i.src))) throw new InputError(ERROS.exportarRascunho);
+    if (work.trechos.some((t) => t.itens.some((i) => !i.src && i.codigo === undefined))) throw new InputError(ERROS.exportarRascunho);
+    const animacoes: NonNullable<ExportPlan["animacoes"]> = [];
+    for (const t of work.trechos) {
+      for (const [n, i] of t.itens.entries()) {
+        if (i.codigo === undefined) continue;
+        if (!this.renderer) throw new InputError(ERROS.exportarIndisponivel);
+        // O vídeo da animação vai do começo da linha do tempo até onde o bloco corta, no tamanho do Final.
+        const duracao = +(i.corte + i.dura * i.velocidade).toFixed(3);
+        const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${ANIMATION_VERSION}:${work.largura}x${work.altura}:${duracao}:${i.codigo}`));
+        const chave = `animacoes/${hex(hash)}.webm`;
+        if (!animacoes.some((a) => a.chave === chave)) animacoes.push({ chave, html: i.codigo, largura: work.largura, altura: work.altura, duracao });
+        // No trecho, a animação é um vídeo transparente sem som, como o WebM do renderizar_html.
+        const { codigo: _, ...resto } = i;
+        t.itens[n] = { ...resto, tipo: "video", src: `${ANIMACAO}${chave}`, volume: 0 };
+      }
+    }
     const id = crypto.randomUUID();
     const trechos: ExportPlan["trechos"] = [];
     for (const t of work.trechos) trechos.push(await this.segmentPlan(project, role, work.largura, work.altura, t));
     const versoes: ExportPlan["versoes"] = [];
     for (const v of work.versoes) versoes.push(await this.versionPlan(v, trechos, now));
-    const plan: ExportPlan = { trechos, versoes };
-    return this.db.insertExport({ id, project_id: project.id, total: trechos.length + versoes.length, plan: JSON.stringify(plan), expires_at: new Date(now.getTime() + EXPORT_TTL_MS).toISOString() }, now);
+    const plan: ExportPlan = { animacoes, trechos, versoes };
+    return this.db.insertExport({ id, project_id: project.id, total: animacoes.length + trechos.length + versoes.length, plan: JSON.stringify(plan), expires_at: new Date(now.getTime() + EXPORT_TTL_MS).toISOString() }, now);
   }
 
   /**
@@ -225,15 +247,16 @@ export class Exports {
     const arquivos: string[] = [];
     const itens = [];
     for (const { src, ...item } of t.itens) {
-      const key = await this.source(project, role, src);
+      // A animação ainda vai ser feita: a chave dela já é o hash do conteúdo.
+      const key = src.startsWith(ANIMACAO) ? src.slice(ANIMACAO.length) : await this.source(project, role, src);
       if (!arquivos.includes(key)) arquivos.push(key);
       itens.push({ ...item, arquivo: arquivos.indexOf(key) });
     }
     const plano = JSON.stringify({ largura, altura, duracao: t.duracao, itens });
-    const heads = await Promise.all(arquivos.map((k) => this.media.head(k)));
-    if (heads.some((h) => !h)) throw new InputError(ERROS.exportarArquivo);
+    const heads = await Promise.all(arquivos.map((k) => (k.startsWith("animacoes/") ? null : this.media.head(k))));
+    if (heads.some((h, i) => !h && !arquivos[i]!.startsWith("animacoes/"))) throw new InputError(ERROS.exportarArquivo);
     // O etag entra na chave: se o arquivo mudar (áudio tratado de novo), o trecho é refeito.
-    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SEGMENT_VERSION + plano + heads.map((h) => h!.etag).join()));
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SEGMENT_VERSION + plano + heads.map((h, i) => h?.etag ?? arquivos[i]).join()));
     return { chave: `trechos/${hex(hash)}.mkv`, plano, arquivos };
   }
 
@@ -302,8 +325,10 @@ export class Exports {
       let step = row.step;
       // O que já está pronto (de outra exportação) ou não será usado não conta como passo.
       while (step < row.total && (await this.done(plan, step))) step++;
-      if (step < plan.trechos.length) await this.segment(id, plan.trechos[step]!);
-      else if (step < row.total) await this.version(id, plan, step - plan.trechos.length);
+      const animacoes = plan.animacoes ?? [];
+      if (step < animacoes.length) await this.animation(animacoes[step]!);
+      else if (step < animacoes.length + plan.trechos.length) await this.segment(id, plan.trechos[step - animacoes.length]!);
+      else if (step < row.total) await this.version(id, plan, step - animacoes.length - plan.trechos.length);
       const next = Math.min(step + 1, row.total);
       return this.db.finishStep(id, next, next >= row.total ? "done" : "running", JSON.stringify(plan));
     } catch (err) {
@@ -314,9 +339,28 @@ export class Exports {
   }
 
   private async done(plan: ExportPlan, step: number): Promise<boolean> {
-    if (step >= plan.trechos.length) return plan.versoes[step - plan.trechos.length]!.tamanho !== undefined;
-    const needed = plan.versoes.some((v) => v.tamanho === undefined && v.trechos.includes(step));
-    return !needed || (await this.media.head(plan.trechos[step]!.chave)) !== null;
+    const animacoes = plan.animacoes ?? [];
+    if (step < animacoes.length) {
+      // Só renderiza a animação de um trecho que ainda vai ser feito.
+      const chave = animacoes[step]!.chave;
+      for (const [i, t] of plan.trechos.entries()) if (t.arquivos.includes(chave) && !(await this.segmentDone(plan, i))) return (await this.media.head(chave)) !== null;
+      return true;
+    }
+    const s = step - animacoes.length;
+    if (s >= plan.trechos.length) return plan.versoes[s - plan.trechos.length]!.tamanho !== undefined;
+    return this.segmentDone(plan, s);
+  }
+
+  private async segmentDone(plan: ExportPlan, index: number): Promise<boolean> {
+    const needed = plan.versoes.some((v) => v.tamanho === undefined && v.trechos.includes(index));
+    return !needed || (await this.media.head(plan.trechos[index]!.chave)) !== null;
+  }
+
+  /** A animação vira o WebM transparente no contêiner de render; o HTML que não roda falha o passo. */
+  private async animation(a: NonNullable<ExportPlan["animacoes"]>[number]): Promise<void> {
+    if (!this.renderer) throw new Error("Render indisponível para a animação.");
+    const res = await this.renderer.render(a.html, a.largura, a.altura, a.duracao);
+    await this.keep(res, a.chave, "video/webm");
   }
 
   private async segment(id: string, t: ExportPlan["trechos"][number]): Promise<void> {

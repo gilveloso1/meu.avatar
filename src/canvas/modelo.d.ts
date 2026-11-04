@@ -1,5 +1,5 @@
 /** O pedaço do modelo do canvas que o Worker usa (src/exportar.ts, src/comandos.ts). */
-export interface ExportItem { tipo: "video" | "imagem" | "audio"; camada: string; src: string; entra: number; dura: number; corte: number; volume: number; codigo?: string }
+export interface ExportItem { tipo: "video" | "imagem" | "audio"; camada: string; src: string; entra: number; dura: number; corte: number; volume: number; velocidade: number; codigo?: string }
 export interface ExportWork {
   largura: number;
   altura: number;

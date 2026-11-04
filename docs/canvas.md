@@ -34,7 +34,11 @@ menos custo.
   quadro, o instante (`tl.seek`), só para a que está na tela, no tamanho do Final e reduzida para
   o quadro. Sem resposta em 8 s (código que trava, quadro barrado), a prévia segue sem ela. O
   navegador do app Claude barra iframes com `sandbox`: lá a animação não aparece; no Chrome e
-  no Safari, sim. A exportação ainda recusa projetos com animação.
+  no Safari, sim. Na exportação, cada animação vira um WebM transparente no contêiner de render
+  (`src/exportar.ts`, um passo antes dos trechos), no tamanho e na duração do Final, guardado em
+  `animacoes/<hash>.webm` pelo código, pelo tamanho e pela duração: a mesma animação não
+  renderiza duas vezes, nem entre exportações, e só renderiza a que um trecho ainda por fazer
+  usa. No trecho, ela entra como qualquer vídeo transparente sem som.
 - **Juntar**: blocos encostados lado a lado formam uma sequência fixa (corte
   seco), como numa linha do tempo. Juntos, viram um grupo.
 - **Sobrepor**: um bloco em cima de outro cobre a imagem dele naquele trecho,

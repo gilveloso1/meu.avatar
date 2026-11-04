@@ -477,6 +477,10 @@ npx wrangler r2 bucket lifecycle add meu-avatar trechos-30d trechos/ --expire-da
 npx wrangler r2 bucket lifecycle add meu-avatar exportacoes-2d exportacoes/ --expire-days 2 < /dev/null
 ```
 
+```bash
+npx wrangler r2 bucket lifecycle add meu-avatar animacoes-30d animacoes/ --expire-days 30 < /dev/null
+```
+
 Teste sem o contêiner (precisa de ffmpeg): `python3 container/exportar.py trecho
 plano.json saida.mkv arquivo...` e `python3 container/exportar.py emendar saida.mp4
 trecho.mkv...`.

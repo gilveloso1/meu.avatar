@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
 import { sugestao, TIPOS } from "../src/comandos";
 import { normalizar } from "../src/transcricao";
+import { ERROS } from "../src/erros";
 import { call, cookie, FakeExportApi, FakeRenderApi, FakeTranscriber, FakeVideoApi, memberCookie, SITE } from "./helpers";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
@@ -900,12 +901,38 @@ describe("animação em código", () => {
     expect(fake.inspections).toHaveLength(0);
   });
 
-  it("ainda não exporta, com a frase que diz o porquê", async () => {
+  it("a exportação faz o vídeo da animação uma vez só, no tamanho do Final, e põe por cima como vídeo sem som", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" }, { tipo: "adicionar", html: CENA, duracao: 2, sobre: "@a", em: 1 }]);
+    const fake = new FakeExportApi();
+    const render = new FakeRenderApi();
+    const exportar = async () => {
+      let e = await (await api(`/projetos/${id}/exportar`, admin, { final: "final" }, fake, null, render)).json<{ id: string; status: string; total: number }>();
+      const total = e.total;
+      for (let i = 0; i < 6 && e.status !== "done"; i++) e = await (await api(`/projetos/${id}/exportacoes/${e.id}`, admin, {}, fake, null, render)).json();
+      expect(e.status).toBe("done");
+      return total;
+    };
+    // Uma animação, um trecho e uma versão.
+    expect(await exportar()).toBe(3);
+    expect(render.calls).toEqual([{ html: CENA, largura: 720, altura: 1280, duracao: 2 }]);
+    const plano = JSON.parse(fake.segments[0]!.plan) as { itens: { tipo: string; volume: number; entra: number; codigo?: string }[] };
+    expect(plano.itens[1]).toMatchObject({ tipo: "video", camada: "cobertura", volume: 0, entra: 1 });
+    expect(plano.itens[1]!.codigo).toBeUndefined();
+    // Outro corte no vídeo refaz o trecho, mas a animação já está guardada.
+    await lote(id, r.revisao, [{ tipo: "cortar", bloco: r.criados[0], fim: 3.5 }]);
+    await exportar();
+    expect(fake.segments).toHaveLength(2);
+    expect(render.calls).toHaveLength(1);
+  });
+
+  it("sem o contêiner de render, a exportação com animação é recusada logo", async () => {
     const { id, revisao } = await novo();
     await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" }, { tipo: "adicionar", html: CENA, duracao: 2, sobre: "@a", em: 0 }]);
     const res = await api(`/projetos/${id}/exportar`, admin, { final: "final" }, new FakeExportApi());
     expect(res.status).toBe(400);
-    expect(await res.text()).toContain("animações");
+    expect(await res.text()).toContain(ERROS.exportarIndisponivel.split(" ")[0]!);
   });
 });
 

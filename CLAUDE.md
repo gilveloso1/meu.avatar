@@ -289,7 +289,9 @@ colar um segredo no terminal, mudar uma configuração fora do repositório. Nes
   as imagens dos contêineres. De uma sessão local, faça o merge e mande uma
   sessão cloud publicar o `main`, dizendo no pedido que o usuário autorizou.
   Quando `container/` mudar, confira que o digest da imagem mudou, não só a
-  versão do Worker.
+  versão do Worker. Exceção: quando nem `container/` nem a imagem de render mudam, dá para
+  publicar daqui só o Worker, sem Docker: `npx wrangler deploy --containers-rollout=none < /dev/null`
+  (os contêineres seguem como estão; usado em 04/11/2026). Sempre com autorização.
 - `MEU_AVATAR_TOKEN` no ambiente é o token do administrador para o MCP
   (`https://meuavatar.ia.br/mcp`, `Authorization: Bearer`). Depois de publicar
   algo que o MCP usa, confira no ar com uma chamada de verdade (as que não
