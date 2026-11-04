@@ -687,7 +687,7 @@ describe("legenda do grupo", () => {
     await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
     const { id, revisao } = await novo();
     const a = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 3, rotulo: "a" }, { tipo: "adicionar", video: VIDEO, inicio: 2.5, fim: 8.5, depois: "@a", rotulo: "b" }, { tipo: "velocidade", bloco: "@b", velocidade: 2 }])).json<{ revisao: number; criados: string[] }>();
-    return { id, grupo: a.criados[0]!, b: a.criados[1]! };
+    return { id, grupo: a.criados[0]!, b: a.criados[1]!, revisao: a.revisao };
   }
 
   it("simular traz as palavras no tempo do grupo e os trechos, sem fazer vídeo", async () => {
@@ -706,18 +706,37 @@ describe("legenda do grupo", () => {
     expect(r.calls).toHaveLength(0);
   });
 
-  it("faz o WebM do tamanho do grupo, com as palavras corrigidas pelo agente", async () => {
-    const { id, grupo } = await falando();
+  it("põe a legenda como animação em código por cima do grupo, com as palavras corrigidas pelo agente", async () => {
+    const { id, grupo, revisao } = await falando();
     const r = new FakeRenderApi();
-    const res = await legenda(id, { grupo, palavras: [{ palavra: "Brasil.", inicio: 0.2, fim: 0.8 }], estilo: { fonte: "TikTok Sans", destaque: "#ffd400" } }, null, r);
-    expect(res.status).toBe(201);
-    const out = await res.json<{ arquivo: { src: string }; duracao: number; trechos: { texto: string }[] }>();
-    expect(out.duracao).toBe(6);
-    expect(out.trechos.map((t) => t.texto)).toEqual(["Brasil."]);
-    expect(r.calls[0]).toMatchObject({ largura: 720, altura: 1280, duracao: 6 });
-    expect(r.calls[0]!.html).toContain("BRASIL.");
-    expect(r.calls[0]!.html).toContain('"TikTok Sans"');
-    expect(r.calls[0]!.html).toContain('"#ffd400"');
+    const res = await legenda(id, { grupo, revisao, palavras: [{ palavra: "Brasil.", inicio: 0.2, fim: 0.8 }], estilo: { fonte: "TikTok Sans", destaque: "#ffd400" } }, null, r);
+    expect(res.status).toBe(200);
+    type Saida = { revisao: number; criados: string[]; grupos: { blocos: { id: string; tipo: string; camada: string; inicio: number; fim: number; nome: string }[] }[]; legenda: { trechos: { texto: string }[] } };
+    const out = await res.json<Saida>();
+    expect(out.revisao).toBe(revisao + 1);
+    expect(out.legenda.trechos.map((t) => t.texto)).toEqual(["Brasil."]);
+    expect(out.grupos[0]!.blocos.find((x) => x.id === out.criados[0])).toMatchObject({ tipo: "animacao", camada: "cobertura", nome: "Legenda", inicio: 0, fim: 6 });
+    // Nada é renderizado agora: a exportação faz o vídeo.
+    expect(r.calls).toHaveLength(0);
+    const v = await (await api(`/api/v1/projetos/${id}?incluir=codigo`, admin)).json<{ codigo: { html: string }[] }>();
+    expect(v.codigo[0]!.html).toContain("BRASIL.");
+    expect(v.codigo[0]!.html).toContain('"TikTok Sans"');
+    expect(v.codigo[0]!.html).toContain('"#ffd400"');
+  });
+
+  it("com bloco, troca o código e o tempo da legenda que já existe, sem pôr outra", async () => {
+    const { id, grupo, revisao } = await falando();
+    const primeira = await (await legenda(id, { grupo, revisao, palavras: [{ palavra: "Antes.", inicio: 0.2, fim: 0.8 }] }, null)).json<{ revisao: number; criados: string[] }>();
+    const bloco = primeira.criados[0]!;
+    const out = await (await legenda(id, { grupo, revisao: primeira.revisao, bloco, palavras: [{ palavra: "Depois.", inicio: 0.2, fim: 0.8 }] }, null)).json<{ criados: string[] }>();
+    expect(out.criados).toEqual([]);
+    const v = await (await api(`/api/v1/projetos/${id}?incluir=codigo`, admin)).json<{ codigo: { bloco: string; html: string; duracao: number }[] }>();
+    expect(v.codigo).toHaveLength(1);
+    expect(v.codigo[0]).toMatchObject({ bloco, duracao: 6 });
+    expect(v.codigo[0]!.html).toContain("DEPOIS.");
+    // Sem a revisão, ou com uma velha, nada muda.
+    expect(await (await legenda(id, { grupo, palavras: [{ palavra: "X.", inicio: 0.2, fim: 0.8 }] }, null)).json()).toEqual({ erro: "revisao_obrigatoria" });
+    expect((await legenda(id, { grupo, revisao, palavras: [{ palavra: "X.", inicio: 0.2, fim: 0.8 }] }, null)).status).toBe(409);
   });
 
   it("recusa grupo que não existe, estilo fora da lista e palavras malformadas", async () => {

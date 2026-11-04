@@ -67,7 +67,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/projetos/<id>/animacao?bloco=&instantes=0,1.5&quadros=1&final=` | Abre o código de um bloco de animação no Chrome do render, sem fazer vídeo, no tamanho do Final (sem `final`, o primeiro), e mede cada instante (até 12, em segundos do bloco; sem `instantes`, o começo, os quartos e o fim). Volta `{largura, altura, duracao: {bloco, animacao}, problemas, instantes, linhaDoTempo}`, e `quadros` (o mosaico, JPG em base64) só com `quadros=1`. Ver "Inspeção da animação", abaixo |
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida: `{duracao, silencios, som}`; arquivo sem faixa de áudio (como o WebM do render) vem com `som: false` e nenhum silêncio |
 | `POST /api/v1/projetos/<id>/html` `{nome, html, duracao, final?}` | Faz um WebM transparente do HTML e o guarda nos arquivos do projeto: `{arquivo: {id, nome, tipo, src}, largura, altura}` |
-| `POST /api/v1/projetos/<id>/legenda` `{grupo, simular?, palavras?, semTexto?, fontes?, estilo?, final?, nome?}` | Legenda palavra a palavra do grupo, em WebM transparente: `{arquivo, duracao, largura, altura, palavras, trechos}`; com `simular`, só `{duracao, palavras, trechos}` |
+| `POST /api/v1/projetos/<id>/legenda` `{grupo, revisao, bloco?, simular?, palavras?, semTexto?, fontes?, estilo?, final?, nome?}` | Legenda palavra a palavra do grupo, como animação em código por cima dele (com `bloco`, troca o código e o tempo de uma legenda que já existe). Responde como os comandos, com `legenda: {palavras, trechos}`; com `simular`, só `{duracao, palavras, trechos}`, sem mexer no projeto |
 | `POST /api/v1/projetos/<id>/limpar` `{apagar?}` | Os arquivos do projeto que nenhum bloco usa: `{arquivos: [{id, nome, tipo, tamanho}], tamanho}`. Com `apagar: true`, apaga de vez (do banco e do R2); durante uma exportação, `409 exportando` |
 | `GET /api/v1/projetos/<id>/transcricao?src=` | A fala com o tempo de cada palavra: `{idioma, duracao, texto, palavras: [{palavra, inicio, fim}]}` |
 
@@ -104,7 +104,8 @@ Uns 16 s para 10 s de vídeo; a primeira vez depois de publicar demora mais. HTM
 `422 render_falhou`, com o log do HyperFrames em `detalhe`. Sem o contêiner,
 `503 render_indisponivel`. O WebM entra com `adicionar {arquivo, dur, sobre, em}`.
 
-A legenda (`src/legenda.ts`) junta a transcrição e o render. As palavras dos blocos que falam
+A legenda (`src/legenda.ts`) junta a transcrição e a animação em código: o projeto guarda o HTML
+dela, a prévia do canvas mostra e a exportação renderiza. As palavras dos blocos que falam
 (os de vídeo da sequência com som, ou os de `fontes`) vão para o tempo do grupo, com o corte e a
 velocidade de cada bloco, e viram trechos: quebra na pontuação, numa pausa de 0,25 s, com 4
 palavras ou 24 letras, e palavra curta sozinha entra na anterior. Cada trecho sai 0,35 s depois
@@ -115,8 +116,9 @@ maiúsculas, a palavra dita em verde (`#46ff96`), no máximo duas linhas, a 80% 
 `estilo` muda `fonte`, `tamanho`, `cor`, `destaque`, `maiusculas` e `altura` (0 topo, 1 base).
 Para corrigir a grafia (a da tela é o português correto, não o texto mandado ao avatar), chame
 com `simular`, conserte as `palavras` e mande de volta. A legenda vale para o grupo como está:
-faça depois dos cortes, e de novo se o grupo mudar. Até 60 s por grupo. O WebM entra com
-`adicionar {arquivo, dur: duracao, sobre: grupo, em: 0}`.
+faça depois dos cortes e, se o grupo mudar, chame de novo com `bloco` (o id da legenda): o código e
+o tempo dela são trocados, sem pôr outra. Até 60 s por grupo. Pede `revisao`, como os comandos. O
+tamanho da letra segue o Final da hora (`final`, ou o primeiro): mudou o formato, legende de novo.
 
 `avisos`, em `ver_projeto` e na resposta dos comandos, aponta o que está aceito mas sairá errado.
 Há dois. `rascunho` (`bloco`, `fala`, `segundos`): uma fala que ainda espera o vídeo. E `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),

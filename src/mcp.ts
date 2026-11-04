@@ -113,7 +113,7 @@ const FERRAMENTAS = [
   },
   {
     name: "renderizar_html",
-    description: `Faz um vídeo transparente (WebM) de uma composição em HTML e o guarda no projeto; depois, ponha-o sobre o vídeo com adicionar {arquivo, dur, sobre, em}. Serve para legenda palavra a palavra, títulos, lower thirds, selos, gráficos, contadores e máscaras. ${RENDER}`,
+    description: `Faz um vídeo transparente (WebM) de uma composição em HTML e o guarda no projeto; depois, ponha-o sobre o vídeo com adicionar {arquivo, dur, sobre, em}. Só quando precisar do arquivo: para pôr uma animação no projeto, adicionar {html, duracao} guarda o código, e a exportação faz o vídeo. ${RENDER}`,
     inputSchema: objeto(
       {
         projeto,
@@ -127,13 +127,15 @@ const FERRAMENTAS = [
   },
   {
     name: "legendar",
-    description: `Legenda palavra a palavra de um grupo, pronta: as palavras vêm da transcrição dos blocos que falam, já no tempo do grupo (corte e velocidade valem), e viram um WebM transparente no projeto. Depois, adicionar {arquivo, dur: duracao, sobre: grupo, em: 0}. Faça depois dos cortes: mudar o grupo pede legenda nova. Use simular: true para ver palavras e trechos sem fazer o vídeo; corrija a grafia (a da tela é o português correto) e mande as palavras de volta em palavras. Padrão do caso aprovado: Inter Black de 44 px, maiúsculas, palavra dita em verde, no máximo duas linhas. Onde já houver texto na tela, passe o intervalo em semTexto.`,
+    description: `Legenda palavra a palavra de um grupo, pronta: as palavras vêm da transcrição dos blocos que falam, já no tempo do grupo (corte e velocidade valem), e entram no projeto como uma animação em código por cima do grupo, que a prévia mostra e a exportação renderiza. Responde como o editar_projeto, com a revisão nova, o id em criados e as palavras e trechos em legenda. Faça depois dos cortes; se o grupo mudar, chame de novo com bloco: o id da legenda, e o código e o tempo dela são trocados. Use simular: true para ver palavras e trechos sem fazer o vídeo; corrija a grafia (a da tela é o português correto) e mande as palavras de volta em palavras. Padrão do caso aprovado: Inter Black de 44 px, maiúsculas, palavra dita em verde, no máximo duas linhas. Onde já houver texto na tela, passe o intervalo em semTexto.`,
     inputSchema: objeto(
       {
         projeto,
         grupo: texto("Id do grupo, de ver_projeto."),
-        nome: texto('Nome do arquivo, como "legenda.webm".'),
-        simular: { type: "boolean", description: "Só devolve palavras e trechos, sem fazer o vídeo." },
+        revisao: { type: "integer", description: "A revisão lida em ver_projeto; obrigatória sem simular." },
+        bloco: texto("Id de uma legenda que já está no projeto, para trocar o código dela em vez de pôr outra."),
+        nome: texto('Nome do bloco; sem isso, "Legenda".'),
+        simular: { type: "boolean", description: "Só devolve palavras e trechos, sem mexer no projeto." },
         palavras: { type: "array", items: { type: "object" }, description: "[{palavra, inicio, fim}] em segundos do grupo, como simular devolve; sem isso, a transcrição." },
         semTexto: { type: "array", items: { type: "array", items: { type: "number" } }, description: "[[de, ate]] em segundos do grupo onde já há texto na tela." },
         fontes: { type: "array", items: { type: "string" }, description: "Ids dos blocos que falam; sem isso, os de vídeo da sequência com som." },
@@ -197,7 +199,7 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
     case "renderizar_html":
       return chama("POST", `${p}/html`, json({ nome: a.nome, html: a.html, duracao: a.duracao, final: a.final }));
     case "legendar":
-      return chama("POST", `${p}/legenda`, json({ grupo: a.grupo, nome: a.nome, simular: a.simular, palavras: a.palavras, semTexto: a.semTexto, fontes: a.fontes, estilo: a.estilo, final: a.final }));
+      return chama("POST", `${p}/legenda`, json({ grupo: a.grupo, revisao: a.revisao, bloco: a.bloco, nome: a.nome, simular: a.simular, palavras: a.palavras, semTexto: a.semTexto, fontes: a.fontes, estilo: a.estilo, final: a.final }));
     case "limpar_arquivos":
       return chama("POST", `${p}/limpar`, json({ apagar: a.apagar }));
     case "exportar":

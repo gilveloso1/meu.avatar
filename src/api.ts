@@ -248,7 +248,9 @@ export class Api {
 
   /**
    * A legenda palavra a palavra de um grupo: as palavras vêm da transcrição dos blocos que falam
-   * (ou do agente, corrigidas) e viram um WebM do tamanho do grupo. simular mostra os trechos sem fazer o vídeo.
+   * (ou do agente, corrigidas) e viram uma animação em código por cima do grupo, que a exportação
+   * renderiza. Com bloco, troca o código de uma legenda que já existe. simular mostra os trechos
+   * sem mexer no projeto.
    */
   private async caption(request: Request, user: User, project: Project): Promise<Response> {
     const body = await json(request);
@@ -291,18 +293,32 @@ export class Api {
     const f = final === undefined ? data.finals[0] : data.finals.find((o) => o.id === final);
     if (final !== undefined && !f) return falha(400, "final_inexistente");
     const { width, height } = output(f!);
-    return this.render(project, { nome: nomeDoArquivo(body?.nome, "legenda.webm"), html: legendaHtml(ts, estilo, width, height), duracao, final }, resumo);
+    const html = legendaHtml(ts, estilo, width, height);
+    // Legenda refeita depois de cortes: o mesmo bloco, com o código e o tempo novos.
+    const comandos =
+      typeof body?.bloco === "string"
+        ? [
+            { tipo: "editarCodigo", bloco: body.bloco, html },
+            { tipo: "cortar", bloco: body.bloco, fim: duracao },
+          ]
+        : [{ tipo: "adicionar", html, duracao, sobre: g.id, em: 0, nome: typeof body?.nome === "string" && body.nome.trim() ? body.nome : "Legenda" }];
+    return this.batch(user, project, body?.revisao, comandos, { legenda: resumo });
   }
 
   /** Um lote de comandos sobre uma revisão: tudo ou nada, e quem partiu de uma revisão velha lê de novo. */
   private async commands(request: Request, user: User, project: Project): Promise<Response> {
     const body = await json(request);
     if (!Array.isArray(body?.comandos) || !body.comandos.length || body.comandos.length > MAX_COMANDOS) return falha(400, "comandos_invalidos");
-    if (typeof body.revisao !== "number") return falha(400, "revisao_obrigatoria");
-    if (body.revisao !== project.revision) return conflito(project);
+    return this.batch(user, project, body.revisao, body.comandos as Record<string, unknown>[]);
+  }
+
+  /** Aplica e salva um lote sobre a revisão lida; extra vai junto na resposta (a legenda manda as palavras). */
+  private async batch(user: User, project: Project, revisao: unknown, comandos: Record<string, unknown>[], extra: Record<string, unknown> = {}): Promise<Response> {
+    if (typeof revisao !== "number") return falha(400, "revisao_obrigatoria");
+    if (revisao !== project.revision) return conflito(project);
     try {
       const memo = new Map<string, { duracao: number; silencios: number[][]; som: boolean }>();
-      const { project: data, criados } = await aplicar(JSON.parse(project.data) as CanvasProject, body.comandos as Record<string, unknown>[], {
+      const { project: data, criados } = await aplicar(JSON.parse(project.data) as CanvasProject, comandos, {
         fonte: (c) => this.source(user, project, c),
         silencios: async (src) => {
           if (!memo.has(src)) memo.set(src, await this.silences(user, project, src));
@@ -312,13 +328,13 @@ export class Api {
       });
       const text = JSON.stringify(data);
       if (text.length > MAX_BYTES) return falha(413, "projeto_grande_demais");
-      const revision = await this.db.saveProject(project.id, { data: text }, body.revisao);
+      const revision = await this.db.saveProject(project.id, { data: text }, revisao);
       if (revision === null) {
         const atual = await this.db.projectById(project.id);
         return atual ? conflito(atual) : falha(404, "nao_encontrado");
       }
       // Só o que o lote mudou: os arquivos e o canvas inteiro ficam no ver_projeto (o maior gasto do agente).
-      return Response.json({ revisao: revision, criados, ...resumo(data) });
+      return Response.json({ revisao: revision, criados, ...resumo(data), ...extra });
     } catch (err) {
       if (err instanceof ComandoError) return falha(400, err.codigo, { comando: err.indice, ...err.extra });
       throw err;
