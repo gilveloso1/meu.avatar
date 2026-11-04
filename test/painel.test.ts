@@ -6,12 +6,12 @@ import { call, cookie, FakeVideoApi, memberCookie, SITE } from "./helpers";
 const get = (path: string, session?: string) => call(new Request(`${SITE}${path}`, { headers: session === undefined ? {} : { cookie: session } }), new FakeVideoApi());
 
 /** Um vídeo direto no banco, criado `daysAgo` dias atrás. */
-async function video(id: string, o: { status: string; structure: string; cost?: number; duration?: number; daysAgo?: number; audio?: string }) {
+async function video(id: string, o: { status: string; structure: string; cost?: number; duration?: number; daysAgo?: number; audio?: string; settings?: string }) {
   const at = new Date(Date.now() - (o.daysAgo ?? 0) * 86_400_000).toISOString();
   await env.DB.prepare(
-    "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, cost, audio_status, created_at, updated_at) VALUES (?, ?, 'Oi', 'm', ?, '480p', '9:16', ?, ?, ?, ?, ?)",
+    "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, settings, cost, audio_status, created_at, updated_at) VALUES (?, ?, 'Oi', 'm', ?, '480p', '9:16', ?, ?, ?, ?, ?, ?)",
   )
-    .bind(id, o.status, o.duration ?? 10, o.structure, o.cost ?? null, o.audio ?? null, at, at)
+    .bind(id, o.status, o.duration ?? 10, o.structure, o.settings ?? null, o.cost ?? null, o.audio ?? null, at, at)
     .run();
 }
 
@@ -35,14 +35,19 @@ describe("painel do administrador", () => {
 
   it("soma o gasto por modelo e conta os vídeos do período", async () => {
     await video("a0000000-0000-4000-8000-000000000001", { status: "completed", structure: "wan", cost: 0.5, duration: 60 });
-    await video("a0000000-0000-4000-8000-000000000002", { status: "completed", structure: "heygen", cost: 1.25, audio: "failed" });
-    await video("a0000000-0000-4000-8000-000000000003", { status: "failed", structure: "wan" });
+    await video("a0000000-0000-4000-8000-000000000002", { status: "completed", structure: "heygen", cost: 1.25, audio: "failed", settings: '{"platform":"heygen"}' });
+    await video("a0000000-0000-4000-8000-000000000003", { status: "failed", structure: "wan", settings: "{quebrado" });
     await video("a0000000-0000-4000-8000-000000000004", { status: "completed", structure: "wan", cost: 9, daysAgo: 40 });
 
     const recent = await new Db(env.DB).panelStats(new Date(Date.now() - 30 * 86_400_000).toISOString());
     expect(recent.models).toEqual([
       { structure: "heygen", videos: 1, cost: 1.25 },
       { structure: "wan", videos: 2, cost: 0.5 },
+    ]);
+    // O HeyGen pela API direta conta para a HeyGen; o resto (e settings vazio ou quebrado), para o OpenRouter.
+    expect(recent.platforms.sort((a, b) => a.platform.localeCompare(b.platform))).toEqual([
+      { platform: "heygen", videos: 1, cost: 1.25 },
+      { platform: "openrouter", videos: 2, cost: 0.5 },
     ]);
     expect(recent.videos).toMatchObject({ total: 3, done: 2, failed: 1, busy: 0, seconds: 70, audioFailed: 1 });
 

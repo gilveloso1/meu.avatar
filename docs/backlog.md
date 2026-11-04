@@ -296,10 +296,10 @@ Fora da ordem acima, pedido pelo dono: uma página com os números do site, só 
 1. **A página** (feito): `/painel`, pelo menu do perfil, com as abas Visão geral e Custos (gasto
    por modelo, vídeos, falhas, projetos e contas, do próprio banco), em 7 dias, 30 dias ou tudo.
    404 para quem não é administrador.
-2. **Custos de fora** (feito): na aba Custos, um card por provedor de vídeo com a sua chave
-   (OpenRouter: uso da chave e o que resta do limite; HeyGen: saldo da carteira ou do plano) e a
-   Cloudflare (contêineres pelo painel do alarme, até 30 dias, e o R2). O saldo da conta do
-   OpenRouter pede uma chave de gestão, que o site não tem.
+2. **Custos de fora** (feito): na aba Custos, um card por provedor de vídeo com o saldo e o gasto
+   no período em destaque (OpenRouter: saldo pela chave de gestão `OPENROUTER_MANAGEMENT_KEY`;
+   HeyGen: saldo da carteira ou do plano; o gasto no período vem do banco, pelo provedor de cada
+   vídeo) e a Cloudflare (contêineres pelo painel do alarme, até 30 dias, e o R2).
 3. **Saúde e atividade**, numa aba nova: últimas falhas com o motivo técnico e o link, o estado do alarme de
    contêiner e o uso da API e do MCP (tokens e último uso).
 4. **Cloudflare Access** na frente de `/painel*` (código por e-mail antes de chegar ao Worker):

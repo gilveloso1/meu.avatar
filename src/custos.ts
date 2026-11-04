@@ -1,13 +1,14 @@
 /**
  * Os custos de fora do banco, para a aba Custos do painel do administrador (/painel/custos):
  *
- * - Provedores de vídeo, cada um com a sua chave: o saldo, o gasto do mês e o de hoje, no que a
+ * - Provedores de vídeo, cada um com a sua chave: o saldo e o gasto total da conta e o limite da chave, no que a
  *   API de cada um informa (o que ela não informa fica vazio). Provedor novo é mais um item em
  *   PROVEDORES, com a sua função de leitura.
- *   - OpenRouter (`GET /api/v1/key`): o uso da chave hoje e no mês e o que resta do limite, se a
- *     chave tiver um. O saldo da conta (`/api/v1/credits`) pede uma chave de gestão.
- *   - HeyGen (`GET /v3/users/me`): o saldo da carteira (dólares ou créditos) ou do plano, e o gasto
- *     do período no plano por uso.
+ *   - OpenRouter: o saldo e o gasto da conta (`GET /api/v1/credits`, com a chave de gestão
+ *     OPENROUTER_MANAGEMENT_KEY) e o limite da chave do site (`GET /api/v1/key`), se ela tiver um.
+ *     O limite não é o saldo.
+ *   - HeyGen (`GET /v3/users/me`): o saldo da carteira (dólares ou créditos) ou do plano.
+ *   O gasto no período de cada provedor vem do banco (Db.panelStats, pelo `settings.platform`).
  * - Cloudflare: memória, disco e CPU de cada contêiner no período, do painel da Cloudflare (o mesmo
  *   do alarme, src/vigia.ts), e o espaço do R2, em dólares pela tabela de preço abaixo. O painel
  *   guarda 32 dias: períodos maiores viram os últimos 30 dias.
@@ -42,14 +43,27 @@ export interface Valor {
   moeda: "usd" | "creditos";
 }
 
+/** O limite de gasto da chave: quanto resta, de quanto, e quando ele volta ao início. */
+export interface Limite {
+  restante: number;
+  valor: number;
+  /** "daily", "weekly", "monthly" ou null (não volta). */
+  periodo: string | null;
+}
+
 /** O que a API de um provedor informa; o que ela não informa fica null. */
 export interface Leitura {
+  /** O saldo da conta (o que ainda dá para gastar). */
   saldo: Valor | null;
-  mes: Valor | null;
-  hoje: Valor | null;
+  /** O limite da chave, quando a chave tem um (não é o saldo da conta). */
+  limite: Limite | null;
+  /** O gasto da conta desde o início, como o provedor informa. */
+  total: Valor | null;
 }
 
 export interface UsoProvedor extends Leitura {
+  /** O mesmo id de `settings.platform` dos vídeos (videoPlatform): junta o gasto do site no período. */
+  id: string;
   nome: string;
   /** sem_chave: o site não usa esse provedor; falhou: a API não respondeu. */
   estado: "ok" | "sem_chave" | "falhou";
@@ -75,6 +89,7 @@ export interface CustosApi {
 
 /** Um provedor: o nome na tela e como ler a sua API com a chave. */
 export interface Provedor {
+  id: string;
   nome: string;
   chave: string | undefined;
   ler(chave: string, doFetch: typeof fetch): Promise<Leitura>;
@@ -87,11 +102,25 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function lerOpenRouter(chave: string, doFetch: typeof fetch): Promise<Leitura> {
-  const { data } = await json<{ data: { usage_daily: number; usage_monthly: number; limit_remaining: number | null } }>(
-    await doFetch("https://openrouter.ai/api/v1/key", { headers: { authorization: `Bearer ${chave}` } }),
-  );
-  return { saldo: usd(data.limit_remaining), mes: usd(data.usage_monthly), hoje: usd(data.usage_daily) };
+/**
+ * OpenRouter: o limite pela chave do site (`/api/v1/key`) e o saldo pela chave de gestão
+ * (`/api/v1/credits`: créditos comprados menos os usados). Sem a chave de gestão, ou se ela
+ * falhar, o saldo fica vazio e o total é o uso da chave do site.
+ */
+export async function lerOpenRouter(chave: string, doFetch: typeof fetch, chaveGestao?: string): Promise<Leitura> {
+  type Chave = { usage: number; limit: number | null; limit_remaining: number | null; limit_reset: string | null };
+  const [{ data }, creditos] = await Promise.all([
+    json<{ data: Chave }>(await doFetch("https://openrouter.ai/api/v1/key", { headers: { authorization: `Bearer ${chave}` } })),
+    chaveGestao
+      ? doFetch("https://openrouter.ai/api/v1/credits", { headers: { authorization: `Bearer ${chaveGestao}` } })
+          .then((res) => json<{ data: { total_credits: number; total_usage: number } }>(res))
+          .catch((err) => (console.error("Painel: saldo do OpenRouter falhou", String(err)), null))
+      : Promise.resolve(null),
+  ]);
+  const limite = typeof data.limit === "number" && typeof data.limit_remaining === "number" ? { restante: data.limit_remaining, valor: data.limit, periodo: data.limit_reset ?? null } : null;
+  return creditos
+    ? { saldo: usd(creditos.data.total_credits - creditos.data.total_usage), limite, total: usd(creditos.data.total_usage) }
+    : { saldo: null, limite, total: usd(data.usage) };
 }
 
 export async function lerHeyGen(chave: string, doFetch: typeof fetch): Promise<Leitura> {
@@ -105,12 +134,12 @@ export async function lerHeyGen(chave: string, doFetch: typeof fetch): Promise<L
   const creditos = (valor: number | null | undefined): Valor | null => (typeof valor === "number" ? { valor, moeda: "creditos" } : null);
   if (data.billing_type === "wallet" && data.wallet) {
     const saldo = data.wallet.currency === "usd" ? usd(data.wallet.remaining_balance) : creditos(data.wallet.remaining_balance);
-    return { saldo, mes: null, hoje: null };
+    return { saldo, limite: null, total: null };
   }
   if (data.billing_type === "usage_based" && data.usage_based) {
-    return { saldo: creditos(data.usage_based.remaining_credits), mes: usd(data.usage_based.spending_current_usd), hoje: null };
+    return { saldo: creditos(data.usage_based.remaining_credits), limite: null, total: null };
   }
-  return { saldo: creditos(data.subscription?.credits?.premium_credits?.remaining), mes: null, hoje: null };
+  return { saldo: creditos(data.subscription?.credits?.premium_credits?.remaining), limite: null, total: null };
 }
 
 export class CustosReais implements CustosApi {
@@ -129,13 +158,13 @@ export class CustosReais implements CustosApi {
     const [provedores, cloudflare] = await Promise.all([
       Promise.all(
         this.provedores.map(async (p): Promise<UsoProvedor> => {
-          const vazio = { saldo: null, mes: null, hoje: null };
-          if (!p.chave) return { nome: p.nome, estado: "sem_chave", ...vazio };
+          const vazio = { saldo: null, limite: null, total: null };
+          if (!p.chave) return { id: p.id, nome: p.nome, estado: "sem_chave", ...vazio };
           try {
-            return { nome: p.nome, estado: "ok", ...(await p.ler(p.chave, solto)) };
+            return { id: p.id, nome: p.nome, estado: "ok", ...(await p.ler(p.chave, solto)) };
           } catch (err) {
             console.error(`Painel: uso de ${p.nome} falhou`, String(err));
-            return { nome: p.nome, estado: "falhou", ...vazio };
+            return { id: p.id, nome: p.nome, estado: "falhou", ...vazio };
           }
         }),
       ),

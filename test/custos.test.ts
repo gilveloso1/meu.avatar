@@ -21,39 +21,52 @@ function fakeFetch(routes: Record<string, (init?: RequestInit) => Response>) {
 const GIB = 1024 ** 3;
 
 describe("custos de fora", () => {
-  it("OpenRouter: uso do mês e de hoje e o que resta do limite da chave", async () => {
+  it("OpenRouter: o saldo e o gasto da conta pela chave de gestão; o limite da chave à parte", async () => {
+    // O caso real de 04/11/2026: limite de US$ 50 por semana na chave, US$ 35,03 gastos na conta.
     const { doFetch, calls } = fakeFetch({
-      "https://openrouter.ai/api/v1/key": () => Response.json({ data: { usage_daily: 1.5, usage_monthly: 12, limit_remaining: 38 } }),
+      "https://openrouter.ai/api/v1/key": () => Response.json({ data: { usage: 35.03, limit: 50, limit_remaining: 50, limit_reset: "weekly" } }),
+      "https://openrouter.ai/api/v1/credits": () => Response.json({ data: { total_credits: 60, total_usage: 35.03 } }),
     });
-    expect(await lerOpenRouter("chave", doFetch)).toEqual({
-      saldo: { valor: 38, moeda: "usd" },
-      mes: { valor: 12, moeda: "usd" },
-      hoje: { valor: 1.5, moeda: "usd" },
+    const leitura = await lerOpenRouter("chave", doFetch, "gestao");
+    expect(leitura.saldo!.valor).toBeCloseTo(24.97, 6);
+    expect(leitura.total).toEqual({ valor: 35.03, moeda: "usd" });
+    expect(leitura.limite).toEqual({ restante: 50, valor: 50, periodo: "weekly" });
+    const auth = (url: string) => new Headers(calls.find((c) => c.url.endsWith(url))!.init!.headers).get("authorization");
+    expect(auth("/key")).toBe("Bearer chave");
+    expect(auth("/credits")).toBe("Bearer gestao");
+  });
+
+  it("OpenRouter sem a chave de gestão, ou com ela recusada: sem saldo, e o total é o da chave", async () => {
+    const { doFetch } = fakeFetch({
+      "https://openrouter.ai/api/v1/key": () => Response.json({ data: { usage: 35.03, limit: null, limit_remaining: null, limit_reset: null } }),
+      "https://openrouter.ai/api/v1/credits": () => Response.json({ error: { message: "Only management keys can perform this operation" } }, { status: 403 }),
     });
-    expect(new Headers(calls[0]!.init!.headers).get("authorization")).toBe("Bearer chave");
+    for (const gestao of [undefined, "recusada"]) {
+      expect(await lerOpenRouter("chave", doFetch, gestao)).toEqual({ saldo: null, limite: null, total: { valor: 35.03, moeda: "usd" } });
+    }
   });
 
   it("HeyGen: a carteira em dólares ou em créditos, e o plano por uso", async () => {
     const carteira = fakeFetch({
       "https://api.heygen.com/v3/users/me": () => Response.json({ data: { billing_type: "wallet", wallet: { currency: "usd", remaining_balance: 22.65 }, subscription: null, usage_based: null } }),
     });
-    expect(await lerHeyGen("k", carteira.doFetch)).toEqual({ saldo: { valor: 22.65, moeda: "usd" }, mes: null, hoje: null });
+    expect(await lerHeyGen("k", carteira.doFetch)).toEqual({ saldo: { valor: 22.65, moeda: "usd" }, limite: null, total: null });
     expect(new Headers(carteira.calls[0]!.init!.headers).get("x-api-key")).toBe("k");
 
     const porUso = fakeFetch({
       "https://api.heygen.com/v3/users/me": () =>
         Response.json({ data: { billing_type: "usage_based", wallet: null, subscription: null, usage_based: { spending_current_usd: 7, remaining_credits: 100 } } }),
     });
-    expect(await lerHeyGen("k", porUso.doFetch)).toEqual({ saldo: { valor: 100, moeda: "creditos" }, mes: { valor: 7, moeda: "usd" }, hoje: null });
+    expect(await lerHeyGen("k", porUso.doFetch)).toEqual({ saldo: { valor: 100, moeda: "creditos" }, limite: null, total: null });
   });
 
   it("cada provedor falha sozinho, e sem chave não chama a API", async () => {
     let chamado = false;
     const custos = await new CustosReais(
       [
-        { nome: "Sem chave", chave: undefined, ler: async () => ((chamado = true), { saldo: null, mes: null, hoje: null }) },
-        { nome: "Quebrado", chave: "k", ler: async () => Promise.reject(new Error("fora do ar")) },
-        { nome: "Bom", chave: "k", ler: async () => ({ saldo: { valor: 5, moeda: "usd" }, mes: null, hoje: null }) },
+        { id: "a", nome: "Sem chave", chave: undefined, ler: async () => ((chamado = true), { saldo: null, limite: null, total: null }) },
+        { id: "b", nome: "Quebrado", chave: "k", ler: async () => Promise.reject(new Error("fora do ar")) },
+        { id: "c", nome: "Bom", chave: "k", ler: async () => ({ saldo: { valor: 5, moeda: "usd" }, limite: null, total: null }) },
       ],
       null,
       "meu-avatar",
@@ -128,15 +141,17 @@ describe("aba Custos com a infraestrutura", () => {
     const admin = await cookie();
     const costs = custosFalsos({
       provedores: [
-        { nome: "OpenRouter", estado: "ok", saldo: { valor: 38, moeda: "usd" }, mes: { valor: 12, moeda: "usd" }, hoje: null },
-        { nome: "HeyGen", estado: "sem_chave", saldo: null, mes: null, hoje: null },
+        { id: "openrouter", nome: "OpenRouter", estado: "ok", saldo: { valor: 24.97, moeda: "usd" }, limite: { restante: 50, valor: 50, periodo: "weekly" }, total: { valor: 35.03, moeda: "usd" } },
+        { id: "heygen", nome: "HeyGen", estado: "sem_chave", saldo: null, limite: null, total: null },
       ],
       cloudflare: null,
     });
     const page = await (await get("/painel/custos?periodo=7", admin, costs)).text();
     expect(costs.pedidos).toEqual([7]);
     expect(page).toContain(">OpenRouter<");
-    expect(page).toContain("US$ 38,00");
+    expect(page).toContain("US$ 24,97");
+    expect(page).toContain("US$ 50,00 de US$ 50,00 por semana");
+    expect(page).toContain("US$ 35,03");
     expect(page).toContain(">HeyGen<");
     expect(page).toContain("Sem chave no site");
     expect(page).toContain(ERROS.custosSemAcesso);

@@ -49,8 +49,8 @@ export function createCosts(env: Env): CustosApi {
   const painel = env.CLOUDFLARE_ANALYTICS_TOKEN && env.CLOUDFLARE_ACCOUNT_ID ? new Painel(env.CLOUDFLARE_ANALYTICS_TOKEN, env.CLOUDFLARE_ACCOUNT_ID) : null;
   return new CustosReais(
     [
-      { nome: "OpenRouter", chave: env.OPENROUTER_API_KEY, ler: lerOpenRouter },
-      { nome: "HeyGen", chave: env.HEYGEN_API_KEY, ler: lerHeyGen },
+      { id: "openrouter", nome: "OpenRouter", chave: env.OPENROUTER_API_KEY, ler: (chave, doFetch) => lerOpenRouter(chave, doFetch, env.OPENROUTER_MANAGEMENT_KEY) },
+      { id: "heygen", nome: "HeyGen", chave: env.HEYGEN_API_KEY, ler: lerHeyGen },
     ],
     painel,
     "meu-avatar",

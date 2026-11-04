@@ -22,7 +22,7 @@ import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { handleMcp } from "../mcp";
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { AssetKind, Avatar, AvatarAsset, Db, PanelStats, Project, User, Video, VideoStatus } from "../db";
-import { type CustosExternos, type CustosApi, FRANQUIA, type Valor } from "../custos";
+import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -56,7 +56,7 @@ const ICONS = [
   "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
   "image", "info", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
   "person", "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
-  "send", "space_dashboard", "speed", "star", "swap_vert", "switch_account", "today", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
+  "send", "space_dashboard", "speed", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -1899,8 +1899,25 @@ function panelCosts(s: PanelStats, external: CustosExternos | null, local: boole
       <h2 class="qe-result__title" id="card-modelos">Gasto por modelo</h2>
       ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
     </section>
-    ${external ? panelInfra(external, local) : ""}
+    ${external ? panelInfra(external, s.platforms, local) : ""}
   </div>`;
+}
+
+/**
+ * O card de um provedor, igual para todos: o saldo (quanto ainda dá para gastar) e o gasto no
+ * período (pelo banco do site) em destaque, e embaixo as linhas do que a API informa (o que ela
+ * não informa fica "—"). Mesmas linhas em todos, então a mesma altura.
+ */
+function providerCard(title: string, o: { balance: string; spent: string; spentNote: string; rows: { icon: string; term: string; value: string }[] }): string {
+  const id = `card-${title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
+  return `<section class="viewer__card viewer__details" aria-labelledby="${id}">
+      <h2 class="qe-result__title" id="${id}">${esc(title)}</h2>
+      <div class="figures">
+        <div class="figures__item"><p class="figures__label">Saldo</p><p class="figures__value">${esc(o.balance)}</p><p class="figures__note">para gastar</p></div>
+        <div class="figures__item"><p class="figures__label">Gasto no período</p><p class="figures__value">${esc(o.spent)}</p><p class="figures__note">em ${esc(o.spentNote)}</p></div>
+      </div>
+      <dl class="dash__totals">${o.rows.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${d.icon}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.value)}</dd></div>`).join("")}</dl>
+    </section>`;
 }
 
 const PROVIDER_STATUS = {
@@ -1908,6 +1925,14 @@ const PROVIDER_STATUS = {
   sem_chave: { icon: "link_off", label: "Sem chave no site" },
   falhou: { icon: "error", label: "Sem resposta agora" },
 } as const;
+
+const LIMIT_PERIODS: Record<string, string> = { daily: "por dia", weekly: "por semana", monthly: "por mês" };
+
+/** "US$ 50,00 de US$ 50,00 por semana": o que resta do limite da chave, de quanto e quando volta. */
+function limitValue(l: Limite | null): string {
+  if (!l) return "—";
+  return `${money(l.restante)} de ${money(l.valor)}${l.periodo && LIMIT_PERIODS[l.periodo] ? ` ${LIMIT_PERIODS[l.periodo]}` : ""}`;
+}
 
 function providerValue(v: Valor | null): string {
   if (!v) return "—";
@@ -1919,16 +1944,21 @@ function providerValue(v: Valor | null): string {
  * API não informa fica "—"), lado a lado como um feed; e a Cloudflare num card só, um serviço por
  * linha, como o gasto por modelo.
  */
-function panelInfra(e: CustosExternos, local: boolean): string {
+function panelInfra(e: CustosExternos, platforms: PanelStats["platforms"], local: boolean): string {
   const n1 = (x: number) => x.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
-  const providers = e.provedores.map((p) =>
-    detailsCard(p.nome, [
-      { icon: "account_balance_wallet", term: "Saldo", value: providerValue(p.saldo) },
-      { icon: "calendar_today", term: "Neste mês", value: providerValue(p.mes) },
-      { icon: "today", term: "Hoje", value: providerValue(p.hoje) },
-      { icon: PROVIDER_STATUS[p.estado].icon, term: "Situação", value: PROVIDER_STATUS[p.estado].label },
-    ]),
-  );
+  const providers = e.provedores.map((p) => {
+    const spent = platforms.find((x) => x.platform === p.id);
+    return providerCard(p.nome, {
+      balance: providerValue(p.saldo),
+      spent: money(spent?.cost ?? 0),
+      spentNote: plural(spent?.videos ?? 0, "vídeo", "vídeos"),
+      rows: [
+        { icon: "payments", term: "Gasto total na conta", value: providerValue(p.total) },
+        { icon: "speed", term: "Limite da chave", value: limitValue(p.limite) },
+        { icon: PROVIDER_STATUS[p.estado].icon, term: "Situação", value: PROVIDER_STATUS[p.estado].label },
+      ],
+    });
+  });
   const c = e.cloudflare;
   let cloudflare: string;
   if (c === null || c === "falhou") {

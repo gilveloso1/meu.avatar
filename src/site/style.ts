@@ -446,7 +446,12 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 /* Título de um grupo de cards dentro da aba (M3: title-medium, 16 px acima para separar do grupo anterior). */
 .dash__section { margin: 16px 0 0; font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; color: var(--md-sys-color-on-surface); }
 /* Cards iguais lado a lado (os provedores): todos com as mesmas linhas, então com a mesma altura. */
-.dash__feed { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+/* Os dois números de um provedor (saldo e gasto), lado a lado, em headline-medium. */
+.figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 8px; }
+.figures__label { font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }
+.figures__value { margin-top: 4px; font: var(--md-sys-typescale-headline-medium); color: var(--md-sys-color-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.figures__note { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
+.dash__feed { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 8px; }
 .dash__totals { margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--md-sys-color-outline-variant); }
 @media (max-width: 839px) {
   .dash__kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
