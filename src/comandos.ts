@@ -71,6 +71,27 @@ const MAX_FALA = 2000;
 /** O código de uma animação: as cenas do caso real têm 3 a 5 mil caracteres; o projeto inteiro vai até 1 MB. */
 export const MAX_CODIGO = 100_000;
 const MAX_TROCAS = 50;
+const MAX_PARAMETROS = 30;
+const MAX_VALOR = 500;
+const CHAVE_PARAMETRO = /^[a-zA-Z_][a-zA-Z0-9_]{0,39}$/;
+
+/**
+ * Os parâmetros de uma animação junto com os que já tinha: texto ou número por chave, e null tira
+ * a chave. É o que um template muda sem reescrever o código (ver codeHtml em modelo.js).
+ */
+function parametros(v: unknown, antes: Record<string, string | number> | undefined, falha: (c: string, extra?: Record<string, unknown>) => ComandoError): Record<string, string | number> | undefined {
+  if (v === undefined) return antes;
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw falha("parametros_invalidos");
+  const novos = { ...antes };
+  for (const [k, valor] of Object.entries(v)) {
+    if (!CHAVE_PARAMETRO.test(k)) throw falha("parametros_invalidos", { parametro: k });
+    if (valor === null) delete novos[k];
+    else if ((typeof valor === "string" && valor.length <= MAX_VALOR) || (typeof valor === "number" && Number.isFinite(valor))) novos[k] = valor;
+    else throw falha("parametros_invalidos", { parametro: k });
+  }
+  if (Object.keys(novos).length > MAX_PARAMETROS) throw falha("parametros_invalidos", { maximo: MAX_PARAMETROS });
+  return Object.keys(novos).length ? novos : undefined;
+}
 
 /** O nome do bloco sem arquivo, como o dos blocos: Texto 1 (rascunho), Animação 1... depois do maior que já existe. */
 function proximoNome(project: CanvasProject, prefixo: string, dele: (b: Block) => unknown): string {
@@ -101,8 +122,9 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
           const duracao = numero(c.duracao);
           if (duracao === null || duracao < MIN_LEN || duracao > CODE_MAX) throw falha("duracao_invalida");
           const nome = texto(c.nome) ?? proximoNome(project, "Animação", (b) => b.code);
+          const params = parametros(c.parametros, undefined, falha);
           const novo = adicionar(project, { ...c, inicio: 0, fim: duracao }, { src: "", kind: "image", dur: CODE_MAX, name: nome }, falha);
-          project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, code: { html } } : b)) };
+          project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, code: { html, ...(params ? { params } : {}) } } : b)) };
           criados.push(novo.id);
           break;
         }
@@ -344,16 +366,18 @@ function codigo(v: unknown, falha: (c: string, extra?: Record<string, unknown>) 
 
 /**
  * Troca o código de uma animação: inteiro (html) ou só trechos (trocas: [{de, para}]), para o
- * agente não reenviar a cena toda. Cada de tem de aparecer uma vez só, como está.
+ * agente não reenviar a cena toda. Cada de tem de aparecer uma vez só, como está. parametros
+ * muda só os valores, sozinho ou junto.
  */
 function editarCodigo(project: CanvasProject, c: Comando, falha: (c: string, extra?: Record<string, unknown>) => ComandoError): CanvasProject {
   const b = project.blocks.find((o) => o.id === c.bloco);
   if (!b) throw falha("bloco_inexistente");
   if (!b.code) throw falha("sem_codigo");
-  if ((c.html === undefined) === (c.trocas === undefined)) throw falha("codigo_invalido");
+  if ((c.html !== undefined && c.trocas !== undefined) || (c.html === undefined && c.trocas === undefined && c.parametros === undefined)) throw falha("codigo_invalido");
+  const params = parametros(c.parametros, b.code.params, falha);
   let html = b.code.html;
   if (c.html !== undefined) html = codigo(c.html, falha);
-  else {
+  else if (c.trocas !== undefined) {
     if (!Array.isArray(c.trocas) || !c.trocas.length || c.trocas.length > MAX_TROCAS) throw falha("trocas_invalidas");
     for (const [i, t] of (c.trocas as unknown[]).entries()) {
       const { de, para } = (t ?? {}) as Record<string, unknown>;
@@ -364,7 +388,7 @@ function editarCodigo(project: CanvasProject, c: Comando, falha: (c: string, ext
     }
     html = codigo(html, falha);
   }
-  return { ...project, blocks: project.blocks.map((o) => (o === b ? { ...o, code: { html } } : o)) };
+  return { ...project, blocks: project.blocks.map((o) => (o === b ? { ...o, code: { html, ...(params ? { params } : {}) } } : o)) };
 }
 
 /** O grupo em que o bloco faz parte da sequência (e não da cobertura ou do som). */

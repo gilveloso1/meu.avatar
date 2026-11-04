@@ -167,7 +167,16 @@ instantes, uns 14 mil em base64.
 |---|---|---|
 | `adicionar` | `video`, `arquivo` ou `ativo` (de `listar_avatares`); `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo` e de ativo enviado; o ativo gerado usa a duração do vídeo); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: bloco solto, à direita de tudo. Vídeo de `arquivo` sem faixa de som (o WebM do render, uma animação) entra sem a camada de áudio, como com `semSom` |
 | `adicionar` (animação) | `html`, `duracao` (0,5 a 60); `nome`; `depois` ou `sobre` e `em`; `rotulo` | Animação em código: o projeto guarda o HTML (até 100 mil caracteres, com as regras do `renderizar_html`), não um WebM. Sem `nome`, Animação 1, Animação 2... A prévia do canvas roda o código; a exportação faz o vídeo dela no tamanho do Final, uma vez só por código, tamanho e duração. `cortar` muda o tempo até 60 s; `enquadrar` não vale (o código já desenha no tamanho do Final) |
-| `editarCodigo` | `bloco`; `html` ou `trocas: [{de, para}]` (até 50) | Troca o código da animação inteiro ou só trechos, sem reenviar a cena. Cada `de` tem de aparecer uma vez só, como está; senão, `trecho_nao_unico` com `troca` e `vezes` |
+| `editarCodigo` | `bloco`; `html` ou `trocas: [{de, para}]` (até 50); `parametros` | Troca o código da animação inteiro ou só trechos, sem reenviar a cena. Cada `de` tem de aparecer uma vez só, como está; senão, `trecho_nao_unico` com `troca` e `vezes`. Só `parametros` muda só os valores |
+
+**Parâmetros** (`parametros: {chave: texto ou número}`, até 30, em `adicionar` com `html` e em
+`editarCodigo`): os valores que um template muda sem reescrever o código, como nome, preço ou cor da
+marca. No HTML, `{{chave}}` fora dos scripts vira o valor, escapado; nos scripts, `params.chave`.
+Em `editarCodigo`, os valores novos se juntam aos que já existem, e `null` tira uma chave. Chave é
+letra, número e `_`, começando por letra (`parametros_invalidos`, com `parametro`). A prévia, a
+inspeção e a exportação usam o código já com os valores (`codeHtml`, `src/canvas/modelo.js`):
+outro valor faz outro vídeo na exportação, e o mesmo valor reaproveita. No canvas, cada parâmetro
+é um campo nos Ajustes do bloco. Animação sem parâmetros roda como foi guardada.
 | `rascunho` | `fala`, `duracao` (0,5 a 30); `nome`; `depois` ou `sobre` e `em`; `rotulo` | O lugar de um vídeo que ainda não existe: um bloco sem arquivo, com a fala, do tamanho estimado. Sem `nome`, Texto 1, Texto 2..., como os blocos. No canvas e na prévia, um cartão com a fala. A exportação é recusada enquanto houver rascunho |
 | `trocar` | `bloco`; `video`, `arquivo` ou `ativo`; `inicio`, `fim`, `dur`, `nome`, `semSom` | Põe o arquivo no lugar do bloco (o vídeo pronto no lugar do rascunho): a posição e o que está por cima ficam, e a sequência acompanha a duração nova. Sem `fim`, o vídeo entra inteiro |
 | `renomear` | `bloco`, `nome` | Muda o nome do bloco, como o campo Nome dos Ajustes |

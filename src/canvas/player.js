@@ -15,7 +15,7 @@
  * A animação em código é uma página isolada (iframe com sandbox, src/canvas/animacao.html) no
  * tamanho do Final, reduzida para o quadro; só a que está na tela é levada ao instante.
  */
-import { placement, sounds } from "./modelo.js";
+import { codeHtml, placement, sounds } from "./modelo.js";
 import { draftCard } from "./miniaturas.js";
 
 const READY = 2; // HAVE_CURRENT_DATA: já há quadro para mostrar.
@@ -91,7 +91,7 @@ export class Player {
     el.tabIndex = -1;
     const { width, height } = this.size;
     Object.assign(el.style, { width: `${width}px`, height: `${height}px` });
-    el.addEventListener("load", () => el.contentWindow.postMessage({ tipo: "carregar", html: i.block.code.html, largura: width, altura: height, duracao: i.block.tout }, "*"), { once: true });
+    el.addEventListener("load", () => el.contentWindow.postMessage({ tipo: "carregar", html: codeHtml(i.block.code), largura: width, altura: height, duracao: i.block.tout }, "*"), { once: true });
     el.src = this.frameSrc;
     this.stage.append(el);
     const item = { ...i, el, active: false, ready: false, sent: null };

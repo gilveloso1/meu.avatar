@@ -480,3 +480,12 @@ test("a animação em código vai até a duração dela, e a exportação recebe
   const work = M.exportWork(p, "final");
   assert.equal(work.trechos[0].itens.find((i) => i.src === "" && i.codigo).codigo, "<b>Oi</b>");
 });
+
+test("os parâmetros da animação entram no HTML escapados e nos scripts como params", () => {
+  const html = M.codeHtml({ html: '<b>{{nome}}</b><i>{{ preco }}</i>{{falta}}<script>tl.to("#a",{x:params.x, t:"{{nome}}"})</script>', params: { nome: "Ana <3>", preco: "R$ 49", x: 120 } });
+  assert.ok(html.startsWith('<script>var params = {"nome":"Ana \\u003c3>","preco":"R$ 49","x":120};</script>'));
+  assert.ok(html.includes("<b>Ana &lt;3&gt;</b><i>R$ 49</i>{{falta}}"));
+  // Dentro do script, nada é trocado: o valor vem de params.
+  assert.ok(html.includes('t:"{{nome}}"'));
+  assert.equal(M.codeHtml({ html: "<p>x</p>" }), "<p>x</p>");
+});

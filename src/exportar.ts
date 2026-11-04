@@ -18,7 +18,7 @@ import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
 import { CABECALHO_BYTES, temSom } from "./som";
 import { MAX_VIDEO_BYTES } from "./studio";
-import { output } from "./canvas/modelo.js";
+import { codeHtml, output } from "./canvas/modelo.js";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { type InspecaoDaAnimacao, MAX_HTML_BYTES, MAX_RENDER_SECONDS, type RenderApi } from "./render";
 import { AudioLongoError, type Transcriber, type Transcricao } from "./transcricao";
@@ -190,7 +190,7 @@ export class Exports {
     if (c.final !== undefined && !final) return "final_inexistente";
     if (!this.renderer) return null;
     const { width, height } = output(final!);
-    return this.renderer.inspect(block.code.html, width, height, duracao, instantes, c.quadros);
+    return this.renderer.inspect(codeHtml(block.code), width, height, duracao, instantes, c.quadros);
   }
 
   /** Começa a exportação de um Final, sempre a partir do projeto salvo; os arquivos são conferidos aqui. */

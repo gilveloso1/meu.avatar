@@ -109,7 +109,7 @@ function loadPreview() {
     }
   }
   tl ??= v ? M.timeline(v, M.finalRate(previewFinal())) : { duration: 0, items: [] };
-  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.block.draft?.fala, i.block.code?.html, i.block.tout, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
+  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.block.draft?.fala, i.block.code && M.codeHtml(i.block.code), i.block.tout, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
   pv.title.textContent = title;
   if (key === loadedKey) return playhead(player.t);
   loadedKey = key;
@@ -610,6 +610,11 @@ function renderSide(gs) {
     if (b.draft)
       h += `<div class="text-field"><textarea class="text-field__input" id="f-fala" rows="1" maxlength="${MAX_FALA}" placeholder=" " aria-describedby="f-fala-ajuda">${esc(b.draft.fala)}</textarea><label class="text-field__label" for="f-fala">Fala</label><p class="text-field__supporting" id="f-fala-ajuda"><span>Gere o vídeo com esta fala.</span><span id="f-fala-n">${b.draft.fala.length}/${MAX_FALA}</span></p></div>`;
     if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.maxEnd(b)}"`);
+    // O que o template deixa mudar sem mexer no código: nome, preço, cor da marca.
+    if (b.code?.params)
+      h += `<section class="viewer__section"><h3 class="viewer__title">Parâmetros</h3>${Object.entries(b.code.params)
+        .map(([k, v]) => field(`f-param-${k}`, esc(k), String(v), `data-param="${esc(k)}" maxlength="500"`))
+        .join("")}</section>`;
     else
       h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
     if (b.kind === "video" && !M.linked(b))
@@ -765,6 +770,11 @@ function onSideInput(t0) {
   const b = project.blocks.find((b) => b.id === sel.id);
   const t = t0;
   if (t.id === "f-name") b.name = t.value;
+  if (t.dataset.param && b.code?.params) {
+    // O número continua número (params.x nos scripts); o resto é texto.
+    const old = b.code.params[t.dataset.param];
+    b.code.params[t.dataset.param] = typeof old === "number" && t.value.trim() !== "" && Number.isFinite(+t.value) ? +t.value : t.value;
+  }
   if (t.id === "f-fala") {
     fitText(t);
     $("#f-fala-n").textContent = `${t.value.length}/${MAX_FALA}`;
