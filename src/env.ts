@@ -8,6 +8,8 @@ export interface Env {
   MIDIA: R2Bucket;
   /** Chave da API do OpenRouter. Sem ela, o estúdio mostra os vídeos mas não gera novos. */
   OPENROUTER_API_KEY?: string;
+  /** Chave de gestão do OpenRouter, só para ler o saldo da conta no painel (src/custos.ts). */
+  OPENROUTER_MANAGEMENT_KEY?: string;
   /** Segredo de assinatura dos webhooks do OpenRouter (opcional: o status sempre é conferido na API). */
   OPENROUTER_WEBHOOK_SECRET?: string;
   /** Chave da API direta da HeyGen (vence em 27/01/2027). Sem ela, o HeyGen segue pelo OpenRouter. */

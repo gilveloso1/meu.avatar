@@ -217,6 +217,8 @@ export interface AvatarAsset {
 export interface PanelStats {
   /** Por modelo: vídeos pedidos e o gasto dos que o provedor cobrou. */
   models: { structure: string; videos: number; cost: number }[];
+  /** Por provedor (`settings.platform`; sem ele, o OpenRouter): o gasto dos vídeos do período. */
+  platforms: { platform: string; videos: number; cost: number }[];
   videos: { total: number; done: number; failed: number; busy: number; seconds: number; audioFailed: number; editFailed: number };
   projects: { created: number; exports: number; exportsFailed: number };
   accounts: { users: number; avatars: number; assets: number };
@@ -228,9 +230,16 @@ export class Db {
   async panelStats(since: string | null): Promise<PanelStats> {
     // Sem período, a data mínima pega tudo (as datas são ISO, em texto).
     const from = since ?? "";
-    const [models, videos, projects, accounts] = await this.d1.batch([
+    const [models, platforms, videos, projects, accounts] = await this.d1.batch([
       this.d1
         .prepare("SELECT COALESCE(structure, '') AS structure, COUNT(*) AS videos, COALESCE(SUM(cost), 0) AS cost FROM videos WHERE created_at >= ? GROUP BY structure ORDER BY cost DESC, videos DESC")
+        .bind(from),
+      this.d1
+        .prepare(
+          `SELECT CASE WHEN json_valid(settings) AND json_extract(settings, '$.platform') = 'heygen' THEN 'heygen' ELSE 'openrouter' END AS platform,
+             COUNT(*) AS videos, COALESCE(SUM(cost), 0) AS cost
+           FROM videos WHERE created_at >= ? GROUP BY platform`,
+        )
         .bind(from),
       this.d1
         .prepare(
@@ -261,6 +270,7 @@ export class Db {
     ]);
     return {
       models: models!.results as PanelStats["models"],
+      platforms: platforms!.results as PanelStats["platforms"],
       videos: videos!.results[0] as PanelStats["videos"],
       projects: projects!.results[0] as PanelStats["projects"],
       accounts: accounts!.results[0] as PanelStats["accounts"],

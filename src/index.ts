@@ -1,5 +1,6 @@
 import { type AudioApi, type AudioFixer, ContainerAudio } from "./audio";
 import { Accounts } from "./auth";
+import { type CustosApi, CustosReais, lerHeyGen, lerOpenRouter } from "./custos";
 import { Db } from "./db";
 import { ContainerExport, type ExportApi, type Exporter, Exports } from "./exportar";
 import { HeyGenClient, type HeyGenApi } from "./heygen";
@@ -22,6 +23,8 @@ export interface Deps {
   exporter?: ExportApi | null;
   transcriber?: Transcriber | null;
   renderer?: RenderApi | null;
+  /** Os custos de fora do banco, na aba Custos do painel (src/custos.ts). */
+  costs?: CustosApi | null;
 }
 
 export function createExports(env: Env, deps: Deps = {}): Exports {
@@ -42,8 +45,20 @@ export function createAccounts(env: Env): Accounts {
   return new Accounts(new Db(env.DB), Number(env.BCRYPT_COST) || 12);
 }
 
-export function createSite(env: Env, studio: Studio, exports: Exports = createExports(env)): Site {
-  return new Site(new Db(env.DB), env.MIDIA, studio, exports, createAccounts(env), {
+export function createCosts(env: Env): CustosApi {
+  const painel = env.CLOUDFLARE_ANALYTICS_TOKEN && env.CLOUDFLARE_ACCOUNT_ID ? new Painel(env.CLOUDFLARE_ANALYTICS_TOKEN, env.CLOUDFLARE_ACCOUNT_ID) : null;
+  return new CustosReais(
+    [
+      { id: "openrouter", nome: "OpenRouter", chave: env.OPENROUTER_API_KEY, ler: (chave, doFetch) => lerOpenRouter(chave, doFetch, env.OPENROUTER_MANAGEMENT_KEY) },
+      { id: "heygen", nome: "HeyGen", chave: env.HEYGEN_API_KEY, ler: lerHeyGen },
+    ],
+    painel,
+    "meu-avatar",
+  );
+}
+
+export function createSite(env: Env, studio: Studio, exports: Exports = createExports(env), costs: CustosApi | null = createCosts(env)): Site {
+  return new Site(new Db(env.DB), env.MIDIA, studio, exports, createAccounts(env), costs, {
     defaults: {
       duration: Number(env.VIDEO_DURATION),
       resolution: env.VIDEO_RESOLUTION,
@@ -107,7 +122,7 @@ export async function handle(request: Request, env: Env, deps: Deps = {}): Promi
     return new Response("ok");
   }
 
-  return createSite(env, studio, createExports(env, deps)).handle(request);
+  return createSite(env, studio, createExports(env, deps), deps.costs !== undefined ? deps.costs : createCosts(env)).handle(request);
 }
 
 /** O alarme de contêiner ligado sem trabalho (src/vigia.ts): o painel da Cloudflare e o que o site sabe de cada um. */

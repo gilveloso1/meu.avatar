@@ -22,6 +22,7 @@ import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { handleMcp } from "../mcp";
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { AssetKind, Avatar, AvatarAsset, Db, PanelStats, Project, User, Video, VideoStatus } from "../db";
+import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -50,12 +51,12 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today", "check", "check_circle",
-  "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
+  "account_balance_wallet", "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today", "check", "check_circle",
+  "checkroom", "chevron_left", "chevron_right", "close", "cloud", "content_copy", "content_cut", "crop_square", "date_range", "delete", "download", "drag_indicator",
   "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
-  "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
+  "image", "info", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
   "person", "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
-  "send", "space_dashboard", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
+  "send", "space_dashboard", "speed", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -90,6 +91,7 @@ export class Site {
     private readonly studio: Studio,
     private readonly exports: Exports,
     private readonly accounts: Accounts,
+    private readonly costs: CustosApi | null,
     private readonly config: SiteConfig,
   ) {}
 
@@ -476,7 +478,10 @@ ${error ? snackbar(error) : ""}`;
   private async panelPage(user: User, url: URL, tab: PanelTab): Promise<Response> {
     const period = PANEL_PERIODS.find((p) => p.id === url.searchParams.get("periodo")) ?? PANEL_PERIODS[1]!;
     const since = period.days ? new Date(Date.now() - period.days * 86_400_000).toISOString() : null;
-    const stats = await this.db.panelStats(since);
+    const [stats, external] = await Promise.all([
+      this.db.panelStats(since),
+      tab === "custos" && this.costs ? this.costs.custos(period.days || null) : Promise.resolve(null),
+    ]);
     const query = `?periodo=${period.id}`;
     const tabs = PANEL_TABS.map(
       (t) => `<a class="tabs__tab interactive" href="${t.href}${query}"${t.id === tab ? ' aria-current="page"' : ""}><span class="tabs__content"><span class="icon">${t.icon}</span>${esc(t.label)}</span></a>`,
@@ -489,7 +494,7 @@ ${error ? snackbar(error) : ""}`;
 <main class="page" id="conteudo">
   <nav class="tabs tabs--start" aria-label="Seções do painel">${tabs}</nav>
   <nav class="chip-set library__tools" aria-label="Período">${chips}</nav>
-  ${tab === "custos" ? panelCosts(stats) : panelOverview(stats, query)}
+  ${tab === "custos" ? panelCosts(stats, external, !!this.config.local) : panelOverview(stats, query)}
 </main>`;
     return html(page(`Painel · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Painel" } }));
   }
@@ -1875,8 +1880,11 @@ function panelOverview(s: PanelStats, query: string): string {
   </div>`;
 }
 
-/** Custos: os números do período no topo (como na Visão geral) e todos os modelos, uma linha cada. */
-function panelCosts(s: PanelStats): string {
+/**
+ * Custos: os números do período no topo (como na Visão geral), todos os modelos, uma linha cada, e
+ * a infraestrutura num mosaico: os contêineres (o card alto) ao lado do OpenRouter e do R2.
+ */
+function panelCosts(s: PanelStats, external: CustosExternos | null, local: boolean): string {
   const total = s.models.reduce((sum, m) => sum + m.cost, 0);
   const done = s.videos.done;
   const minutes = s.videos.seconds / 60;
@@ -1891,8 +1899,101 @@ function panelCosts(s: PanelStats): string {
       <h2 class="qe-result__title" id="card-modelos">Gasto por modelo</h2>
       ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
     </section>
+    ${external ? panelInfra(external, s.platforms, local) : ""}
   </div>`;
 }
+
+/**
+ * O card de um provedor, igual para todos: o saldo (quanto ainda dá para gastar) e o gasto no
+ * período (pelo banco do site) em destaque, e embaixo as linhas do que a API informa (o que ela
+ * não informa fica "—"). Mesmas linhas em todos, então a mesma altura.
+ */
+function providerCard(title: string, o: { balance: string; spent: string; spentNote: string; rows: { icon: string; term: string; value: string }[] }): string {
+  const id = `card-${title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
+  return `<section class="viewer__card viewer__details" aria-labelledby="${id}">
+      <h2 class="qe-result__title" id="${id}">${esc(title)}</h2>
+      <div class="figures">
+        <div class="figures__item"><p class="figures__label">Saldo</p><p class="figures__value">${esc(o.balance)}</p><p class="figures__note">para gastar</p></div>
+        <div class="figures__item"><p class="figures__label">Gasto no período</p><p class="figures__value">${esc(o.spent)}</p><p class="figures__note">em ${esc(o.spentNote)}</p></div>
+      </div>
+      <dl class="dash__totals">${o.rows.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${d.icon}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.value)}</dd></div>`).join("")}</dl>
+    </section>`;
+}
+
+const PROVIDER_STATUS = {
+  ok: { icon: "check_circle", label: "Em dia" },
+  sem_chave: { icon: "link_off", label: "Sem chave no site" },
+  falhou: { icon: "error", label: "Sem resposta agora" },
+} as const;
+
+const LIMIT_PERIODS: Record<string, string> = { daily: "por dia", weekly: "por semana", monthly: "por mês" };
+
+/** "US$ 50,00 de US$ 50,00 por semana": o que resta do limite da chave, de quanto e quando volta. */
+function limitValue(l: Limite | null): string {
+  if (!l) return "—";
+  return `${money(l.restante)} de ${money(l.valor)}${l.periodo && LIMIT_PERIODS[l.periodo] ? ` ${LIMIT_PERIODS[l.periodo]}` : ""}`;
+}
+
+function providerValue(v: Valor | null): string {
+  if (!v) return "—";
+  return v.moeda === "usd" ? money(v.valor) : `${v.valor.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} créditos`;
+}
+
+/**
+ * A infraestrutura em Custos: um card por provedor de vídeo, todos com as mesmas linhas (o que a
+ * API não informa fica "—"), lado a lado como um feed; e a Cloudflare num card só, um serviço por
+ * linha, como o gasto por modelo.
+ */
+function panelInfra(e: CustosExternos, platforms: PanelStats["platforms"], local: boolean): string {
+  const n1 = (x: number) => x.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  const providers = e.provedores.map((p) => {
+    const spent = platforms.find((x) => x.platform === p.id);
+    return providerCard(p.nome, {
+      balance: providerValue(p.saldo),
+      spent: money(spent?.cost ?? 0),
+      spentNote: plural(spent?.videos ?? 0, "vídeo", "vídeos"),
+      rows: [
+        { icon: "payments", term: "Gasto total na conta", value: providerValue(p.total) },
+        { icon: "speed", term: "Limite da chave", value: limitValue(p.limite) },
+        { icon: PROVIDER_STATUS[p.estado].icon, term: "Situação", value: PROVIDER_STATUS[p.estado].label },
+      ],
+    });
+  });
+  const c = e.cloudflare;
+  let cloudflare: string;
+  if (c === null || c === "falhou") {
+    const note = c === null && local ? "Sem dados no computador." : c === null ? ERROS.custosSemAcesso : ERROS.custosIndisponiveis;
+    cloudflare = `<p class="qe-result__note">${esc(note)}</p>`;
+  } else {
+    const max = Math.max(...c.servicos.map((x) => x.custo), 0);
+    const total = c.servicos.reduce((t, x) => t + x.custo, 0);
+    cloudflare = `<ul class="rank rank--wide">${c.servicos
+      .map(
+        (x) => `<li class="rank__item">
+        <div class="rank__head">
+          <span class="rank__label"><span class="icon" aria-hidden="true">${SERVICE_ICONS[x.nome] ?? "layers"}</span><span class="rank__name">${esc(x.nome)}</span></span>
+          <span class="rank__meta">${esc(x.detalhe)}</span>
+          <span class="rank__value">${money(x.custo)}</span>
+        </div>
+        <span class="rank__bar" style="--size:${max > 0 ? (x.custo / max).toFixed(3) : 0}" aria-hidden="true"></span>
+      </li>`,
+      )
+      .join("")}</ul>
+      <dl class="viewer__details dash__totals">
+        <div class="qe-result__row"><span class="icon" aria-hidden="true">payments</span><dt class="qe-result__label">Total</dt><dd class="qe-result__value">${money(total)}</dd></div>
+        <div class="qe-result__row"><span class="icon" aria-hidden="true">memory</span><dt class="qe-result__label">Memória</dt><dd class="qe-result__value">${n1(c.memoriaGiBHoras)} de ${FRANQUIA.memoriaGiBHoras} GiB·h por mês no plano</dd></div>
+        <div class="qe-result__row"><span class="icon" aria-hidden="true">speed</span><dt class="qe-result__label">CPU</dt><dd class="qe-result__value">${n1(c.cpuMinutos)} de ${FRANQUIA.cpuMinutos} min por mês no plano</dd></div>
+        <div class="qe-result__row"><span class="icon" aria-hidden="true">cloud</span><dt class="qe-result__label">Espaço</dt><dd class="qe-result__value">${formatBytes(c.r2Bytes)} de ${FRANQUIA.r2GB} GB no plano</dd></div>
+      </dl>
+      <p class="qe-result__note">Últimos ${c.dias} dias, antes do que o plano inclui.</p>`;
+  }
+  return `<h2 class="dash__section">Provedores de vídeo</h2>
+    <div class="dash__feed">${providers.join("")}</div>
+    <h2 class="dash__section">Cloudflare</h2>
+    <section class="viewer__card" aria-label="Cloudflare">${cloudflare}</section>`;
+}
+
+const SERVICE_ICONS: Record<string, string> = { "Áudio": "graphic_eq", "Exportação": "download", "Animações": "animation", "Armazenamento": "cloud" };
 
 /** O card de linhas (ícone, rótulo, valor): os Detalhes do vídeo e do ativo e os cards do painel. */
 function detailsCard(title: string, rows: { icon: string; term: string; value: string }[], cls = ""): string {
