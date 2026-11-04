@@ -174,10 +174,20 @@ instantes, uns 14 mil em base64.
 | `editarCodigo` | `bloco`; `html` ou `trocas: [{de, para}]` (até 50); `parametros` | Troca o código da animação inteiro ou só trechos, sem reenviar a cena. Cada `de` tem de aparecer uma vez só, como está; senão, `trecho_nao_unico` com `troca` e `vezes`. Só `parametros` muda só os valores |
 
 **Reusar animações.** Não há modelos prontos: as possibilidades de estilo e layout não cabem
-numa lista. Cada animação que um agente faz fica no projeto, e o próximo agente parte dela. Antes de
-criar uma do zero, ele procura com `listar_animacoes` (no mesmo projeto ou nos do mesmo avatar), copia
-com `adicionar {animacao: {projeto, bloco}}`, troca os `parametros` e ajusta com `editarCodigo`. A
-instrução do MCP diz isso. Assim os trabalhos se acumulam e ficam à mão para o próximo vídeo.
+numa lista. Cada animação que um agente faz fica no projeto, e o próximo agente parte dela. A
+instrução do MCP diz como (combinado com o dono em 04/11/2026):
+
+1. Antes de criar, procurar com `listar_animacoes` no mesmo projeto e nos projetos do mesmo avatar.
+2. Achou uma que se encaixa bem: partir dela sem perguntar. Copiar com
+   `adicionar {animacao: {projeto, bloco}}`, trocar os `parametros` e ajustar com `editarCodigo`.
+3. O pedido é muito diferente e nada do projeto ou do avatar se encaixa: perguntar à pessoa antes,
+   entre criar uma nova e partir de uma de outro projeto. Uma de outro avatar também pede a pergunta,
+   mesmo que sirva bem: pode ser outra marca, sem relação com o projeto.
+4. Na pergunta, o agente leva a análise de custo e benefício e uma recomendação. Reaproveitar o
+   código com mudanças profundas (a estrutura, a linha do tempo) também vale; decidir o que sai
+   melhor e mais barato é dele.
+
+Assim os trabalhos se acumulam e ficam à mão para o próximo vídeo.
 
 **Parâmetros** (`parametros: {chave: texto ou número}`, até 30, em `adicionar` com `html` e em
 `editarCodigo`): os valores que um template muda sem reescrever o código, como nome, preço ou cor da
