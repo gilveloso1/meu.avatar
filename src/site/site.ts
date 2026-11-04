@@ -1921,9 +1921,15 @@ const FAILURE_KINDS: Record<PanelFailure["kind"], { icon: string; label: string 
   export: { icon: "download", label: "Exportação" },
 };
 
-/** Um item da lista do M3 (o mesmo da escolha de avatar): ícone, duas linhas e o texto no fim; link quando houver. */
-function listItem(o: { icon: string; headline: string; support: string; end: string; href?: string }): string {
-  const content = `<span class="icon" aria-hidden="true">${o.icon}</span><span class="avatar-option__text"><span class="vrow__headline">${esc(o.headline)}</span><span class="vrow__support" title="${esc(o.support)}">${esc(o.support)}</span></span><span class="avatar-option__end">${esc(o.end)}</span>`;
+/**
+ * Um item das listas do painel (o item de lista do site, o da escolha de avatar): ícone, título,
+ * as colunas de `meta` e o texto no fim, numa linha só com as colunas alinhadas; no celular, o
+ * título e o fim em cima e as colunas embaixo. Link quando houver.
+ */
+function listItem(o: { icon: string; title: string; meta: string[]; end: string; href?: string }): string {
+  const content = `<span class="icon" aria-hidden="true">${o.icon}</span><span class="dash__title" title="${esc(o.title)}">${esc(o.title)}</span><span class="dash__meta">${o.meta
+    .map((m) => `<span class="dash__cell" title="${esc(m)}">${esc(m)}</span>`)
+    .join("")}</span><span class="avatar-option__end">${esc(o.end)}</span>`;
   return `<li>${o.href ? `<a class="avatar-option interactive" href="${o.href}">${content}</a>` : `<div class="avatar-option avatar-option--static">${content}</div>`}</li>`;
 }
 
@@ -1947,21 +1953,10 @@ function panelActivity(s: PanelStats, o: { failures: PanelFailure[]; tokens: Pan
     const kind = FAILURE_KINDS[f.kind];
     // A página do vídeo abre para o administrador; o projeto, só para o dono.
     const href = f.kind === "export" ? (f.user_id === o.userId ? `/canvas/${f.ref}` : undefined) : `/video/${f.ref}?de=${encodeURIComponent(o.from)}`;
-    return listItem({
-      icon: kind.icon,
-      headline: `${kind.label} · ${f.title}`,
-      support: `${f.owner ?? "Sem dono"} · ${f.reason ?? "Sem motivo registrado"}`,
-      end: formatDate(f.at),
-      href,
-    });
+    return listItem({ icon: kind.icon, title: f.title, meta: [kind.label, f.owner ?? "Sem dono", f.reason ?? "Sem motivo registrado"], end: formatDate(f.at), href });
   });
   const tokens = o.tokens.map((t) =>
-    listItem({
-      icon: "key",
-      headline: t.name,
-      support: `${t.owner} · criado em ${formatDate(t.created_at)}`,
-      end: t.last_used_at ? `usado em ${formatDate(t.last_used_at)}` : "nunca usado",
-    }),
+    listItem({ icon: "key", title: t.name, meta: [t.owner, `criado em ${formatDate(t.created_at)}`], end: t.last_used_at ? `usado em ${formatDate(t.last_used_at)}` : "nunca usado" }),
   );
   return `<div class="dash">
     <div class="dash__kpis">
@@ -1972,11 +1967,11 @@ function panelActivity(s: PanelStats, o: { failures: PanelFailure[]; tokens: Pan
     </div>
     <h2 class="dash__section">Últimas falhas</h2>
     <section class="viewer__card" aria-label="Últimas falhas">
-      ${failures.length ? `<ul class="dash__list">${failures.join("")}</ul>` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
+      ${failures.length ? `<ul class="dash__list dash__list--failures">${failures.join("")}</ul>` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
     </section>
     <h2 class="dash__section">API e MCP</h2>
     <section class="viewer__card" aria-label="Tokens de API e MCP">
-      ${tokens.length ? `<ul class="dash__list">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
+      ${tokens.length ? `<ul class="dash__list dash__list--tokens">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
       <p class="qe-result__note">O último uso é gravado no máximo uma vez por hora.</p>
     </section>
   </div>`;
