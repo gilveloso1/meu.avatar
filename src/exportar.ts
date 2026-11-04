@@ -17,7 +17,7 @@ import { CABECALHO_BYTES, temSom } from "./som";
 import { MAX_VIDEO_BYTES } from "./studio";
 import { output } from "./canvas/modelo.js";
 import type { CanvasProject } from "./canvas/modelo.js";
-import { MAX_HTML_BYTES, MAX_RENDER_SECONDS, type RenderApi } from "./render";
+import { type InspecaoDaAnimacao, MAX_HTML_BYTES, MAX_RENDER_SECONDS, type RenderApi } from "./render";
 import { AudioLongoError, type Transcriber, type Transcricao } from "./transcricao";
 
 /** Passado o prazo dos arquivos, a linha fica mais um pouco: a tela mostra que expirou. */
@@ -38,6 +38,8 @@ const MAX_ZIP_BYTES = 0xffffffff;
 const TRANSCRIPTION_VERSION = "1";
 /** O MP3 do contêiner tem 32 kbit/s: 10 MB são uns 40 minutos de fala. */
 export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+/** Os instantes de uma inspeção da animação, como os quadros do ver_quadros. */
+const MAX_INSTANTES = 12;
 
 export class Exporter extends SleepyContainer {
   defaultPort = 8080;
@@ -161,6 +163,25 @@ export class Exports {
     }
     const file = await this.saveFile(project.id, c.nome, "video/webm", await res.arrayBuffer());
     return { file, largura: width, altura: height };
+  }
+
+  /**
+   * O código guardado num bloco, aberto no contêiner de render sem fazer vídeo, no tamanho de um
+   * Final. Sem instantes, o começo, os quartos e o fim do bloco. Null sem o contêiner.
+   */
+  async inspectCode(project: Project, c: { bloco: string; instantes: number[]; quadros: boolean; final?: string }): Promise<InspecaoDaAnimacao | "bloco_inexistente" | "bloco_sem_codigo" | "instantes_invalidos" | "final_inexistente" | null> {
+    const data = JSON.parse(project.data) as CanvasProject;
+    const block = data.blocks.find((b) => b.id === c.bloco);
+    if (!block) return "bloco_inexistente";
+    if (!block.code) return "bloco_sem_codigo";
+    const duracao = +(block.tout - block.tin).toFixed(3);
+    const instantes = c.instantes.length ? c.instantes : [0, 0.25, 0.5, 0.75, 1].map((f) => +(f * duracao).toFixed(2));
+    if (instantes.length > MAX_INSTANTES || !instantes.every((t) => Number.isFinite(t) && t >= 0 && t <= duracao)) return "instantes_invalidos";
+    const final = c.final === undefined ? data.finals[0] : data.finals.find((f) => f.id === c.final);
+    if (c.final !== undefined && !final) return "final_inexistente";
+    if (!this.renderer) return null;
+    const { width, height } = output(final!);
+    return this.renderer.inspect(block.code.html, width, height, duracao, instantes, c.quadros);
   }
 
   /** Começa a exportação de um Final, sempre a partir do projeto salvo; os arquivos são conferidos aqui. */

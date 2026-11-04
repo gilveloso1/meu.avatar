@@ -14,7 +14,7 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.8.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.9.0" };
 /**
  * A lista de ferramentas não depende de quem pede. Curto: com 1 h, uma sessão aberta antes de
  * publicar seguiu com a descrição velha (sem rascunho e trocar) no teste de 02/11/2026.
@@ -23,7 +23,7 @@ export const CACHE = { ttlMs: 5 * 60_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Depois de editar, olhe avisos: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte e erro de script; peça quadros: true só se o texto não bastar. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro. Cada um tem "tipo":
 adicionar {video|arquivo|ativo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos}
@@ -84,6 +84,21 @@ const FERRAMENTAS = [
     name: "ver_quadros",
     description: "Mostra até 12 instantes de um arquivo, lado a lado, para ver o vídeo.",
     inputSchema: objeto({ projeto, src, instantes: { type: "array", items: { type: "number" }, description: "Segundos do arquivo." } }, ["projeto", "src", "instantes"]),
+  },
+  {
+    name: "inspecionar_animacao",
+    description:
+      'Abre o código de uma animação (bloco do ver_projeto) no navegador do render, sem fazer vídeo, e mede cada instante; barato, em texto. Volta: problemas [{tipo, alvo, t, detalhe}] (quebrou, palavra_partida, fora_da_tela, cortado_pelo_pai, texto_cortado, texto_sobre_texto, fonte, erro_de_script, passa_do_bloco); instantes com os elementos visíveis no primeiro ("seletor x,y LxA op0.5 2linhas \"texto\"", em px do Final) e depois só o que mudou e o que saiu; linhaDoTempo com cada tween ("início-fim alvo propriedades"); duracao do bloco e da animação. Para conferir as linhas de um texto, marque-o com data-linhas="1" (ou o número que cabe).',
+    inputSchema: objeto(
+      {
+        projeto,
+        bloco: texto("Id do bloco de animação."),
+        instantes: { type: "array", items: { type: "number" }, description: "Até 12 segundos do bloco; sem isso, o começo, os quartos e o fim." },
+        quadros: { type: "boolean", description: "Traz também os instantes lado a lado em imagem (custa mais); só quando o texto não bastar." },
+        final: texto("Id do Final cujo tamanho vale; sem isso, o primeiro."),
+      },
+      ["projeto", "bloco"],
+    ),
   },
   {
     name: "ver_transcricao",
@@ -173,6 +188,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("POST", `${p}/comandos`, json({ revisao: a.revisao, comandos: a.comandos }));
     case "ver_quadros":
       return chama("GET", `${p}/quadros?src=${seguro(a.src)}&instantes=${seguro(Array.isArray(a.instantes) ? a.instantes.join(",") : "")}`);
+    case "inspecionar_animacao":
+      return chama("GET", `${p}/animacao?${new URLSearchParams(Object.entries({ bloco: a.bloco, instantes: Array.isArray(a.instantes) ? a.instantes.join(",") : undefined, quadros: a.quadros === true ? "1" : undefined, final: a.final }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "ver_transcricao":
       return chama("GET", `${p}/transcricao?src=${seguro(a.src)}`);
     case "ver_silencios":
@@ -209,6 +226,11 @@ async function resultado(res: Response) {
     return { content: [{ type: "image", data: base64(await res.arrayBuffer()), mimeType: res.headers.get("content-type")! }] };
   }
   const text = await res.text();
+  // O mosaico da inspeção vem em base64 no JSON: vira imagem, e o texto fica sem ele.
+  if (res.ok && text.includes('"quadros":"')) {
+    const { quadros, ...resto } = JSON.parse(text) as { quadros?: unknown };
+    if (typeof quadros === "string") return { content: [{ type: "text", text: json(resto) }, { type: "image", data: quadros, mimeType: "image/jpeg" }] };
+  }
   return { content: [{ type: "text", text: text || res.statusText }], isError: !res.ok };
 }
 

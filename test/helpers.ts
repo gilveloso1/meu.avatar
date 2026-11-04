@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { type RenderApi, RenderError } from "../src/render";
+import { type InspecaoDaAnimacao, type RenderApi, RenderError } from "../src/render";
 import type { Transcriber, Transcricao } from "../src/transcricao";
 import { handle } from "../src/index";
 import type { AudioApi, ContainerPlan, Face } from "../src/audio";
@@ -228,6 +228,23 @@ export class FakeRenderApi implements RenderApi {
     if (this.log) throw new RenderError(this.log);
     if (this.fail) throw new Error(this.fail);
     return new Response("webm", { headers: { "content-length": "4", "content-type": "video/webm" } });
+  }
+
+  inspections: { html: string; largura: number; altura: number; duracao: number; instantes: number[]; quadros: boolean }[] = [];
+  /** O que a inspeção devolve: um título que quebrou e o mosaico só quando pedido. */
+  async inspect(html: string, largura: number, altura: number, duracao: number, instantes: number[], quadros: boolean): Promise<InspecaoDaAnimacao> {
+    this.inspections.push({ html, largura, altura, duracao, instantes, quadros });
+    if (this.log) throw new RenderError(this.log);
+    if (this.fail) throw new Error(this.fail);
+    return {
+      largura,
+      altura,
+      duracao: { bloco: duracao, animacao: duracao },
+      problemas: [{ tipo: "quebrou", alvo: "#titulo", t: instantes.slice(1), detalhe: "2 linhas, cabe 1" }],
+      instantes: instantes.map((t, i) => ({ t, ...(i ? { mudou: [] } : { elementos: ['#titulo 40,80 640x192 2linhas "MEU TÍTULO"'] }) })),
+      linhaDoTempo: ["0-0.6 #titulo y,opacity"],
+      ...(quadros ? { quadros: btoa("jpg") } : {}),
+    };
   }
 }
 

@@ -344,11 +344,12 @@ e no ambiente cloud o apt e o npm só passam pelo proxy com a CA dele, que o wra
 passar ao build. Então, no ambiente cloud **Meu Avatar**, com o Docker rodando (`dockerd &`):
 
 ```bash
-sh container/render/construir.sh 2
+sh container/render/construir.sh 3
 ```
 
-(O número é a versão da imagem: a de agora é a 2, com a fonte de emoji; a próxima mudança em
-`container/render/` é a 3.)
+(O número é a versão da imagem: a de agora é a 3, com a inspeção das animações
+(`inspecionar.mjs`, que o `construir.sh` também confere sem rede); a próxima mudança em
+`container/render/` é a 4.)
 
 Ele baixa o ffmpeg e as fontes (conferindo o SHA-256), monta a imagem com a CA como segredo do
 build (não fica na imagem), faz um render sem rede, confere a transparência e que o servidor
