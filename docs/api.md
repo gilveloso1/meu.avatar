@@ -154,7 +154,9 @@ menos de 1 s; o mosaico vem só com `quadros: true`.
   de cada lado; o pai é o mais próximo com `overflow` que corta), `texto_cortado` (o próprio
   elemento corta: `scrollHeight > clientHeight`), `texto_sobre_texto` (linhas de dois textos
   visíveis que se cobrem), `fonte` (a família pedida não existe aqui ou não carregou),
-  `erro_de_script` e `passa_do_bloco` (a linha do tempo termina depois do bloco).
+  `erro_de_script`, `passa_do_bloco` (a linha do tempo termina depois do bloco) e
+  `parametro_sem_valor` (o código usa `{{chave}}` ou `params.chave` e o bloco não tem esse valor em
+  `parametros`: o texto sai como está, e o script recebe `undefined`; vem do site, sem instantes).
 - `linhaDoTempo`: um tween por linha, `início-fim alvo propriedades` (de `tl.getChildren`).
 - `duracao`: a do bloco e a da animação (o fim do último tween).
 

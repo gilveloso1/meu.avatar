@@ -35,6 +35,7 @@ export function output(final: CanvasFinal): { resolution: string; format: string
 export function width(b: Block): number;
 export function len(b: Block): number;
 export function maxEnd(b: Block): number;
+export function missingParams(code: { html: string; params?: Record<string, string | number> }): { chave: string; alvo: string }[];
 export function codeHtml(code: { html: string; params?: Record<string, string | number> }): string;
 export function sounds(b: Block): boolean;
 export function finalRate(final?: CanvasFinal): number;

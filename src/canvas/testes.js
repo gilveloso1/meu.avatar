@@ -489,3 +489,13 @@ test("os parâmetros da animação entram no HTML escapados e nos scripts como p
   assert.ok(html.includes('t:"{{nome}}"'));
   assert.equal(M.codeHtml({ html: "<p>x</p>" }), "<p>x</p>");
 });
+
+test("parâmetro usado sem valor aparece uma vez, no texto e nos scripts", () => {
+  const faltam = M.missingParams({ html: '<b>{{nome}}</b>{{ preco }}{{preco}}<script>tl.to("#a",{x:params.x, y:params["y"], z:params.nome})</script>', params: { nome: "Ana" } });
+  assert.deepEqual(faltam, [
+    { chave: "preco", alvo: "{{preco}}" },
+    { chave: "x", alvo: "params.x" },
+    { chave: "y", alvo: "params.y" },
+  ]);
+  assert.deepEqual(M.missingParams({ html: "<b>sem nada</b>" }), []);
+});
