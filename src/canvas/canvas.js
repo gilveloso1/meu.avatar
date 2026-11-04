@@ -610,8 +610,6 @@ function renderSide(gs) {
     if (b.draft)
       h += `<div class="text-field"><textarea class="text-field__input" id="f-fala" rows="1" maxlength="${MAX_FALA}" placeholder=" " aria-describedby="f-fala-ajuda">${esc(b.draft.fala)}</textarea><label class="text-field__label" for="f-fala">Fala</label><p class="text-field__supporting" id="f-fala-ajuda"><span>Gere o vídeo com esta fala.</span><span id="f-fala-n">${b.draft.fala.length}/${MAX_FALA}</span></p></div>`;
     if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.maxEnd(b)}"`);
-    // A animação em código vem do agente; a prévia já mostra, a exportação ainda não.
-    if (b.code) h += `<p class="sheet-hint">Esta animação aparece na prévia, mas ainda não sai na exportação.</p>`;
     else
       h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
     if (b.kind === "video" && !M.linked(b))
