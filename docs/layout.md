@@ -26,7 +26,9 @@ Toda tela passa pelos itens abaixo **antes do PR**, medindo no navegador em 375,
 4. **O card tem o tamanho do conteúdo.** Nada de card esticado para igualar altura nem de espaço
    interno sem conteúdo. *M3: "Card size is determined by the elements it contains".* Cards lado a
    lado na mesma linha têm a mesma estrutura (mesmas linhas), então a mesma altura; quando um é
-   maior, é um mosaico (`.dash__mosaic`) e a grade alinha as bases.
+   maior, é um mosaico (`.dash__mosaic`) e a grade alinha as bases. Exceção pedida pelo dono: no layout fixo, o
+   card de lista que fecha uma coluna (máquinas, falhas, tokens) desce até o fim dela, para as
+   colunas terminarem na mesma linha; a paginação fica no pé dele.
 5. **Painéis são colunas independentes.** O principal e o de apoio podem terminar em alturas
    diferentes (são painéis, não cards de uma mesma linha); dentro de cada um, os grupos se empilham
    com 8 px entre cards.

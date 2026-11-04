@@ -467,6 +467,11 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
   /* Abaixo de 1600 px os grupos se empilham no painel de apoio, que rola: nenhum encolhe. */
   .page--dash .dash__group > .dash__part { flex: none; }
   .page--dash .dash__mosaic { align-content: start; }
+  /* O card de lista que fecha a coluna desce até o fim dela (máquinas, falhas, tokens); a
+     paginação fica no pé. Cards de outros tipos mantêm o tamanho do conteúdo. */
+  .page--dash .dash__pane > .viewer__card:last-child:has(> .dash__list),
+  .page--dash .dash__part > .viewer__card:last-child:has(> .dash__list) { flex: 1 0 auto; }
+  .page--dash .viewer__card > .pager { margin-top: auto; }
   /* O título do grupo fica preso no alto do painel enquanto a lista rola. */
   .page--dash .dash__pane > .dash__section, .page--dash .dash__part > .dash__section { position: sticky; top: 0; z-index: 1; margin-top: 0; padding: 8px 0; background: var(--md-sys-color-surface); }
   .page--dash .dash__pane > .dash__section:first-child, .page--dash .dash__part > .dash__section:first-child { padding-top: 0; }
