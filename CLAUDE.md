@@ -255,6 +255,26 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   modelo e atualize depois de cada teste, bom ou ruim, no mesmo PR. Modelo que o provedor bloqueia para um uso
   não é contornado nem apagado: a estrutura fica e ganha a nota lá.
 
+## Quando o usuário precisa agir
+
+Alguns passos só o usuário pode fazer: criar um token, entrar numa conta, aprovar algo num painel,
+colar um segredo no terminal, mudar uma configuração fora do repositório. Nesses casos:
+
+- Parta da premissa de que ele não sabe como fazer. Antes de qualquer instrução, pergunte se ele
+  quer o passo a passo, com botões (por exemplo "Sim, me guie" e "Já sei fazer").
+- Com o passo a passo, mande **um passo por mensagem**, numerado ("Passo 2 de 5"). Nunca mande a
+  lista inteira de uma vez.
+- Cada passo diz exatamente onde tocar e o que escrever: o link direto da página, o nome do botão
+  como aparece na tela, o texto a digitar e o comando num bloco `bash`.
+- Termine cada passo com uma pergunta e botões: "Pronto" e uma saída, como "Não achei" ou "Deu
+  erro". Espere a resposta antes do passo seguinte.
+- Se não souber o nome exato de algo na tela, diga isso e peça para ele contar o que aparece,
+  antes de escolher.
+- Segredo nunca passa pelo chat: o usuário cola direto onde ele vai (terminal, painel), e você
+  avisa isso no passo.
+- Confira o resultado você mesmo quando puder (por exemplo, lendo o terminal) em vez de pedir que
+  ele descreva. No fim, diga que deu certo e qual é o próximo passo do trabalho.
+
 ## Migrations e deploy
 
 - O Claude roda as migrations e publica **sempre depois de pedir autorização**
