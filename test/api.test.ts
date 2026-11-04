@@ -223,12 +223,32 @@ describe("comandos", () => {
     expect([res.status, await res.json()]).toEqual([409, { erro: "exportando" }]);
   });
 
-  it("a resposta é o resumo: sem os arquivos e o canvas inteiro", async () => {
+  it("a resposta traz só o que o lote mudou, sem repetir a fala dos rascunhos", async () => {
     const { id, revisao } = await novo();
-    const res = await api(`/api/v1/projetos/${id}/comandos`, admin, { revisao, comandos: [{ tipo: "rascunho", fala: "Oi, gente", duracao: 2 }] });
-    const r = await res.json<Record<string, unknown>>();
-    expect(Object.keys(r).sort()).toEqual(["avisos", "criados", "finais", "grupos", "revisao"]);
-    expect(r).toMatchObject({ revisao: revisao + 1, avisos: [{ tipo: "rascunho", fala: "Oi, gente" }] });
+    const cru = (rev: number, lista: unknown[]) => api(`/api/v1/projetos/${id}/comandos`, admin, { revisao: rev, comandos: lista }).then((r) => r.json<Record<string, any>>());
+    const falas = Array.from({ length: 30 }, (_, i) => ({ tipo: "rascunho", fala: `Fala ${i + 1}, com uma frase comprida de roteiro para pesar.`, duracao: 2, ...(i ? { depois: `@f${i - 1}` } : {}), rotulo: `f${i}` }));
+    const a = await cru(revisao, falas);
+    expect(Object.keys(a).sort()).toEqual(["avisosPendentes", "criados", "mudou", "revisao"]);
+    expect(a.avisosPendentes).toBe(30);
+    expect(a.mudou.avisos[0]).toEqual({ tipo: "rascunho", bloco: a.criados[0], segundos: 2 });
+    expect(JSON.stringify(a)).not.toContain("Fala 1,");
+
+    // Renomear um bloco: só ele volta, e nada de avisos ou Finais.
+    const b = await cru(a.revisao, [{ tipo: "renomear", bloco: a.criados[5], nome: "Gancho" }]);
+    expect(b.mudou).toEqual({ grupos: [{ id: a.criados[0], nome: expect.any(String), duracao: 60, blocos: [expect.objectContaining({ id: a.criados[5], nome: "Gancho" })] }] });
+    expect(b.avisosPendentes).toBe(30);
+    expect(JSON.stringify(b).length).toBeLessThan(400);
+
+    // Remover: o id some, o aviso se resolve, e os blocos que andaram voltam com o início novo.
+    const c = await cru(b.revisao, [{ tipo: "remover", ids: [a.criados[29]] }]);
+    expect(c.mudou.removidos).toEqual({ blocos: [a.criados[29]] });
+    expect(c.mudou.avisosResolvidos).toEqual([{ tipo: "rascunho", bloco: a.criados[29], segundos: 2 }]);
+    expect(c.mudou.grupos[0]).toMatchObject({ duracao: 58, blocos: [] });
+    expect(c.avisosPendentes).toBe(29);
+
+    // O projeto inteiro continua no ver_projeto, com as falas.
+    const lido = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ avisos: { fala?: string }[] }>();
+    expect(lido.avisos[0]!.fala).toContain("Fala 1,");
   });
 
   it("um lote com erro não muda nada", async () => {
@@ -711,11 +731,11 @@ describe("legenda do grupo", () => {
     const r = new FakeRenderApi();
     const res = await legenda(id, { grupo, revisao, palavras: [{ palavra: "Brasil.", inicio: 0.2, fim: 0.8 }], estilo: { fonte: "TikTok Sans", destaque: "#ffd400" } }, null, r);
     expect(res.status).toBe(200);
-    type Saida = { revisao: number; criados: string[]; grupos: { blocos: { id: string; tipo: string; camada: string; inicio: number; fim: number; nome: string }[] }[]; legenda: { trechos: { texto: string }[] } };
+    type Saida = { revisao: number; criados: string[]; mudou: { grupos: { blocos: { id: string; tipo: string; camada: string; inicio: number; fim: number; nome: string }[] }[] }; legenda: { trechos: { texto: string }[] } };
     const out = await res.json<Saida>();
     expect(out.revisao).toBe(revisao + 1);
     expect(out.legenda.trechos.map((t) => t.texto)).toEqual(["Brasil."]);
-    expect(out.grupos[0]!.blocos.find((x) => x.id === out.criados[0])).toMatchObject({ tipo: "animacao", camada: "cobertura", nome: "Legenda", inicio: 0, fim: 6 });
+    expect(out.mudou.grupos[0]!.blocos.find((x) => x.id === out.criados[0])).toMatchObject({ tipo: "animacao", camada: "cobertura", nome: "Legenda", inicio: 0, fim: 6 });
     // Nada é renderizado agora: a exportação faz o vídeo.
     expect(r.calls).toHaveLength(0);
     const v = await (await api(`/api/v1/projetos/${id}?incluir=codigo`, admin)).json<{ codigo: { html: string }[] }>();

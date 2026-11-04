@@ -153,8 +153,8 @@ describe("ferramentas", () => {
     const fake = new FakeExportApi();
     expect(dados<{ videos: { id: string }[] }>(await ferramenta("listar_videos")).videos[0]!.id).toBe(VIDEO);
     const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Campanha" }));
-    const editado = dados<{ finais: { variacoes: unknown[] }[]; criados: string[] }>(await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", video: VIDEO, fim: 4 }] }));
-    expect(editado.finais[0]!.variacoes).toHaveLength(1);
+    const editado = dados<{ mudou: { finais: { variacoes: unknown[] }[] }; criados: string[] }>(await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", video: VIDEO, fim: 4 }] }));
+    expect(editado.mudou.finais[0]!.variacoes).toHaveLength(1);
     let e = dados<{ id: string; status: string; versoes: { href: string }[] }>(await ferramenta("exportar", { projeto: id, final: "final" }, fake));
     for (let i = 0; i < 5 && e.status !== "done"; i++) e = dados(await ferramenta("acompanhar_exportacao", { projeto: id, exportacao: e.id }, fake));
     expect(e.status).toBe("done");
