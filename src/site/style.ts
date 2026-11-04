@@ -440,15 +440,21 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
    Um número herói por tela (display-large); os outros em display-small. */
 .dash { display: flex; flex-direction: column; gap: 8px; }
 .dash__kpis { display: grid; grid-template-columns: 2fr repeat(3, minmax(0, 1fr)); gap: 8px; }
-/* O painel do administrador fica em até 1296 px com as margens (docs/layout.md, item 1): telas
-   maiores ganham margem, não cards maiores. */
-.page.page--dash { max-width: 1296px; }
 /* Dois painéis a partir de 840 px (M3): o principal com 2/3 e o de apoio com 1/3, 24 px entre eles.
    Cada painel é um contêiner: as listas dentro dele escolhem uma ou duas linhas pela largura dele. */
 .dash__panes { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; gap: 24px; }
-.dash__pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; container-type: inline-size; }
-.dash__pane > .dash__section:first-child { margin-top: 0; }
+.dash__pane, .dash__part { display: flex; flex-direction: column; gap: 8px; min-width: 0; container-type: inline-size; }
+.dash__pane > .dash__section:first-child, .dash__part > .dash__section:first-child { margin-top: 0; }
+.dash__part + .dash__part { margin-top: 16px; }
 @media (max-width: 839px) { .dash__panes { grid-template-columns: minmax(0, 1fr); } }
+/* Extra-grande do M3 (1600 px ou mais): o painel de apoio com dois grupos vira dois painéis, e a
+   tela fica com três (docs/layout.md, item 2). O espaço a mais é uma coluna, não cards maiores. */
+@media (min-width: 1600px) {
+  .dash__panes--split { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
+  .dash__panes--split > .dash__group { display: contents; }
+  .dash__panes--split .dash__part + .dash__part { margin-top: 0; }
+  .page--dash .dash__panes--split .dash__part { flex: initial; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
 /* Layout fixo a partir de 840 px (como a página do vídeo): a página tem a altura da janela e não rola;
    abas, chips e números ficam parados, e cada painel (ou o mosaico) ocupa o resto e rola por dentro.
    No celular e no tablet, a página rola inteira. */
@@ -458,10 +464,12 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
   .page--dash .dash__panes, .page--dash .dash__mosaic { flex: 1; min-height: 0; }
   .page--dash .dash__panes { grid-template-rows: minmax(0, 1fr); align-items: stretch; }
   .page--dash .dash__pane, .page--dash .dash__mosaic { overflow-y: auto; overscroll-behavior: contain; }
+  /* Abaixo de 1600 px os grupos se empilham no painel de apoio, que rola: nenhum encolhe. */
+  .page--dash .dash__group > .dash__part { flex: none; }
   .page--dash .dash__mosaic { align-content: start; }
   /* O título do grupo fica preso no alto do painel enquanto a lista rola. */
-  .page--dash .dash__pane > .dash__section { position: sticky; top: 0; z-index: 1; margin-top: 0; padding: 8px 0; background: var(--md-sys-color-surface); }
-  .page--dash .dash__pane > .dash__section:first-child { padding-top: 0; }
+  .page--dash .dash__pane > .dash__section, .page--dash .dash__part > .dash__section { position: sticky; top: 0; z-index: 1; margin-top: 0; padding: 8px 0; background: var(--md-sys-color-surface); }
+  .page--dash .dash__pane > .dash__section:first-child, .page--dash .dash__part > .dash__section:first-child { padding-top: 0; }
 }
 /* Paginação no pé do card (a das tabelas de dados do Material): o intervalo e as setas, à direita. */
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 -8px -8px 0; }
@@ -472,7 +480,7 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 .dash .qe-result__value { flex: 1; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Mosaico do M3: o card alto ocupa duas linhas da grade, e as bases se alinham pela grade. */
 .dash__mosaic { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
-.dash__tall { grid-row: span 2; }
+.dash__tall { grid-row: span 2; container-type: inline-size; }
 /* Título de um grupo de cards dentro da aba (M3: title-medium, 16 px acima para separar do grupo anterior). */
 .dash__section { margin: 16px 0 0; font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; color: var(--md-sys-color-on-surface); }
 /* Cards iguais lado a lado (os provedores): todos com as mesmas linhas, então com a mesma altura. */

@@ -1,26 +1,28 @@
 # Checklist de layout das telas de dados
 
 Para o painel do administrador (`/painel`) e qualquer tela nova de números, listas e cards.
-Criado em 04/11/2026, depois de três versões do painel recusadas pelo dono: cards esticados,
-bases desalinhadas e, em telas largas, cards de ponta a ponta com espaço interno sobrando (em
-1920 px, o nome de um modelo ficava a 1797 px do valor dele).
+Criado em 04/11/2026, depois de várias versões do painel recusadas pelo dono: cards esticados,
+bases desalinhadas, em telas largas cards de ponta a ponta com espaço interno sobrando (em 1920 px,
+o nome de um modelo ficava a 1797 px do valor dele) e, na correção, o painel encolhido numa coluna.
 
-Toda tela passa pelos itens abaixo **antes do PR**, medindo no navegador em 375, 768, 1280 e
+Toda tela passa pelos itens abaixo **antes do PR**, medindo no navegador em 375, 768, 1280, 1600 e
 1920 px (`resize_window` e as medidas por `javascript_tool`), não só olhando.
 
 ## Checklist
 
-1. **Largura máxima do conteúdo: 1296 px** (contando as margens), centrada. Telas maiores ganham
-   margem, não cards maiores. *Atlassian: "maximum width of 1296px", o padrão para a maioria das
-   telas; grade fluida sem limite, "sparingly".*
-2. **Painéis por largura (M3).** Até 839 px, um painel (uma coluna). De 840 px para cima, dois
-   painéis: o principal com 2/3 e o de apoio com 1/3. *M3: "Expanded and large breakpoints: Two
-   panes are recommended"; Android: o principal com "about two thirds".* Espaço a mais é uma
-   coluna a mais, nunca o mesmo card maior. *M3: "Additional space doesn't just mean making the
-   same thing bigger."*
-3. **Distância de leitura.** Numa linha, o rótulo e o valor dela ficam a no máximo ~800 px um do
-   outro (o painel principal em 1296 px). Texto corrido com 40 a 60 caracteres por linha. *M3: "keep
-   text between 40–60 characters per line"; Baymard: 50 a 75 caracteres.*
+1. **Largura toda, como o resto do site.** O painel não encolhe nem fica centrado numa coluna
+   estreita: no computador, todo o projeto ocupa a largura da tela. *Corrigido em 04/11/2026: uma
+   versão limitou o painel a 1296 px (sugestão da Atlassian) e destoou das outras telas.*
+2. **O espaço a mais vira coluna, não card maior (M3).** Até 839 px, um painel. De 840 px para
+   cima, dois: o principal com 2/3 e o de apoio com 1/3. Do extra-grande (1600 px) para cima, três,
+   quando o apoio tem dois grupos (`panes(principal, [grupo, grupo])`). *M3: "Additional space
+   doesn't just mean making the same thing bigger"; "Extra-large breakpoints: Consider using three
+   panes"; Android: o principal com "about two thirds".*
+3. **Distância de leitura.** Numa linha, rótulo e valor ficam perto (num painel de 1/3, ou numa
+   lista de colunas) ou ligados por uma barra que ocupa o meio (`modelBars` largo: nome, barra,
+   vídeos, valor). Nunca um rótulo de um lado e o valor do outro de um card largo, com vazio no meio.
+   Texto corrido com 40 a 60 caracteres por linha. *M3: "keep text between 40–60 characters per
+   line"; Baymard: 50 a 75 caracteres.*
 4. **O card tem o tamanho do conteúdo.** Nada de card esticado para igualar altura nem de espaço
    interno sem conteúdo. *M3: "Card size is determined by the elements it contains".* Cards lado a
    lado na mesma linha têm a mesma estrutura (mesmas linhas), então a mesma altura; quando um é
@@ -51,7 +53,6 @@ Toda tela passa pelos itens abaixo **antes do PR**, medindo no navegador em 375,
 - M3, cards: <https://m3.material.io/components/cards/guidelines>
 - Android, layouts canônicos (painel de apoio 2/3 + 1/3):
   <https://developer.android.com/develop/ui/compose/layouts/adaptive/canonical-layouts>
-- Atlassian, grade (1296 px): <https://atlassian.design/foundations/grid>
 - NN/g, dashboards: <https://www.nngroup.com/articles/dashboards-preattentive/>
 - NN/g, tabelas de dados: <https://www.nngroup.com/articles/data-tables/>
 - Baymard, largura de linha: <https://baymard.com/blog/line-length-readability>

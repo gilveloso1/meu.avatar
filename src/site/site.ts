@@ -1882,7 +1882,7 @@ function panelOverview(s: PanelStats, query: string): string {
     <div class="dash__mosaic">
         <section class="viewer__card dash__tall" aria-labelledby="card-gasto">
           <h2 class="qe-result__title" id="card-gasto">Gasto por modelo</h2>
-          ${s.models.length ? modelBars(s.models, PANEL_TOP_MODELS) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+          ${s.models.length ? modelBars(s.models, PANEL_TOP_MODELS, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
           ${s.models.length > PANEL_TOP_MODELS + 1 ? `<div class="viewer__card-actions"><a class="button button--text interactive" href="/painel/custos${query}">Ver todos os modelos</a></div>` : ""}
         </section>
         ${panelFailures(s)}
@@ -1994,16 +1994,18 @@ function panelActivity(
       <section class="viewer__card" aria-label="Últimas falhas">
         ${failures.length ? `<ul class="dash__list dash__list--failures">${failures.join("")}</ul>${pager(o.failures.total, o.page, o.from)}` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
       </section>`,
-      `<h2 class="dash__section">Máquinas agora</h2>
+      [
+        `<h2 class="dash__section">Máquinas agora</h2>
       <section class="viewer__card" aria-label="Máquinas agora">
         <ul class="dash__list dash__list--machines">${machines.join("")}</ul>
         ${alarmNote ? `<p class="qe-result__note">${esc(alarmNote)}</p>` : ""}
-      </section>
-      <h2 class="dash__section">API e MCP</h2>
+      </section>`,
+        `<h2 class="dash__section">API e MCP</h2>
       <section class="viewer__card" aria-label="Tokens de API e MCP">
         ${tokens.length ? `<ul class="dash__list dash__list--tokens">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
         <p class="qe-result__note">O último uso é gravado no máximo uma vez por hora.</p>
       </section>`,
+      ],
     )}
   </div>`;
 }
@@ -2132,8 +2134,10 @@ function pager(total: number, page: number, from: string): string {
  * Dois painéis (docs/layout.md): o principal com 2/3 e o de apoio com 1/3 a partir de 840 px; abaixo
  * disso, um embaixo do outro. São colunas independentes: podem terminar em alturas diferentes.
  */
-function panes(main: string, support: string): string {
-  return `<div class="dash__panes"><div class="dash__pane">${main}</div><div class="dash__pane">${support}</div></div>`;
+function panes(main: string, support: string | string[]): string {
+  // Com dois grupos no apoio, a partir de 1600 px cada grupo vira um painel (três ao todo).
+  const side = Array.isArray(support) ? support.map((g) => `<div class="dash__part">${g}</div>`).join("") : support;
+  return `<div class="dash__panes${Array.isArray(support) ? " dash__panes--split" : ""}"><div class="dash__pane">${main}</div><div class="dash__pane${Array.isArray(support) ? " dash__group" : ""}">${side}</div></div>`;
 }
 
 const SERVICE_ICONS: Record<string, string> = { "Áudio": "graphic_eq", "Exportação": "download", "Animações": "animation", "Armazenamento": "cloud" };

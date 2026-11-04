@@ -240,7 +240,7 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   **saldo** e o **gasto no período** em destaque (o que mais importa ao dono) e, embaixo, o gasto
   total da conta e o limite da chave, sempre rotulado como limite, nunca no lugar do saldo; e a
   Cloudflare (contêineres e R2) num card só. Toda tela de dados passa pelo checklist de
-  [docs/layout.md](docs/layout.md) antes do PR (largura máxima, dois painéis, layout fixo, paginação).
+  [docs/layout.md](docs/layout.md) antes do PR (largura toda, colunas em vez de cards maiores, layout fixo, paginação).
   Para simular volume: `npm run exemplos:painel`.
 
 ## Contas
