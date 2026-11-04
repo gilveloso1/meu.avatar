@@ -55,6 +55,19 @@ export interface Uso {
   workerAte: number | null;
 }
 
+/**
+ * O corpo da resposta da Cloudflare, ou o erro com o motivo por escrito: o código HTTP e o começo
+ * do corpo, mesmo quando ele não é JSON. O log guardava só a pilha, sem o motivo.
+ */
+async function corpo<T>(res: Response, oQue: string): Promise<T> {
+  const texto = await res.text();
+  try {
+    return JSON.parse(texto) as T;
+  } catch {
+    throw new Error(`${oQue} falhou (HTTP ${res.status}, resposta que não é JSON): ${texto.slice(0, 300)}`);
+  }
+}
+
 export class Painel {
   constructor(
     private readonly token: string,
@@ -65,7 +78,7 @@ export class Painel {
   /** As aplicações de contêiner da conta: nome → id. */
   async aplicacoes(): Promise<Map<string, string>> {
     const res = await this.doFetch(`${API}/accounts/${this.conta}/containers/applications`, { headers: { authorization: `Bearer ${this.token}` } });
-    const body = await res.json<{ success?: boolean; result?: { id: string; name: string }[]; errors?: unknown }>();
+    const body = await corpo<{ success?: boolean; result?: { id: string; name: string }[]; errors?: unknown }>(res, "Lista de contêineres");
     if (!res.ok || !body.result) throw new Error(`Lista de contêineres falhou (HTTP ${res.status}): ${JSON.stringify(body.errors)}`);
     return new Map(body.result.map((a) => [a.name, a.id]));
   }
@@ -87,7 +100,7 @@ export class Painel {
       body: JSON.stringify({ query, variables: { conta: this.conta, desde: desde.toISOString(), ate: ate.toISOString(), worker: WORKER } }),
     });
     type Linha = { dimensions: { applicationId?: string; datetimeMinute: string }; sum?: { allocatedMemory: number } };
-    const body = await res.json<{ data?: { viewer: { accounts: { containersUsageAdaptiveGroups: Linha[]; workersInvocationsAdaptive: Linha[] }[] } }; errors?: unknown }>();
+    const body = await corpo<{ data?: { viewer: { accounts: { containersUsageAdaptiveGroups: Linha[]; workersInvocationsAdaptive: Linha[] }[] } }; errors?: unknown }>(res, "Painel da Cloudflare");
     const conta = body.data?.viewer.accounts[0];
     if (!res.ok || !conta) throw new Error(`Painel da Cloudflare falhou (HTTP ${res.status}): ${JSON.stringify(body.errors)}`);
     const minutos = new Map<string, number[]>();
@@ -126,7 +139,8 @@ export async function vigiar(painel: Painel | null, vigiados: Vigiado[], db: Db,
   try {
     [apps, uso] = await Promise.all([painel.aplicacoes(), painel.uso(new Date(agora.getTime() - JANELA_MS), agora)]);
   } catch (err) {
-    console.error("Alarme de contêiner: o painel não respondeu", err);
+    // O motivo vai no texto: passado como objeto, o log da Cloudflare guardava só a pilha.
+    console.error(`Alarme de contêiner: o painel não respondeu. ${err instanceof Error ? err.message : String(err)}`);
     return guardar(db, { ligados: [], semPainel: true }, agora);
   }
   if (uso.workerAte === null || agora.getTime() - uso.workerAte > EM_DIA_MS) {

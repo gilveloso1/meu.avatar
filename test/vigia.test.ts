@@ -100,6 +100,23 @@ describe("alarme de contêiner ligado sem trabalho", () => {
     expect(await (await call(new Request(`${SITE}/`, { headers: { cookie: admin } }))).text()).toContain(ERROS.alarmeSemPainel);
   });
 
+  it("painel que falha: o log diz o código e o que a Cloudflare respondeu, mesmo sem JSON", async () => {
+    const erros: string[] = [];
+    const antes = console.error;
+    console.error = (...a: unknown[]) => void erros.push(a.map(String).join(" "));
+    try {
+      const negado = async () => Response.json({ success: false, errors: [{ code: 10000, message: "Authentication error" }] }, { status: 403 });
+      await vigiar(new Painel("token", "conta", negado as typeof fetch), vigiados("negado"), new Db(env.DB), AGORA);
+      const html = async () => new Response("<html>error code: 1010</html>", { status: 403 });
+      await vigiar(new Painel("token", "conta", html as typeof fetch), vigiados("html"), new Db(env.DB), AGORA);
+    } finally {
+      console.error = antes;
+    }
+    expect(erros[0]).toContain('HTTP 403): [{"code":10000,"message":"Authentication error"}]');
+    expect(erros[1]).toContain("HTTP 403, resposta que não é JSON): <html>error code: 1010</html>");
+    expect((await guardado())?.semPainel).toBe(true);
+  });
+
   it("minutos pulados no painel contam como o mesmo período ligado", () => {
     const t = (m: number) => AGORA.getTime() - m * MIN;
     expect(ligadoDesde([t(50), t(46), t(42), t(5)], t(2))).toBe(t(5));
