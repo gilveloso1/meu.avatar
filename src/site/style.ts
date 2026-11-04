@@ -440,44 +440,27 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
    Um número herói por tela (display-large); os outros em display-small. */
 .dash { display: flex; flex-direction: column; gap: 8px; }
 .dash__kpis { display: grid; grid-template-columns: 2fr repeat(3, minmax(0, 1fr)); gap: 8px; }
-/* Dois painéis a partir de 840 px (M3): o principal com 2/3 e o de apoio com 1/3, 24 px entre eles.
-   Cada painel é um contêiner: as listas dentro dele escolhem uma ou duas linhas pela largura dele. */
-.dash__panes { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; gap: 24px; }
-.dash__pane, .dash__part { display: flex; flex-direction: column; gap: 8px; min-width: 0; container-type: inline-size; }
-.dash__pane > .dash__section:first-child, .dash__part > .dash__section:first-child { margin-top: 0; }
-.dash__part + .dash__part { margin-top: 16px; }
+/* Dois painéis do M3 a partir de 840 px: o principal flexível e o de apoio com largura fixa (360 px
+   no expandido, 412 px do grande em diante), 24 px entre eles. Cada painel tem o título, parado, e o
+   corpo; os cards do corpo têm o tamanho do conteúdo e nunca rolam (M3, cards). O corpo é um
+   contêiner: as listas escolhem uma ou duas linhas pela largura dele. */
+.dash__panes { display: grid; grid-template-columns: minmax(0, 1fr) 360px; align-items: start; gap: 24px; }
+.dash__pane { display: flex; flex-direction: column; min-width: 0; }
+.dash__pane-title { flex: none; padding-bottom: 8px; font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; color: var(--md-sys-color-on-surface); }
+.dash__pane-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; container-type: inline-size; }
+@media (min-width: 1200px) { .dash__panes { grid-template-columns: minmax(0, 1fr) 412px; } }
 @media (max-width: 839px) { .dash__panes { grid-template-columns: minmax(0, 1fr); } }
-/* Extra-grande do M3 (1600 px ou mais): o painel de apoio com dois grupos vira dois painéis, e a
-   tela fica com três (docs/layout.md, item 2). O espaço a mais é uma coluna, não cards maiores. */
-@media (min-width: 1600px) {
-  .dash__panes--split { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
-  .dash__panes--split > .dash__group { display: contents; }
-  .dash__panes--split .dash__part + .dash__part { margin-top: 0; }
-}
 /* Layout fixo a partir de 840 px (como a página do vídeo): a página tem a altura da janela e não rola.
-   Abas, chips, números e os títulos dos grupos ficam parados; só o corpo que cresce (a lista dentro
-   do card marcado com dash__fill) rola, e o pé do card (paginação, notas, totais) fica embaixo.
-   No celular e no tablet, a página rola inteira. */
+   Abas, chips, números e o título de cada painel ficam parados; o corpo do painel rola por inteiro,
+   então a barra de rolagem começa embaixo do título. No celular e no tablet, a página rola inteira. */
 @media (min-width: 840px) {
   .page.page--dash { flex: none; height: calc(100dvh - var(--bar-height, 72px)); overflow: hidden; padding-bottom: 24px; }
   .page--dash > .dash { flex: 1; min-height: 0; }
   .page--dash .dash__panes, .page--dash .dash__mosaic { flex: 1; min-height: 0; }
   .page--dash .dash__panes { grid-template-rows: minmax(0, 1fr); align-items: stretch; }
-  .page--dash .dash__pane, .page--dash .dash__part { min-height: 0; overflow: hidden; }
+  .page--dash .dash__pane { min-height: 0; }
+  .page--dash .dash__pane-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .page--dash .dash__mosaic { overflow-y: auto; overscroll-behavior: contain; align-content: start; }
-  .page--dash .dash__section { flex: none; }
-  /* No apoio com dois grupos (abaixo de 1600 px), o grupo sem corpo que rola fica do tamanho dele. */
-  .page--dash .dash__group > .dash__part { flex: 0 0 auto; }
-  .page--dash .dash__group > .dash__part:has(.dash__fill) { flex: 1 1 0; }
-  .page--dash .dash__fill { flex: 1 1 0; min-height: 0; }
-  .page--dash .dash__fill > .dash__list, .page--dash .dash__fill > .rank { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  .page--dash .dash__fill > :not(.dash__list):not(.rank) { flex: none; }
-  .page--dash .dash__fill > .pager { margin-top: auto; }
-  .page--dash .dash__feed.dash__fill { overflow-y: auto; overscroll-behavior: contain; align-content: start; }
-}
-/* Com três colunas, o card das máquinas desce até o fim da dele (pedido do dono). */
-@media (min-width: 1600px) {
-  .page--dash .dash__grow { flex: 1 0 auto; }
 }
 /* Paginação no pé do card (a das tabelas de dados do Material): o intervalo e as setas, à direita. */
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 -8px -8px 0; }
@@ -489,15 +472,11 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 /* Mosaico do M3: o card alto ocupa duas linhas da grade, e as bases se alinham pela grade. */
 .dash__mosaic { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
 .dash__tall { grid-row: span 2; container-type: inline-size; }
-/* Título de um grupo de cards dentro da aba (M3: title-medium, 16 px acima para separar do grupo anterior). */
-.dash__section { margin: 16px 0 0; font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; color: var(--md-sys-color-on-surface); }
-/* Cards iguais lado a lado (os provedores): todos com as mesmas linhas, então com a mesma altura. */
 /* Os dois números de um provedor (saldo e gasto), lado a lado, em headline-medium. */
 .figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 8px; }
 .figures__label { font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }
 .figures__value { margin-top: 4px; font: var(--md-sys-typescale-headline-medium); color: var(--md-sys-color-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .figures__note { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
-.dash__feed { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 8px; }
 .dash__totals { margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--md-sys-color-outline-variant); }
 @media (max-width: 839px) {
   .dash__kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }

@@ -1909,15 +1909,18 @@ function panelCosts(s: PanelStats, external: CustosExternos | null, local: boole
       ${statCard("payments", "Gasto em vídeos", money(total), `em ${plural(s.models.length, "modelo", "modelos")}`, true)}
       ${statCard("movie", "Por vídeo", done ? money(total / done) : "—", `${plural(done, "vídeo pronto", "vídeos prontos")}`)}
       ${statCard("schedule", "Por minuto", minutes ? money(total / minutes) : "—", `${minutes.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} min prontos`)}
-      ${statCard("error", "Vídeos com falha", count(s.videos.failed), "não entram no gasto")}
+      ${statCard("error", "Com falha", count(s.videos.failed), "vídeos fora do gasto")}
     </div>
     ${panes(
-      `<h2 class="dash__section">Gasto por modelo</h2>
-      <section class="viewer__card${s.models.length ? " dash__fill" : ""}" aria-label="Gasto por modelo">
+      {
+        title: "Gastos",
+        body: `<section class="viewer__card" aria-labelledby="card-modelos">
+        <h3 class="qe-result__title" id="card-modelos">Por modelo</h3>
         ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
       </section>
       ${external ? cloudflareSection(external, local) : ""}`,
-      external ? providersSection(external, s.platforms) : "",
+      },
+      { title: "Provedores de vídeo", body: external ? providersSection(external, s.platforms) : "" },
     )}
   </div>`;
 }
@@ -1990,22 +1993,25 @@ function panelActivity(
       ${statCard("memory", "Máquinas ligadas", count(on), `de ${o.machines.length} agora`)}
     </div>
     ${panes(
-      `<h2 class="dash__section">Últimas falhas</h2>
-      <section class="viewer__card dash__fill" aria-label="Últimas falhas">
+      {
+        title: "Últimas falhas",
+        body: `<section class="viewer__card" aria-label="Últimas falhas">
         ${failures.length ? `<ul class="dash__list dash__list--failures">${failures.join("")}</ul>${pager(o.failures.total, o.page, o.from)}` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
       </section>`,
-      [
-        `<h2 class="dash__section">Máquinas agora</h2>
-      <section class="viewer__card dash__grow" aria-label="Máquinas agora">
+      },
+      {
+        title: "Sistema",
+        body: `<section class="viewer__card" aria-labelledby="card-maquinas">
+        <h3 class="qe-result__title" id="card-maquinas">Máquinas agora</h3>
         <ul class="dash__list dash__list--machines">${machines.join("")}</ul>
         ${alarmNote ? `<p class="qe-result__note">${esc(alarmNote)}</p>` : ""}
-      </section>`,
-        `<h2 class="dash__section">API e MCP</h2>
-      <section class="viewer__card dash__fill" aria-label="Tokens de API e MCP">
+      </section>
+      <section class="viewer__card" aria-labelledby="card-tokens">
+        <h3 class="qe-result__title" id="card-tokens">API e MCP</h3>
         ${tokens.length ? `<ul class="dash__list dash__list--tokens">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
         <p class="qe-result__note">O último uso é gravado no máximo uma vez por hora.</p>
       </section>`,
-      ],
+      },
     )}
   </div>`;
 }
@@ -2068,8 +2074,7 @@ function providersSection(e: CustosExternos, platforms: PanelStats["platforms"])
       ],
     });
   });
-  return `<h2 class="dash__section">Provedores de vídeo</h2>
-    <div class="dash__feed dash__fill">${providers.join("")}</div>`;
+  return providers.join("");
 }
 
 /** A Cloudflare num card só: um serviço por linha, como o gasto por modelo, e os totais. */
@@ -2103,8 +2108,7 @@ function cloudflareSection(e: CustosExternos, local: boolean): string {
       </dl>
       <p class="qe-result__note">Últimos ${c.dias} dias, antes do que o plano inclui.</p>`;
   }
-  return `<h2 class="dash__section">Cloudflare</h2>
-    <section class="viewer__card${c && c !== "falhou" ? " dash__fill" : ""}" aria-label="Cloudflare">${cloudflare}</section>`;
+  return `<section class="viewer__card" aria-labelledby="card-cloudflare"><h3 class="qe-result__title" id="card-cloudflare">Cloudflare</h3>${cloudflare}</section>`;
 }
 
 /** Itens por página nas listas do painel que crescem sem limite (as falhas). */
@@ -2131,13 +2135,18 @@ function pager(total: number, page: number, from: string): string {
 }
 
 /**
- * Dois painéis (docs/layout.md): o principal com 2/3 e o de apoio com 1/3 a partir de 840 px; abaixo
- * disso, um embaixo do outro. São colunas independentes: podem terminar em alturas diferentes.
+ * Dois painéis do M3 (docs/layout.md) a partir de 840 px: o principal flexível e o de apoio com
+ * largura fixa (360 px no expandido, 412 px do grande em diante); abaixo disso, um embaixo do outro.
+ * Cada painel tem o seu título, parado, e o corpo, que rola por inteiro no layout fixo. Os cards
+ * dentro dele nunca rolam: têm o tamanho do conteúdo.
  */
-function panes(main: string, support: string | string[]): string {
-  // Com dois grupos no apoio, a partir de 1600 px cada grupo vira um painel (três ao todo).
-  const side = Array.isArray(support) ? support.map((g) => `<div class="dash__part">${g}</div>`).join("") : support;
-  return `<div class="dash__panes${Array.isArray(support) ? " dash__panes--split" : ""}"><div class="dash__pane">${main}</div><div class="dash__pane${Array.isArray(support) ? " dash__group" : ""}">${side}</div></div>`;
+function panes(...list: { title: string; body: string }[]): string {
+  return `<div class="dash__panes">${list
+    .map((p) => {
+      const id = `painel-${p.title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
+      return `<section class="dash__pane" aria-labelledby="${id}"><h2 class="dash__pane-title" id="${id}">${esc(p.title)}</h2><div class="dash__pane-body">${p.body}</div></section>`;
+    })
+    .join("")}</div>`;
 }
 
 const SERVICE_ICONS: Record<string, string> = { "Áudio": "graphic_eq", "Exportação": "download", "Animações": "animation", "Armazenamento": "cloud" };
