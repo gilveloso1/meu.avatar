@@ -25,6 +25,7 @@ ${LIGHT}
   /* Tipografia (escala base do MD3, fonte Roboto) */
   --md-ref-typeface-brand: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
   --md-ref-typeface-plain: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --md-sys-typescale-display-large: 400 3.5625rem/4rem var(--md-ref-typeface-brand);
   --md-sys-typescale-display-small: 400 2.25rem/2.75rem var(--md-ref-typeface-brand);
   --md-sys-typescale-headline-medium: 400 1.75rem/2.25rem var(--md-ref-typeface-brand);
   --md-sys-typescale-headline-small: 400 1.5rem/2rem var(--md-ref-typeface-brand);
@@ -434,6 +435,61 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 /* Modelos e vídeos em grade: card preenchido de cantos grandes, com o ícone e o menu em
    cima e o título embaixo. O link cobre o card inteiro; o menu fica por cima dele. */
 .tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+/* O painel do administrador (M3: layout de feed, 8 px entre cards). Nada estica para igualar
+   alturas: as colunas crescem cada uma com o seu conteúdo, e a Visão geral tem linhas contadas.
+   Um número herói por tela (display-large); os outros em display-small. */
+.dash { display: flex; flex-direction: column; gap: 8px; }
+.dash__kpis { display: grid; grid-template-columns: 2fr repeat(3, minmax(0, 1fr)); gap: 8px; }
+/* Mosaico do M3: o card alto ocupa duas linhas da grade, e as bases se alinham pela grade. */
+.dash__mosaic { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
+.dash__tall { grid-row: span 2; }
+@media (max-width: 839px) {
+  .dash__kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dash__kpis > .stat-card--hero { grid-column: 1 / -1; }
+  .dash__mosaic { grid-template-columns: minmax(0, 1fr); }
+  .dash__tall { grid-row: auto; }
+}
+@media (max-width: 599px) {
+  .dash__kpis { grid-template-columns: minmax(0, 1fr); }
+}
+.stat-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 16px; border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-surface-container-highest); }
+.stat-card__label { display: flex; align-items: center; gap: 8px; font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }
+.stat-card__label .icon { font-size: 20px; }
+.stat-card__value { margin-top: auto; padding-top: 8px; font: var(--md-sys-typescale-display-small); color: var(--md-sys-color-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-card--hero .stat-card__value { font: var(--md-sys-typescale-display-large); letter-spacing: -0.016rem; }
+.stat-card__supporting { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+/* Barras horizontais ordenadas: 8 px, ponta de 4 px arredondada e reta na base, uma cor só; "Outros" em cinza. */
+.rank { display: flex; flex-direction: column; gap: 12px; margin: 4px 0 0; padding: 0; list-style: none; }
+.rank__head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rank__label { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rank__label .icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); }
+.rank__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface); }
+.rank__meta { flex: 1; white-space: nowrap; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.rank__value { white-space: nowrap; font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface); }
+.rank__bar { display: block; width: max(4px, calc(var(--size) * 100%)); height: 8px; margin-top: 8px; border-radius: 0 4px 4px 0; background: var(--md-sys-color-primary); }
+.rank__item--other .rank__bar { background: var(--md-sys-color-outline); }
+.viewer__card-actions { display: flex; justify-content: flex-end; margin: auto -12px -8px 0; }
+/* No celular, os vídeos e a parte do total descem para baixo do nome, que não se corta. */
+@media (max-width: 599px) {
+  .rank__head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; }
+  .rank__meta { grid-column: 1; grid-row: 2; padding-left: 32px; }
+  .rank__value { grid-column: 2; grid-row: 1; }
+}
+/* Em Custos, na tela média para cima: uma linha por modelo (nome, barra, vídeos e parte, valor), com
+   as colunas alinhadas de cima a baixo; a barra usa a largura que sobra. */
+@media (min-width: 840px) {
+  .rank--wide { gap: 4px; }
+  .rank--wide .rank__item { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) 150px 110px; align-items: center; column-gap: 24px; min-height: 48px; }
+  .rank--wide .rank__head { display: contents; }
+  .rank--wide .rank__label { grid-column: 1; }
+  .rank--wide .rank__bar { grid-column: 2; grid-row: 1; margin: 0; }
+  .rank--wide .rank__meta { grid-column: 3; text-align: right; font-variant-numeric: tabular-nums; }
+  .rank--wide .rank__value { grid-column: 4; text-align: right; font-variant-numeric: tabular-nums; }
+}
+/* As abas do painel são links (uma página para cada) e ficam no começo, cada uma do tamanho do texto. */
+.tabs--start .tabs__tab { flex: none; text-decoration: none; }
+.tabs__tab[aria-current="page"] { color: var(--md-sys-color-primary); }
+.tabs__tab[aria-current="page"] .tabs__content::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--md-sys-color-primary); }
 .tile-card {
   position: relative; display: flex; flex-direction: column; min-height: 184px; padding: 28px 24px 24px 32px;
   border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container);

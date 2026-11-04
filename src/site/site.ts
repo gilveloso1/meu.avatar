@@ -21,7 +21,7 @@
 import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { handleMcp } from "../mcp";
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
-import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video, VideoStatus } from "../db";
+import type { AssetKind, Avatar, AvatarAsset, Db, PanelStats, Project, User, Video, VideoStatus } from "../db";
 import { ERROS } from "../erros";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -53,9 +53,9 @@ const ICONS = [
   "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today", "check", "check_circle",
   "checkroom", "chevron_left", "chevron_right", "close", "content_copy", "content_cut", "crop_square", "delete", "download", "drag_indicator",
   "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top",
-  "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
+  "image", "info", "layers", "link", "link_off", "lock", "logout", "mic", "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments",
   "person", "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search",
-  "send", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
+  "send", "space_dashboard", "star", "swap_vert", "switch_account", "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -142,6 +142,9 @@ export class Site {
 
     if (!post && path === "/") return this.home(user, url);
     if (!post && path === "/videos") return this.videosPage(user, url);
+    // O painel do administrador: para os outros, a página nem existe.
+    const panel = /^\/painel(?:\/(custos))?$/.exec(path);
+    if (!post && panel) return user.role === "admin" ? this.panelPage(user, url, panel[1] === "custos" ? "custos" : "geral") : new Response("não encontrado", { status: 404 });
     // Endereços da versão anterior.
     if (!post && path === "/novo") return redirect("/");
     const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
@@ -378,9 +381,7 @@ ${error ? snackbar(error) : ""}`;
     </div>
     <div class="viewer__body"><div class="viewer__panel">
       <section class="viewer__section"><h2 class="viewer__title">Nome</h2><div class="viewer__card"><p class="viewer__text">${esc(asset.name)}</p></div></section>
-      <section class="viewer__card viewer__details"><h2 class="qe-result__title">Detalhes</h2>
-        <dl>${details.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${d.icon}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.value)}</dd></div>`).join("")}</dl>
-      </section>
+      ${detailsCard("Detalhes", details)}
     </div></div>
     <div class="viewer__actions">
       <a class="button button--outlined interactive" href="${src}/apagar"><span class="icon">delete</span>Apagar</a>
@@ -466,6 +467,31 @@ ${error ? snackbar(error) : ""}`;
   /** Liga o vídeo aos ativos do avatar, sem copiar o arquivo. */
   private async linkVideo(saving: SavableVideo, avatarId: string): Promise<void> {
     await this.db.insertAsset({ id: crypto.randomUUID(), avatar_id: avatarId, kind: "video", key: saving.key, name: videoAssetName(saving), type: "video/mp4", size: saving.size, source_video: saving.video.id });
+  }
+
+  /**
+   * O painel do administrador: uso e gasto do site inteiro. Abas (Visão geral e Custos), cada
+   * uma com o seu endereço; os chips de período valem para as duas (30 dias por padrão).
+   */
+  private async panelPage(user: User, url: URL, tab: PanelTab): Promise<Response> {
+    const period = PANEL_PERIODS.find((p) => p.id === url.searchParams.get("periodo")) ?? PANEL_PERIODS[1]!;
+    const since = period.days ? new Date(Date.now() - period.days * 86_400_000).toISOString() : null;
+    const stats = await this.db.panelStats(since);
+    const query = `?periodo=${period.id}`;
+    const tabs = PANEL_TABS.map(
+      (t) => `<a class="tabs__tab interactive" href="${t.href}${query}"${t.id === tab ? ' aria-current="page"' : ""}><span class="tabs__content"><span class="icon">${t.icon}</span>${esc(t.label)}</span></a>`,
+    ).join("");
+    const here = PANEL_TABS.find((t) => t.id === tab)!.href;
+    const chips = PANEL_PERIODS.map(
+      (p) => `<a class="chip interactive" href="${here}?periodo=${p.id}"${p === period ? ' aria-current="true"' : ""}>${p === period ? '<span class="icon">check</span>' : ""}${esc(p.label)}</a>`,
+    ).join("");
+    const body = `
+<main class="page" id="conteudo">
+  <nav class="tabs tabs--start" aria-label="Seções do painel">${tabs}</nav>
+  <nav class="chip-set library__tools" aria-label="Período">${chips}</nav>
+  ${tab === "custos" ? panelCosts(stats) : panelOverview(stats, query)}
+</main>`;
+    return html(page(`Painel · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Painel" } }));
   }
 
   /** Tela inicial: um card por estrutura que a pessoa pode usar; a busca filtra pelo nome. */
@@ -976,10 +1002,7 @@ ${error ? snackbar(error) : ""}`;
           ${notes
             .map((d) => `<section class="viewer__section"><h2 class="viewer__title">${esc(d.term)}</h2><div class="viewer__card"><p class="viewer__text">${esc(d.description)}</p></div></section>`)
             .join("")}
-          <section class="viewer__card viewer__details" aria-labelledby="detalhes-titulo">
-            <h2 class="qe-result__title" id="detalhes-titulo">Detalhes</h2>
-            <dl>${details.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${DETAIL_ICONS[d.term] ?? "info"}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.description)}</dd></div>`).join("")}</dl>
-          </section>
+          ${detailsCard("Detalhes", details.map((d) => ({ icon: DETAIL_ICONS[d.term] ?? "info", term: d.term, value: d.description })))}
           ${saveButton}
         </div>`;
     const body = `
@@ -1747,6 +1770,139 @@ function generateBar(seconds: string, cost: number | undefined, enabled: boolean
       </div>`;
 }
 
+/** Os períodos do painel; `days` vazio é desde o começo. */
+const PANEL_PERIODS = [
+  { id: "7", label: "Últimos 7 dias", days: 7 },
+  { id: "30", label: "Últimos 30 dias", days: 30 },
+  { id: "tudo", label: "Tudo", days: 0 },
+] as const;
+
+function money(n: number): string {
+  return `US$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+type PanelTab = "geral" | "custos";
+const PANEL_TABS: { id: PanelTab; href: string; label: string; icon: string }[] = [
+  { id: "geral", href: "/painel", label: "Visão geral", icon: "space_dashboard" },
+  { id: "custos", href: "/painel/custos", label: "Custos", icon: "payments" },
+];
+/** Na Visão geral, os modelos que mais gastaram; o resto vira "Outros" (a lista inteira fica em Custos). */
+const PANEL_TOP_MODELS = 5;
+
+const count = (x: number) => x.toLocaleString("pt-BR");
+const plural = (x: number, one: string, many: string) => (x === 1 ? `1 ${one}` : `${count(x)} ${many}`);
+
+/** Um número do painel: rótulo, valor e uma linha de apoio. O herói (um por tela) é maior. */
+function statCard(icon: string, label: string, value: string, supporting: string, hero = false): string {
+  return `<section class="stat-card${hero ? " stat-card--hero" : ""}">
+      <p class="stat-card__label"><span class="icon" aria-hidden="true">${icon}</span>${esc(label)}</p>
+      <p class="stat-card__value">${esc(value)}</p>
+      <p class="stat-card__supporting">${esc(supporting)}</p>
+    </section>`;
+}
+
+/**
+ * Gasto por modelo em barras horizontais ordenadas (do maior para o menor, uma cor só, a maior
+ * ocupa a largura toda), com o nome, os vídeos, a parte do total e o valor em texto. Com `top`, o
+ * que passa vira uma linha "Outros", em cinza.
+ */
+function modelBars(models: PanelStats["models"], top?: number, wide = false): string {
+  const total = models.reduce((sum, m) => sum + m.cost, 0);
+  const rows = models.map((m) => {
+    const found = structureById(m.structure);
+    return { icon: found?.icon ?? "movie", name: found?.name ?? (m.structure || "Sem modelo"), videos: m.videos, cost: m.cost, other: false };
+  });
+  if (top !== undefined && rows.length > top + 1) {
+    const rest = rows.splice(top);
+    rows.push({ icon: "more_horiz", name: `Outros ${rest.length} modelos`, videos: rest.reduce((s, r) => s + r.videos, 0), cost: rest.reduce((s, r) => s + r.cost, 0), other: true });
+  }
+  const max = Math.max(...rows.map((r) => r.cost), 0);
+  return `<ul class="rank${wide ? " rank--wide" : ""}">${rows
+    .map((r) => {
+      const share = total > 0 ? Math.round((r.cost / total) * 100) : 0;
+      return `<li class="rank__item${r.other ? " rank__item--other" : ""}">
+        <div class="rank__head">
+          <span class="rank__label"><span class="icon" aria-hidden="true">${r.icon}</span><span class="rank__name">${esc(r.name)}</span></span>
+          <span class="rank__meta">${plural(r.videos, "vídeo", "vídeos")} · ${share}%</span>
+          <span class="rank__value">${money(r.cost)}</span>
+        </div>
+        <span class="rank__bar" style="--size:${max > 0 ? (r.cost / max).toFixed(3) : 0}" aria-hidden="true"></span>
+      </li>`;
+    })
+    .join("")}</ul>`;
+}
+
+function panelFailures(s: PanelStats): string {
+  return detailsCard("Falhas", [
+    { icon: "movie", term: "Vídeos", value: count(s.videos.failed) },
+    { icon: "graphic_eq", term: "Áudio", value: count(s.videos.audioFailed) },
+    { icon: "content_cut", term: "Edição rápida", value: count(s.videos.editFailed) },
+    { icon: "download", term: "Exportações", value: count(s.projects.exportsFailed) },
+  ]);
+}
+
+/**
+ * A Visão geral, sempre do mesmo tamanho (nada nela cresce com os dados): o gasto como número
+ * herói e três números ao lado; embaixo, um mosaico (M3): o gasto por modelo, até 6 linhas, ocupa
+ * duas linhas da grade, ao lado das Falhas e do Conteúdo, 4 linhas cada. As bases se alinham pela
+ * grade, e o "Ver todos" fica no pé do card.
+ */
+function panelOverview(s: PanelStats, query: string): string {
+  const v = s.videos;
+  const total = s.models.reduce((sum, m) => sum + m.cost, 0);
+  const minutes = (v.seconds / 60).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+  return `<div class="dash">
+    <div class="dash__kpis">
+      ${statCard("payments", "Gasto em vídeos", money(total), `em ${plural(v.total, "vídeo pedido", "vídeos pedidos")}`, true)}
+      ${statCard("check_circle", "Vídeos prontos", count(v.done), `${count(v.busy)} em andamento`)}
+      ${statCard("schedule", "Minutos de vídeo", minutes, "dos vídeos prontos")}
+      ${statCard("download", "Exportações", count(s.projects.exports), `de ${plural(s.projects.created, "projeto novo", "projetos novos")}`)}
+    </div>
+    <div class="dash__mosaic">
+        <section class="viewer__card dash__tall" aria-labelledby="card-gasto">
+          <h2 class="qe-result__title" id="card-gasto">Gasto por modelo</h2>
+          ${s.models.length ? modelBars(s.models, PANEL_TOP_MODELS) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+          ${s.models.length > PANEL_TOP_MODELS + 1 ? `<div class="viewer__card-actions"><a class="button button--text interactive" href="/painel/custos${query}">Ver todos os modelos</a></div>` : ""}
+        </section>
+        ${panelFailures(s)}
+        ${detailsCard("Conteúdo", [
+          { icon: "folder_open", term: "Projetos novos", value: count(s.projects.created) },
+          { icon: "person", term: "Pessoas novas", value: count(s.accounts.users) },
+          { icon: "face", term: "Avatares", value: count(s.accounts.avatars) },
+          { icon: "photo_library", term: "Ativos", value: count(s.accounts.assets) },
+        ])}
+    </div>
+  </div>`;
+}
+
+/** Custos: os números do período no topo (como na Visão geral) e todos os modelos, uma linha cada. */
+function panelCosts(s: PanelStats): string {
+  const total = s.models.reduce((sum, m) => sum + m.cost, 0);
+  const done = s.videos.done;
+  const minutes = s.videos.seconds / 60;
+  return `<div class="dash">
+    <div class="dash__kpis">
+      ${statCard("payments", "Gasto em vídeos", money(total), `em ${plural(s.models.length, "modelo", "modelos")}`, true)}
+      ${statCard("movie", "Por vídeo", done ? money(total / done) : "—", `${plural(done, "vídeo pronto", "vídeos prontos")}`)}
+      ${statCard("schedule", "Por minuto", minutes ? money(total / minutes) : "—", `${minutes.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} min prontos`)}
+      ${statCard("error", "Vídeos com falha", count(s.videos.failed), "não entram no gasto")}
+    </div>
+    <section class="viewer__card" aria-labelledby="card-modelos">
+      <h2 class="qe-result__title" id="card-modelos">Gasto por modelo</h2>
+      ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+    </section>
+  </div>`;
+}
+
+/** O card de linhas (ícone, rótulo, valor): os Detalhes do vídeo e do ativo e os cards do painel. */
+function detailsCard(title: string, rows: { icon: string; term: string; value: string }[], cls = ""): string {
+  const id = `card-${title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
+  return `<section class="viewer__card viewer__details${cls ? ` ${cls}` : ""}" aria-labelledby="${id}">
+            <h2 class="qe-result__title" id="${id}">${esc(title)}</h2>
+            <dl>${rows.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${d.icon}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.value)}</dd></div>`).join("")}</dl>
+          </section>`;
+}
+
 function emptyState(icon: string, title: string, text: string): string {
   return `<div class="empty"><span class="icon">${icon}</span><p class="empty__title">${esc(title)}</p><p>${esc(text)}</p></div>`;
 }
@@ -1989,6 +2145,7 @@ function accountActions(user: User): string {
       <div class="menu__list">
         <p class="menu__header"><span class="menu__name">${esc(user.name)}</span><span class="menu__email">${esc(user.email)}</span></p>
         <hr class="menu__divider">
+        ${user.role === "admin" ? `<a class="menu__item interactive" href="/painel"><span class="icon">monitoring</span>Painel</a>` : ""}
         <form method="post" action="/sair"><button class="menu__item interactive" type="submit"><span class="icon">logout</span>Sair</button></form>
       </div>
     </details>`;

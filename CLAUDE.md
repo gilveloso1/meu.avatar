@@ -64,6 +64,7 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
   - Painel de configuração: `pane pane--config` em `.workspace`, com `formField`, e `filePicker`
     para foto, vídeo e áudio.
   - Item aberto: o molde da página do vídeo (`.viewer`), como a página de um ativo.
+  - Card de linhas (ícone, rótulo, valor): `detailsCard`, nos Detalhes do vídeo e do ativo e nos cards de lista do painel.
   - Escolher um avatar: `avatarPicker` (busca e lista), em `avatarDialog` (diálogo básico do M3, em
     "Salvar no avatar") e em `assetPanel`.
   - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
@@ -222,6 +223,17 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   motivo da falha, que então não se repete na folha); o FAB "Novo vídeo" preso no
   canto.
 
+- Painel do administrador (`/painel`, pelo item "Painel" do menu do perfil; 404 para quem não é
+  administrador): abas que são links (Visão geral em `/painel`, Custos em `/painel/custos`) e os
+  chips de período (7 dias, 30 dias, tudo) valendo para todas. Regras de layout (da skill dataviz e
+  do M3): um número herói por tela (`.stat-card--hero`, display-large) e os outros em
+  display-small, e cada aba abre com essa fileira de números; o card não estica para igualar
+  alturas (M3: o tamanho vem do conteúdo): quando um card alto fica ao lado de dois, é um mosaico
+  (`.dash__mosaic`, o alto em duas linhas da grade) e as bases se alinham pela grade; a Visão geral
+  tem linhas contadas (até 5 modelos e "Outros"; listas inteiras ficam
+  numa aba); parte de um todo em barras horizontais ordenadas (`.rank`, uma cor só, "Outros" em
+  cinza; em Custos, uma linha por modelo com as colunas alinhadas, para não esticar só a barra). Para simular volume: `npm run exemplos:painel`.
+
 ## Contas
 
 - Contas e sessões vêm do estuda.mais (github.com/gilveloso1/estuda.mais,
@@ -304,7 +316,8 @@ colar um segredo no terminal, mudar uma configuração fora do repositório. Nes
   sem chave, lê a lista pública de modelos para o formulário mostrar todas as
   opções) e, se o usuário quiser, a chave do OpenRouter. O contêiner não roda sem
   Docker (`wrangler dev --enable-containers=false`). `npm run exemplos` põe vídeos
-  de exemplo no banco local. Os testes zeram `AMBIENTE` e a chave
+  de exemplo no banco local; `npm run exemplos:painel` põe volume (contas, 900 vídeos, projetos,
+  exportações, avatares) para simular o painel, e `-- --limpar` tira. Os testes zeram `AMBIENTE` e a chave
   (`vitest.config.ts`).
 - Neste ambiente cloud, o `fetch` do Node só passa pelo proxy com
   `NODE_USE_ENV_PROXY=1` (para `npm run gerar`).

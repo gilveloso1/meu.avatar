@@ -213,8 +213,59 @@ export interface AvatarAsset {
   created_at: string;
 }
 
+/** Os números do painel do administrador (/painel), de todas as contas, desde `since` (ou de sempre). */
+export interface PanelStats {
+  /** Por modelo: vídeos pedidos e o gasto dos que o provedor cobrou. */
+  models: { structure: string; videos: number; cost: number }[];
+  videos: { total: number; done: number; failed: number; busy: number; seconds: number; audioFailed: number; editFailed: number };
+  projects: { created: number; exports: number; exportsFailed: number };
+  accounts: { users: number; avatars: number; assets: number };
+}
+
 export class Db {
   constructor(private readonly d1: D1Database) {}
+
+  async panelStats(since: string | null): Promise<PanelStats> {
+    // Sem período, a data mínima pega tudo (as datas são ISO, em texto).
+    const from = since ?? "";
+    const [models, videos, projects, accounts] = await this.d1.batch([
+      this.d1
+        .prepare("SELECT COALESCE(structure, '') AS structure, COUNT(*) AS videos, COALESCE(SUM(cost), 0) AS cost FROM videos WHERE created_at >= ? GROUP BY structure ORDER BY cost DESC, videos DESC")
+        .bind(from),
+      this.d1
+        .prepare(
+          `SELECT COUNT(*) AS total,
+             COALESCE(SUM(status = 'completed'), 0) AS done,
+             COALESCE(SUM(status IN ('failed', 'cancelled', 'expired')), 0) AS failed,
+             COALESCE(SUM(status IN ('submitting', 'pending', 'in_progress')), 0) AS busy,
+             COALESCE(SUM(CASE WHEN status = 'completed' THEN duration END), 0) AS seconds,
+             COALESCE(SUM(audio_status = 'failed'), 0) AS audioFailed,
+             COALESCE(SUM(edit_status = 'failed'), 0) AS editFailed
+           FROM videos WHERE created_at >= ?`,
+        )
+        .bind(from),
+      this.d1
+        .prepare(
+          `SELECT (SELECT COUNT(*) FROM projects WHERE created_at >= ?1) AS created,
+             (SELECT COUNT(*) FROM exports WHERE created_at >= ?1) AS exports,
+             (SELECT COUNT(*) FROM exports WHERE created_at >= ?1 AND status = 'failed') AS exportsFailed`,
+        )
+        .bind(from),
+      this.d1
+        .prepare(
+          `SELECT (SELECT COUNT(*) FROM users WHERE created_at >= ?1) AS users,
+             (SELECT COUNT(*) FROM avatars WHERE created_at >= ?1) AS avatars,
+             (SELECT COUNT(*) FROM avatar_assets WHERE created_at >= ?1) AS assets`,
+        )
+        .bind(from),
+    ]);
+    return {
+      models: models!.results as PanelStats["models"],
+      videos: videos!.results[0] as PanelStats["videos"],
+      projects: projects!.results[0] as PanelStats["projects"],
+      accounts: accounts!.results[0] as PanelStats["accounts"],
+    };
+  }
 
   async insertVideo(v: NewVideo, now = new Date()): Promise<Video> {
     const at = now.toISOString();
