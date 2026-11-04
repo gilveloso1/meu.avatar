@@ -311,7 +311,8 @@ colar um segredo no terminal, mudar uma configuração fora do repositório. Nes
   sem chave, lê a lista pública de modelos para o formulário mostrar todas as
   opções) e, se o usuário quiser, a chave do OpenRouter. O contêiner não roda sem
   Docker (`wrangler dev --enable-containers=false`). `npm run exemplos` põe vídeos
-  de exemplo no banco local. Os testes zeram `AMBIENTE` e a chave
+  de exemplo no banco local; `npm run exemplos:painel` põe volume (contas, 900 vídeos, projetos,
+  exportações, avatares) para simular o painel, e `-- --limpar` tira. Os testes zeram `AMBIENTE` e a chave
   (`vitest.config.ts`).
 - Neste ambiente cloud, o `fetch` do Node só passa pelo proxy com
   `NODE_USE_ENV_PROXY=1` (para `npm run gerar`).

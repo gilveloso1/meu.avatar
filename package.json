@@ -14,6 +14,7 @@
     "db:migrar": "wrangler d1 migrations apply DB --remote",
     "db:migrar:local": "wrangler d1 migrations apply DB --local",
     "exemplos": "python3 tools/exemplos.py",
+    "exemplos:painel": "python3 tools/exemplos-painel.py",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "teste:canvas": "node --test src/canvas/testes.js"
