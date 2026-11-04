@@ -1913,7 +1913,7 @@ function panelCosts(s: PanelStats, external: CustosExternos | null, local: boole
     </div>
     ${panes(
       `<h2 class="dash__section">Gasto por modelo</h2>
-      <section class="viewer__card" aria-label="Gasto por modelo">
+      <section class="viewer__card${s.models.length ? " dash__fill" : ""}" aria-label="Gasto por modelo">
         ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
       </section>
       ${external ? cloudflareSection(external, local) : ""}`,
@@ -1991,17 +1991,17 @@ function panelActivity(
     </div>
     ${panes(
       `<h2 class="dash__section">Últimas falhas</h2>
-      <section class="viewer__card" aria-label="Últimas falhas">
+      <section class="viewer__card dash__fill" aria-label="Últimas falhas">
         ${failures.length ? `<ul class="dash__list dash__list--failures">${failures.join("")}</ul>${pager(o.failures.total, o.page, o.from)}` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
       </section>`,
       [
         `<h2 class="dash__section">Máquinas agora</h2>
-      <section class="viewer__card" aria-label="Máquinas agora">
+      <section class="viewer__card dash__grow" aria-label="Máquinas agora">
         <ul class="dash__list dash__list--machines">${machines.join("")}</ul>
         ${alarmNote ? `<p class="qe-result__note">${esc(alarmNote)}</p>` : ""}
       </section>`,
         `<h2 class="dash__section">API e MCP</h2>
-      <section class="viewer__card" aria-label="Tokens de API e MCP">
+      <section class="viewer__card dash__fill" aria-label="Tokens de API e MCP">
         ${tokens.length ? `<ul class="dash__list dash__list--tokens">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
         <p class="qe-result__note">O último uso é gravado no máximo uma vez por hora.</p>
       </section>`,
@@ -2069,7 +2069,7 @@ function providersSection(e: CustosExternos, platforms: PanelStats["platforms"])
     });
   });
   return `<h2 class="dash__section">Provedores de vídeo</h2>
-    <div class="dash__feed">${providers.join("")}</div>`;
+    <div class="dash__feed dash__fill">${providers.join("")}</div>`;
 }
 
 /** A Cloudflare num card só: um serviço por linha, como o gasto por modelo, e os totais. */
@@ -2104,7 +2104,7 @@ function cloudflareSection(e: CustosExternos, local: boolean): string {
       <p class="qe-result__note">Últimos ${c.dias} dias, antes do que o plano inclui.</p>`;
   }
   return `<h2 class="dash__section">Cloudflare</h2>
-    <section class="viewer__card" aria-label="Cloudflare">${cloudflare}</section>`;
+    <section class="viewer__card${c && c !== "falhou" ? " dash__fill" : ""}" aria-label="Cloudflare">${cloudflare}</section>`;
 }
 
 /** Itens por página nas listas do painel que crescem sem limite (as falhas). */

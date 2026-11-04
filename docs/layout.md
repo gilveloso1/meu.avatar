@@ -41,8 +41,10 @@ Toda tela passa pelos itens abaixo **antes do PR**, medindo no navegador em 375,
    largura fixa ou fração, nunca `auto` (cada item é uma grade própria).
 9. **Números alinhados.** Textos de apoio dos números numa linha só; rótulos sem quebrar.
 10. **Layout fixo a partir de 840 px.** A página tem a altura da janela e não rola (como a página
-    do vídeo): abas, chips e números ficam parados, e cada painel ocupa o resto e rola por dentro,
-    com o título do grupo preso no alto. No celular e no tablet, a página rola inteira.
+    do vídeo). Abas, chips, números e os títulos dos grupos ficam parados; **só o corpo rola**: a
+    lista dentro do card que cresce (`dash__fill`), com o pé do card (paginação, totais, notas)
+    sempre visível. A barra de rolagem nunca começa num título. No celular e no tablet, a página
+    rola inteira.
 11. **Lista que cresce sem limite tem paginação** (15 por página, `pager`): "16–30 de 65" e as
     setas no pé do card, como nas tabelas de dados do Material. Trocar de período ou de aba volta
     para a primeira página.

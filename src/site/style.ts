@@ -453,28 +453,31 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
   .dash__panes--split { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
   .dash__panes--split > .dash__group { display: contents; }
   .dash__panes--split .dash__part + .dash__part { margin-top: 0; }
-  .page--dash .dash__panes--split .dash__part { flex: initial; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 }
-/* Layout fixo a partir de 840 px (como a página do vídeo): a página tem a altura da janela e não rola;
-   abas, chips e números ficam parados, e cada painel (ou o mosaico) ocupa o resto e rola por dentro.
+/* Layout fixo a partir de 840 px (como a página do vídeo): a página tem a altura da janela e não rola.
+   Abas, chips, números e os títulos dos grupos ficam parados; só o corpo que cresce (a lista dentro
+   do card marcado com dash__fill) rola, e o pé do card (paginação, notas, totais) fica embaixo.
    No celular e no tablet, a página rola inteira. */
 @media (min-width: 840px) {
   .page.page--dash { flex: none; height: calc(100dvh - var(--bar-height, 72px)); overflow: hidden; padding-bottom: 24px; }
   .page--dash > .dash { flex: 1; min-height: 0; }
   .page--dash .dash__panes, .page--dash .dash__mosaic { flex: 1; min-height: 0; }
   .page--dash .dash__panes { grid-template-rows: minmax(0, 1fr); align-items: stretch; }
-  .page--dash .dash__pane, .page--dash .dash__mosaic { overflow-y: auto; overscroll-behavior: contain; }
-  /* Abaixo de 1600 px os grupos se empilham no painel de apoio, que rola: nenhum encolhe. */
-  .page--dash .dash__group > .dash__part { flex: none; }
-  .page--dash .dash__mosaic { align-content: start; }
-  /* O card de lista que fecha a coluna desce até o fim dela (máquinas, falhas, tokens); a
-     paginação fica no pé. Cards de outros tipos mantêm o tamanho do conteúdo. */
-  .page--dash .dash__pane > .viewer__card:last-child:has(> .dash__list),
-  .page--dash .dash__part > .viewer__card:last-child:has(> .dash__list) { flex: 1 0 auto; }
-  .page--dash .viewer__card > .pager { margin-top: auto; }
-  /* O título do grupo fica preso no alto do painel enquanto a lista rola. */
-  .page--dash .dash__pane > .dash__section, .page--dash .dash__part > .dash__section { position: sticky; top: 0; z-index: 1; margin-top: 0; padding: 8px 0; background: var(--md-sys-color-surface); }
-  .page--dash .dash__pane > .dash__section:first-child, .page--dash .dash__part > .dash__section:first-child { padding-top: 0; }
+  .page--dash .dash__pane, .page--dash .dash__part { min-height: 0; overflow: hidden; }
+  .page--dash .dash__mosaic { overflow-y: auto; overscroll-behavior: contain; align-content: start; }
+  .page--dash .dash__section { flex: none; }
+  /* No apoio com dois grupos (abaixo de 1600 px), o grupo sem corpo que rola fica do tamanho dele. */
+  .page--dash .dash__group > .dash__part { flex: 0 0 auto; }
+  .page--dash .dash__group > .dash__part:has(.dash__fill) { flex: 1 1 0; }
+  .page--dash .dash__fill { flex: 1 1 0; min-height: 0; }
+  .page--dash .dash__fill > .dash__list, .page--dash .dash__fill > .rank { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .page--dash .dash__fill > :not(.dash__list):not(.rank) { flex: none; }
+  .page--dash .dash__fill > .pager { margin-top: auto; }
+  .page--dash .dash__feed.dash__fill { overflow-y: auto; overscroll-behavior: contain; align-content: start; }
+}
+/* Com três colunas, o card das máquinas desce até o fim da dele (pedido do dono). */
+@media (min-width: 1600px) {
+  .page--dash .dash__grow { flex: 1 0 auto; }
 }
 /* Paginação no pé do card (a das tabelas de dados do Material): o intervalo e as setas, à direita. */
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 -8px -8px 0; }
