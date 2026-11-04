@@ -246,6 +246,7 @@ Nenhuma chave fica no repositório.
 | `OPENROUTER_WEBHOOK_SECRET` | Segredo do Worker (recomendado) | Segredo de assinatura do workspace no OpenRouter; com ele, avisos sem assinatura válida são recusados (401) |
 | `HEYGEN_API_KEY` | Segredo do Worker e `.dev.vars` | API direta da HeyGen (o HeyGen Avatar IV com voz pronta, voz clonada ou o áudio da pessoa). **Vence em 27/01/2027**: gere outra em platform.heygen.com → API keys e troque nos dois lugares. Sem ela, o HeyGen segue pelo OpenRouter |
 | `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` | Só onde você publica | Publicar, criar banco e bucket, cadastrar segredos |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | Segredo do Worker | Só leitura do painel e dos contêineres: o alarme de contêiner ligado sem trabalho ("Contêiner que dorme de verdade"). Sem ele, o administrador vê o aviso de alarme sem acesso |
 
 ## Trocar a plataforma do HeyGen
 
@@ -350,10 +351,64 @@ usar o contêiner para a prova valer. O que prova:
 Se a memória alocada segue aparecendo sem trabalho em andamento, o contêiner não dormiu: é o
 caso de 26/10, e o motivo costuma ser um pedido sem resposta lida ou o SIGTERM ignorado.
 
-Os campos do `containersUsageAdaptiveGroups` não estão na documentação pública da Cloudflare
-(conferido em 03/11/2026). Descubra pela própria API, com o token do ambiente, antes de
-montar a consulta: a introspecção do GraphQL (`__type(name: ...)`) lista os filtros, as
-dimensões e as somas. Quando uma consulta funcionar, anote-a aqui.
+**Alarme automático** (`src/vigia.ts`, `test/vigia.test.ts`). A cada 15 min o agendamento faz
+essa prova sozinho, nos três contêineres, sem depender de alguém usar o contêiner ou olhar o
+painel:
+
+- Lê os últimos 90 min do `containersUsageAdaptiveGroups` e, na mesma consulta, o minuto mais
+  novo das invocações do Worker (o cron roda a cada minuto, então sempre há). Se as invocações
+  tiverem mais de 15 min, o painel está atrasado: a rodada não conclui nada.
+- Contêiner sem linha recente (a última a mais de 10 min das invocações) está desligado. Com
+  linhas, junta os minutos seguidos (até 5 min de buraco) e acha desde quando está ligado.
+- Ligado há mais de 30 min: confere o trabalho de verdade. No banco, áudio ou edição rápida em
+  `processing` (AudioFixer) e exportação `running` (Exporter); no Durable Object, o último
+  pedido ao contêiner (render e inspeção do Renderer, quadros e silêncios do Exporter), pela
+  `pararSeOcioso` do `SleepyContainer`.
+- Sem trabalho: `console.error` ("Contêiner … com memória alocada há … min sem trabalho"), o
+  contêiner é parado à força (SIGKILL, `destroy()`) e o administrador vê um aviso na página
+  Modelos por um dia (config `alarme.conteiner` no banco). Achou o aviso: confira nos logs do
+  Worker por que ele não dormiu, como na prova acima.
+- Sem o token ou sem acesso ao painel, o administrador vê "O alarme de custos está sem acesso."
+  na mesma página, e o log diz o motivo. No computador (`AMBIENTE=local`) o alarme não roda.
+
+A aplicação de cada contêiner é achada pelo nome (`meu-avatar-<classe>`, na lista de
+aplicações da conta), e a conta vem de `CLOUDFLARE_ACCOUNT_ID` em `vars`.
+
+**O token do alarme** (`CLOUDFLARE_ANALYTICS_TOKEN`, segredo do Worker; nunca no código nem
+na tela). Em dash.cloudflare.com → My Profile → API Tokens → Create Token → Custom token, só a
+conta do Meu Avatar e só leitura:
+
+- Account → Account Analytics → Read (o GraphQL);
+- Account → Containers → Read (a lista de aplicações, para achar o id de cada contêiner; o
+  nome não foi conferido no painel: é a permissão de leitura de Containers).
+
+```bash
+npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN
+```
+
+Para conferir o token antes, a consulta que o alarme faz (com `$conta`, `$desde`, `$ate` e
+`$worker` = `meu-avatar`):
+
+```graphql
+query ($conta: String!, $desde: Time!, $ate: Time!, $worker: String!) {
+  viewer { accounts(filter: {accountTag: $conta}) {
+    containersUsageAdaptiveGroups(limit: 10000, filter: {datetimeMinute_geq: $desde, datetimeMinute_leq: $ate}, orderBy: [datetimeMinute_ASC]) {
+      dimensions { applicationId datetimeMinute } sum { allocatedMemory }
+    }
+    workersInvocationsAdaptive(limit: 1, filter: {datetime_geq: $desde, datetime_leq: $ate, scriptName: $worker}, orderBy: [datetimeMinute_DESC]) {
+      dimensions { datetimeMinute }
+    }
+  } }
+}
+```
+
+Os campos do `containersUsageAdaptiveGroups` não estão na documentação pública da Cloudflare;
+vieram da introspecção do GraphQL (`__type(name: "AccountContainersUsageAdaptiveGroups")`,
+03/11/2026). Dimensões: `applicationId`, `instanceId`, `datetimeMinute` (e por 5 min, 15 min,
+hora, 6 h, dia), `location`, `region`, `placementId`; somas: `allocatedMemory`,
+`allocatedDisk`, `cpuTimeSec`, `txBytes`. Não há filtro por memória nem pelo nome da
+aplicação, só pelo `applicationId`. O painel pula minutos: o Exporter ligado de 00:57 a 00:59
+de 04/11 deu linhas só nesses dois minutos.
 
 Para a API, o mesmo contêiner responde `POST /quadros` e `POST /silencios`
 ([api.md](api.md)). Mudou o `exportar.py`: precisa do deploy com Docker, no ambiente cloud.
@@ -473,6 +528,7 @@ npx wrangler d1 create meu-avatar          # copie o database_id para o wrangler
 npx wrangler r2 bucket create meu-avatar
 npx wrangler secret put OPENROUTER_API_KEY
 npx wrangler secret put OPENROUTER_WEBHOOK_SECRET   # o mesmo do painel do OpenRouter
+npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN  # só leitura ("Contêiner que dorme de verdade")
 npm run db:migrar < /dev/null
 npm run deploy
 ```

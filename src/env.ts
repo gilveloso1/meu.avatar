@@ -20,6 +20,10 @@ export interface Env {
   RENDER?: DurableObjectNamespace<Renderer>;
   /** Workers AI: o Whisper que transcreve a fala dos arquivos dos projetos (src/transcricao.ts). */
   AI?: Ai;
+  /** Token de leitura do painel da Cloudflare (docs/operacao.md): o alarme de contêiner ligado sem trabalho (src/vigia.ts). */
+  CLOUDFLARE_ANALYTICS_TOKEN?: string;
+  /** A conta da Cloudflare dos contêineres, para o mesmo alarme. */
+  CLOUDFLARE_ACCOUNT_ID?: string;
   /** Custo do bcrypt das senhas; padrão 12 (os testes usam 4, para ir rápido). */
   BCRYPT_COST?: string;
   /** Endereço público do Worker, sem barra no fim: vira o callback_url e a URL das fotos. */

@@ -531,6 +531,27 @@ export class Db {
     await this.d1.prepare("INSERT INTO config (key, value) VALUES ('plataforma.heygen', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(platform).run();
   }
 
+  /** Um aviso guardado em JSON na config (o alarme de contêiner, src/vigia.ts); null apaga. */
+  async alarm<T>(key: string): Promise<T | null> {
+    const row = await this.d1.prepare("SELECT value FROM config WHERE key = ?").bind(key).first<{ value: string }>();
+    return row ? JSON.parse(row.value) : null;
+  }
+
+  async setAlarm(key: string, value: unknown): Promise<void> {
+    if (value === null) await this.d1.prepare("DELETE FROM config WHERE key = ?").bind(key).run();
+    else await this.d1.prepare("INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(key, JSON.stringify(value)).run();
+  }
+
+  /** Há tratamento de áudio ou edição rápida em andamento (os dois rodam no AudioFixer). */
+  async audioWorking(): Promise<boolean> {
+    return !!(await this.d1.prepare("SELECT 1 FROM videos WHERE audio_status = 'processing' OR edit_status = 'processing' LIMIT 1").first());
+  }
+
+  /** Há exportação em andamento (roda no Exporter). */
+  async exportWorking(): Promise<boolean> {
+    return !!(await this.d1.prepare("SELECT 1 FROM exports WHERE status = 'running' LIMIT 1").first());
+  }
+
   /** O catálogo de vozes prontas da HeyGen guardado (config 'vozes.heygen.listadas'): ler tudo da API leva várias chamadas. */
   async voiceCatalog<T>(): Promise<{ at: number; voices: T[] } | null> {
     const row = await this.d1.prepare("SELECT value FROM config WHERE key = 'vozes.heygen.listadas'").first<{ value: string }>();
@@ -773,6 +794,7 @@ export class Db {
       this.d1.prepare("DELETE FROM avatars"),
       this.d1.prepare("DELETE FROM voices"),
       this.d1.prepare("UPDATE config SET value = 'openrouter' WHERE key = 'plataforma.heygen'"),
+      this.d1.prepare("DELETE FROM config WHERE key = 'alarme.conteiner'"),
       this.d1.prepare("DELETE FROM sessions"),
       this.d1.prepare("DELETE FROM api_tokens"),
       this.d1.prepare("DELETE FROM users"),

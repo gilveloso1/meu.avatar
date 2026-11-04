@@ -53,6 +53,10 @@ export const ERROS = {
   senha: (min: number, max: number) => campo(`Use uma senha de ${min} a ${max} caracteres.`),
   senhasDiferentes: campo("Repita a mesma senha."),
 
+  // Aviso só do administrador, na página Modelos (src/vigia.ts)
+  servicoLigado: erro("Um serviço ficou ligado sem uso e foi parado.", "Confira os logs do site."),
+  alarmeSemPainel: erro("O alarme de custos está sem acesso.", "Configure o token de leitura do painel."),
+
   // Criação do vídeo
   opcoesIndisponiveis: erro("Opções do modelo indisponíveis.", "Atualize a página em instantes."),
   criacaoPausada: erro("Criação de vídeos pausada.", "Tente mais tarde."),
