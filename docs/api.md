@@ -58,6 +58,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | Rota | O que faz |
 |---|---|
 | `GET /api/v1/videos?q=&desde=&ate=&limite=&continuar=` | Vídeos prontos que a conta pode usar, do mais novo ao mais antigo, 20 por vez (`limite` até 100). `desde` e `ate` são datas (`2026-11-02`, UTC; o dia do `ate` vale inteiro). Com mais vídeos, a resposta traz `continuar`, que vai no pedido seguinte |
+| `GET /api/v1/animacoes?projeto=&avatar=&q=&limite=` | As animações em código já feitas nos projetos da conta, do projeto editado por último ao mais antigo (20 por vez, até 100): `{animacoes: [{projeto: {id, nome}, bloco, nome, duracao, texto, parametros, avatares, atualizado}], mais}`. `projeto` filtra um projeto; `avatar`, os projetos que usam vídeos ou ativos dele; `q` busca no nome, no texto na tela e nos valores dos parâmetros. Sem o código: leia com `ver_projeto` (`incluir: codigo`). Ver "Reusar animações", abaixo |
 | `GET /api/v1/avatares?q=` | Avatares da conta com os ativos: `id`, `nome`, `tipo` (`imagem`, `video`, `audio`), `origem` (`gerado`, `enviado`), `foto`, `voz` e `src` |
 | `GET /api/v1/projetos?q=` | Projetos da conta |
 | `POST /api/v1/projetos` `{nome}` | Cria um projeto |
@@ -168,8 +169,15 @@ instantes, uns 14 mil em base64.
 | `tipo` | Campos | Efeito |
 |---|---|---|
 | `adicionar` | `video`, `arquivo` ou `ativo` (de `listar_avatares`); `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo` e de ativo enviado; o ativo gerado usa a duração do vídeo); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos (ou soma o som, se for áudio). Sem os dois: bloco solto, à direita de tudo. Vídeo de `arquivo` sem faixa de som (o WebM do render, uma animação) entra sem a camada de áudio, como com `semSom` |
+| `adicionar` (cópia) | `animacao: {projeto, bloco}` (de `listar_animacoes`); `parametros`, `duracao`, `nome`; `depois` ou `sobre` e `em`; `rotulo` | Copia uma animação já feita num projeto da conta (este ou outro): o código, os parâmetros, a duração e o nome. O que vier aqui muda, e os `parametros` se juntam aos dela. A cópia é independente: mudar uma não mexe na outra. Projeto ou bloco que não existe, de outra pessoa ou sem código: `animacao_inexistente`. Com `html` junto: `codigo_invalido` |
 | `adicionar` (animação) | `html`, `duracao` (0,5 a 60); `nome`; `depois` ou `sobre` e `em`; `rotulo` | Animação em código: o projeto guarda o HTML (até 100 mil caracteres, com as regras do `renderizar_html`), não um WebM. Sem `nome`, Animação 1, Animação 2... A prévia do canvas roda o código; a exportação faz o vídeo dela no tamanho do Final, uma vez só por código, tamanho e duração. `cortar` muda o tempo até 60 s; `enquadrar` não vale (o código já desenha no tamanho do Final) |
 | `editarCodigo` | `bloco`; `html` ou `trocas: [{de, para}]` (até 50); `parametros` | Troca o código da animação inteiro ou só trechos, sem reenviar a cena. Cada `de` tem de aparecer uma vez só, como está; senão, `trecho_nao_unico` com `troca` e `vezes`. Só `parametros` muda só os valores |
+
+**Reusar animações.** Não há modelos prontos: as possibilidades de estilo e layout não cabem
+numa lista. Cada animação que um agente faz fica no projeto, e o próximo agente parte dela. Antes de
+criar uma do zero, ele procura com `listar_animacoes` (no mesmo projeto ou nos do mesmo avatar), copia
+com `adicionar {animacao: {projeto, bloco}}`, troca os `parametros` e ajusta com `editarCodigo`. A
+instrução do MCP diz isso. Assim os trabalhos se acumulam e ficam à mão para o próximo vídeo.
 
 **Parâmetros** (`parametros: {chave: texto ou número}`, até 30, em `adicionar` com `html` e em
 `editarCodigo`): os valores que um template muda sem reescrever o código, como nome, preço ou cor da

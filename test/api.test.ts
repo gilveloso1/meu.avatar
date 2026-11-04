@@ -967,6 +967,54 @@ describe("animação em código", () => {
     expect(render.calls).toHaveLength(2);
   });
 
+  it("listar_animacoes acha as já feitas por projeto, por avatar e pela busca, só da conta e sem o código", async () => {
+    const AV = "abababab-abab-4bab-8bab-abababababab";
+    await env.DB.prepare("UPDATE videos SET avatar_id = ? WHERE id = ?").bind(AV, VIDEO).run();
+    const a = await novo();
+    const ra = await lote(a.id, a.revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "v" }, { tipo: "adicionar", html: "<style>b{}</style><b>{{preco}}</b><script>tl.to('b',{x:1},0)</script>", duracao: 2, sobre: "@v", em: 0, nome: "Selo", parametros: { preco: "R$ 49" } }]);
+    const b = await novo();
+    await lote(b.id, b.revisao, [{ tipo: "adicionar", video: VIDEO2, fim: 4, rotulo: "v" }, { tipo: "adicionar", html: "<h1>Oferta da semana</h1>", duracao: 3, sobre: "@v", em: 0, nome: "Título" }]);
+    // Projeto de outra pessoa: nunca aparece.
+    await memberCookie();
+    const { id: membro } = (await env.DB.prepare("SELECT id FROM users WHERE role = 'member'").first<{ id: number }>())!;
+    const alheio = { blocks: [{ id: "x", kind: "image", name: "Alheia", src: "", dur: 60, tin: 0, tout: 2, x: 0, y: 0, mute: false, vol: 1, tone: 1, code: { html: "<b>Oferta</b>" } }], finals: [], edges: [] };
+    await env.DB.prepare("INSERT INTO projects (id, user_id, name, data, created_at, updated_at) VALUES (?, ?, 'De outro', ?, ?, ?)").bind(crypto.randomUUID(), membro, JSON.stringify(alheio), new Date().toISOString(), new Date().toISOString()).run();
+    type Lista = { animacoes: { projeto: { id: string }; bloco: string; nome: string; duracao: number; texto: string; parametros?: unknown; avatares: string[]; html?: string }[]; mais?: number };
+    const lista = (q: string) => api(`/api/v1/animacoes?${q}`, admin).then((r) => r.json<Lista>());
+    const doAvatar = await lista(`avatar=${AV}`);
+    expect(doAvatar.animacoes).toEqual([{ projeto: { id: a.id, nome: "Campanha" }, bloco: ra.criados[1], nome: "Selo", duracao: 2, texto: "{{preco}}", parametros: { preco: "R$ 49" }, avatares: [AV], atualizado: expect.any(String) }]);
+    expect((await lista("q=oferta")).animacoes.map((x) => x.nome)).toEqual(["Título"]);
+    expect((await lista("q=49")).animacoes.map((x) => x.nome)).toEqual(["Selo"]);
+    expect((await lista(`projeto=${b.id}`)).animacoes.map((x) => x.nome)).toEqual(["Título"]);
+    const tudo = await lista("limite=1");
+    expect([tudo.animacoes.length, tudo.mais]).toEqual([1, 1]);
+    expect((await api("/api/v1/animacoes?limite=0", admin)).status).toBe(400);
+  });
+
+  it("adicionar {animacao} copia código, valores, tempo e nome; a cópia é independente e só vem da conta", async () => {
+    const a = await novo();
+    const ra = await lote(a.id, a.revisao, [{ tipo: "adicionar", html: "<b>{{nome}} {{preco}}</b>", duracao: 2.5, nome: "Selo", parametros: { nome: "Ana", preco: "R$ 49" } }]);
+    const origem = { projeto: a.id, bloco: ra.criados[0] };
+    const b = await novo();
+    const rb = await lote(b.id, b.revisao, [{ tipo: "adicionar", animacao: origem, parametros: { preco: "R$ 39" } }]);
+    expect(rb.canvas.blocks[0]).toMatchObject({ name: "Selo", tout: 2.5, code: { html: "<b>{{nome}} {{preco}}</b>", params: { nome: "Ana", preco: "R$ 39" } } });
+    await lote(b.id, rb.revisao, [{ tipo: "editarCodigo", bloco: rb.criados[0], html: "<i>outra</i>" }]);
+    const original = await (await api(`/api/v1/projetos/${a.id}?incluir=codigo`, admin)).json<{ codigo: { html: string; parametros: unknown }[] }>();
+    expect(original.codigo[0]).toMatchObject({ html: "<b>{{nome}} {{preco}}</b>", parametros: { nome: "Ana", preco: "R$ 49" } });
+    // Do mesmo projeto também serve, com outro tempo e outro nome.
+    const mesma = await lote(a.id, ra.revisao, [{ tipo: "adicionar", animacao: origem, duracao: 4, nome: "Selo 2" }]);
+    expect(mesma.canvas.blocks[1]).toMatchObject({ name: "Selo 2", tout: 4 });
+    const erro = (c: unknown) => comandos(b.id, rb.revisao + 1, [c]).then((r) => r.json());
+    expect(await erro({ tipo: "adicionar", animacao: { projeto: a.id, bloco: "nao-existe" } })).toEqual({ erro: "animacao_inexistente", comando: 0 });
+    expect(await erro({ tipo: "adicionar", animacao: origem, html: "<b>x</b>" })).toEqual({ erro: "codigo_invalido", comando: 0 });
+    await memberCookie();
+    const { id: membro } = (await env.DB.prepare("SELECT id FROM users WHERE role = 'member'").first<{ id: number }>())!;
+    const alheio = crypto.randomUUID();
+    const dados = { blocks: [{ id: "x", kind: "image", name: "Alheia", src: "", dur: 60, tin: 0, tout: 2, x: 0, y: 0, mute: false, vol: 1, tone: 1, code: { html: "<b>x</b>" } }], finals: [], edges: [] };
+    await env.DB.prepare("INSERT INTO projects (id, user_id, name, data, created_at, updated_at) VALUES (?, ?, 'De outro', ?, ?, ?)").bind(alheio, membro, JSON.stringify(dados), new Date().toISOString(), new Date().toISOString()).run();
+    expect(await erro({ tipo: "adicionar", animacao: { projeto: alheio, bloco: "x" } })).toEqual({ erro: "animacao_inexistente", comando: 0 });
+  });
+
   it("a exportação faz o vídeo da animação uma vez só, no tamanho do Final, e põe por cima como vídeo sem som", async () => {
     await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
     const { id, revisao } = await novo();

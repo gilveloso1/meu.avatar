@@ -614,6 +614,17 @@ export class Db {
   }
 
   /** Os projetos da pessoa, o editado por último primeiro; q filtra pelo nome. */
+  /** O avatar de cada vídeo (os que têm), para saber que avatar um projeto usa. */
+  async videoAvatars(ids: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (let i = 0; i < ids.length; i += 90) {
+      const parte = ids.slice(i, i + 90);
+      const rows = await this.d1.prepare(`SELECT id, avatar_id FROM videos WHERE avatar_id IS NOT NULL AND id IN (${parte.map(() => "?").join(",")})`).bind(...parte).all<{ id: string; avatar_id: string }>();
+      for (const r of rows.results) out.set(r.id, r.avatar_id);
+    }
+    return out;
+  }
+
   async projectsByUser(userId: number, q = "", limit = 200): Promise<Project[]> {
     const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     return (
