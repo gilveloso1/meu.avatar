@@ -24,12 +24,13 @@ import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth
 import type { AssetKind, Avatar, AvatarAsset, Db, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
 import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
 import { ERROS } from "../erros";
+import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
 import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { temSom } from "../som";
-import { type Alarme, CHAVE as ALARME } from "../vigia";
+import { type Alarme, CHAVE as ALARME, LIMITE_MS } from "../vigia";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_ANIMACAO, CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { MAX_VERSOES } from "../canvas/modelo.js";
@@ -92,6 +93,7 @@ export class Site {
     private readonly exports: Exports,
     private readonly accounts: Accounts,
     private readonly costs: CustosApi | null,
+    private readonly machines: MaquinasApi | null,
     private readonly config: SiteConfig,
   ) {}
 
@@ -479,13 +481,16 @@ ${error ? snackbar(error) : ""}`;
     const period = PANEL_PERIODS.find((p) => p.id === url.searchParams.get("periodo")) ?? PANEL_PERIODS[1]!;
     const since = period.days ? new Date(Date.now() - period.days * 86_400_000).toISOString() : null;
     const activity = tab === "atividade";
+    // A página da lista de falhas (?pagina=), de 1 em diante.
+    const pageNumber = Math.max(1, Math.floor(Number(url.searchParams.get("pagina")) || 1));
     const [stats, external, failures, tokens, alarm] = await Promise.all([
       this.db.panelStats(since),
       tab === "custos" && this.costs ? this.costs.custos(period.days || null) : Promise.resolve(null),
-      activity ? this.db.panelFailures(since) : Promise.resolve([]),
+      activity ? this.db.panelFailures(since, PANEL_PAGE, (pageNumber - 1) * PANEL_PAGE) : Promise.resolve({ items: [], total: 0 }),
       activity ? this.db.panelTokens() : Promise.resolve([]),
       activity ? this.db.alarm<Alarme>(ALARME) : Promise.resolve(null),
     ]);
+    const machines = activity && this.machines ? await this.machines.estados() : [];
     const query = `?periodo=${period.id}`;
     const tabs = PANEL_TABS.map(
       (t) => `<a class="tabs__tab interactive" href="${t.href}${query}"${t.id === tab ? ' aria-current="page"' : ""}><span class="tabs__content"><span class="icon">${t.icon}</span>${esc(t.label)}</span></a>`,
@@ -495,14 +500,14 @@ ${error ? snackbar(error) : ""}`;
       (p) => `<a class="chip interactive" href="${here}?periodo=${p.id}"${p === period ? ' aria-current="true"' : ""}>${p === period ? '<span class="icon">check</span>' : ""}${esc(p.label)}</a>`,
     ).join("");
     const body = `
-<main class="page" id="conteudo">
+<main class="page page--dash" id="conteudo">
   <nav class="tabs tabs--start" aria-label="Seções do painel">${tabs}</nav>
   <nav class="chip-set library__tools" aria-label="Período">${chips}</nav>
   ${
     tab === "custos"
       ? panelCosts(stats, external, !!this.config.local)
       : activity
-        ? panelActivity(stats, { failures, tokens, alarm, since, local: !!this.config.local, from: `/painel/atividade${query}`, userId: user.id })
+        ? panelActivity(stats, { failures, page: pageNumber, tokens, alarm, machines, since, local: !!this.config.local, from: `/painel/atividade${query}`, userId: user.id })
         : panelOverview(stats, query)
   }
 </main>`;
@@ -1877,7 +1882,7 @@ function panelOverview(s: PanelStats, query: string): string {
     <div class="dash__mosaic">
         <section class="viewer__card dash__tall" aria-labelledby="card-gasto">
           <h2 class="qe-result__title" id="card-gasto">Gasto por modelo</h2>
-          ${s.models.length ? modelBars(s.models, PANEL_TOP_MODELS) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+          ${s.models.length ? modelBars(s.models, PANEL_TOP_MODELS, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
           ${s.models.length > PANEL_TOP_MODELS + 1 ? `<div class="viewer__card-actions"><a class="button button--text interactive" href="/painel/custos${query}">Ver todos os modelos</a></div>` : ""}
         </section>
         ${panelFailures(s)}
@@ -1892,8 +1897,8 @@ function panelOverview(s: PanelStats, query: string): string {
 }
 
 /**
- * Custos: os números do período no topo (como na Visão geral), todos os modelos, uma linha cada, e
- * a infraestrutura num mosaico: os contêineres (o card alto) ao lado do OpenRouter e do R2.
+ * Custos: os números do período no topo (como na Visão geral) e dois painéis (docs/layout.md): no
+ * principal, o gasto por modelo e a Cloudflare, listas com barras; no de apoio, os provedores.
  */
 function panelCosts(s: PanelStats, external: CustosExternos | null, local: boolean): string {
   const total = s.models.reduce((sum, m) => sum + m.cost, 0);
@@ -1904,13 +1909,19 @@ function panelCosts(s: PanelStats, external: CustosExternos | null, local: boole
       ${statCard("payments", "Gasto em vídeos", money(total), `em ${plural(s.models.length, "modelo", "modelos")}`, true)}
       ${statCard("movie", "Por vídeo", done ? money(total / done) : "—", `${plural(done, "vídeo pronto", "vídeos prontos")}`)}
       ${statCard("schedule", "Por minuto", minutes ? money(total / minutes) : "—", `${minutes.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} min prontos`)}
-      ${statCard("error", "Vídeos com falha", count(s.videos.failed), "não entram no gasto")}
+      ${statCard("error", "Com falha", count(s.videos.failed), "vídeos fora do gasto")}
     </div>
-    <section class="viewer__card" aria-labelledby="card-modelos">
-      <h2 class="qe-result__title" id="card-modelos">Gasto por modelo</h2>
-      ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
-    </section>
-    ${external ? panelInfra(external, s.platforms, local) : ""}
+    ${panes(
+      {
+        title: "Gastos",
+        body: `<section class="viewer__card" aria-labelledby="card-modelos">
+        <h3 class="qe-result__title" id="card-modelos">Por modelo</h3>
+        ${s.models.length ? modelBars(s.models, undefined, true) : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+      </section>
+      ${external ? cloudflareSection(external, local) : ""}`,
+      },
+      { title: "Provedores de vídeo", body: external ? providersSection(external, s.platforms) : "" },
+    )}
   </div>`;
 }
 
@@ -1926,11 +1937,11 @@ const FAILURE_KINDS: Record<PanelFailure["kind"], { icon: string; label: string 
  * as colunas de `meta` e o texto no fim, numa linha só com as colunas alinhadas; no celular, o
  * título e o fim em cima e as colunas embaixo. Link quando houver.
  */
-function listItem(o: { icon: string; title: string; meta: string[]; end: string; href?: string }): string {
+function listItem(o: { icon: string; title: string; meta: string[]; end: string; href?: string; alert?: boolean }): string {
   const content = `<span class="icon" aria-hidden="true">${o.icon}</span><span class="dash__title" title="${esc(o.title)}">${esc(o.title)}</span><span class="dash__meta">${o.meta
     .map((m) => `<span class="dash__cell" title="${esc(m)}">${esc(m)}</span>`)
     .join("")}</span><span class="avatar-option__end">${esc(o.end)}</span>`;
-  return `<li>${o.href ? `<a class="avatar-option interactive" href="${o.href}">${content}</a>` : `<div class="avatar-option avatar-option--static">${content}</div>`}</li>`;
+  return `<li${o.alert ? ' class="dash__alert"' : ""}>${o.href ? `<a class="avatar-option interactive" href="${o.href}">${content}</a>` : `<div class="avatar-option avatar-option--static">${content}</div>`}</li>`;
 }
 
 /**
@@ -1938,22 +1949,38 @@ function listItem(o: { icon: string; title: string; meta: string[]; end: string;
  * motivo técnico (só o administrador vê; ele não vai para a tela de mais ninguém) e os tokens de
  * API e MCP com o último uso. Cards na largura toda, um embaixo do outro: nada a alinhar.
  */
-function panelActivity(s: PanelStats, o: { failures: PanelFailure[]; tokens: PanelToken[]; alarm: Alarme | null; since: string | null; local: boolean; from: string; userId: number }): string {
+function panelActivity(
+  s: PanelStats,
+  o: { failures: { items: PanelFailure[]; total: number }; page: number; tokens: PanelToken[]; alarm: Alarme | null; machines: Awaited<ReturnType<MaquinasApi["estados"]>>; since: string | null; local: boolean; from: string; userId: number },
+): string {
   const v = s.videos;
   const failed = v.failed + v.audioFailed + v.editFailed + s.projects.exportsFailed;
   const used = o.tokens.filter((t) => t.last_used_at && (!o.since || t.last_used_at >= o.since)).length;
-  const alarm = o.local
-    ? { value: "—", note: "só roda no ar" }
-    : o.alarm?.ligados.length
-      ? { value: "Avisou", note: plural(o.alarm.ligados.length, "serviço parado", "serviços parados") }
+  const now = Date.now();
+  const on = o.machines.filter((m) => "ligada" in m && m.ligada).length;
+  const machines = o.machines.map((m) => {
+    const last = "ultimoPedido" in m && m.ultimoPedido ? `último pedido ${formatDate(new Date(m.ultimoPedido).toISOString())}` : "sem pedido recente";
+    if ("falhou" in m) return listItem({ icon: m.icone, title: m.nome, meta: ["Sem resposta agora"], end: "" });
+    const idle = m.ligada && m.emAndamento === 0;
+    const idleMin = idle && m.ultimoPedido ? Math.floor((now - m.ultimoPedido) / 60_000) : null;
+    const state = !m.ligada ? "Desligada" : m.emAndamento > 0 ? "Ligada, trabalhando" : `Ligada sem trabalho${idleMin !== null ? ` há ${idleMin} min` : ""}`;
+    // Ligada sem trabalho por metade do prazo do alarme: é o caso que gasta à toa.
+    return listItem({ icon: m.icone, title: m.nome, meta: [state], end: last, alert: idle && (idleMin ?? 0) * 60_000 >= LIMITE_MS / 2 });
+  });
+  // O alarme só aparece quando fez algo ou não consegue vigiar; no dia a dia, nada a dizer.
+  const stopped = o.alarm?.ligados ?? [];
+  const alarmNote = o.local
+    ? null
+    : stopped.length
+      ? `Alarme: desligou ${stopped.map((l) => `${MAQUINAS.find((m) => m.classe === l.classe)?.nome ?? l.classe} em ${formatDate(l.em)}`).join(", ")}, por estar ligada sem uso.`
       : o.alarm?.semPainel
-        ? { value: "Sem acesso", note: "sem leitura do painel" }
-        : { value: "Em dia", note: "nada ligado à toa" };
-  const failures = o.failures.map((f) => {
+        ? ERROS.alarmeSemPainel
+        : null;
+  const failures = o.failures.items.map((f) => {
     const kind = FAILURE_KINDS[f.kind];
     // A página do vídeo abre para o administrador; o projeto, só para o dono.
     const href = f.kind === "export" ? (f.user_id === o.userId ? `/canvas/${f.ref}` : undefined) : `/video/${f.ref}?de=${encodeURIComponent(o.from)}`;
-    return listItem({ icon: kind.icon, title: f.title, meta: [kind.label, f.owner ?? "Sem dono", f.reason ?? "Sem motivo registrado"], end: formatDate(f.at), href });
+    return listItem({ icon: kind.icon, title: f.title.trim() || "Sem fala", meta: [kind.label, f.owner ?? "Sem dono", f.reason ?? "Sem motivo registrado"], end: formatDate(f.at), href });
   });
   const tokens = o.tokens.map((t) =>
     listItem({ icon: "key", title: t.name, meta: [t.owner, `criado em ${formatDate(t.created_at)}`], end: t.last_used_at ? `usado em ${formatDate(t.last_used_at)}` : "nunca usado" }),
@@ -1963,17 +1990,29 @@ function panelActivity(s: PanelStats, o: { failures: PanelFailure[]; tokens: Pan
       ${statCard("error", "Falhas no período", count(failed), "em vídeos, áudio, edição e exportações", true)}
       ${statCard("hourglass_top", "Em andamento", count(v.busy), "na fila ou gerando")}
       ${statCard("key", "Agentes ativos", count(used), `de ${plural(o.tokens.length, "token", "tokens")}`)}
-      ${statCard("monitor_heart", "Alarme", alarm.value, alarm.note)}
+      ${statCard("memory", "Máquinas ligadas", count(on), `de ${o.machines.length} agora`)}
     </div>
-    <h2 class="dash__section">Últimas falhas</h2>
-    <section class="viewer__card" aria-label="Últimas falhas">
-      ${failures.length ? `<ul class="dash__list dash__list--failures">${failures.join("")}</ul>` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
-    </section>
-    <h2 class="dash__section">API e MCP</h2>
-    <section class="viewer__card" aria-label="Tokens de API e MCP">
-      ${tokens.length ? `<ul class="dash__list dash__list--tokens">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
-      <p class="qe-result__note">O último uso é gravado no máximo uma vez por hora.</p>
-    </section>
+    ${panes(
+      {
+        title: "Últimas falhas",
+        body: `<section class="viewer__card" aria-label="Últimas falhas">
+        ${failures.length ? `<ul class="dash__list dash__list--failures">${failures.join("")}</ul>${pager(o.failures.total, o.page, o.from)}` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}
+      </section>`,
+      },
+      {
+        title: "Sistema",
+        body: `<section class="viewer__card" aria-labelledby="card-maquinas">
+        <h3 class="qe-result__title" id="card-maquinas">Máquinas agora</h3>
+        <ul class="dash__list dash__list--machines">${machines.join("")}</ul>
+        ${alarmNote ? `<p class="qe-result__note">${esc(alarmNote)}</p>` : ""}
+      </section>
+      <section class="viewer__card" aria-labelledby="card-tokens">
+        <h3 class="qe-result__title" id="card-tokens">API e MCP</h3>
+        ${tokens.length ? `<ul class="dash__list dash__list--tokens">${tokens.join("")}</ul>` : `<p class="qe-result__note">Nenhum token criado.</p>`}
+        <p class="qe-result__note">O último uso é gravado no máximo uma vez por hora.</p>
+      </section>`,
+      },
+    )}
   </div>`;
 }
 
@@ -2002,10 +2041,12 @@ const PROVIDER_STATUS = {
 
 const LIMIT_PERIODS: Record<string, string> = { daily: "por dia", weekly: "por semana", monthly: "por mês" };
 
-/** "US$ 50,00 de US$ 50,00 por semana": o que resta do limite da chave, de quanto e quando volta. */
+/** "US$ 50,00 de 50,00 por semana": o que resta do limite da chave, de quanto e quando volta. */
 function limitValue(l: Limite | null): string {
   if (!l) return "—";
-  return `${money(l.restante)} de ${money(l.valor)}${l.periodo && LIMIT_PERIODS[l.periodo] ? ` ${LIMIT_PERIODS[l.periodo]}` : ""}`;
+  // Sem repetir a moeda: a linha cabe no painel de apoio (docs/layout.md, item 9).
+  const of = l.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${money(l.restante)} de ${of}${l.periodo && LIMIT_PERIODS[l.periodo] ? ` ${LIMIT_PERIODS[l.periodo]}` : ""}`;
 }
 
 function providerValue(v: Valor | null): string {
@@ -2018,8 +2059,8 @@ function providerValue(v: Valor | null): string {
  * API não informa fica "—"), lado a lado como um feed; e a Cloudflare num card só, um serviço por
  * linha, como o gasto por modelo.
  */
-function panelInfra(e: CustosExternos, platforms: PanelStats["platforms"], local: boolean): string {
-  const n1 = (x: number) => x.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+/** Os provedores de vídeo, um card igual para cada, empilhados no painel de apoio. */
+function providersSection(e: CustosExternos, platforms: PanelStats["platforms"]): string {
   const providers = e.provedores.map((p) => {
     const spent = platforms.find((x) => x.platform === p.id);
     return providerCard(p.nome, {
@@ -2033,6 +2074,12 @@ function panelInfra(e: CustosExternos, platforms: PanelStats["platforms"], local
       ],
     });
   });
+  return providers.join("");
+}
+
+/** A Cloudflare num card só: um serviço por linha, como o gasto por modelo, e os totais. */
+function cloudflareSection(e: CustosExternos, local: boolean): string {
+  const n1 = (x: number) => x.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
   const c = e.cloudflare;
   let cloudflare: string;
   if (c === null || c === "falhou") {
@@ -2061,10 +2108,45 @@ function panelInfra(e: CustosExternos, platforms: PanelStats["platforms"], local
       </dl>
       <p class="qe-result__note">Últimos ${c.dias} dias, antes do que o plano inclui.</p>`;
   }
-  return `<h2 class="dash__section">Provedores de vídeo</h2>
-    <div class="dash__feed">${providers.join("")}</div>
-    <h2 class="dash__section">Cloudflare</h2>
-    <section class="viewer__card" aria-label="Cloudflare">${cloudflare}</section>`;
+  return `<section class="viewer__card" aria-labelledby="card-cloudflare"><h3 class="qe-result__title" id="card-cloudflare">Cloudflare</h3>${cloudflare}</section>`;
+}
+
+/** Itens por página nas listas do painel que crescem sem limite (as falhas). */
+const PANEL_PAGE = 15;
+
+/**
+ * A paginação de uma lista, no pé do card (a das tabelas de dados do Material): "16–30 de 65" e as
+ * setas de anterior e próxima, links com ?pagina= sobre o endereço da aba (que já leva o período).
+ */
+function pager(total: number, page: number, from: string): string {
+  if (total <= PANEL_PAGE) return "";
+  const last = Math.ceil(total / PANEL_PAGE);
+  const current = Math.min(page, last);
+  const first = (current - 1) * PANEL_PAGE + 1;
+  const href = (n: number) => `${from}${from.includes("?") ? "&" : "?"}pagina=${n}`;
+  const arrow = (n: number, icon: string, label: string) =>
+    n >= 1 && n <= last
+      ? `<a class="icon-button interactive" href="${href(n)}" aria-label="${label}" title="${label}"><span class="icon">${icon}</span></a>`
+      : `<span class="icon-button" aria-disabled="true" aria-label="${label}"><span class="icon">${icon}</span></span>`;
+  return `<nav class="pager" aria-label="Páginas">
+      <span class="pager__range">${count(first)}–${count(Math.min(current * PANEL_PAGE, total))} de ${count(total)}</span>
+      ${arrow(current - 1, "chevron_left", "Página anterior")}${arrow(current + 1, "chevron_right", "Próxima página")}
+    </nav>`;
+}
+
+/**
+ * Dois painéis do M3 (docs/layout.md) a partir de 840 px: o principal flexível e o de apoio com
+ * largura fixa (360 px no expandido, 412 px do grande em diante); abaixo disso, um embaixo do outro.
+ * Cada painel tem o seu título, parado, e o corpo, que rola por inteiro no layout fixo. Os cards
+ * dentro dele nunca rolam: têm o tamanho do conteúdo.
+ */
+function panes(...list: { title: string; body: string }[]): string {
+  return `<div class="dash__panes">${list
+    .map((p) => {
+      const id = `painel-${p.title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
+      return `<section class="dash__pane" aria-labelledby="${id}"><h2 class="dash__pane-title" id="${id}">${esc(p.title)}</h2><div class="dash__pane-body">${p.body}</div></section>`;
+    })
+    .join("")}</div>`;
 }
 
 const SERVICE_ICONS: Record<string, string> = { "Áudio": "graphic_eq", "Exportação": "download", "Animações": "animation", "Armazenamento": "cloud" };

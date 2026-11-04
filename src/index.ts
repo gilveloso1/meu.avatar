@@ -2,6 +2,7 @@ import { type AudioApi, type AudioFixer, ContainerAudio } from "./audio";
 import { Accounts } from "./auth";
 import { type CustosApi, CustosReais, lerHeyGen, lerOpenRouter } from "./custos";
 import { Db } from "./db";
+import { type MaquinasApi, MaquinasReais } from "./maquinas";
 import { ContainerExport, type ExportApi, type Exporter, Exports } from "./exportar";
 import { HeyGenClient, type HeyGenApi } from "./heygen";
 import type { Env } from "./env";
@@ -25,6 +26,8 @@ export interface Deps {
   renderer?: RenderApi | null;
   /** Os custos de fora do banco, na aba Custos do painel (src/custos.ts). */
   costs?: CustosApi | null;
+  /** O estado das máquinas, na aba Atividade do painel (src/maquinas.ts). */
+  machines?: MaquinasApi | null;
 }
 
 export function createExports(env: Env, deps: Deps = {}): Exports {
@@ -57,8 +60,24 @@ export function createCosts(env: Env): CustosApi {
   );
 }
 
-export function createSite(env: Env, studio: Studio, exports: Exports = createExports(env), costs: CustosApi | null = createCosts(env)): Site {
-  return new Site(new Db(env.DB), env.MIDIA, studio, exports, createAccounts(env), costs, {
+export function createMachines(env: Env): MaquinasApi {
+  // No computador o contêiner não roda (wrangler dev --enable-containers=false): as três estão desligadas.
+  if (env.AMBIENTE === "local") return new MaquinasReais({});
+  return new MaquinasReais({
+    AudioFixer: env.AUDIO && { ns: env.AUDIO, nome: "audio" },
+    Exporter: env.EXPORTAR && { ns: env.EXPORTAR, nome: "exportar" },
+    Renderer: env.RENDER && { ns: env.RENDER, nome: "render" },
+  });
+}
+
+export function createSite(
+  env: Env,
+  studio: Studio,
+  exports: Exports = createExports(env),
+  costs: CustosApi | null = createCosts(env),
+  machines: MaquinasApi | null = createMachines(env),
+): Site {
+  return new Site(new Db(env.DB), env.MIDIA, studio, exports, createAccounts(env), costs, machines, {
     defaults: {
       duration: Number(env.VIDEO_DURATION),
       resolution: env.VIDEO_RESOLUTION,
@@ -122,7 +141,13 @@ export async function handle(request: Request, env: Env, deps: Deps = {}): Promi
     return new Response("ok");
   }
 
-  return createSite(env, studio, createExports(env, deps), deps.costs !== undefined ? deps.costs : createCosts(env)).handle(request);
+  return createSite(
+    env,
+    studio,
+    createExports(env, deps),
+    deps.costs !== undefined ? deps.costs : createCosts(env),
+    deps.machines !== undefined ? deps.machines : createMachines(env),
+  ).handle(request);
 }
 
 /** O alarme de contêiner ligado sem trabalho (src/vigia.ts): o painel da Cloudflare e o que o site sabe de cada um. */

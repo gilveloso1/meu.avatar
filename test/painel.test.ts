@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
+import { handle } from "../src/index";
+import type { MaquinasApi } from "../src/maquinas";
 import { call, cookie, FakeVideoApi, memberCookie, SITE } from "./helpers";
 
 const get = (path: string, session?: string) => call(new Request(`${SITE}${path}`, { headers: session === undefined ? {} : { cookie: session } }), new FakeVideoApi());
@@ -107,6 +109,12 @@ describe("aba Atividade", () => {
     )
       .bind("d0000000-0000-4000-8000-000000000002", "completed", "Áudio que falhou", null, "failed", "ffmpeg saiu com 1", at(2), at(2))
       .run();
+    // A troca de avatar não tem fala: o título vira "Sem fala".
+    await env.DB.prepare(
+      "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES (?, 'failed', '', 'm', 10, '480p', '9:16', 'aleph', 'preparo', ?, ?)",
+    )
+      .bind("d0000000-0000-4000-8000-000000000004", at(3), at(3))
+      .run();
     // Uma falha antiga, fora dos 7 dias.
     await env.DB.prepare(
       "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES (?, 'failed', 'Antiga', 'm', 10, '480p', '9:16', 'wan', 'velho', ?, ?)",
@@ -114,10 +122,12 @@ describe("aba Atividade", () => {
       .bind("d0000000-0000-4000-8000-000000000003", at(24 * 10), at(24 * 10))
       .run();
 
-    const failures = await new Db(env.DB).panelFailures(new Date(now - 7 * 86_400_000).toISOString());
+    const { items: failures, total } = await new Db(env.DB).panelFailures(new Date(now - 7 * 86_400_000).toISOString());
+    expect(total).toBe(3);
     expect(failures.map((f) => [f.kind, f.title])).toEqual([
       ["video", "Fala que falhou"],
       ["audio", "Áudio que falhou"],
+      ["video", ""],
     ]);
 
     const page = await (await get("/painel/atividade?periodo=7", admin)).text();
@@ -125,8 +135,31 @@ describe("aba Atividade", () => {
     expect(page).toContain("provider_error: &lt;b&gt;timeout&lt;/b&gt;");
     expect(page).toContain("ffmpeg saiu com 1");
     expect(page).not.toContain("Antiga");
+    expect(page).toContain(">Sem fala<");
     expect(page).toContain(`href="/video/d0000000-0000-4000-8000-000000000001?de=${encodeURIComponent("/painel/atividade?periodo=7")}"`);
     expect(page).toMatch(/href="\/painel\/atividade\?periodo=7" aria-current="page"/);
+  });
+
+  it("pagina as falhas de 15 em 15, com o intervalo e as setas", async () => {
+    const admin = await cookie();
+    for (let i = 0; i < 20; i++) {
+      const at = new Date(Date.now() - (i + 1) * 60_000).toISOString();
+      await env.DB.prepare(
+        "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES (?, 'failed', ?, 'm', 10, '480p', '9:16', 'wan', 'x', ?, ?)",
+      )
+        .bind(`f0000000-0000-4000-8000-0000000000${String(i).padStart(2, "0")}`, `Falha ${i + 1}`, at, at)
+        .run();
+    }
+    const first = await (await get("/painel/atividade?periodo=7", admin)).text();
+    expect(first).toContain("1–15 de 20");
+    expect(first).toContain(">Falha 15<");
+    expect(first).not.toContain(">Falha 16<");
+    expect(first).toContain('href="/painel/atividade?periodo=7&pagina=2"');
+
+    const second = await (await get("/painel/atividade?periodo=7&pagina=2", admin)).text();
+    expect(second).toContain("16–20 de 20");
+    expect(second).toContain(">Falha 16<");
+    expect(second).not.toContain(">Falha 1<");
   });
 
   it("a exportação que falhou só tem link para o dono do projeto, e os tokens mostram o último uso", async () => {
@@ -153,5 +186,37 @@ describe("aba Atividade", () => {
     expect(page).not.toContain('href="/canvas/e0000000-0000-4000-8000-000000000001"');
     expect(page).toContain("Agente de teste");
     expect(page).toContain("nunca usado");
+  });
+});
+
+describe("máquinas agora, na aba Atividade", () => {
+  const agora = Date.now();
+  const maquinas: MaquinasApi = {
+    estados: async () => [
+      { classe: "Exporter", nome: "Exportação", icone: "download", ligada: true, emAndamento: 1, ultimoPedido: agora - 60_000 },
+      { classe: "AudioFixer", nome: "Áudio", icone: "graphic_eq", ligada: true, emAndamento: 0, ultimoPedido: agora - 20 * 60_000 },
+      { classe: "Renderer", nome: "Animações", icone: "animation", falhou: true },
+    ],
+  };
+  const page = async (alarme?: object) => {
+    if (alarme) await env.DB.prepare("INSERT INTO config (key, value) VALUES ('alarme.conteiner', ?)").bind(JSON.stringify(alarme)).run();
+    const res = await handle(new Request(`${SITE}/painel/atividade`, { headers: { cookie: await cookie() } }), { ...env, SITE_URL: SITE }, { api: new FakeVideoApi(), machines: maquinas });
+    return res.text();
+  };
+
+  it("conta as ligadas e diz o estado de cada uma, com alerta na ligada sem trabalho", async () => {
+    const html = await page();
+    expect(html).toMatch(/Máquinas ligadas<\/p>\s*<p class="stat-card__value">2<\/p>\s*<p class="stat-card__supporting">de 3 agora</);
+    expect(html).toContain("Ligada, trabalhando");
+    // 20 min sem trabalho passa da metade do prazo do alarme (30 min): fica em alerta.
+    expect(html).toMatch(/<li class="dash__alert">.*?Ligada sem trabalho há 20 min/s);
+    expect(html).toContain("Sem resposta agora");
+    // Sem nada a dizer, o alarme não aparece.
+    expect(html).not.toContain("Alarme:");
+  });
+
+  it("diz qual máquina o alarme desligou", async () => {
+    const html = await page({ ligados: [{ classe: "Exporter", desde: "2026-11-04T12:00:00.000Z", em: "2026-11-04T12:40:00.000Z" }] });
+    expect(html).toContain("Alarme: desligou Exportação em");
   });
 });

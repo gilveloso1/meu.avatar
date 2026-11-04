@@ -225,7 +225,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 
 - Painel do administrador (`/painel`, pelo item "Painel" do menu do perfil; 404 para quem não é
   administrador): abas que são links (Visão geral em `/painel`, Custos em `/painel/custos`,
-  Atividade em `/painel/atividade`: falhas com o motivo técnico, tokens e alarme) e os
+  Atividade em `/painel/atividade`: as três máquinas agora (`src/maquinas.ts`, lido do próprio
+  contêiner, sem ligar), falhas com o motivo técnico, tokens e o alarme) e os
   chips de período (7 dias, 30 dias, tudo) valendo para todas. Regras de layout (da skill dataviz e
   do M3): um número herói por tela (`.stat-card--hero`, display-large) e os outros em
   display-small, e cada aba abre com essa fileira de números; o card não estica para igualar
@@ -238,7 +239,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   (OpenRouter, HeyGen; provedor novo é mais um item em `createCosts`, `src/index.ts`) com o
   **saldo** e o **gasto no período** em destaque (o que mais importa ao dono) e, embaixo, o gasto
   total da conta e o limite da chave, sempre rotulado como limite, nunca no lugar do saldo; e a
-  Cloudflare (contêineres e R2) num card só. Para simular volume: `npm run exemplos:painel`.
+  Cloudflare (contêineres e R2) num card só. Toda tela de dados passa pelo checklist de
+  [docs/layout.md](docs/layout.md) antes do PR (largura toda, dois painéis com título parado e corpo que rola, cards que nunca rolam, paginação).
+  Para simular volume: `npm run exemplos:painel`.
 
 ## Contas
 
