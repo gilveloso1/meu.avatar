@@ -24,12 +24,13 @@ import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth
 import type { AssetKind, Avatar, AvatarAsset, Db, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
 import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
 import { ERROS } from "../erros";
+import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
 import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { temSom } from "../som";
-import { type Alarme, CHAVE as ALARME } from "../vigia";
+import { type Alarme, CHAVE as ALARME, LIMITE_MS } from "../vigia";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_ANIMACAO, CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { MAX_VERSOES } from "../canvas/modelo.js";
@@ -92,6 +93,7 @@ export class Site {
     private readonly exports: Exports,
     private readonly accounts: Accounts,
     private readonly costs: CustosApi | null,
+    private readonly machines: MaquinasApi | null,
     private readonly config: SiteConfig,
   ) {}
 
@@ -486,6 +488,7 @@ ${error ? snackbar(error) : ""}`;
       activity ? this.db.panelTokens() : Promise.resolve([]),
       activity ? this.db.alarm<Alarme>(ALARME) : Promise.resolve(null),
     ]);
+    const machines = activity && this.machines ? await this.machines.estados() : [];
     const query = `?periodo=${period.id}`;
     const tabs = PANEL_TABS.map(
       (t) => `<a class="tabs__tab interactive" href="${t.href}${query}"${t.id === tab ? ' aria-current="page"' : ""}><span class="tabs__content"><span class="icon">${t.icon}</span>${esc(t.label)}</span></a>`,
@@ -502,7 +505,7 @@ ${error ? snackbar(error) : ""}`;
     tab === "custos"
       ? panelCosts(stats, external, !!this.config.local)
       : activity
-        ? panelActivity(stats, { failures, tokens, alarm, since, local: !!this.config.local, from: `/painel/atividade${query}`, userId: user.id })
+        ? panelActivity(stats, { failures, tokens, alarm, machines, since, local: !!this.config.local, from: `/painel/atividade${query}`, userId: user.id })
         : panelOverview(stats, query)
   }
 </main>`;
@@ -1926,11 +1929,11 @@ const FAILURE_KINDS: Record<PanelFailure["kind"], { icon: string; label: string 
  * as colunas de `meta` e o texto no fim, numa linha só com as colunas alinhadas; no celular, o
  * título e o fim em cima e as colunas embaixo. Link quando houver.
  */
-function listItem(o: { icon: string; title: string; meta: string[]; end: string; href?: string }): string {
+function listItem(o: { icon: string; title: string; meta: string[]; end: string; href?: string; alert?: boolean }): string {
   const content = `<span class="icon" aria-hidden="true">${o.icon}</span><span class="dash__title" title="${esc(o.title)}">${esc(o.title)}</span><span class="dash__meta">${o.meta
     .map((m) => `<span class="dash__cell" title="${esc(m)}">${esc(m)}</span>`)
     .join("")}</span><span class="avatar-option__end">${esc(o.end)}</span>`;
-  return `<li>${o.href ? `<a class="avatar-option interactive" href="${o.href}">${content}</a>` : `<div class="avatar-option avatar-option--static">${content}</div>`}</li>`;
+  return `<li${o.alert ? ' class="dash__alert"' : ""}>${o.href ? `<a class="avatar-option interactive" href="${o.href}">${content}</a>` : `<div class="avatar-option avatar-option--static">${content}</div>`}</li>`;
 }
 
 /**
@@ -1938,22 +1941,37 @@ function listItem(o: { icon: string; title: string; meta: string[]; end: string;
  * motivo técnico (só o administrador vê; ele não vai para a tela de mais ninguém) e os tokens de
  * API e MCP com o último uso. Cards na largura toda, um embaixo do outro: nada a alinhar.
  */
-function panelActivity(s: PanelStats, o: { failures: PanelFailure[]; tokens: PanelToken[]; alarm: Alarme | null; since: string | null; local: boolean; from: string; userId: number }): string {
+function panelActivity(
+  s: PanelStats,
+  o: { failures: PanelFailure[]; tokens: PanelToken[]; alarm: Alarme | null; machines: Awaited<ReturnType<MaquinasApi["estados"]>>; since: string | null; local: boolean; from: string; userId: number },
+): string {
   const v = s.videos;
   const failed = v.failed + v.audioFailed + v.editFailed + s.projects.exportsFailed;
   const used = o.tokens.filter((t) => t.last_used_at && (!o.since || t.last_used_at >= o.since)).length;
-  const alarm = o.local
-    ? { value: "—", note: "só roda no ar" }
-    : o.alarm?.ligados.length
-      ? { value: "Avisou", note: plural(o.alarm.ligados.length, "serviço parado", "serviços parados") }
+  const now = Date.now();
+  const on = o.machines.filter((m) => "ligada" in m && m.ligada).length;
+  const machines = o.machines.map((m) => {
+    const last = "ultimoPedido" in m && m.ultimoPedido ? `último pedido ${formatDate(new Date(m.ultimoPedido).toISOString())}` : "sem pedido recente";
+    if ("falhou" in m) return listItem({ icon: m.icone, title: m.nome, meta: ["Sem resposta agora"], end: "" });
+    const idle = m.ligada && m.emAndamento === 0;
+    const idleMin = idle && m.ultimoPedido ? Math.floor((now - m.ultimoPedido) / 60_000) : null;
+    const state = !m.ligada ? "Desligada" : m.emAndamento > 0 ? "Ligada, trabalhando" : `Ligada sem trabalho${idleMin !== null ? ` há ${idleMin} min` : ""}`;
+    // Ligada sem trabalho por metade do prazo do alarme: é o caso que gasta à toa.
+    return listItem({ icon: m.icone, title: m.nome, meta: [state], end: last, alert: idle && (idleMin ?? 0) * 60_000 >= LIMITE_MS / 2 });
+  });
+  const stopped = o.alarm?.ligados ?? [];
+  const alarmNote = o.local
+    ? "O alarme só roda no ar."
+    : stopped.length
+      ? `Alarme: desligou ${stopped.map((l) => `${MAQUINAS.find((m) => m.classe === l.classe)?.nome ?? l.classe} em ${formatDate(l.em)}`).join(", ")}, por estar ligada sem uso.`
       : o.alarm?.semPainel
-        ? { value: "Sem acesso", note: "sem leitura do painel" }
-        : { value: "Em dia", note: "nada ligado à toa" };
+        ? ERROS.alarmeSemPainel
+        : "Alarme: nenhuma máquina ligada à toa nas últimas 24 h.";
   const failures = o.failures.map((f) => {
     const kind = FAILURE_KINDS[f.kind];
     // A página do vídeo abre para o administrador; o projeto, só para o dono.
     const href = f.kind === "export" ? (f.user_id === o.userId ? `/canvas/${f.ref}` : undefined) : `/video/${f.ref}?de=${encodeURIComponent(o.from)}`;
-    return listItem({ icon: kind.icon, title: f.title, meta: [kind.label, f.owner ?? "Sem dono", f.reason ?? "Sem motivo registrado"], end: formatDate(f.at), href });
+    return listItem({ icon: kind.icon, title: f.title.trim() || "Sem fala", meta: [kind.label, f.owner ?? "Sem dono", f.reason ?? "Sem motivo registrado"], end: formatDate(f.at), href });
   });
   const tokens = o.tokens.map((t) =>
     listItem({ icon: "key", title: t.name, meta: [t.owner, `criado em ${formatDate(t.created_at)}`], end: t.last_used_at ? `usado em ${formatDate(t.last_used_at)}` : "nunca usado" }),
@@ -1963,8 +1981,13 @@ function panelActivity(s: PanelStats, o: { failures: PanelFailure[]; tokens: Pan
       ${statCard("error", "Falhas no período", count(failed), "em vídeos, áudio, edição e exportações", true)}
       ${statCard("hourglass_top", "Em andamento", count(v.busy), "na fila ou gerando")}
       ${statCard("key", "Agentes ativos", count(used), `de ${plural(o.tokens.length, "token", "tokens")}`)}
-      ${statCard("monitor_heart", "Alarme", alarm.value, alarm.note)}
+      ${statCard("memory", "Máquinas ligadas", count(on), `de ${o.machines.length} agora`)}
     </div>
+    <h2 class="dash__section">Máquinas agora</h2>
+    <section class="viewer__card" aria-label="Máquinas agora">
+      <ul class="dash__list dash__list--machines">${machines.join("")}</ul>
+      <p class="qe-result__note">${esc(alarmNote)}</p>
+    </section>
     <h2 class="dash__section">Últimas falhas</h2>
     <section class="viewer__card" aria-label="Últimas falhas">
       ${failures.length ? `<ul class="dash__list dash__list--failures">${failures.join("")}</ul>` : `<p class="qe-result__note">Nenhuma falha no período.</p>`}

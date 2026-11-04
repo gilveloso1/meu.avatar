@@ -15,6 +15,7 @@
  *
  * Cada fonte falha sozinha: a tela mostra o que veio e avisa do resto. O motivo vai para o log.
  */
+import { MAQUINAS } from "./maquinas";
 import type { Painel } from "./vigia";
 
 /** Preços de 05/10/2026 (developers.cloudflare.com/containers/pricing e /r2/pricing), sem a franquia do plano. */
@@ -31,11 +32,8 @@ export const DIAS_CONTEINER = 30;
 
 const GIB = 1024 ** 3;
 const GB = 1e9;
-const APLICACOES: Record<string, string> = {
-  "meu-avatar-audiofixer": "Áudio",
-  "meu-avatar-exporter": "Exportação",
-  "meu-avatar-renderer": "Animações",
-};
+/** O nome na tela de cada aplicação de contêiner deste site (`meu-avatar-<classe>`). */
+const APLICACOES: Record<string, string> = Object.fromEntries(MAQUINAS.map((m) => [`meu-avatar-${m.classe.toLowerCase()}`, m.nome]));
 
 /** Um valor em dólares ou em créditos do provedor. */
 export interface Valor {

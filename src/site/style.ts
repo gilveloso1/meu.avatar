@@ -952,6 +952,9 @@ a.frame { display: block; }
 .dash__list .avatar-option { display: grid; grid-template-columns: var(--cols); align-items: center; column-gap: 16px; min-height: 56px; text-decoration: none; }
 .dash__list--failures { --cols: 24px minmax(0, 2fr) 112px minmax(0, 120px) minmax(0, 3fr) 88px; }
 .dash__list--tokens { --cols: 24px minmax(0, 1fr) minmax(0, 160px) 160px 136px; }
+.dash__list--machines { --cols: 24px minmax(0, 200px) minmax(0, 1fr) 160px; }
+/* A máquina ligada sem trabalho há muito tempo (a que gasta à toa): ícone e estado na cor de erro. */
+.dash__list .dash__alert .avatar-option > .icon, .dash__list .dash__alert .dash__cell { color: var(--md-sys-color-error); }
 .dash__list .avatar-option > .icon { color: var(--md-sys-color-on-surface-variant); }
 .dash__title, .dash__cell { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash__title { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface); }

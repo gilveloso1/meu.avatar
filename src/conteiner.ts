@@ -92,6 +92,12 @@ export abstract class SleepyContainer extends Container {
     return "parado";
   }
 
+  /** Como a máquina está agora, para o painel (src/maquinas.ts). Só lê: não liga o contêiner. */
+  async estado(): Promise<{ ligada: boolean; emAndamento: number; ultimoPedido: number | null }> {
+    const self = this as unknown as Internals;
+    return { ligada: !!this.ctx.container?.running, emAndamento: self.inflightRequests ?? 0, ultimoPedido: this.lastRequestAt || null };
+  }
+
   /** Prazo vencido: SIGTERM; se na volta seguinte ainda estiver ligado, SIGKILL. */
   override async onActivityExpired(): Promise<void> {
     if (!this.ctx.container?.running) return;

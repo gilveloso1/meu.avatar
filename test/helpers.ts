@@ -406,7 +406,8 @@ export class FakeHeyGenApi implements HeyGenApi {
 }
 
 export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null, exporter: ExportApi | null = null, transcriber: Transcriber | null = null, renderer: RenderApi | null = null): Promise<Response> {
-  return handle(request, { ...env, SITE_URL: SITE }, { api, audio, heygen, exporter, transcriber, renderer });
+  // As máquinas do painel não rodam nos testes (sem contêiner): quem testa o estado delas passa um falso.
+  return handle(request, { ...env, SITE_URL: SITE }, { api, audio, heygen, exporter, transcriber, renderer, machines: null });
 }
 
 export function form(fields: Record<string, string | File>): FormData {
