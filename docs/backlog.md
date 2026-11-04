@@ -317,6 +317,11 @@ próprio admin, hoje o caminho é apagar a conta no D1 e cadastrar de novo
 
 ## Pendências pequenas
 
+- **Alarme de contêiner ligado sem trabalho** (`src/vigia.ts`): pronto, falta criar o token de
+  leitura (`CLOUDFLARE_ANALYTICS_TOKEN`, ver "Contêiner que dorme de verdade" em
+  [operacao.md](operacao.md)) e publicar. Depois, conferir nos logs uma rodada sem aviso e que
+  a página Modelos do administrador não mostra o alarme sem acesso.
+
 - **Canvas**: o "Seus vídeos" da tela só lista vídeos gerados; os ativos de avatar entram pela
   API e aparecem na prévia, mas a tela ainda não tem onde escolhê-los.
 - **Canvas**: velocidade e enquadramento ainda não têm campos nos Ajustes (só pela API, a prévia

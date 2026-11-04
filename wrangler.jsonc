@@ -8,7 +8,8 @@
   // caso o aviso (webhook) não chegue, e manda ao contêiner o próximo áudio a
   // tratar e a próxima edição rápida. Rodadas podem se sobrepor (uma edição
   // leva ~1 min): cada vídeo sai da fila numa instrução só do banco, e o
-  // contêiner faz um vídeo por vez.
+  // contêiner faz um vídeo por vez. A cada 15 min, também o alarme de contêiner ligado sem
+  // trabalho (src/vigia.ts).
   "triggers": { "crons": ["* * * * *"] },
   // O estúdio no domínio próprio (zona meuavatar.ia.br na mesma conta). O www
   // redireciona para o endereço sem www (src/index.ts). O workers.dev continua
@@ -59,6 +60,9 @@
     // Endereço público do Worker (sem barra no fim): o OpenRouter manda o aviso
     // para SITE_URL/openrouter/webhook e baixa a foto do avatar de SITE_URL/midia/...
     "SITE_URL": "https://meuavatar.ia.br",
+    // A conta dos contêineres (a mesma do registro, acima): o alarme de contêiner ligado sem
+    // trabalho lê o painel dela (src/vigia.ts) com o segredo CLOUDFLARE_ANALYTICS_TOKEN.
+    "CLOUDFLARE_ACCOUNT_ID": "89fd8860072dca2486e51cd4ad292f43",
     // Padrões do formulário do Wan. O modelo de cada estrutura fica em
     // src/structures/; os valores aceitos vêm do próprio modelo
     // (GET https://openrouter.ai/api/v1/videos/models).

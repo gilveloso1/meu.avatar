@@ -1,14 +1,15 @@
-import { type AudioApi, ContainerAudio } from "./audio";
+import { type AudioApi, type AudioFixer, ContainerAudio } from "./audio";
 import { Accounts } from "./auth";
 import { Db } from "./db";
-import { ContainerExport, type ExportApi, Exports } from "./exportar";
+import { ContainerExport, type ExportApi, type Exporter, Exports } from "./exportar";
 import { HeyGenClient, type HeyGenApi } from "./heygen";
 import type { Env } from "./env";
 import { OpenRouterVideo, verifySignature, type VideoApi } from "./openrouter";
 import { Site } from "./site/site";
-import { ContainerRender, type RenderApi } from "./render";
+import { ContainerRender, type RenderApi, type Renderer } from "./render";
 import { Studio } from "./studio";
 import { type Transcriber, WorkersAiTranscriber } from "./transcricao";
+import { Painel, type Vigiado, vigiar } from "./vigia";
 
 export { AudioFixer } from "./audio";
 export { Exporter } from "./exportar";
@@ -109,11 +110,30 @@ export async function handle(request: Request, env: Env, deps: Deps = {}): Promi
   return createSite(env, studio, createExports(env, deps)).handle(request);
 }
 
+/** O alarme de contêiner ligado sem trabalho (src/vigia.ts): o painel da Cloudflare e o que o site sabe de cada um. */
+export function vigiaConteineres(env: Env, doFetch: typeof fetch = fetch) {
+  const db = new Db(env.DB);
+  const parar = (ns: DurableObjectNamespace<AudioFixer | Exporter | Renderer> | undefined, nome: string) => (limiteMs: number) =>
+    ns ? ns.getByName(nome).pararSeOcioso(limiteMs) : Promise.resolve("parado" as const);
+  const vigiados: Vigiado[] = [
+    { classe: "AudioFixer", trabalhoNoBanco: () => db.audioWorking(), pararSeOcioso: parar(env.AUDIO, "audio") },
+    { classe: "Exporter", trabalhoNoBanco: () => db.exportWorking(), pararSeOcioso: parar(env.EXPORTAR, "exportar") },
+    { classe: "Renderer", trabalhoNoBanco: async () => false, pararSeOcioso: parar(env.RENDER, "render") },
+  ];
+  const painel = env.CLOUDFLARE_ANALYTICS_TOKEN && env.CLOUDFLARE_ACCOUNT_ID ? new Painel(env.CLOUDFLARE_ANALYTICS_TOKEN, env.CLOUDFLARE_ACCOUNT_ID, doFetch) : null;
+  return () => vigiar(painel, vigiados, db);
+}
+
 export default {
   fetch: (request, env) => handle(request, env),
 
   // Rede de segurança: confere os vídeos que ainda estão na fila, caso o aviso se perca.
-  async scheduled(_controller, env): Promise<void> {
+  async scheduled(controller, env): Promise<void> {
+    // A cada 15 min, fora do computador: contêiner ligado sem trabalho (src/vigia.ts). Antes do
+    // resto, para um erro lá adiante não calar o alarme.
+    if (env.AMBIENTE !== "local" && new Date(controller.scheduledTime).getUTCMinutes() % 15 === 0) {
+      await vigiaConteineres(env)().catch((err) => console.error("Alarme de contêiner falhou", err));
+    }
     const studio = createStudio(env);
     // A troca de avatar pelo Aleph 2 prepara um vídeo e o envia; depois, os da fila.
     await studio.prepareNext();

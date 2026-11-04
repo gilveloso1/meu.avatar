@@ -28,6 +28,7 @@ import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, R
 import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { temSom } from "../som";
+import { type Alarme, CHAVE as ALARME } from "../vigia";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_ANIMACAO, CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { MAX_VERSOES } from "../canvas/modelo.js";
@@ -486,8 +487,12 @@ ${error ? snackbar(error) : ""}`;
         ],
       });
     });
+    // Só o administrador vê o alarme de contêiner ligado sem trabalho (src/vigia.ts).
+    const alarm = user.role === "admin" && !this.config.local ? await this.db.alarm<Alarme>(ALARME) : null;
+    const banners = [...(alarm?.ligados.length ? [ERROS.servicoLigado] : []), ...(alarm?.semPainel ? [ERROS.alarmeSemPainel] : [])];
     const body = `
 <main class="page" id="conteudo">
+  ${banners.map((b) => `<p class="banner" role="status"><span class="icon">error</span>${esc(b)}</p>`).join("")}
   ${pageHead("Modelos", cards.length, "Escolha um modelo para criar imagens ou vídeos.")}
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : emptyState("search", "Nenhum modelo encontrado", `Nada com “${q}” no nome.`)}
 </main>`;

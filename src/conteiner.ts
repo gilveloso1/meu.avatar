@@ -1,5 +1,5 @@
 /**
- * Base dos contêineres do site (AudioFixer e Exporter). Em out/2026 os dois do
+ * Base dos contêineres do site (AudioFixer, Exporter e Renderer). Em out/2026 os dois do
  * Exporter (8 GiB cada) e o AudioFixer ficaram ligados dia e noite sem trabalho, por
  * dois motivos que esta base cobre:
  *
@@ -77,6 +77,19 @@ export abstract class SleepyContainer extends Container {
     console.error(`Contêiner com ${self.inflightRequests} pedido(s) sem fim há mais de ${this.maxRequestMs / 60_000} min: desligando.`);
     self.inflightRequests = 0;
     self.sleepAfterMs = Date.now();
+  }
+
+  /**
+   * O alarme (src/vigia.ts) achou o contêiner com memória alocada há mais de `limiteMs` sem
+   * trabalho no banco. Se aqui também não houve pedido nesse tempo, para à força (SIGKILL): o
+   * SIGTERM do alarme da biblioteca já não bastou.
+   */
+  async pararSeOcioso(limiteMs: number): Promise<"trabalhando" | "parado"> {
+    const self = this as unknown as Internals;
+    const now = Date.now();
+    if (now - this.lastRequestAt < limiteMs || (self.inflightRequests > 0 && !abandoned(self.inflightRequests, this.lastRequestAt, now, this.maxRequestMs))) return "trabalhando";
+    if (this.ctx.container?.running) await this.destroy();
+    return "parado";
   }
 
   /** Prazo vencido: SIGTERM; se na volta seguinte ainda estiver ligado, SIGKILL. */
