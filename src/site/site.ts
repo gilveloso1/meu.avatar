@@ -479,7 +479,7 @@ ${error ? snackbar(error) : ""}`;
     const body = `
 <main class="page" id="conteudo">
   <nav class="chip-set library__tools" aria-label="Período">${chips}</nav>
-  <div class="panel-grid">${panelCards(stats).join("")}</div>
+  ${panelCards(stats)}
 </main>`;
     return html(page(`Painel · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Painel" } }));
   }
@@ -1771,46 +1771,57 @@ function money(n: number): string {
   return `US$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** Os cards do painel: gasto por modelo, vídeos, projetos e contas. */
-function panelCards(s: PanelStats): string[] {
+/**
+ * O painel no layout de feed do M3, na grade de 12 colunas (8 no médio, 4 no compacto): primeiro os
+ * quatro números principais, grandes; depois o gasto por modelo (2/3) e as falhas (1/3).
+ */
+function panelCards(s: PanelStats): string {
   const n = (x: number) => x.toLocaleString("pt-BR");
+  const plural = (x: number, one: string, many: string) => (x === 1 ? `1 ${one}` : `${n(x)} ${many}`);
   const total = s.models.reduce((sum, m) => sum + m.cost, 0);
-  const spend = [
-    { icon: "payments", term: "Total", value: money(total) },
-    ...s.models.map((m) => {
-      const found = structureById(m.structure);
-      return { icon: found?.icon ?? "movie", term: found?.name ?? (m.structure || "Sem modelo"), value: `${money(m.cost)} · ${m.videos === 1 ? "1 vídeo" : `${n(m.videos)} vídeos`}` };
-    }),
-  ];
   const v = s.videos;
-  return [
-    detailsCard("Gasto em vídeos", spend),
-    detailsCard("Vídeos", [
-      { icon: "movie", term: "Pedidos", value: n(v.total) },
-      { icon: "check_circle", term: "Prontos", value: n(v.done) },
-      { icon: "error", term: "Com falha", value: n(v.failed) },
-      { icon: "hourglass_top", term: "Em andamento", value: n(v.busy) },
-      { icon: "schedule", term: "Minutos prontos", value: (v.seconds / 60).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) },
-      { icon: "graphic_eq", term: "Áudio com falha", value: n(v.audioFailed) },
-      { icon: "content_cut", term: "Edição rápida com falha", value: n(v.editFailed) },
-    ]),
-    detailsCard("Projetos", [
-      { icon: "folder_open", term: "Criados", value: n(s.projects.created) },
-      { icon: "download", term: "Exportações", value: n(s.projects.exports) },
-      { icon: "error", term: "Exportações com falha", value: n(s.projects.exportsFailed) },
-    ]),
-    detailsCard("Contas", [
-      { icon: "person", term: "Pessoas", value: n(s.accounts.users) },
-      { icon: "face", term: "Avatares", value: n(s.accounts.avatars) },
-      { icon: "photo_library", term: "Ativos", value: n(s.accounts.assets) },
-    ]),
+  const minutes = (v.seconds / 60).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  const stat = (icon: string, label: string, value: string, supporting: string) => `<section class="stat-card">
+      <p class="stat-card__label"><span class="icon" aria-hidden="true">${icon}</span>${esc(label)}</p>
+      <p class="stat-card__value">${esc(value)}</p>
+      <p class="stat-card__supporting">${esc(supporting)}</p>
+    </section>`;
+  const models = s.models.map((m) => {
+    const found = structureById(m.structure);
+    const share = total > 0 ? m.cost / total : 0;
+    return `<li class="share-list__item">
+        <span class="icon" aria-hidden="true">${found?.icon ?? "movie"}</span>
+        <div class="share-list__text">
+          <p class="share-list__headline">${esc(found?.name ?? (m.structure || "Sem modelo"))}</p>
+          <p class="share-list__supporting">${plural(m.videos, "vídeo", "vídeos")} · ${Math.round(share * 100)}%</p>
+          <div class="linear-progress linear-progress--determinate" style="--progress:${share.toFixed(3)}" role="progressbar" aria-label="Parte do gasto" aria-valuenow="${Math.round(share * 100)}" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <span class="share-list__value">${money(m.cost)}</span>
+      </li>`;
+  });
+  const failures = [
+    { icon: "movie", term: "Vídeos", value: n(v.failed) },
+    { icon: "graphic_eq", term: "Áudio", value: n(v.audioFailed) },
+    { icon: "content_cut", term: "Edição rápida", value: n(v.editFailed) },
+    { icon: "download", term: "Exportações", value: n(s.projects.exportsFailed) },
   ];
+  return `<div class="dash">
+    ${stat("payments", "Gasto em vídeos", money(total), `em ${plural(v.total, "vídeo pedido", "vídeos pedidos")}`)}
+    ${stat("check_circle", "Vídeos prontos", n(v.done), `${minutes} min · ${n(v.busy)} em andamento`)}
+    ${stat("folder_open", "Exportações", n(s.projects.exports), `de ${plural(s.projects.created, "projeto novo", "projetos novos")}`)}
+    ${stat("person", "Pessoas", n(s.accounts.users), `${plural(s.accounts.avatars, "avatar", "avatares")} · ${plural(s.accounts.assets, "ativo", "ativos")}`)}
+    <section class="viewer__card dash__wide" aria-labelledby="card-gasto">
+      <h2 class="qe-result__title" id="card-gasto">Gasto por modelo</h2>
+      ${models.length ? `<ul class="share-list">${models.join("")}</ul>` : `<p class="qe-result__note">Nenhum vídeo no período.</p>`}
+    </section>
+    ${detailsCard("Falhas", failures, "dash__side")}
+  </div>`;
 }
 
 /** O card de linhas (ícone, rótulo, valor): os Detalhes do vídeo e do ativo e os cards do painel. */
-function detailsCard(title: string, rows: { icon: string; term: string; value: string }[]): string {
+function detailsCard(title: string, rows: { icon: string; term: string; value: string }[], cls = ""): string {
   const id = `card-${title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
-  return `<section class="viewer__card viewer__details" aria-labelledby="${id}">
+  return `<section class="viewer__card viewer__details${cls ? ` ${cls}` : ""}" aria-labelledby="${id}">
             <h2 class="qe-result__title" id="${id}">${esc(title)}</h2>
             <dl>${rows.map((d) => `<div class="qe-result__row"><span class="icon" aria-hidden="true">${d.icon}</span><dt class="qe-result__label">${esc(d.term)}</dt><dd class="qe-result__value">${esc(d.value)}</dd></div>`).join("")}</dl>
           </section>`;
