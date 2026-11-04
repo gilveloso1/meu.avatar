@@ -827,7 +827,7 @@ describe("rascunho", () => {
 });
 
 describe("animação em código", () => {
-  type Bloco = { id: string; kind: string; src: string; name: string; tin: number; tout: number; dur: number; code?: { html: string } };
+  type Bloco = { id: string; kind: string; src: string; name: string; tin: number; tout: number; dur: number; code?: { html: string; params?: Record<string, unknown> } };
   type Vista = { revisao: number; criados: string[]; grupos: { id: string; blocos: { id: string; tipo: string; camada: string; inicio: number; fim: number }[] }[]; canvas: { blocks: Bloco[] } };
   const lote = async (id: string, revisao: number, lista: unknown[]) => (await comandos(id, revisao, lista)).json<Vista>();
   const CENA = `<div id="t">Oi</div><script>tl.from("#t", { opacity: 0, duration: 0.5 }, 0.2);</script>`;
@@ -918,6 +918,39 @@ describe("animação em código", () => {
     const fake = new FakeRenderApi();
     expect((await api(`/api/v1/projetos/${id}/animacao?bloco=${r.criados[0]}`, membro, undefined, null, null, fake)).status).toBe(404);
     expect(fake.inspections).toHaveLength(0);
+  });
+
+  it("parâmetros: o template guarda os valores, editarCodigo troca e tira, e chave ruim é recusada", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [{ tipo: "adicionar", html: "<b>{{nome}}</b>", duracao: 2, parametros: { nome: "Ana", preco: 49 } }]);
+    const cena = r.criados[0]!;
+    const t = await lote(id, r.revisao, [{ tipo: "editarCodigo", bloco: cena, parametros: { nome: "Bia", preco: null, cor: "#ff3d7f" } }]);
+    expect(t.canvas.blocks[0]!.code).toEqual({ html: "<b>{{nome}}</b>", params: { nome: "Bia", cor: "#ff3d7f" } });
+    const v = await (await api(`/api/v1/projetos/${id}?incluir=codigo`, admin)).json<{ codigo: { parametros: unknown }[] }>();
+    expect(v.codigo[0]!.parametros).toEqual({ nome: "Bia", cor: "#ff3d7f" });
+    expect(await (await comandos(id, t.revisao, [{ tipo: "editarCodigo", bloco: cena, parametros: { "1x": "a" } }])).json()).toEqual({ erro: "parametros_invalidos", comando: 0, parametro: "1x" });
+    expect(await (await comandos(id, t.revisao, [{ tipo: "editarCodigo", bloco: cena, parametros: { nome: { a: 1 } } }])).json()).toEqual({ erro: "parametros_invalidos", comando: 0, parametro: "nome" });
+  });
+
+  it("outro valor de parâmetro faz outro vídeo na exportação; o mesmo valor reaproveita", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" }, { tipo: "adicionar", html: "<b>{{nome}}</b>", duracao: 2, sobre: "@a", em: 0, parametros: { nome: "Ana" } }]);
+    const fake = new FakeExportApi();
+    const render = new FakeRenderApi();
+    const exportar = async () => {
+      let e = await (await api(`/projetos/${id}/exportar`, admin, { final: "final" }, fake, null, render)).json<{ id: string; status: string }>();
+      for (let i = 0; i < 6 && e.status !== "done"; i++) e = await (await api(`/projetos/${id}/exportacoes/${e.id}`, admin, {}, fake, null, render)).json();
+    };
+    await exportar();
+    expect(render.calls[0]!.html).toContain("<b>Ana</b>");
+    const t = await lote(id, r.revisao, [{ tipo: "editarCodigo", bloco: r.criados[1], parametros: { nome: "Bia" } }]);
+    await exportar();
+    expect(render.calls).toHaveLength(2);
+    expect(render.calls[1]!.html).toContain("<b>Bia</b>");
+    await lote(id, t.revisao, [{ tipo: "editarCodigo", bloco: r.criados[1], parametros: { nome: "Ana" } }]);
+    await exportar();
+    expect(render.calls).toHaveLength(2);
   });
 
   it("a exportação faz o vídeo da animação uma vez só, no tamanho do Final, e põe por cima como vídeo sem som", async () => {

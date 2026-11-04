@@ -6,7 +6,7 @@ export interface ExportWork {
   trechos: { duracao: number; itens: ExportItem[] }[];
   versoes: { nome: string; trechos: number[] }[];
 }
-export interface Block { id: string; kind: "video" | "image" | "audio"; name: string; src: string; dur: number; tin: number; tout: number; x: number; y: number; mute: boolean; vol: number; tone: number; audio?: string; speed?: number; frame?: Frame; draft?: { fala: string }; code?: { html: string } }
+export interface Block { id: string; kind: "video" | "image" | "audio"; name: string; src: string; dur: number; tin: number; tout: number; x: number; y: number; mute: boolean; vol: number; tone: number; audio?: string; speed?: number; frame?: Frame; draft?: { fala: string }; code?: { html: string; params?: Record<string, string | number> } }
 export interface FrameKey { t: number; z: number; x: number; y: number }
 export interface Frame { fit?: "cover" | "contain" | "blur"; flipH?: boolean; flipV?: boolean; rotate?: number; crop?: { l: number; t: number; r: number; b: number }; keys?: FrameKey[] }
 export interface CanvasFinal { id: string; x: number; y: number; resolution?: string; format?: string; speed?: number }
@@ -35,6 +35,7 @@ export function output(final: CanvasFinal): { resolution: string; format: string
 export function width(b: Block): number;
 export function len(b: Block): number;
 export function maxEnd(b: Block): number;
+export function codeHtml(code: { html: string; params?: Record<string, string | number> }): string;
 export function sounds(b: Block): boolean;
 export function finalRate(final?: CanvasFinal): number;
 export function split(project: CanvasProject, id: string, at: number): { project: CanvasProject; id: string };

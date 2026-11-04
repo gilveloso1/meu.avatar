@@ -45,7 +45,7 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Animação como código* (desenho de 02/11/2026; o PR 1, o bloco com a prévia, está feito): o projeto guarda o
+   - *Animação como código* (desenho de 02/11/2026; os cinco PRs estão feitos): o projeto guarda o
      código da animação, não o WebM pronto, e só renderiza o vídeo na exportação. Cobre a camada
      que acompanha o bloco, a prévia sem salvar, ler o HTML para editar e é a base dos templates
      com parâmetros. Desenho abaixo, em "Animação como código".
@@ -108,11 +108,9 @@ Feito: o bloco de código no modelo e na API (`adicionar {html, duracao}`, `edit
 `incluir: codigo`), com a prévia no canvas ([canvas.md](canvas.md)), e o `inspecionar_animacao`:
 o agente vê o resultado em texto (a geometria do DOM em cada instante, com os problemas que no
 exemplo de 8 s só se viram por imagem) e pede os quadros só quando o texto não basta
-([api.md](api.md)), o render na exportação, guardado pelo hash ([canvas.md](canvas.md)), e a legenda do `legendar`
-como animação em código. O `renderizar_html` fica para quem precisa do arquivo.
-Faltam, nesta ordem, um PR de cada vez:
-
-1. Parâmetros no bloco, base dos templates de layout.
+([api.md](api.md)), o render na exportação, guardado pelo hash ([canvas.md](canvas.md)), a legenda do `legendar`
+como animação em código e os parâmetros no bloco (`parametros`, campos nos Ajustes), base dos
+templates de layout. O `renderizar_html` fica para quem precisa do arquivo.
 
 ## Recriar um vídeo de referência com outra personagem (29/10/2026)
 

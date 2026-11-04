@@ -5,8 +5,9 @@
  * Projeto: { blocks, finals, edges }
  *   bloco: { id, kind: "video" | "image" | "audio", name, src, dur, tin, tout,
  *     draft? ({ fala }: o rascunho, uma imagem sem arquivo no lugar de um vídeo que falta),
- *     code? ({ html }: a animação em código, uma imagem sem arquivo que o navegador roda na
- *            prévia; o tempo do bloco é o da linha do tempo `tl` dela, até CODE_MAX),
+ *     code? ({ html, params }: a animação em código, uma imagem sem arquivo que o navegador roda na
+ *            prévia; o tempo do bloco é o da linha do tempo `tl` dela, até CODE_MAX; params, os
+ *            valores que o código usa, ver codeHtml()),
  *            x, y, mute, vol, tone, audio, speed, frame }   (dur: duração do
  *            arquivo; tin/tout: o corte; tone: 1 a TONES, o tom da cor do tipo;
  *            audio, só no vídeo: "linked" (o som dele numa faixa presa embaixo,
@@ -85,6 +86,21 @@ export const SPEED_MAX = 4;
 /** O tempo do bloco na tela: o trecho do arquivo, na velocidade dele. */
 export const len = (b) => (b.tout - b.tin) / (b.speed ?? 1);
 export const width = (b) => len(b) * PX;
+/**
+ * O código que roda, com os parâmetros: {{nome}} fora dos scripts vira o valor (escapado), e os
+ * scripts leem o objeto params. Mudar um valor muda o código, e a exportação renderiza de novo.
+ */
+export function codeHtml(code) {
+  // Sem parâmetros, o código vai como foi guardado (e o vídeo já feito continua valendo).
+  if (!code.params || !Object.keys(code.params).length) return code.html;
+  const params = code.params;
+  const escapa = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  // Só fora dos <script>: dentro deles, o valor vem de params, já com o tipo certo.
+  const partes = code.html.split(/(<script\b[\s\S]*?<\/script>)/i);
+  const html = partes.map((p, i) => (i % 2 ? p : p.replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (m, k) => (k in params ? escapa(params[k]) : m)))).join("");
+  return `<script>var params = ${JSON.stringify(params).replace(/</g, "\\u003c")};</script>\n${html}`;
+}
+
 /** Até onde o bloco pode ir no arquivo: a imagem fica até IMAGE_MAX, a animação até a duração dela. */
 export const maxEnd = (b) => (b.kind === "image" && !b.code ? IMAGE_MAX : b.dur);
 export const linked = (b) => b.kind === "video" && (b.audio ?? "linked") === "linked";
@@ -358,7 +374,7 @@ export function exportWork(project, finalId, pick) {
           corte: +i.tin.toFixed(3),
           volume: sounds(i.block) ? i.block.vol : 0,
           velocidade: +i.speed.toFixed(4),
-          ...(i.block.code ? { codigo: i.block.code.html } : {}),
+          ...(i.block.code ? { codigo: codeHtml(i.block.code) } : {}),
           ...(i.block.frame && i.block.kind !== "audio" ? { quadro: { ...i.block.frame, ...(i.block.frame.keys ? { keys: i.block.frame.keys.map((k) => ({ ...k, t: k.t / i.rate })) } : {}) } } : {}),
         })),
       });

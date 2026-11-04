@@ -38,7 +38,9 @@ menos custo.
   (`src/exportar.ts`, um passo antes dos trechos), no tamanho e na duração do Final, guardado em
   `animacoes/<hash>.webm` pelo código, pelo tamanho e pela duração: a mesma animação não
   renderiza duas vezes, nem entre exportações, e só renderiza a que um trecho ainda por fazer
-  usa. No trecho, ela entra como qualquer vídeo transparente sem som.
+  usa. No trecho, ela entra como qualquer vídeo transparente sem som. Os parâmetros (`code.params`,
+  [api.md](api.md)) aparecem nos Ajustes, um campo de texto por chave: trocar o valor muda a
+  prévia e faz outro vídeo na próxima exportação, sem mexer no código.
 - **Juntar**: blocos encostados lado a lado formam uma sequência fixa (corte
   seco), como numa linha do tempo. Juntos, viram um grupo.
 - **Sobrepor**: um bloco em cima de outro cobre a imagem dele naquele trecho,

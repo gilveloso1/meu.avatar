@@ -186,7 +186,7 @@ export class Api {
       atualizado: project.updated_at,
       ...resumo(data),
       ...(files ? { arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })) } : {}),
-      ...(incluir.includes("codigo") ? { codigo: data.blocks.filter((b) => b.code).map((b) => ({ bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), html: b.code!.html })) } : {}),
+      ...(incluir.includes("codigo") ? { codigo: data.blocks.filter((b) => b.code).map((b) => ({ bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), html: b.code!.html, ...(b.code!.params ? { parametros: b.code!.params } : {}) })) } : {}),
       ...(incluir.includes("canvas") ? { canvas: data } : {}),
     };
   }
