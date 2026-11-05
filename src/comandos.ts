@@ -3,7 +3,7 @@
  * vídeo depois daquele"), não a geometria do canvas. Tudo passa pelo mesmo modelo da tela
  * (src/canvas/modelo.js), com as mesmas regras. Um lote vale inteiro ou não vale nada.
  */
-import { arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, linkFirst, linkProblem, maxEnd, MIN_LEN, newId, nextTone, PX, relay, removeItems, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
+import { arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, linkFirst, linkProblem, links, maxEnd, MIN_LEN, newId, nextTone, PX, relay, removeItems, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
 import type { Block, CanvasProject, Frame, FrameKey, Group } from "./canvas/modelo.js";
 import { PAUSES, planParts, RULES } from "./quickedit";
 
@@ -212,7 +212,14 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
         const para = texto(c.para);
         const problema = de && para ? linkProblem(project, de, para) : "missing";
         if (problema) throw falha({ missing: "bloco_inexistente", same: "ligacao_mesmo_grupo", repeated: "ligacao_repetida", cycle: "ligacao_ciclo", limit: "limite_variacoes" }[problema] ?? problema);
-        project = { ...project, edges: [...project.edges, { id: newId("e"), from: de!, to: para! }] };
+        // Encadear a partir de um grupo que é a única entrada de um Final (a ligação automática do primeiro bloco): ela sai,
+        // senão esse grupo sairia sozinho como mais uma variação. A última cena se liga ao Final depois.
+        const gs = groups(project);
+        const ls = links(project, gs);
+        const origem = groupIndex(gs).get(de!);
+        const sozinha = project.finals.some((f) => f.id === para) ? [] : ls.filter((l) => l.from === origem && typeof l.to === "string" && ls.filter((o) => o.to === l.to).length === 1);
+        const tirar = new Set(sozinha.map((l) => l.edge.id));
+        project = { ...project, edges: [...project.edges.filter((e) => !tirar.has(e.id)), { id: newId("e"), from: de!, to: para! }] };
         break;
       }
       case "remover": {

@@ -311,6 +311,32 @@ describe("comandos", () => {
     expect(b.mudou.finais[0].variacoes).toEqual([{ nome: "Variação 1", grupos: [c1, c2], duracao: 4 }]);
   });
 
+  it("encadear cenas num lote só: a ligação automática sai, e tirar a primeira fala de uma cena não desfaz as ligações", async () => {
+    const { id, revisao } = await novo();
+    const cru = (rev: number, lista: unknown[]) => api(`/api/v1/projetos/${id}/comandos`, admin, { revisao: rev, comandos: lista }).then((r) => r.json<Record<string, any>>());
+    const a = await cru(revisao, [
+      { tipo: "rascunho", fala: "1.1", duracao: 2, rotulo: "c1" },
+      { tipo: "rascunho", fala: "2.1", duracao: 2, rotulo: "c2" },
+      { tipo: "rascunho", fala: "3.1", duracao: 2, rotulo: "c3" },
+      { tipo: "rascunho", fala: "3.2", duracao: 3, depois: "@c3" },
+      { tipo: "ligar", de: "@c1", para: "@c2" },
+      { tipo: "ligar", de: "@c2", para: "@c3" },
+      { tipo: "ligar", de: "@c3", para: "final" },
+    ]);
+    const [c1, c2, c3, c32] = a.criados as [string, string, string, string];
+    expect(a.mudou.finais[0].variacoes).toEqual([{ nome: "Variação 1", grupos: [c1, c2, c3], duracao: 9 }]);
+
+    // A 3.1 era o primeiro bloco da cena 3: o grupo passa a ter o id da 3.2 e as ligações vão junto.
+    const b = await cru(a.revisao, [{ tipo: "remover", ids: [c3], fechar: true }]);
+    expect(b.mudou.finais[0].variacoes).toEqual([{ nome: "Variação 1", grupos: [c1, c2, c32], duracao: 7 }]);
+    expect(b.mudou.removidos).toEqual({ blocos: [c3], grupos: [c3] });
+
+    // Sem nenhum grupo chegando ao Final, o aviso diz.
+    const ultima = (await (await api(`/api/v1/projetos/${id}`, admin)).json<{ ligacoes: { id: string; para: string }[] }>()).ligacoes.find((l) => l.para === "final")!;
+    const c = await cru(b.revisao, [{ tipo: "remover", ids: [ultima.id] }]);
+    expect(c.mudou.avisos).toContainEqual({ tipo: "final_sem_variacao", final: "final" });
+  });
+
   it("revisão velha: 409 com o projeto como está agora, e nada é escrito", async () => {
     const { id, revisao } = await novo();
     const feito = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }])).json<{ criados: string[] }>();

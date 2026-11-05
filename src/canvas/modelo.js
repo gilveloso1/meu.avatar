@@ -846,9 +846,19 @@ export function linkFirst(project, b) {
 export function removeItems(project, ids) {
   const p = clone(project);
   const s = new Set(ids);
+  // A ligação é do grupo, mas guarda o id de um bloco dele: se esse bloco sai e o grupo fica, ela passa a outro do grupo.
+  const idx = groupIndex(groups(project));
+  const fica = (id) => {
+    if (!s.has(id)) return id;
+    const g = idx.get(id);
+    return g ? members(g).find((b) => !s.has(b.id))?.id : undefined;
+  };
   p.blocks = p.blocks.filter((b) => !s.has(b.id));
   p.finals = p.finals.filter((f) => !s.has(f.id));
-  p.edges = p.edges.filter((e) => !s.has(e.id) && !s.has(e.from) && !s.has(e.to));
+  p.edges = p.edges
+    .filter((e) => !s.has(e.id))
+    .map((e) => ({ ...e, from: fica(e.from), to: fica(e.to) }))
+    .filter((e) => e.from && e.to);
   return p;
 }
 

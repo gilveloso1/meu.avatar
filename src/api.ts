@@ -109,6 +109,8 @@ function resumo(data: CanvasProject) {
     avisos: [
       ...gs.filter((g) => g.blocks.length).flatMap((g) => baseGaps(g).map(([de, ate]) => ({ tipo: "sem_video_de_base", grupo: g.id, de, ate, segundos: +(ate! - de!).toFixed(3) }))),
       ...data.blocks.filter((b) => b.draft).map((b) => ({ tipo: "rascunho", bloco: b.id, fala: b.draft!.fala, segundos: +(b.tout - b.tin).toFixed(3) })),
+      // Um Final a que nenhum grupo chega não exporta nada (falta ligar a última cena a ele).
+      ...(gs.length ? data.finals.filter((f) => !versions(data, f.id).length).map((f) => ({ tipo: "final_sem_variacao", final: f.id })) : []),
     ],
   };
 }
