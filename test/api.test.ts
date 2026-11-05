@@ -329,12 +329,22 @@ describe("comandos", () => {
     // A 3.1 era o primeiro bloco da cena 3: o grupo passa a ter o id da 3.2 e as ligações vão junto.
     const b = await cru(a.revisao, [{ tipo: "remover", ids: [c3], fechar: true }]);
     expect(b.mudou.finais[0].variacoes).toEqual([{ nome: "Variação 1", grupos: [c1, c2, c32], duracao: 7 }]);
-    expect(b.mudou.removidos).toEqual({ blocos: [c3], grupos: [c3] });
+    expect(b.mudou.removidos).toEqual({ blocos: [c3] });
+    expect(b.mudou.gruposComIdNovo).toEqual([{ de: c3, para: c32 }]);
+    // O grupo é o mesmo: a 3.2 só andou para o começo, e a ligação ao Final não volta como nova.
+    expect(b.mudou.grupos).toEqual([{ id: c32, nome: expect.any(String), duracao: 3, andaram: [{ de: c32, ate: c32, segundos: -2 }] }]);
+    expect(b.mudou).not.toHaveProperty("ligacoes");
 
     // Sem nenhum grupo chegando ao Final, o aviso diz.
     const ultima = (await (await api(`/api/v1/projetos/${id}`, admin)).json<{ ligacoes: { id: string; para: string }[] }>()).ligacoes.find((l) => l.para === "final")!;
     const c = await cru(b.revisao, [{ tipo: "remover", ids: [ultima.id] }]);
     expect(c.mudou.avisos).toContainEqual({ tipo: "final_sem_variacao", final: "final" });
+
+    // Nome do grupo e duração do rascunho direto; o aviso do rascunho vem uma vez, com a duração nova.
+    const d = await cru(c.revisao, [{ tipo: "renomear", grupo: c32, nome: "Cena 3" }, { tipo: "cortar", bloco: c1, duracao: 3 }]);
+    expect(d.mudou.grupos.map((g: { nome: string }) => g.nome)).toEqual([expect.any(String), "Cena 3"]);
+    expect(d.mudou.avisos).toEqual([{ tipo: "rascunho", bloco: c1, segundos: 3 }]);
+    expect(d.mudou).not.toHaveProperty("avisosResolvidos");
   });
 
   it("revisão velha: 409 com o projeto como está agora, e nada é escrito", async () => {

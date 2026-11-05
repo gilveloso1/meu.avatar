@@ -130,8 +130,20 @@ const semFala = (a: Aviso) => ("fala" in a ? (({ fala: _, ...resto }) => resto)(
 function mudancas(antes: Resumo, depois: Resumo) {
   const chave = (x: unknown) => JSON.stringify(x);
   type Bloco = Resumo["grupos"][number]["blocos"][number];
-  const blocosAntes = new Map(antes.grupos.flatMap((g) => g.blocos.map((b) => [b.id, { g: g.id, b }] as const)));
-  const gruposAntes = new Map(antes.grupos.map((g) => [g.id, chave([g.nome, g.duracao])]));
+  const grupoDe = new Map(depois.grupos.flatMap((g) => g.blocos.map((b) => [b.id, g.id] as const)));
+  const idsAntes = new Set(antes.grupos.map((g) => g.id));
+  const idsDepois = new Set(depois.grupos.map((g) => g.id));
+  // O grupo tem o id do primeiro bloco: tirado esse bloco, o mesmo grupo passa a ter o id do seguinte. Não é remoção.
+  const idNovo = new Map(
+    antes.grupos.flatMap((g) => {
+      if (idsDepois.has(g.id)) return [];
+      const onde = [...new Set(g.blocos.map((b) => grupoDe.get(b.id)).filter((id): id is string => !!id))];
+      return onde.length === 1 && !idsAntes.has(onde[0]!) ? [[g.id, onde[0]!] as const] : [];
+    }),
+  );
+  const g0 = (id: string) => idNovo.get(id) ?? id;
+  const blocosAntes = new Map(antes.grupos.flatMap((g) => g.blocos.map((b) => [b.id, { g: g0(g.id), b }] as const)));
+  const gruposAntes = new Map(antes.grupos.map((g) => [g0(g.id), chave([g.nome, g.duracao])]));
   /** 0 quando nada mudou; o deslocamento, quando só o início e o fim andaram juntos; null quando mudou de verdade. */
   const passo = (g: string, b: Bloco): number | null => {
     const a = blocosAntes.get(b.id);
@@ -161,10 +173,9 @@ function mudancas(antes: Resumo, depois: Resumo) {
       return { id: g.id, nome: g.nome, duracao: g.duracao, ...(blocos.length ? { blocos } : {}), ...(andaram.length ? { andaram } : {}) };
     })
     .filter((g) => g.blocos || g.andaram || gruposAntes.get(g.id) !== chave([g.nome, g.duracao]));
-  const ligacoesAntes = new Set(antes.ligacoes.map(chave));
+  const ligacoesAntes = new Set(antes.ligacoes.map((l) => chave({ ...l, de: g0(l.de), para: g0(l.para) })));
   const ligacoes = depois.ligacoes.filter((l) => !ligacoesAntes.has(chave(l)));
   // Um grupo que o lote partiu: parte dos blocos dele foi parar num grupo novo, só com blocos dele (remover sem fechar).
-  const grupoDe = new Map(depois.grupos.flatMap((g) => g.blocos.map((b) => [b.id, g.id] as const)));
   const novos = depois.grupos.filter((g) => !gruposAntes.has(g.id));
   const partidos = antes.grupos.flatMap((g) => {
     const meus = new Set(g.blocos.filter((b) => b.camada === "base").map((b) => b.id));
@@ -172,23 +183,28 @@ function mudancas(antes: Resumo, depois: Resumo) {
     const sobra = novos.some((n) => partes.includes(n.id) && n.blocos.filter((b) => b.camada === "base").every((b) => meus.has(b.id)));
     return partes.length > 1 && sobra ? [{ tipo: "grupo_partido", grupo: g.id, partes }] : [];
   });
-  const finaisAntes = new Map(antes.finais.map((f) => [f.id, chave(f)]));
+  const finaisAntes = new Map(antes.finais.map((f) => [f.id, chave({ ...f, variacoes: f.variacoes.map((v) => ({ ...v, grupos: v.grupos.map(g0) })) })]));
   const finais = depois.finais.filter((f) => finaisAntes.get(f.id) !== chave(f));
   const ficaram = (lista: { id: string }[]) => new Set(lista.map((x) => x.id));
   const blocosDepois = new Set(depois.grupos.flatMap((g) => g.blocos.map((b) => b.id)));
   const removidos = {
     blocos: [...blocosAntes.keys()].filter((id) => !blocosDepois.has(id)),
-    grupos: antes.grupos.map((g) => g.id).filter((id) => !ficaram(depois.grupos).has(id)),
+    grupos: antes.grupos.map((g) => g.id).filter((id) => !idsDepois.has(id) && !idNovo.has(id)),
     finais: antes.finais.map((f) => f.id).filter((id) => !ficaram(depois.finais).has(id)),
     ligacoes: antes.ligacoes.map((l) => l.id).filter((id) => !ficaram(depois.ligacoes).has(id)),
   };
-  const avisosAntes = new Set(antes.avisos.map(chave));
-  const avisosDepois = new Set(depois.avisos.map(chave));
+  // Um aviso é do seu bloco, grupo ou Final: se só o valor mudou (a duração do rascunho), vem uma vez, com o novo.
+  const quem = (a: Aviso) => chave([a.tipo, "bloco" in a ? a.bloco : "grupo" in a ? g0(a.grupo) : "final" in a ? a.final : ""]);
+  const normal = (a: Aviso) => chave("grupo" in a ? { ...a, grupo: g0(a.grupo) } : a);
+  const avisosAntes = new Set(antes.avisos.map(normal));
+  const quemDepois = new Set(depois.avisos.map(quem));
   const avisos = [...partidos, ...depois.avisos.filter((a) => !avisosAntes.has(chave(a))).map(semFala)];
-  const avisosResolvidos = antes.avisos.filter((a) => !avisosDepois.has(chave(a))).map(semFala);
+  const avisosResolvidos = antes.avisos.filter((a) => !quemDepois.has(quem(a))).map(semFala);
+  const gruposComIdNovo = [...idNovo].map(([de, para]) => ({ de, para }));
   const cheio = (x: unknown[]) => x.length > 0;
   return {
     mudou: {
+      ...(cheio(gruposComIdNovo) ? { gruposComIdNovo } : {}),
       ...(cheio(grupos) ? { grupos } : {}),
       ...(cheio(finais) ? { finais } : {}),
       ...(cheio(ligacoes) ? { ligacoes } : {}),

@@ -3,7 +3,7 @@
  * vídeo depois daquele"), não a geometria do canvas. Tudo passa pelo mesmo modelo da tela
  * (src/canvas/modelo.js), com as mesmas regras. Um lote vale inteiro ou não vale nada.
  */
-import { arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, linkFirst, linkProblem, links, maxEnd, MIN_LEN, newId, nextTone, PX, relay, removeItems, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
+import { arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, linkFirst, linkProblem, links, maxEnd, MIN_LEN, newId, nextTone, PX, relay, removeItems, renameGroup, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
 import type { Block, CanvasProject, Frame, FrameKey, Group } from "./canvas/modelo.js";
 import { PAUSES, planParts, RULES } from "./quickedit";
 
@@ -163,6 +163,13 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
       case "renomear": {
         const nome = texto(c.nome);
         if (!nome) throw falha("nome_invalido");
+        // O nome do grupo (Cena 1...), em vez de Bloco 1; vale qualquer bloco dele.
+        if (c.grupo !== undefined) {
+          const g = groupIndex(groups(project)).get(texto(c.grupo) ?? "");
+          if (!g) throw falha("bloco_inexistente");
+          project = renameGroup(project, g, nome);
+          break;
+        }
         if (!project.blocks.some((b) => b.id === c.bloco)) throw falha("bloco_inexistente");
         project = { ...project, blocks: project.blocks.map((b) => (b.id === c.bloco ? { ...b, name: nome } : b)) };
         break;
@@ -548,7 +555,9 @@ function cortar(project: CanvasProject, c: Comando, falha: (c: string) => Comand
   const b = project.blocks.find((o) => o.id === c.bloco);
   if (!b) throw falha("bloco_inexistente");
   const inicio = c.inicio === undefined ? b.tin : numero(c.inicio);
-  const fim = c.fim === undefined ? b.tout : numero(c.fim);
+  // duracao no lugar de fim: o que fica a partir do início (num rascunho, a duração dele).
+  const duracao = c.duracao === undefined ? undefined : numero(c.duracao);
+  const fim = duracao !== undefined ? (duracao === null || inicio === null ? null : +(inicio + duracao).toFixed(3)) : c.fim === undefined ? b.tout : numero(c.fim);
   const maximo = maxEnd(b);
   if (inicio === null || fim === null || inicio < 0 || fim <= inicio || fim > maximo || (b.kind === "image" && inicio !== 0)) throw falha("corte_invalido");
   if (fim - inicio < MIN_LEN) throw falha("corte_invalido");

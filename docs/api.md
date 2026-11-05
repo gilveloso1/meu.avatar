@@ -199,16 +199,16 @@ outro valor faz outro vídeo na exportação, e o mesmo valor reaproveita. No ca
 é um campo nos Ajustes do bloco. Animação sem parâmetros roda como foi guardada.
 | `rascunho` | `fala`, `duracao` (0,5 a 30); `nome`; `depois` ou `sobre` e `em`; `rotulo` | O lugar de um vídeo que ainda não existe: um bloco sem arquivo, com a fala, do tamanho estimado. Sem `nome`, Texto 1, Texto 2..., como os blocos. No canvas e na prévia, um cartão com a fala. A exportação é recusada enquanto houver rascunho |
 | `trocar` | `bloco`; `video`, `arquivo` ou `ativo`; `inicio`, `fim`, `dur`, `nome`, `semSom` | Põe o arquivo no lugar do bloco (o vídeo pronto no lugar do rascunho): a posição e o que está por cima ficam, e a sequência acompanha a duração nova. Sem `fim`, o vídeo entra inteiro |
-| `renomear` | `bloco`, `nome` | Muda o nome do bloco, como o campo Nome dos Ajustes |
-| `cortar` | `bloco`, `inicio`, `fim` | Trecho do arquivo, em segundos; a sequência fica encostada. Num rascunho, muda a duração (`inicio: 0, fim: 3` deixa 3 s) |
+| `renomear` | `bloco` ou `grupo`, `nome` | Muda o nome do bloco, como o campo Nome dos Ajustes; com `grupo` (o id de qualquer bloco dele), o nome do grupo, como "Cena 1" no lugar de "Bloco 1" |
+| `cortar` | `bloco`, `inicio`, `fim` ou `duracao` | Trecho do arquivo, em segundos; a sequência fica encostada. `duracao` no lugar de `fim` é o que fica a partir do início: num rascunho, `{bloco, duracao: 3}` deixa 3 s |
 | `dividir` | `bloco`, `em` | Dois blocos, no instante `em` do arquivo; 0,5 s no mínimo de cada lado |
 | `mover` | `bloco`, `depois` ou `antes` | Muda a ordem, sem buraco, também para outro grupo (assim se juntam dois); a cobertura e o som somado vão junto |
 | `velocidade` | `bloco`, `velocidade` (0,25 a 4) | Mantém o tom da voz; o resto da sequência acompanha |
 | `removerTrechos` | `bloco`, `trechos: [[inicio, fim], ...]` (até 200) | Tira esses trechos do arquivo (vícios, repetições, frases, pelos tempos da transcrição) e o resto encosta. Sobra menor que 0,5 s é recusada (`sobra_curta`): junte-a ao trecho do lado |
 | `removerPausas` | `bloco` (sem ele, todos), `pausa` (`curta`, `media`, `longa`) | Tira as pausas com a regra da Edição rápida |
 | `enquadrar` | `bloco`; `zoom` (1 a 8), `focoX`, `focoY` (0 a 1) ou `rosto: true`; `chaves: [{t, zoom, focoX, focoY}]`; `encaixe` (`preencher`, `caber`, `desfocar`); `recorte: {esquerda, topo, direita, base}`; `espelharH`, `espelharV`, `girar` (0, 90, 180, 270); `limpar` | Só muda o que vier. `t` é o tempo do bloco (negativo continua um movimento do bloco anterior); entre as chaves, a curva é suave |
-| `ligar` | `de`, `para` | Liga o grupo de um bloco a outro grupo ou a um Final (o grupo tem o id do primeiro bloco). Encadeia, não junta: para juntar dois grupos, `mover`. Ligar a outro grupo um grupo que é a única entrada de um Final (a ligação automática do primeiro bloco) tira essa ligação. Recusa círculo, repetida e passar de 48 variações |
-| `remover` | `ids`, `fechar` | Blocos, Finais ou ligações (os ids de `ligacoes`). Com `fechar: true`, a sequência encosta onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois (aviso `grupo_partido`). Tirar o primeiro bloco de um grupo passa o id do grupo e as ligações ao bloco seguinte |
+| `ligar` | `de`, `para` | Liga o grupo de um bloco a outro grupo ou a um Final (o grupo tem o id do primeiro bloco). Encadeia, não junta: para juntar dois grupos, `mover`. Ligar a outro grupo um grupo que é a única entrada de um Final (a ligação automática do primeiro bloco) tira essa ligação. Fora isso, soma: cada saída de um grupo vira uma variação; para mudar a ordem, remova as antigas e ligue de novo. Recusa círculo, repetida e passar de 48 variações |
+| `remover` | `ids`, `fechar` | Blocos, Finais ou ligações (os ids de `ligacoes`). Com `fechar: true`, a sequência encosta onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois (aviso `grupo_partido`). Tirar o primeiro bloco de um grupo passa o id do grupo e as ligações ao bloco seguinte (`gruposComIdNovo` na resposta) |
 | `som` | `bloco`, `volume` (0 a 4), `mudo` | Volume do bloco |
 | `final` | `id`, `resolucao`, `formato`, `velocidade` | Muda um Final; sem `id`, cria outro. A velocidade vale para todas as variações dele |
 | `organizar` | | O mesmo Organizar da tela |
@@ -218,7 +218,7 @@ seguintes do mesmo lote, sem esperar a resposta.
 
 O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, como na tela.
 
-Roteiro com cenas: um grupo por cena, de preferência até uns 30 s, e cada cena ligada à seguinte, a
+Roteiro com cenas: um grupo por cena (com nome: `renomear {grupo, nome: "Cena 1"}`), de preferência até uns 30 s, e cada cena ligada à seguinte, a
 última ao Final (`ligar {de: <cena 1>, para: <cena 2>}`...). Não é preciso juntar no fim: o Final
 monta a sequência. O primeiro bloco já vem ligado ao Final; ao ligar essa cena à seguinte, essa ligação
 sai sozinha (assim o lote cria as cenas e as ligações de uma vez, com `rotulo`), e a última cena
@@ -231,8 +231,9 @@ A resposta traz `criados`, com os ids novos na ordem dos comandos, e em `mudou` 
 mexeu, para não devolver o projeto inteiro a cada edição (num roteiro de 30 falas, o resumo inteiro
 passava de 7 mil caracteres): `grupos` novos ou alterados, cada um com só os blocos novos ou
 alterados (sem `blocos`, o grupo só mudou de nome ou de duração; os que só andaram, porque um corte antes deles mudou o tempo, vêm em `andaram`: uma
-faixa `{de, ate, segundos}` por deslocamento, na ordem do grupo); `ligacoes` e `finais` novos ou alterados; `removidos` (`blocos`, `grupos`, `finais`,
-`ligacoes`); `avisos` que apareceram (mais `grupo_partido`, `{grupo, partes}`, quando o lote partiu
+faixa `{de, ate, segundos}` por deslocamento, na ordem do grupo); `gruposComIdNovo` (`[{de, para}]`, o grupo que só trocou de id porque o primeiro bloco saiu; não
+vem em `removidos`); `ligacoes` e `finais` novos ou alterados; `removidos` (`blocos`, `grupos`, `finais`,
+`ligacoes`); `avisos` que apareceram ou mudaram de valor (o rascunho com outra duração vem uma vez, com a nova; mais `grupo_partido`, `{grupo, partes}`, quando o lote partiu
 um grupo) e `avisosResolvidos`. Campo vazio não vem. Nos avisos de `rascunho` a `fala` não vem (quem editou
 acabou de escrevê-la; o `ver_projeto` mostra). `avisosPendentes` conta os avisos que o projeto tem
 agora.
