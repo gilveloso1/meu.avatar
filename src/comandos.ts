@@ -525,18 +525,20 @@ function mover(project: CanvasProject, c: Comando, falha: (c: string) => Comando
 }
 
 /** Tira as pausas dos blocos de vídeo, com a regra da Edição rápida. */
-async function removerPausas(project: CanvasProject, c: Comando, ctx: Contexto, falha: (c: string) => ComandoError): Promise<{ project: CanvasProject; ids: string[] }> {
+async function removerPausas(project: CanvasProject, c: Comando, ctx: Contexto, falha: (c: string, extra?: Record<string, unknown>) => ComandoError): Promise<{ project: CanvasProject; ids: string[] }> {
   // acima: toda pausa maior que isso (s) fica com isso; sem ele, a regra da Edição rápida.
   const acima = c.acima === undefined ? null : numero(c.acima);
-  if (acima === null && c.acima !== undefined) throw falha("pausa_invalida");
-  if (acima !== null && (acima < ACIMA_MIN || acima > ACIMA_MAX || c.pausa !== undefined)) throw falha("pausa_invalida");
+  if (acima !== null && c.pausa !== undefined) throw falha("pausa_invalida", { motivo: "acima ou pausa, não os dois" });
+  if ((acima === null && c.acima !== undefined) || (acima !== null && (acima < ACIMA_MIN || acima > ACIMA_MAX))) throw falha("pausa_invalida", { minimo: ACIMA_MIN, maximo: ACIMA_MAX });
   const pausa = PAUSES.find((p) => p.value === (c.pausa ?? "media"));
   if (!pausa) throw falha("pausa_invalida");
   const pedidos = c.bloco === undefined ? project.blocks.filter((b) => b.kind === "video") : project.blocks.filter((b) => b.id === c.bloco);
   if (!pedidos.length) throw falha("bloco_inexistente");
   let p = project;
   const ids: string[] = [];
-  for (const alvo of pedidos) {
+  for (const pedido of pedidos) {
+    // O bloco como está agora: os anteriores já encolheram, e a posição dele mudou.
+    const alvo = p.blocks.find((b) => b.id === pedido.id)!;
     if (alvo.kind !== "video" || !sequencia(p, alvo.id)) throw falha("posicao_invalida");
     const som = await ctx.silencios(alvo.src);
     if (!som) throw falha("analise_indisponivel");
