@@ -70,6 +70,9 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   (No quarto, o projeto ficou certo, com nomes e ordem trocada, mas o `@rotulo` não valia em
   `renomear {grupo}` e o nome da cena se perdia quando o primeiro bloco dela saía. Corrigido: o
   rótulo vale em `grupo`, e o nome segue o grupo como as ligações, também no canvas.)
+  (No quinto, 3 lotes sem recusa e o projeto certo de primeira. Trocar a ordem das cenas pedia
+  remover 3 ligações e criar 3; agora há `ordenar {grupos}`, que também monta a sequência na
+  criação.)
 - Reenviar o HTML completo a cada correção: 3 a 5 mil caracteres por cena, com o mesmo CSS do
   painel repetido em todas.
 - O raciocínio de layout e de tempos: coordenadas do SVG, posições das moedas, a matemática do

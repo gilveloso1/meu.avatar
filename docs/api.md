@@ -207,22 +207,24 @@ outro valor faz outro vídeo na exportação, e o mesmo valor reaproveita. No ca
 | `removerTrechos` | `bloco`, `trechos: [[inicio, fim], ...]` (até 200) | Tira esses trechos do arquivo (vícios, repetições, frases, pelos tempos da transcrição) e o resto encosta. Sobra menor que 0,5 s é recusada (`sobra_curta`): junte-a ao trecho do lado |
 | `removerPausas` | `bloco` (sem ele, todos), `pausa` (`curta`, `media`, `longa`) | Tira as pausas com a regra da Edição rápida |
 | `enquadrar` | `bloco`; `zoom` (1 a 8), `focoX`, `focoY` (0 a 1) ou `rosto: true`; `chaves: [{t, zoom, focoX, focoY}]`; `encaixe` (`preencher`, `caber`, `desfocar`); `recorte: {esquerda, topo, direita, base}`; `espelharH`, `espelharV`, `girar` (0, 90, 180, 270); `limpar` | Só muda o que vier. `t` é o tempo do bloco (negativo continua um movimento do bloco anterior); entre as chaves, a curva é suave |
-| `ligar` | `de`, `para` | Liga o grupo de um bloco a outro grupo ou a um Final (o grupo tem o id do primeiro bloco). Encadeia, não junta: para juntar dois grupos, `mover`. Ligar a outro grupo um grupo que é a única entrada de um Final (a ligação automática do primeiro bloco) tira essa ligação. Fora isso, soma: cada saída de um grupo vira uma variação; para mudar a ordem, remova as antigas e ligue de novo. Recusa círculo, repetida e passar de 48 variações |
-| `remover` | `ids`, `fechar` | Blocos, Finais ou ligações (os ids de `ligacoes`). Com `fechar: true`, a sequência encosta onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois (aviso `grupo_partido`). Tirar o primeiro bloco de um grupo passa o id do grupo e as ligações ao bloco seguinte (`gruposComIdNovo` na resposta); o nome do grupo vai junto |
+| `ligar` | `de`, `para` | Liga o grupo de um bloco a outro grupo ou a um Final (o grupo tem o id do primeiro bloco). Encadeia, não junta: para juntar dois grupos, `mover`. Ligar a outro grupo um grupo que é a única entrada de um Final (a ligação automática do primeiro bloco) tira essa ligação. Fora isso, soma: cada saída de um grupo vira uma variação; para a sequência das cenas, `ordenar`. Recusa círculo, repetida e passar de 48 variações |
+| `ordenar` | `grupos` (um bloco de cada grupo, na ordem), `final` | Liga as cenas nessa ordem e a última ao Final (sem `final`, o único que houver), no lugar das ligações entre elas e das delas ao Final, inclusive a automática do primeiro bloco. Ligações de fora (ganchos que chegam à primeira) ficam. Recusa grupo repetido ou que não existe (`grupos_invalidos`) e Final que não existe (`final_inexistente`) |
+| `remover` | `ids`, `fechar` | Blocos, Finais ou ligações (os ids de `ligacoes`). Com `fechar: true`, a sequência encosta onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois (aviso `grupo_partido`). Tirar o primeiro bloco de um grupo passa o id do grupo e as ligações ao bloco seguinte (`gruposComIdNovo` na resposta); o nome do grupo e as ligações, com o mesmo id, vão junto |
 | `som` | `bloco`, `volume` (0 a 4), `mudo` | Volume do bloco |
 | `final` | `id`, `resolucao`, `formato`, `velocidade` | Muda um Final; sem `id`, cria outro. A velocidade vale para todas as variações dele |
 | `organizar` | | O mesmo Organizar da tela |
 
 Em `adicionar`, `rascunho` e `dividir`, `rotulo: "nome"` permite citar o bloco como `"@nome"` nos comandos
-seguintes do mesmo lote, sem esperar a resposta (em `bloco`, `depois`, `antes`, `sobre`, `de`, `para`, `grupo` e `ids`).
+seguintes do mesmo lote, sem esperar a resposta (em `bloco`, `depois`, `antes`, `sobre`, `de`, `para`, `grupo`, `grupos` e `ids`).
 
 O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, como na tela.
 
-Roteiro com cenas: um grupo por cena (com nome: `renomear {grupo, nome: "Cena 1"}`), de preferência até uns 30 s, e cada cena ligada à seguinte, a
-última ao Final (`ligar {de: <cena 1>, para: <cena 2>}`...). Não é preciso juntar no fim: o Final
-monta a sequência. O primeiro bloco já vem ligado ao Final; ao ligar essa cena à seguinte, essa ligação
-sai sozinha (assim o lote cria as cenas e as ligações de uma vez, com `rotulo`), e a última cena
-se liga ao Final. Para tirar uma
+Roteiro com cenas: um grupo por cena (com nome: `renomear {grupo, nome: "Cena 1"}`), de preferência até uns 30 s;
+um `rascunho` ou `adicionar` sem `depois` nem `sobre` abre uma cena nova. As cenas vão em ordem até o
+Final com `ordenar {grupos: ["@c1", "@c2", ...]}`; não é preciso juntar no fim, o Final monta a
+sequência. O lote cria as cenas, dá nome e ordena de uma vez, com `rotulo`; para mudar a ordem
+depois, `ordenar` de novo. (Com `ligar` também dá: ligar a primeira cena à seguinte tira a ligação
+automática do primeiro bloco ao Final.) Para tirar uma
 fala do meio, `remover` com `fechar: true`. Cada edição só mexe no tempo da cena dela (a resposta fica pequena), a legenda
 cabe nos 60 s por grupo e dá para trocar ou testar uma cena sem tocar nas outras. Uma cena mais
 longa pode passar dos 30 s: não corte uma fala ou uma cobertura no meio, porque a cobertura não
