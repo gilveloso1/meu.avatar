@@ -3,7 +3,7 @@
  * vídeo depois daquele"), não a geometria do canvas. Tudo passa pelo mesmo modelo da tela
  * (src/canvas/modelo.js), com as mesmas regras. Um lote vale inteiro ou não vale nada.
  */
-import { arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, linkFirst, linkProblem, links, maxEnd, MIN_LEN, newId, nextTone, PX, relay, removeItems, renameGroup, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
+import { arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, len, linkFirst, linkProblem, links, maxEnd, MIN_LEN, newId, nextTone, PX, relay, removeItems, renameGroup, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
 import type { Block, CanvasProject, Frame, FrameKey, Group } from "./canvas/modelo.js";
 import { PAUSES, planParts, RULES } from "./quickedit";
 
@@ -353,10 +353,13 @@ function adicionar(project: CanvasProject, c: Comando, f: Fonte, falha: (c: stri
     p = relay(project, p, ordem, seq.x, seq.blocks[0]!.y);
   } else if (sobre) {
     const grupo = groupIndex(groups(project)).get(sobre);
-    if (!grupo) throw falha("bloco_inexistente");
+    const ref = project.blocks.find((b) => b.id === sobre);
+    if (!grupo || !ref) throw falha("bloco_inexistente");
+    // O em conta do começo do bloco citado (no primeiro, é o começo do grupo) e pode passar dele, até o fim do grupo.
     const em = numero(c.em) ?? 0;
-    if (em < 0 || em >= grupo.dur) throw falha("momento_invalido");
-    const x = grupo.x + em * PX;
+    const desde = (ref.x - grupo.x) / PX;
+    if (em < 0 || desde + em >= grupo.dur) throw falha("momento_invalido");
+    const x = ref.x + em * PX;
     const y = f.kind === "audio" ? grupo.y + VIS_H : grupo.y - height(block);
     const s = snap(p, block.id, x, y, 1, { group: grupo.id });
     if (!s.mode) throw falha("posicao_invalida");
@@ -383,10 +386,15 @@ async function trocar(project: CanvasProject, c: Comando, ctx: Contexto, falha: 
   if (f.kind === "audio") throw falha("posicao_invalida");
   const dur = f.kind === "image" ? IMAGE_MAX : (numero(c.dur) ?? f.dur);
   if (dur === null || dur <= 0) throw falha("duracao_obrigatoria");
-  const inicio = numero(c.inicio) ?? 0;
+  // Sem início nem fim, o vídeo entra sem o silêncio da ponta (aparar: false o põe inteiro).
+  const ponta = f.kind === "video" && c.inicio === undefined && c.fim === undefined && c.aparar !== false ? await pontas(ctx, f.src, dur) : null;
+  const inicio = numero(c.inicio) ?? ponta?.[0] ?? 0;
   // A imagem fica com o tempo que o bloco tinha; o vídeo entra inteiro, se ninguém cortar.
-  const fim = numero(c.fim) ?? (f.kind === "image" ? Math.min(b.tout - b.tin, IMAGE_MAX) : dur);
+  const fim = numero(c.fim) ?? ponta?.[1] ?? (f.kind === "image" ? Math.min(b.tout - b.tin, IMAGE_MAX) : dur);
   if (inicio < 0 || fim <= inicio || fim > dur || fim - inicio < MIN_LEN || (f.kind === "image" && inicio !== 0)) throw falha("corte_invalido");
+  // No lugar de um rascunho, o que está por cima vai para o mesmo ponto da fala: a fala real tem outro tamanho que a estimada.
+  // Outro arquivo no lugar de outro: os tempos não se correspondem, e a camada fica onde estava no bloco.
+  const mapa: Mapa = b.draft ? (off, antes, depois) => (off * len(depois)) / len(antes) : (off) => off;
   return alterar(project, b.id, (o) => {
     const { draft, code, frame, audio, ...resto } = o;
     return {
@@ -402,7 +410,25 @@ async function trocar(project: CanvasProject, c: Comando, ctx: Contexto, falha: 
       ...(frame && !draft && !code ? { frame } : {}),
       ...(f.kind === "video" ? { audio: c.semSom === true || f.som === false ? "none" : "linked" } : {}),
     };
-  });
+  }, mapa);
+}
+
+/** Do silêncio que sobra antes e depois da fala, quanto fica (s): um respiro, sem cortar a palavra. */
+const RESPIRO_ANTES = 0.1;
+const RESPIRO_DEPOIS = 0.2;
+
+/** O trecho do vídeo sem o silêncio do começo e do fim, ou null (sem análise, sem som ou nada a tirar). */
+async function pontas(ctx: Contexto, src: string, dur: number): Promise<[number, number] | null> {
+  const som = await ctx.silencios(src).catch(() => null);
+  if (!som?.som) return null;
+  const fimArquivo = Math.min(dur, som.duracao || dur);
+  const primeiro = som.silencios.find(([a]) => a! <= 0.05);
+  const ultimo = som.silencios.find(([, b]) => b! >= fimArquivo - 0.05);
+  if (primeiro && primeiro === ultimo) return null; // Só silêncio: fica como veio.
+  const inicio = primeiro ? Math.max(0, primeiro[1]! - RESPIRO_ANTES) : 0;
+  const fim = ultimo ? Math.min(fimArquivo, ultimo[0]! + RESPIRO_DEPOIS) : fimArquivo;
+  if (fim - inicio < MIN_LEN || (inicio === 0 && fim >= dur)) return null;
+  return [+inicio.toFixed(3), +fim.toFixed(3)];
 }
 
 /** O código da animação, conferido: texto, não vazio e no limite. */
@@ -445,11 +471,41 @@ function sequencia(project: CanvasProject, id: string): Group | null {
   return g ?? null;
 }
 
-/** Muda um bloco e mantém a sequência dele encostada, com o que o cobre acompanhando. */
-function alterar(project: CanvasProject, id: string, muda: (b: Block) => Block): CanvasProject {
+/** Onde fica, em segundos do bloco depois da mudança, o que começava a off segundos dele antes. */
+type Mapa = (off: number, antes: Block, depois: Block) => number;
+
+/** Pelo arquivo: o mesmo instante da fala (cortar o começo ou mudar a velocidade não desalinha a camada). */
+const peloArquivo: Mapa = (off, antes, depois) => {
+  const t = antes.tin + off * (antes.speed ?? 1);
+  return Math.min(len(depois), Math.max(0, (t - depois.tin) / (depois.speed ?? 1)));
+};
+
+const EPS = 1e-6;
+
+/** As coberturas e os sons somados que começam dentro do bloco, com os segundos do bloco em que começam. */
+function presos(project: CanvasProject, alvo: Block): { id: string; off: number }[] {
+  const g = sequencia(project, alvo.id);
+  if (!g) return [];
+  return [...g.covers, ...g.audios].filter((o) => o.x >= alvo.x - EPS && o.x < alvo.x + width(alvo) - EPS).map((o) => ({ id: o.id, off: (o.x - alvo.x) / PX }));
+}
+
+/** Põe cada camada presa no x dado (null: fica onde a sequência a deixou). */
+function reposicionar(project: CanvasProject, camadas: { id: string; off: number }[], onde: (off: number) => number | null): CanvasProject {
+  if (!camadas.length) return project;
+  const xs = new Map(camadas.map((c) => [c.id, onde(c.off)]));
+  return { ...project, blocks: project.blocks.map((b) => (xs.get(b.id) != null ? { ...b, x: +xs.get(b.id)!.toFixed(3) } : b)) };
+}
+
+/** Muda um bloco e mantém a sequência dele encostada, com o que o cobre acompanhando o mesmo ponto da fala. */
+function alterar(project: CanvasProject, id: string, muda: (b: Block) => Block, mapa: Mapa = peloArquivo): CanvasProject {
+  const antes = project.blocks.find((b) => b.id === id)!;
   const p = { ...project, blocks: project.blocks.map((b) => (b.id === id ? muda(b) : b)) };
   const seq = sequencia(project, id);
-  return seq ? relay(project, p, seq.blocks.map((b) => b.id), seq.x, seq.blocks[0]!.y) : p;
+  if (!seq) return p;
+  const camadas = presos(project, antes);
+  const novo = relay(project, p, seq.blocks.map((b) => b.id), seq.x, seq.blocks[0]!.y);
+  const depois = novo.blocks.find((b) => b.id === id)!;
+  return reposicionar(novo, camadas, (off) => depois.x + mapa(off, antes, depois) * PX);
 }
 
 /** Leva um bloco para depois ou antes de outro, fechando o buraco de onde saiu. */
@@ -470,6 +526,10 @@ function mover(project: CanvasProject, c: Comando, falha: (c: string) => Comando
 
 /** Tira as pausas dos blocos de vídeo, com a regra da Edição rápida. */
 async function removerPausas(project: CanvasProject, c: Comando, ctx: Contexto, falha: (c: string) => ComandoError): Promise<{ project: CanvasProject; ids: string[] }> {
+  // acima: toda pausa maior que isso (s) fica com isso; sem ele, a regra da Edição rápida.
+  const acima = c.acima === undefined ? null : numero(c.acima);
+  if (acima === null && c.acima !== undefined) throw falha("pausa_invalida");
+  if (acima !== null && (acima < ACIMA_MIN || acima > ACIMA_MAX || c.pausa !== undefined)) throw falha("pausa_invalida");
   const pausa = PAUSES.find((p) => p.value === (c.pausa ?? "media"));
   if (!pausa) throw falha("pausa_invalida");
   const pedidos = c.bloco === undefined ? project.blocks.filter((b) => b.kind === "video") : project.blocks.filter((b) => b.id === c.bloco);
@@ -482,13 +542,55 @@ async function removerPausas(project: CanvasProject, c: Comando, ctx: Contexto, 
     if (!som) throw falha("analise_indisponivel");
     const silencios = som.silencios.filter(([a, b]) => a! < alvo.tout && b! > alvo.tin).map(([a, b]) => [Math.max(a!, alvo.tin), Math.min(b!, alvo.tout)]);
     // Do trecho do bloco para o tempo dele, e de volta para o arquivo.
-    const partes = planParts(silencios.map(([a, b]) => [a! - alvo.tin, b! - alvo.tin]), alvo.tout - alvo.tin, pausa.pause, [1], RULES).map(([a, b]) => [a + alvo.tin, b + alvo.tin] as const);
+    const partes =
+      acima !== null
+        ? pausasAcima(silencios as [number, number][], alvo.tin, alvo.tout, acima)
+        : planParts(silencios.map(([a, b]) => [a! - alvo.tin, b! - alvo.tin]), alvo.tout - alvo.tin, pausa.pause, [1], RULES).map(([a, b]) => [a + alvo.tin, b + alvo.tin] as const);
     if (partes.length < 2 && (!partes[0] || (partes[0][0] === alvo.tin && partes[0][1] === alvo.tout))) continue;
     const novo = manterPartes(p, alvo, partes);
     p = novo.project;
     ids.push(...novo.ids);
   }
   return { project: p, ids };
+}
+
+const ACIMA_MIN = 0.1;
+const ACIMA_MAX = 5;
+
+/**
+ * As partes do trecho [de, ate] que ficam quando toda pausa maior que `acima` passa a ter `acima`: do que fica, a
+ * parte de RULES.tail depois da fala e o resto antes da seguinte, como na Edição rápida. Corte que deixaria um
+ * pedaço menor que um bloco não é feito (a pausa fica inteira).
+ */
+export function pausasAcima(silencios: [number, number][], de: number, ate: number, acima: number): (readonly [number, number])[] {
+  const cortes: [number, number][] = [];
+  for (const [s, e] of silencios) {
+    if (e - s <= acima) continue;
+    const comeco = s <= de + EPS;
+    const fim = e >= ate - EPS;
+    if (comeco && fim) continue; // O trecho inteiro é silêncio: nada a guardar.
+    const a = comeco ? s : s + acima * RULES.tail;
+    const b = fim ? e : e - acima * (1 - RULES.tail);
+    if (b - a >= RULES.minCut) cortes.push([a, b]);
+  }
+  const partes = () => {
+    const ps: [number, number][] = [];
+    let x = de;
+    for (const [a, b] of cortes) {
+      if (a > x) ps.push([x, a]);
+      x = b;
+    }
+    if (x < ate) ps.push([x, ate]);
+    return ps;
+  };
+  // Pedaço curto demais: desfaz o corte do lado dele (o seguinte, ou o anterior no fim) até todos caberem.
+  for (let ps = partes(); ps.some(([a, b]) => b - a < MIN_LEN) && cortes.length; ps = partes()) {
+    const i = ps.findIndex(([a, b]) => b - a < MIN_LEN);
+    const fim = ps[i]![1];
+    const depois = cortes.findIndex(([x]) => x >= fim - EPS);
+    cortes.splice(depois >= 0 ? depois : cortes.length - 1, 1);
+  }
+  return partes().map(([a, b]) => [+a.toFixed(3), +b.toFixed(3)] as const);
 }
 
 const MAX_TRECHOS = 200;
@@ -524,7 +626,17 @@ function manterPartes(project: CanvasProject, alvo: Block, partes: readonly (rea
   const novos: Block[] = outras.map(([a, b]) => ({ ...alvo, id: newId("b"), tin: a, tout: b }));
   const depois = { ...project, blocks: project.blocks.flatMap((b) => (b.id === alvo.id ? [{ ...b, tin: primeira![0], tout: primeira![1] }, ...novos] : [b])) };
   const ordem = seq.blocks.flatMap((b) => (b.id === alvo.id ? [b.id, ...novos.map((n) => n.id)] : [b.id]));
-  return { project: relay(project, depois, ordem, seq.x, seq.blocks[0]!.y), ids: novos.map((n) => n.id) };
+  const p = relay(project, depois, ordem, seq.x, seq.blocks[0]!.y);
+  // O que cobre o bloco vai para o mesmo ponto da fala; se ele caiu num trecho que saiu, para onde a fala volta.
+  const pecas = [alvo.id, ...novos.map((n) => n.id)].map((id) => p.blocks.find((b) => b.id === id)!);
+  const ultima = pecas[pecas.length - 1]!;
+  const onde = (off: number) => {
+    const t = alvo.tin + off * (alvo.speed ?? 1);
+    const peca = pecas.find((b) => t < b.tout - EPS);
+    if (!peca) return ultima.x + width(ultima);
+    return peca.x + (Math.max(0, t - peca.tin) / (peca.speed ?? 1)) * PX;
+  };
+  return { project: reposicionar(p, presos(project, alvo), onde), ids: novos.map((n) => n.id) };
 }
 
 const ENCAIXES: Record<string, Frame["fit"]> = { preencher: "cover", caber: "contain", desfocar: "blur" };

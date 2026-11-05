@@ -35,12 +35,14 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
 
 - O `sobre`/`em` conta o tempo a partir do começo do grupo, não do bloco citado. Por isso as oito
   animações do corpo ficaram empilhadas no segundo 0, e foi preciso a pessoa no canvas para descobrir.
+  (Agora o `em` conta do bloco citado, 05/11/2026.)
 - Montar as variações: um `ligar` para um bloco no meio de um grupo liga ao grupo inteiro, e um
   `remover` desligou o Final. A estrutura foi refeita duas vezes.
 - Erro do próprio agente: a primeira leva de animações não considerou a apresentadora na tela, e
   foi refeita inteira.
 - Toda mudança de tempo pede realinhamento: cortar pausa ou trocar vídeo obriga a recalcular os
   `em` à mão, apagar e recriar cada camada e ajustar a velocidade.
+  (Agora a camada segue o ponto da fala nos cortes, na velocidade, nas pausas e no `trocar`, 05/11/2026.)
 - O agente não consegue ver o vídeo montado (o canvas pede login) e não exporta sem a pessoa ver
   antes: toda conferência da composição dependeu da pessoa.
 
@@ -88,6 +90,7 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   dentro do grupo.
 - `adicionar` com `sobre`: opção de ancorar no bloco, não no grupo, e a camada acompanhar o bloco
   quando ele muda de tamanho.
+  (Feito em 05/11/2026: o `em` conta do bloco citado e a camada segue o ponto da fala.)
 - `renderizar_html`: fila para chamadas em paralelo e um modo de prévia que devolva quadros sem
   salvar o arquivo.
 - `listar_videos`: filtro por data e paginação.
@@ -99,12 +102,14 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
 - Ver a composição pronta: `ver_quadros` do Final montado, sem exportar. Eliminaria quase todo o vaivém.
 - Encaixe automático: pôr o vídeo no rascunho com a fala casando, cortando o silêncio e ajustando
   a camada de cima.
+  (Feito: o `trocar` tira o silêncio das pontas e leva a camada na proporção.)
 - Camada que se adapta: a animação esticar ou encolher sozinha quando o bloco muda de duração.
 - Ler o código de uma animação: devolver o HTML de um arquivo já renderizado, para editar em vez
   de reescrever.
 - Áudio: enviar música por URL ou da biblioteca do site (o base64 sem terminal é inviável) e ter
   uma biblioteca de trilhas.
 - Remover pausas por limite: cortar toda pausa acima de X segundos em todos os blocos, com realinhamento.
+  (Feito: `removerPausas {acima}`, com as camadas acompanhando.)
 
 ### 6. O que seria bom ter pronto
 

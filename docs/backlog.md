@@ -60,11 +60,12 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Tempo que acompanha*: a cobertura já anda com o bloco em que começa quando algo antes
-     dele muda, e `ligar`, `remover` e `ordenar` já não desfazem variações (PRs 91 a 95). Faltam:
-     `sobre` com o `em` contado do bloco (hoje é do grupo), a cobertura acompanhar o que muda
-     *dentro* do bloco dela (pausas, trechos e velocidade remapeados; animação que estica), o
-     `trocar` cortar o silêncio do vídeo pronto e o `removerPausas` com um limite em segundos.
+   - *Tempo que acompanha* (feito em 05/11/2026, ver "Camadas que acompanham" em [api.md](api.md)):
+     o `em` do `sobre` conta do bloco citado, a camada segue o ponto da fala quando o bloco de baixo
+     é cortado, acelerado ou perde pausas e trechos, o `trocar` tira o silêncio das pontas e leva a
+     camada na proporção, e o `removerPausas` aceita `acima` em segundos. Falta a animação esticar
+     ou encolher com o bloco (hoje mantém a duração), e o mesmo acompanhamento nos cortes feitos
+     na tela do canvas.
    - *Ver o resultado*: quadros do Final montado sem exportar (a animação sozinha já se vê pelo
      `inspecionar_animacao`).
    - *Pronto para usar*: em vez de templates adivinhados, o agente reusa o que já fez (feito,
