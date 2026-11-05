@@ -27,6 +27,7 @@ export const FORMATS: { value: string }[];
 export function exportWork(project: unknown, finalId: string, pick?: number[]): ExportWork | null;
 export function groups(project: CanvasProject): Group[];
 export function groupIndex(gs: Group[]): Map<string, Group>;
+export function renameGroup(project: CanvasProject, group: Group, name: string): CanvasProject;
 export function links(project: CanvasProject, gs?: Group[]): { edge: { id: string; from: string; to: string }; from: Group; to: Group | string }[];
 export function members(g: Group): Block[];
 export function baseGaps(g: Group): number[][];

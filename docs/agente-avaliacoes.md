@@ -62,6 +62,11 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   ligações dela, e a ligação automática não dava para tirar no mesmo lote. Agora as ligações passam
   ao bloco seguinte do grupo (também no canvas), a automática sai ao ligar a primeira cena à
   seguinte, e há o aviso `final_sem_variacao`.)
+  (No terceiro, 3 chamadas e o projeto certo de primeira, inclusive trocando a ordem das cenas.
+  Sobraram detalhes: o grupo que só trocou de id parecia removido, o aviso do rascunho vinha duas
+  vezes quando só a duração mudava, não se sabia se `ligar` troca ou soma, e faltavam a duração
+  direta e o nome do grupo. Agora há `gruposComIdNovo`, o aviso vem uma vez, `cortar {duracao}` e
+  `renomear {grupo}`, e a descrição do `ligar` diz que ele soma.)
 - Reenviar o HTML completo a cada correção: 3 a 5 mil caracteres por cena, com o mesmo CSS do
   painel repetido em todas.
 - O raciocínio de layout e de tempos: coordenadas do SVG, posições das moedas, a matemática do
