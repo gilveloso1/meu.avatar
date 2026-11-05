@@ -272,7 +272,7 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
   return { project, criados };
 }
 
-const CAMPOS_DE_BLOCO = ["bloco", "depois", "antes", "sobre", "de", "para"];
+const CAMPOS_DE_BLOCO = ["bloco", "depois", "antes", "sobre", "de", "para", "grupo"];
 
 /** Num lote, "@nome" é o bloco que um comando anterior criou com rotulo: "nome". */
 function comRotulos(c: Comando, rotulos: Map<string, string>, falha: (c: string) => ComandoError): Comando {
