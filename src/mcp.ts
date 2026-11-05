@@ -29,7 +29,7 @@ const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote i
 adicionar {video|arquivo|ativo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos}
 adicionar {html, duracao: 0,5 a 60, parametros, nome, esticar, depois: bloco | sobre: bloco, em: segundos} (animação em código, guardada no projeto: títulos, selos, gráficos, legendas; as regras do HTML são as do renderizar_html; sem nome, Animação 1, Animação 2...; a tela mostra na prévia, e a exportação faz o vídeo dela; por cima de uma fala, estica ou encolhe com ela, a não ser com esticar: false)
 adicionar {animacao: {projeto, bloco}, parametros, duracao, nome, depois: bloco | sobre: bloco, em: segundos} (copia uma animação já feita, de listar_animacoes: o código, os parametros, a duração, a escala e o nome; o que vier aqui muda, e os parametros se juntam aos dela; a cópia é independente)
-editarCodigo {bloco, html | trocas: [{de, para}], parametros, esticar} (troca o código de uma animação inteiro ou só trechos; cada de aparece uma vez só no código, como está; leia o código com ver_projeto incluir: codigo; se ele trouxer escala, os tempos do código são os de antes dela: as trocas a mantêm, e o html inteiro novo volta a escala a 1, escrito para a duração atual)
+editarCodigo {bloco, html | trocas: [{de, para}], parametros, esticar} (troca o código de uma animação inteiro ou só trechos; cada de aparece uma vez só no código, como está; leia o código com ver_projeto incluir: codigo; esticar liga ou desliga para as próximas mudanças da fala, sem mudar a duração de agora; se ele trouxer escala, os tempos do código são os de antes dela: as trocas a mantêm, e o html inteiro novo volta a escala a 1, escrito para a duração atual)
 parametros: {chave: texto ou número}, até 30, os valores que mudam sem reescrever o código (nome, preço, cor da marca): no HTML, {{chave}} fora dos scripts vira o valor; nos scripts, params.chave. Em editarCodigo, junta aos que já existem, e null tira. Faça o template uma vez e repita o bloco só trocando parametros; a pessoa também troca os valores nos Ajustes do canvas.
 rascunho {fala, duracao: 0,5 a 30, nome, depois: bloco | sobre: bloco, em: segundos} (o lugar de um vídeo que ainda não existe: um cartão com a fala; sem nome, Texto 1, Texto 2...; a exportação espera a troca)
 renomear {bloco, nome} ou {grupo, nome} (com grupo, o nome da cena, como Cena 1, no lugar de Bloco 1; vale o id de qualquer bloco dele)
@@ -87,7 +87,7 @@ const FERRAMENTAS = [
   {
     name: "ver_projeto",
     description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo), ligações (id, de, para: grupo ou Final), Finais com as variações e avisos. Os arquivos, o código das animações e o canvas inteiro são grandes: peça em incluir só quando precisar.",
-    inputSchema: objeto({ projeto, incluir: { type: "array", items: { type: "string", enum: ["arquivos", "codigo", "canvas"] }, description: "arquivos: os arquivos do projeto (id e src para adicionar); codigo: o HTML de cada animação, para editar com editarCodigo; canvas: o modelo inteiro, com posições e ajustes de cada bloco." } }, ["projeto"]),
+    inputSchema: objeto({ projeto, incluir: { type: "array", items: { type: "string", enum: ["arquivos", "codigo", "canvas"] }, description: "arquivos: os arquivos do projeto (id e src para adicionar); codigo: o HTML de cada animação, para editar com editarCodigo, com escala quando ela esticou ou encolheu com a fala (os tempos do código são os de antes) e esticar: false quando não estica; canvas: o modelo inteiro, com posições e ajustes de cada bloco." } }, ["projeto"]),
   },
   {
     name: "editar_projeto",
@@ -102,7 +102,7 @@ const FERRAMENTAS = [
   {
     name: "inspecionar_animacao",
     description:
-      'Abre o código de uma animação (bloco do ver_projeto) no navegador do render, sem fazer vídeo, e mede cada instante; barato, em texto. Volta: problemas [{tipo, alvo, t, detalhe}] (quebrou, palavra_partida, fora_da_tela, cortado_pelo_pai, texto_cortado, texto_sobre_texto, fonte, erro_de_script, passa_do_bloco); instantes com os elementos visíveis no primeiro ("seletor x,y LxA op0.5 2linhas \"texto\"", em px do Final) e depois só o que mudou e o que saiu; linhaDoTempo com cada tween ("início-fim alvo propriedades"); duracao do bloco e da animação. Para conferir as linhas de um texto, marque-o com data-linhas="1" (ou o número que cabe).',
+      'Abre o código de uma animação (bloco do ver_projeto) no navegador do render, sem fazer vídeo, e mede cada instante; barato, em texto. Volta: problemas [{tipo, alvo, t, detalhe}] (quebrou, palavra_partida, fora_da_tela, cortado_pelo_pai, texto_cortado, texto_sobre_texto, fonte, erro_de_script, passa_do_bloco); instantes com os elementos visíveis no primeiro ("seletor x,y LxA op0.5 2linhas \"texto\"", em px do Final) e depois só o que mudou e o que saiu; linhaDoTempo com cada tween ("início-fim alvo propriedades"); duracao do bloco e da animação. Os tempos são os da página, já com a escala (a animação que esticou com a fala mostra os tempos esticados). Para conferir as linhas de um texto, marque-o com data-linhas="1" (ou o número que cabe).',
     inputSchema: objeto(
       {
         projeto,

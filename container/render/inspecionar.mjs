@@ -70,17 +70,20 @@ function instalar({ familias, maxElementos }) {
   function linhaDoTempo() {
     const tweens = [];
     let fim = 0;
-    const percorre = (linha, desloca) => {
+    // escala: quanto um segundo da linha vale na página (timeScale de quem está por fora; a escala que o
+    // site põe para esticar a animação com a fala é um timeScale nos filhos de tl).
+    const percorre = (linha, desloca, escala) => {
       for (const c of linha.getChildren(false, true, true)) {
-        const inicio = desloca + c.startTime();
+        const inicio = desloca + c.startTime() * escala;
+        const passo = escala / (c.timeScale() || 1);
         if (c instanceof gsap.core.Timeline) {
-          percorre(c, inicio);
+          percorre(c, inicio, passo);
           continue;
         }
         const alvos = c.targets().filter((a) => a instanceof Element);
         // O tl.set({}, {}, duração) da página e os objetos do agente não são elementos.
         if (!alvos.length) continue;
-        const termina = inicio + c.totalDuration();
+        const termina = inicio + c.totalDuration() * passo;
         fim = Math.max(fim, termina);
         const props = [...new Set([...Object.keys(c.vars), ...Object.keys(c.vars.startAt ?? {})])].filter((k) => !ESPECIAIS.has(k) && !k.startsWith("on"));
         const quem = alvos.slice(0, 3).map(nome).join(" ") + (alvos.length > 3 ? ` +${alvos.length - 3}` : "");
@@ -88,7 +91,7 @@ function instalar({ familias, maxElementos }) {
         tweens.push(`${quando} ${quem} ${props.join(",")}`);
       }
     };
-    percorre(window.__timelines.main, 0);
+    percorre(window.__timelines.main, 0, 1);
     return { tweens, fim: r2(fim) };
   }
 
