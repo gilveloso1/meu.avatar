@@ -65,7 +65,7 @@ export interface Contexto {
   /** O ponto entre os olhos, de 0 a 1, ou null se não houver. */
   rosto(src: string): Promise<{ x: number; y: number } | null>;
   /** Uma animação já feita num projeto de quem edita (para reusar), ou null. */
-  animacao(projeto: string, bloco: string): Promise<{ html: string; params?: Record<string, string | number>; duracao: number; nome: string } | null>;
+  animacao(projeto: string, bloco: string): Promise<{ html: string; params?: Record<string, string | number>; escala?: number; fixa?: boolean; duracao: number; nome: string } | null>;
 }
 
 export const MAX_COMANDOS = 100;
@@ -130,8 +130,13 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
           if (duracao === null || duracao < MIN_LEN || duracao > CODE_MAX) throw falha("duracao_invalida");
           const nome = texto(c.nome) ?? base?.nome ?? proximoNome(project, "Animação", (b) => b.code);
           const params = parametros(c.parametros, base?.params, falha);
+          if (c.esticar !== undefined && typeof c.esticar !== "boolean") throw falha("codigo_invalido");
+          // A cópia vem com a escala dela, se a duração não mudar; esticar: false a deixa com a duração que tiver.
+          const escala = c.duracao === undefined && base?.escala ? base.escala : undefined;
+          const fixa = c.esticar === undefined ? base?.fixa : c.esticar === false;
           const novo = adicionar(project, { ...c, inicio: 0, fim: duracao }, { src: "", kind: "image", dur: CODE_MAX, name: nome }, falha);
-          project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, code: { html, ...(params ? { params } : {}) } } : b)) };
+          const code = { html, ...(params ? { params } : {}), ...(escala ? { escala } : {}), ...(fixa ? { fixa: true } : {}) };
+          project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, code } : b)) };
           criados.push(novo.id);
           break;
         }
@@ -447,7 +452,8 @@ function editarCodigo(project: CanvasProject, c: Comando, falha: (c: string, ext
   const b = project.blocks.find((o) => o.id === c.bloco);
   if (!b) throw falha("bloco_inexistente");
   if (!b.code) throw falha("sem_codigo");
-  if ((c.html !== undefined && c.trocas !== undefined) || (c.html === undefined && c.trocas === undefined && c.parametros === undefined)) throw falha("codigo_invalido");
+  if ((c.html !== undefined && c.trocas !== undefined) || (c.html === undefined && c.trocas === undefined && c.parametros === undefined && c.esticar === undefined)) throw falha("codigo_invalido");
+  if (c.esticar !== undefined && typeof c.esticar !== "boolean") throw falha("codigo_invalido");
   const params = parametros(c.parametros, b.code.params, falha);
   let html = b.code.html;
   if (c.html !== undefined) html = codigo(c.html, falha);
@@ -462,7 +468,11 @@ function editarCodigo(project: CanvasProject, c: Comando, falha: (c: string, ext
     }
     html = codigo(html, falha);
   }
-  return { ...project, blocks: project.blocks.map((o) => (o === b ? { ...o, code: { html, ...(params ? { params } : {}) } } : o)) };
+  // O código inteiro novo é escrito para o tempo do bloco como está: a escala volta a 1. As trocas mantêm a escala.
+  const escala = c.html === undefined ? b.code.escala : undefined;
+  const fixa = c.esticar === undefined ? b.code.fixa : c.esticar === false;
+  const code = { html, ...(params ? { params } : {}), ...(escala ? { escala } : {}), ...(fixa ? { fixa: true } : {}) };
+  return { ...project, blocks: project.blocks.map((o) => (o === b ? { ...o, code } : o)) };
 }
 
 /** O grupo em que o bloco faz parte da sequência (e não da cobertura ou do som). */
@@ -482,18 +492,41 @@ const peloArquivo: Mapa = (off, antes, depois) => {
 
 const EPS = 1e-6;
 
-/** As coberturas e os sons somados que começam dentro do bloco, com os segundos do bloco em que começam. */
-function presos(project: CanvasProject, alvo: Block): { id: string; off: number }[] {
-  const g = sequencia(project, alvo.id);
-  if (!g) return [];
-  return [...g.covers, ...g.audios].filter((o) => o.x >= alvo.x - EPS && o.x < alvo.x + width(alvo) - EPS).map((o) => ({ id: o.id, off: (o.x - alvo.x) / PX }));
-}
-
-/** Põe cada camada presa no x dado (null: fica onde a sequência a deixou). */
-function reposicionar(project: CanvasProject, camadas: { id: string; off: number }[], onde: (off: number) => number | null): CanvasProject {
-  if (!camadas.length) return project;
-  const xs = new Map(camadas.map((c) => [c.id, onde(c.off)]));
-  return { ...project, blocks: project.blocks.map((b) => (xs.get(b.id) != null ? { ...b, x: +xs.get(b.id)!.toFixed(3) } : b)) };
+/**
+ * Leva as camadas do grupo (coberturas e sons somados) para o mesmo ponto da fala depois que o bloco `alvo` mudou:
+ * o que está no alvo vai por `noAlvo` (segundos do alvo antes → x depois), o resto anda com o bloco de baixo. A
+ * animação em código também leva o fim, e estica ou encolhe até lá (a escala da linha do tempo, ver codeHtml); com
+ * `fixa`, fica com a duração que tinha.
+ */
+function acompanhar(novo: CanvasProject, seq: Group, alvo: Block, noAlvo: (off: number) => number): CanvasProject {
+  const camadas = [...seq.covers, ...seq.audios];
+  if (!camadas.length) return novo;
+  const agora = new Map(novo.blocks.map((b) => [b.id, b]));
+  const ultimo = seq.blocks[seq.blocks.length - 1]!;
+  const onde = (x: number) => {
+    const b = seq.blocks.find((o) => x >= o.x - EPS && x < o.x + width(o) - EPS) ?? (x >= ultimo.x ? ultimo : null);
+    if (!b) return x;
+    if (b.id === alvo.id) return noAlvo((x - alvo.x) / PX);
+    return agora.get(b.id)!.x + (x - b.x);
+  };
+  const muda = new Map<string, Partial<Block>>();
+  for (const o of camadas) {
+    const x = onde(o.x);
+    if (!o.code || o.code.fixa) {
+      muda.set(o.id, { x });
+      continue;
+    }
+    const antes = len(o);
+    const depois = Math.min(CODE_MAX, Math.max(MIN_LEN, (onde(o.x + width(o)) - x) / PX));
+    if (Math.abs(depois - antes) < 0.001) {
+      muda.set(o.id, { x });
+      continue;
+    }
+    const escala = +((o.code.escala ?? 1) * (depois / antes)).toFixed(6);
+    const { escala: _, ...code } = o.code;
+    muda.set(o.id, { x, tout: +(o.tin + depois).toFixed(3), code: Math.abs(escala - 1) < 1e-6 ? code : { ...code, escala } });
+  }
+  return { ...novo, blocks: novo.blocks.map((b) => (muda.has(b.id) ? { ...b, ...muda.get(b.id), x: +muda.get(b.id)!.x!.toFixed(3) } : b)) };
 }
 
 /** Muda um bloco e mantém a sequência dele encostada, com o que o cobre acompanhando o mesmo ponto da fala. */
@@ -502,10 +535,9 @@ function alterar(project: CanvasProject, id: string, muda: (b: Block) => Block, 
   const p = { ...project, blocks: project.blocks.map((b) => (b.id === id ? muda(b) : b)) };
   const seq = sequencia(project, id);
   if (!seq) return p;
-  const camadas = presos(project, antes);
   const novo = relay(project, p, seq.blocks.map((b) => b.id), seq.x, seq.blocks[0]!.y);
   const depois = novo.blocks.find((b) => b.id === id)!;
-  return reposicionar(novo, camadas, (off) => depois.x + mapa(off, antes, depois) * PX);
+  return acompanhar(novo, seq, antes, (off) => depois.x + mapa(off, antes, depois) * PX);
 }
 
 /** Leva um bloco para depois ou antes de outro, fechando o buraco de onde saiu. */
@@ -638,7 +670,7 @@ function manterPartes(project: CanvasProject, alvo: Block, partes: readonly (rea
     if (!peca) return ultima.x + width(ultima);
     return peca.x + (Math.max(0, t - peca.tin) / (peca.speed ?? 1)) * PX;
   };
-  return { project: reposicionar(p, presos(project, alvo), onde), ids: novos.map((n) => n.id) };
+  return { project: acompanhar(p, seq, alvo, onde), ids: novos.map((n) => n.id) };
 }
 
 const ENCAIXES: Record<string, Frame["fit"]> = { preencher: "cover", caber: "contain", desfocar: "blur" };

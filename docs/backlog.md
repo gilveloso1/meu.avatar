@@ -63,8 +63,8 @@ Próximos passos, nesta ordem:
    - *Tempo que acompanha* (feito em 05/11/2026, ver "Camadas que acompanham" em [api.md](api.md)):
      o `em` do `sobre` conta do bloco citado, a camada segue o ponto da fala quando o bloco de baixo
      é cortado, acelerado ou perde pausas e trechos, o `trocar` tira o silêncio das pontas e leva a
-     camada na proporção, e o `removerPausas` aceita `acima` em segundos. Falta a animação esticar
-     ou encolher com o bloco (hoje mantém a duração), o mesmo acompanhamento nos cortes feitos
+     camada na proporção, e o `removerPausas` aceita `acima` em segundos. A animação em código
+     estica ou encolhe com a fala (feito em 05/11/2026). Faltam o mesmo acompanhamento nos cortes feitos
      na tela do canvas, um aviso quando um corte tira o ponto em que a camada começava (hoje ela vai
      para o começo ou o fim do bloco, calada) e apagar um projeto pelo MCP (o teste de 05/11/2026
      deixou o projeto "Teste MCP tempo (agente) 05/11" na conta).

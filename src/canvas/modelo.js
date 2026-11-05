@@ -5,9 +5,10 @@
  * Projeto: { blocks, finals, edges }
  *   bloco: { id, kind: "video" | "image" | "audio", name, src, dur, tin, tout,
  *     draft? ({ fala }: o rascunho, uma imagem sem arquivo no lugar de um vídeo que falta),
- *     code? ({ html, params }: a animação em código, uma imagem sem arquivo que o navegador roda na
+ *     code? ({ html, params, escala, fixa }: a animação em código, uma imagem sem arquivo que o navegador roda na
  *            prévia; o tempo do bloco é o da linha do tempo `tl` dela, até CODE_MAX; params, os
- *            valores que o código usa, ver codeHtml()),
+ *            valores que o código usa; escala, quanto a linha do tempo foi esticada (o bloco de baixo
+            mudou de tamanho); fixa, não estica; ver codeHtml()),
  *            x, y, mute, vol, tone, audio, speed, frame }   (dur: duração do
  *            arquivo; tin/tout: o corte; tone: 1 a TONES, o tom da cor do tipo;
  *            audio, só no vídeo: "linked" (o som dele numa faixa presa embaixo,
@@ -91,6 +92,16 @@ export const width = (b) => len(b) * PX;
  * scripts leem o objeto params. Mudar um valor muda o código, e a exportação renderiza de novo.
  */
 export function codeHtml(code) {
+  const html = comParametros(code);
+  // A escala estica ou encolhe a linha do tempo inteira, depois do código do agente: os tempos escritos no código
+  // são os de antes, e cada tween e linha filha vai para o mesmo ponto, na proporção. Roda igual na prévia, na
+  // inspeção e no render (o tl é o da página). Sem escala, o código vai como está.
+  const k = code.escala;
+  if (!k || k === 1) return html;
+  return `${html}\n<script>tl.getChildren(false, true, true).forEach(function (c) { c.startTime(c.startTime() * ${k}); c.timeScale(c.timeScale() / ${k}); });</script>`;
+}
+
+function comParametros(code) {
   // Sem parâmetros, o código vai como foi guardado (e o vídeo já feito continua valendo).
   if (!code.params || !Object.keys(code.params).length) return code.html;
   const params = code.params;

@@ -104,6 +104,7 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   a camada de cima.
   (Feito: o `trocar` tira o silêncio das pontas e leva a camada na proporção.)
 - Camada que se adapta: a animação esticar ou encolher sozinha quando o bloco muda de duração.
+  (Feito em 05/11/2026: a animação em código guarda a escala e estica com a fala; `esticar: false` não deixa.)
 - Ler o código de uma animação: devolver o HTML de um arquivo já renderizado, para editar em vez
   de reescrever.
 - Áudio: enviar música por URL ou da biblioteca do site (o base64 sem terminal é inviável) e ter
