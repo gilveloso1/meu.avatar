@@ -60,9 +60,11 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Tempo que acompanha*: `sobre` ancorado no bloco (não só no grupo), encaixe do vídeo no
-     rascunho cortando o silêncio, remover pausas acima de X s em todos os blocos com
-     realinhamento; `ligar` e `remover` sem desfazer as variações sem querer.
+   - *Tempo que acompanha*: a cobertura já anda com o bloco em que começa quando algo antes
+     dele muda, e `ligar`, `remover` e `ordenar` já não desfazem variações (PRs 91 a 95). Faltam:
+     `sobre` com o `em` contado do bloco (hoje é do grupo), a cobertura acompanhar o que muda
+     *dentro* do bloco dela (pausas, trechos e velocidade remapeados; animação que estica), o
+     `trocar` cortar o silêncio do vídeo pronto e o `removerPausas` com um limite em segundos.
    - *Ver o resultado*: quadros do Final montado sem exportar (a animação sozinha já se vê pelo
      `inspecionar_animacao`).
    - *Pronto para usar*: em vez de templates adivinhados, o agente reusa o que já fez (feito,
