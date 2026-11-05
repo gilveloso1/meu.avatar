@@ -94,11 +94,13 @@ export const width = (b) => len(b) * PX;
 export function codeHtml(code) {
   const html = comParametros(code);
   // A escala estica ou encolhe a linha do tempo inteira, depois do código do agente: os tempos escritos no código
-  // são os de antes, e cada tween e linha filha vai para o mesmo ponto, na proporção. Roda igual na prévia, na
-  // inspeção e no render (o tl é o da página). Sem escala, o código vai como está.
+  // são os de antes, e tudo vai para o mesmo ponto, na proporção. Os filhos do tl passam para uma linha interna, e só
+  // ela muda de velocidade: mudar a de cada filho aplicava na hora um set (duração zero) e podia gravar o valor de
+  // partida antes da hora. Roda igual na prévia, na inspeção e no render (o tl é o da página). Sem escala, o código
+  // vai como está.
   const k = code.escala;
   if (!k || k === 1) return html;
-  return `${html}\n<script>tl.getChildren(false, true, true).forEach(function (c) { c.startTime(c.startTime() * ${k}); c.timeScale(c.timeScale() / ${k}); });</script>`;
+  return `${html}\n<script>(function (k) { var w = gsap.timeline(); tl.getChildren(false, true, true).forEach(function (c) { var s = c.startTime(); tl.remove(c); w.add(c, s); }); w.timeScale(1 / k); tl.add(w, 0); })(${k});</script>`;
 }
 
 function comParametros(code) {

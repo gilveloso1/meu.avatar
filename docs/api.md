@@ -229,8 +229,8 @@ um rascunho, a camada vai para o mesmo ponto na proporção; no lugar de um arqu
 do bloco. Vídeo, imagem e som por cima mantêm a duração. A animação em código leva também o fim ao mesmo
 ponto da fala e estica ou encolhe até lá (05/11/2026): a animação que cobria uma fala inteira continua
 cobrindo a fala inteira depois de tirar as pausas ou de trocar o rascunho pelo vídeo. O código não muda:
-o bloco guarda a `escala` e a linha do tempo inteira (cada tween e linha filha) vai para o mesmo ponto, na
-proporção, na prévia, na inspeção e na exportação (`codeHtml`, `src/canvas/modelo.js`). Os tempos escritos
+o bloco guarda a `escala` e a linha do tempo inteira vai para o mesmo ponto, na proporção (os filhos do `tl` passam
+para uma linha interna, e só ela muda de velocidade), na prévia, na inspeção e na exportação (`codeHtml`, `src/canvas/modelo.js`). Os tempos escritos
 no código seguem os de antes da escala; o `ver_projeto` com `incluir: codigo` mostra a `escala`.
 `esticar: false` (em `adicionar` e `editarCodigo`) deixa a animação com a duração que tiver, como um selo
 de tempo fixo; ela ainda anda com a fala. `cortar` na própria animação muda só até onde ela vai, sem

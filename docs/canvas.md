@@ -27,7 +27,8 @@ menos custo.
   60 s (`CODE_MAX`, o que o render faz de uma vez) e cobre o vídeo como qualquer cobertura; o
   tempo do bloco é o da linha do tempo. Quando a fala de baixo muda de tamanho pelos comandos, a animação
   estica ou encolhe junto: o bloco guarda a `escala`, e o `codeHtml` acrescenta no fim do código um script
-  que leva cada filho da `tl` para o mesmo ponto, na proporção (`esticar: false` não deixa). Na prévia, cada animação é uma página própria
+  que passa os filhos da `tl` para uma linha interna e muda só a velocidade dela (mudar a de cada filho
+  aplicava os `set` na hora); `esticar: false` não deixa. Na prévia, cada animação é uma página própria
   (`/canvas/animacao`, de `src/canvas/animacao.html`) num iframe com `sandbox="allow-scripts"`:
   sem a origem do site, sem rede além das fontes e só posta pelo canvas (`frame-ancestors 'self'`).
   Ela monta a página do render (`container/render/servidor.mjs`) com o mesmo GSAP (3.15.0,
