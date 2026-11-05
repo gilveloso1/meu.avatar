@@ -243,13 +243,17 @@ describe("comandos", () => {
     const c = await cru(b.revisao, [{ tipo: "remover", ids: [a.criados[29]] }]);
     expect(c.mudou.removidos).toEqual({ blocos: [a.criados[29]] });
     expect(c.mudou.avisosResolvidos).toEqual([{ tipo: "rascunho", bloco: a.criados[29], segundos: 2 }]);
-    expect(c.mudou.grupos[0]).toMatchObject({ duracao: 58, blocos: [] });
+    expect(c.mudou.grupos).toEqual([{ id: a.criados[0], nome: expect.any(String), duracao: 58 }]);
     expect(c.avisosPendentes).toBe(29);
 
     // Tirar uma fala do começo: os 27 que andaram vêm numa faixa só, e não um a um.
     const d = await cru(c.revisao, [{ tipo: "remover", ids: [a.criados[1]], fechar: true }]);
-    expect(d.mudou.grupos).toEqual([{ id: a.criados[0], nome: expect.any(String), duracao: 56, blocos: [], andaram: [{ de: a.criados[2], ate: a.criados[28], segundos: -2 }] }]);
+    expect(d.mudou.grupos).toEqual([{ id: a.criados[0], nome: expect.any(String), duracao: 56, andaram: [{ de: a.criados[2], ate: a.criados[28], segundos: -2 }] }]);
     expect(JSON.stringify(d).length).toBeLessThan(600);
+
+    // Sem fechar, tirar uma fala do meio parte o grupo: o aviso diz, e o grupo novo vem sem os que só mudaram de grupo.
+    const e = await cru(d.revisao, [{ tipo: "remover", ids: [a.criados[10]] }]);
+    expect(e.mudou.avisos).toContainEqual({ tipo: "grupo_partido", grupo: a.criados[0], partes: [a.criados[0], a.criados[11]] });
 
     // O projeto inteiro continua no ver_projeto, com as falas.
     const lido = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ avisos: { fala?: string }[] }>();
@@ -291,13 +295,29 @@ describe("comandos", () => {
     expect(await (await comandos(id, revisao, [{ tipo: "adicionar", arquivo, dur: 5 }])).json()).toEqual({ erro: "arquivo_indisponivel", comando: 0 });
   });
 
+  it("as ligações vêm com o id, e a do Final automático sai pelo remover", async () => {
+    const { id, revisao } = await novo();
+    const cru = (rev: number, lista: unknown[]) => api(`/api/v1/projetos/${id}/comandos`, admin, { revisao: rev, comandos: lista }).then((r) => r.json<Record<string, any>>());
+    const a = await cru(revisao, [
+      { tipo: "rascunho", fala: "Cena 1", duracao: 2, rotulo: "c1" },
+      { tipo: "rascunho", fala: "Cena 2", duracao: 2 },
+    ]);
+    const [c1, c2] = a.criados as [string, string];
+    const auto = a.mudou.ligacoes.find((l: { de: string; para: string }) => l.de === c1 && l.para === "final");
+    expect(auto.id).toEqual(expect.any(String));
+    const b = await cru(a.revisao, [{ tipo: "remover", ids: [auto.id] }, { tipo: "ligar", de: c1, para: c2 }, { tipo: "ligar", de: c2, para: "final" }]);
+    expect(b.mudou.removidos).toEqual({ ligacoes: [auto.id] });
+    expect(b.mudou.ligacoes.map((l: { de: string; para: string }) => [l.de, l.para])).toEqual([[c1, c2], [c2, "final"]]);
+    expect(b.mudou.finais[0].variacoes).toEqual([{ nome: "Variação 1", grupos: [c1, c2], duracao: 4 }]);
+  });
+
   it("revisão velha: 409 com o projeto como está agora, e nada é escrito", async () => {
     const { id, revisao } = await novo();
     const feito = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }])).json<{ criados: string[] }>();
     const res = await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO2 }]);
     expect(res.status).toBe(409);
     const r = await res.json<Record<string, unknown>>();
-    expect(Object.keys(r).sort()).toEqual(["avisos", "erro", "finais", "grupos", "revisao"]);
+    expect(Object.keys(r).sort()).toEqual(["avisos", "erro", "finais", "grupos", "ligacoes", "revisao"]);
     expect(r).toMatchObject({ erro: "conflito", revisao: revisao + 1, grupos: [{ blocos: [{ id: feito.criados[0] }] }] });
   });
 });

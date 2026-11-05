@@ -53,6 +53,11 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   (Num roteiro de 30 falas, em 04/11/2026, o agente ainda reclamou: o resumo inteiro voltava a cada
   edição, uns 7,6 mil caracteres, metade nas falas dos rascunhos. Agora a resposta traz só o que o
   lote mudou, em `mudou`, sem as falas.)
+  (No teste seguinte, um roteiro de 9 falas em 3 cenas, as respostas ficaram entre 219 e 997
+  caracteres, mas o agente precisou de 5 chamadas em vez de 2: a ligação automática do primeiro
+  bloco ao Final virou uma variação a mais e só se via no canvas inteiro, e tirar uma fala do meio
+  partiu a cena sem aviso. Agora as ligações vêm com o id no resumo, há o aviso `grupo_partido`, e as
+  instruções explicam `fechar`, `ligar` e `mover`.)
 - Reenviar o HTML completo a cada correção: 3 a 5 mil caracteres por cena, com o mesmo CSS do
   painel repetido em todas.
 - O raciocínio de layout e de tempos: coordenadas do SVG, posições das moedas, a matemática do

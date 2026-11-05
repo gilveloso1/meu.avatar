@@ -3,7 +3,7 @@
  * mesmo modelo da tela. Só o administrador, como o canvas; cada projeto é só de quem o
  * criou. Exportar e baixar usam as rotas do site, com o mesmo token.
  */
-import { baseGaps, finalRate, groups, members, output, PX, upgrade, versionName, versions, width } from "./canvas/modelo.js";
+import { baseGaps, finalRate, groups, links, members, output, PX, upgrade, versionName, versions, width } from "./canvas/modelo.js";
 import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, trechos } from "./legenda";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
@@ -99,6 +99,8 @@ function resumo(data: CanvasProject) {
         fim: segundos(b.x + width(b) - g.x),
       })),
     })),
+    // Cada ligação de grupo a grupo ou a um Final, com o id para remover (o primeiro bloco já vem ligado ao Final).
+    ligacoes: links(data, gs).map((l) => ({ id: l.edge.id, de: l.from.id, para: typeof l.to === "string" ? l.to : l.to.id })),
     finais: data.finals.map((f) => {
       const { resolution, format } = output(f);
       const vs = versions(data, f.id);
@@ -154,9 +156,20 @@ function mudancas(antes: Resumo, depois: Resumo) {
           andaram.push(faixa);
         }
       }
-      return { id: g.id, nome: g.nome, duracao: g.duracao, blocos, ...(andaram.length ? { andaram } : {}) };
+      return { id: g.id, nome: g.nome, duracao: g.duracao, ...(blocos.length ? { blocos } : {}), ...(andaram.length ? { andaram } : {}) };
     })
-    .filter((g) => g.blocos.length || g.andaram || gruposAntes.get(g.id) !== chave([g.nome, g.duracao]));
+    .filter((g) => g.blocos || g.andaram || gruposAntes.get(g.id) !== chave([g.nome, g.duracao]));
+  const ligacoesAntes = new Set(antes.ligacoes.map(chave));
+  const ligacoes = depois.ligacoes.filter((l) => !ligacoesAntes.has(chave(l)));
+  // Um grupo que o lote partiu: parte dos blocos dele foi parar num grupo novo, só com blocos dele (remover sem fechar).
+  const grupoDe = new Map(depois.grupos.flatMap((g) => g.blocos.map((b) => [b.id, g.id] as const)));
+  const novos = depois.grupos.filter((g) => !gruposAntes.has(g.id));
+  const partidos = antes.grupos.flatMap((g) => {
+    const meus = new Set(g.blocos.filter((b) => b.camada === "base").map((b) => b.id));
+    const partes = [...new Set(g.blocos.filter((b) => meus.has(b.id) && grupoDe.has(b.id)).map((b) => grupoDe.get(b.id)!))];
+    const sobra = novos.some((n) => partes.includes(n.id) && n.blocos.filter((b) => b.camada === "base").every((b) => meus.has(b.id)));
+    return partes.length > 1 && sobra ? [{ tipo: "grupo_partido", grupo: g.id, partes }] : [];
+  });
   const finaisAntes = new Map(antes.finais.map((f) => [f.id, chave(f)]));
   const finais = depois.finais.filter((f) => finaisAntes.get(f.id) !== chave(f));
   const ficaram = (lista: { id: string }[]) => new Set(lista.map((x) => x.id));
@@ -165,16 +178,18 @@ function mudancas(antes: Resumo, depois: Resumo) {
     blocos: [...blocosAntes.keys()].filter((id) => !blocosDepois.has(id)),
     grupos: antes.grupos.map((g) => g.id).filter((id) => !ficaram(depois.grupos).has(id)),
     finais: antes.finais.map((f) => f.id).filter((id) => !ficaram(depois.finais).has(id)),
+    ligacoes: antes.ligacoes.map((l) => l.id).filter((id) => !ficaram(depois.ligacoes).has(id)),
   };
   const avisosAntes = new Set(antes.avisos.map(chave));
   const avisosDepois = new Set(depois.avisos.map(chave));
-  const avisos = depois.avisos.filter((a) => !avisosAntes.has(chave(a))).map(semFala);
+  const avisos = [...partidos, ...depois.avisos.filter((a) => !avisosAntes.has(chave(a))).map(semFala)];
   const avisosResolvidos = antes.avisos.filter((a) => !avisosDepois.has(chave(a))).map(semFala);
   const cheio = (x: unknown[]) => x.length > 0;
   return {
     mudou: {
       ...(cheio(grupos) ? { grupos } : {}),
       ...(cheio(finais) ? { finais } : {}),
+      ...(cheio(ligacoes) ? { ligacoes } : {}),
       ...(Object.values(removidos).some(cheio) ? { removidos: Object.fromEntries(Object.entries(removidos).filter(([, v]) => cheio(v))) } : {}),
       ...(cheio(avisos) ? { avisos } : {}),
       ...(cheio(avisosResolvidos) ? { avisosResolvidos } : {}),
