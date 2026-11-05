@@ -62,7 +62,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/avatares?q=` | Avatares da conta com os ativos: `id`, `nome`, `tipo` (`imagem`, `video`, `audio`), `origem` (`gerado`, `enviado`), `foto`, `voz` e `src` |
 | `GET /api/v1/projetos?q=` | Projetos da conta |
 | `POST /api/v1/projetos` `{nome}` | Cria um projeto |
-| `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio, e `inicio` e `fim` em segundos do grupo), Finais com as variações e avisos. Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
+| `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio, e `inicio` e `fim` em segundos do grupo), `ligacoes` (`id`, `de`, `para`: grupo ou Final), Finais com as variações e avisos. Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
 | `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) e devolve só o que mudou: `{revisao, criados, mudou, avisosPendentes}` (abaixo). O projeto inteiro fica no `ver_projeto` |
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
 | `GET /api/v1/projetos/<id>/animacao?bloco=&instantes=0,1.5&quadros=1&final=` | Abre o código de um bloco de animação no Chrome do render, sem fazer vídeo, no tamanho do Final (sem `final`, o primeiro), e mede cada instante (até 12, em segundos do bloco; sem `instantes`, o começo, os quartos e o fim). Volta `{largura, altura, duracao: {bloco, animacao}, problemas, instantes, linhaDoTempo}`, e `quadros` (o mosaico, JPG em base64) só com `quadros=1`. Ver "Inspeção da animação", abaixo |
@@ -202,13 +202,13 @@ outro valor faz outro vídeo na exportação, e o mesmo valor reaproveita. No ca
 | `renomear` | `bloco`, `nome` | Muda o nome do bloco, como o campo Nome dos Ajustes |
 | `cortar` | `bloco`, `inicio`, `fim` | Trecho do arquivo, em segundos; a sequência fica encostada |
 | `dividir` | `bloco`, `em` | Dois blocos, no instante `em` do arquivo; 0,5 s no mínimo de cada lado |
-| `mover` | `bloco`, `depois` ou `antes` | Muda a ordem, sem buraco; a cobertura e o som somado vão junto |
+| `mover` | `bloco`, `depois` ou `antes` | Muda a ordem, sem buraco, também para outro grupo (assim se juntam dois); a cobertura e o som somado vão junto |
 | `velocidade` | `bloco`, `velocidade` (0,25 a 4) | Mantém o tom da voz; o resto da sequência acompanha |
 | `removerTrechos` | `bloco`, `trechos: [[inicio, fim], ...]` (até 200) | Tira esses trechos do arquivo (vícios, repetições, frases, pelos tempos da transcrição) e o resto encosta. Sobra menor que 0,5 s é recusada (`sobra_curta`): junte-a ao trecho do lado |
 | `removerPausas` | `bloco` (sem ele, todos), `pausa` (`curta`, `media`, `longa`) | Tira as pausas com a regra da Edição rápida |
 | `enquadrar` | `bloco`; `zoom` (1 a 8), `focoX`, `focoY` (0 a 1) ou `rosto: true`; `chaves: [{t, zoom, focoX, focoY}]`; `encaixe` (`preencher`, `caber`, `desfocar`); `recorte: {esquerda, topo, direita, base}`; `espelharH`, `espelharV`, `girar` (0, 90, 180, 270); `limpar` | Só muda o que vier. `t` é o tempo do bloco (negativo continua um movimento do bloco anterior); entre as chaves, a curva é suave |
-| `ligar` | `de`, `para` | Liga blocos (ou um Final); recusa círculo, repetida e passar de 48 variações |
-| `remover` | `ids`, `fechar` | Blocos, Finais ou linhas; com `fechar`, a sequência encosta |
+| `ligar` | `de`, `para` | Liga o grupo de um bloco a outro grupo ou a um Final (o grupo tem o id do primeiro bloco). Encadeia, não junta: para juntar dois grupos, `mover`. Recusa círculo, repetida e passar de 48 variações |
+| `remover` | `ids`, `fechar` | Blocos, Finais ou ligações (os ids de `ligacoes`). Com `fechar: true`, a sequência encosta onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois (aviso `grupo_partido`) |
 | `som` | `bloco`, `volume` (0 a 4), `mudo` | Volume do bloco |
 | `final` | `id`, `resolucao`, `formato`, `velocidade` | Muda um Final; sem `id`, cria outro. A velocidade vale para todas as variações dele |
 | `organizar` | | O mesmo Organizar da tela |
@@ -218,18 +218,21 @@ seguintes do mesmo lote, sem esperar a resposta.
 
 O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, como na tela.
 
-Roteiro longo: um grupo por cena, de preferência até uns 30 s, e cada cena ligada à seguinte, a
+Roteiro com cenas: um grupo por cena, de preferência até uns 30 s, e cada cena ligada à seguinte, a
 última ao Final (`ligar {de: <cena 1>, para: <cena 2>}`...). Não é preciso juntar no fim: o Final
-monta a sequência. Cada edição só mexe no tempo da cena dela (a resposta fica pequena), a legenda
+monta a sequência. O primeiro bloco já vem ligado ao Final: no mesmo lote, remova essa ligação (o
+id está em `ligacoes`), senão a primeira cena sai sozinha como mais uma variação. Para tirar uma
+fala do meio, `remover` com `fechar: true`. Cada edição só mexe no tempo da cena dela (a resposta fica pequena), a legenda
 cabe nos 60 s por grupo e dá para trocar ou testar uma cena sem tocar nas outras. Uma cena mais
 longa pode passar dos 30 s: não corte uma fala ou uma cobertura no meio, porque a cobertura não
 passa de um grupo para o outro.
 A resposta traz `criados`, com os ids novos na ordem dos comandos, e em `mudou` só o que o lote
 mexeu, para não devolver o projeto inteiro a cada edição (num roteiro de 30 falas, o resumo inteiro
 passava de 7 mil caracteres): `grupos` novos ou alterados, cada um com só os blocos novos ou
-alterados (os que só andaram, porque um corte antes deles mudou o tempo, vêm em `andaram`: uma
-faixa `{de, ate, segundos}` por deslocamento, na ordem do grupo); `finais` alterados; `removidos` (`blocos`, `grupos`, `finais`); `avisos` que apareceram
-e `avisosResolvidos`. Campo vazio não vem. Nos avisos de `rascunho` a `fala` não vem (quem editou
+alterados (sem `blocos`, o grupo só mudou de nome ou de duração; os que só andaram, porque um corte antes deles mudou o tempo, vêm em `andaram`: uma
+faixa `{de, ate, segundos}` por deslocamento, na ordem do grupo); `ligacoes` e `finais` novos ou alterados; `removidos` (`blocos`, `grupos`, `finais`,
+`ligacoes`); `avisos` que apareceram (mais `grupo_partido`, `{grupo, partes}`, quando o lote partiu
+um grupo) e `avisosResolvidos`. Campo vazio não vem. Nos avisos de `rascunho` a `fala` não vem (quem editou
 acabou de escrevê-la; o `ver_projeto` mostra). `avisosPendentes` conta os avisos que o projeto tem
 agora.
 
