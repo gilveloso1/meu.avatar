@@ -246,6 +246,11 @@ describe("comandos", () => {
     expect(c.mudou.grupos[0]).toMatchObject({ duracao: 58, blocos: [] });
     expect(c.avisosPendentes).toBe(29);
 
+    // Tirar uma fala do começo: os 27 que andaram vêm numa faixa só, e não um a um.
+    const d = await cru(c.revisao, [{ tipo: "remover", ids: [a.criados[1]], fechar: true }]);
+    expect(d.mudou.grupos).toEqual([{ id: a.criados[0], nome: expect.any(String), duracao: 56, blocos: [], andaram: [{ de: a.criados[2], ate: a.criados[28], segundos: -2 }] }]);
+    expect(JSON.stringify(d).length).toBeLessThan(600);
+
     // O projeto inteiro continua no ver_projeto, com as falas.
     const lido = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ avisos: { fala?: string }[] }>();
     expect(lido.avisos[0]!.fala).toContain("Fala 1,");

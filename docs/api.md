@@ -217,10 +217,18 @@ Em `adicionar`, `rascunho` e `dividir`, `rotulo: "nome"` permite citar o bloco c
 seguintes do mesmo lote, sem esperar a resposta.
 
 O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, como na tela.
+
+Roteiro longo: um grupo por cena, de preferência até uns 30 s, e cada cena ligada à seguinte, a
+última ao Final (`ligar {de: <cena 1>, para: <cena 2>}`...). Não é preciso juntar no fim: o Final
+monta a sequência. Cada edição só mexe no tempo da cena dela (a resposta fica pequena), a legenda
+cabe nos 60 s por grupo e dá para trocar ou testar uma cena sem tocar nas outras. Uma cena mais
+longa pode passar dos 30 s: não corte uma fala ou uma cobertura no meio, porque a cobertura não
+passa de um grupo para o outro.
 A resposta traz `criados`, com os ids novos na ordem dos comandos, e em `mudou` só o que o lote
 mexeu, para não devolver o projeto inteiro a cada edição (num roteiro de 30 falas, o resumo inteiro
 passava de 7 mil caracteres): `grupos` novos ou alterados, cada um com só os blocos novos ou
-alterados; `finais` alterados; `removidos` (`blocos`, `grupos`, `finais`); `avisos` que apareceram
+alterados (os que só andaram, porque um corte antes deles mudou o tempo, vêm em `andaram`: uma
+faixa `{de, ate, segundos}` por deslocamento, na ordem do grupo); `finais` alterados; `removidos` (`blocos`, `grupos`, `finais`); `avisos` que apareceram
 e `avisosResolvidos`. Campo vazio não vem. Nos avisos de `rascunho` a `fala` não vem (quem editou
 acabou de escrevê-la; o `ver_projeto` mostra). `avisosPendentes` conta os avisos que o projeto tem
 agora.

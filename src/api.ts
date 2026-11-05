@@ -121,14 +121,42 @@ const semFala = (a: Aviso) => ("fala" in a ? (({ fala: _, ...resto }) => resto)(
  * O que o lote mudou, para o agente não reler o projeto inteiro a cada edição (num roteiro de 30 falas, o resumo
  * passava de 7 mil caracteres, metade nas falas dos rascunhos). Grupos novos ou alterados só com os blocos novos ou
  * alterados, Finais alterados, o que sumiu e os avisos que apareceram ou se resolveram. Campo vazio não vem.
+ * Blocos que só andaram no grupo (um corte antes deles) vêm em andaram, uma faixa por deslocamento, e não um a um.
  */
 function mudancas(antes: Resumo, depois: Resumo) {
   const chave = (x: unknown) => JSON.stringify(x);
-  const blocosAntes = new Map(antes.grupos.flatMap((g) => g.blocos.map((b) => [b.id, chave({ g: g.id, ...b })] as const)));
+  type Bloco = Resumo["grupos"][number]["blocos"][number];
+  const blocosAntes = new Map(antes.grupos.flatMap((g) => g.blocos.map((b) => [b.id, { g: g.id, b }] as const)));
   const gruposAntes = new Map(antes.grupos.map((g) => [g.id, chave([g.nome, g.duracao])]));
+  /** 0 quando nada mudou; o deslocamento, quando só o início e o fim andaram juntos; null quando mudou de verdade. */
+  const passo = (g: string, b: Bloco): number | null => {
+    const a = blocosAntes.get(b.id);
+    if (!a || a.g !== g) return null;
+    const d = +(b.inicio - a.b.inicio).toFixed(3);
+    const igual = chave({ ...a.b, inicio: 0, fim: 0 }) === chave({ ...b, inicio: 0, fim: 0 }) && Math.abs(b.fim - a.b.fim - d) < 0.001;
+    return igual ? d : null;
+  };
   const grupos = depois.grupos
-    .map((g) => ({ id: g.id, nome: g.nome, duracao: g.duracao, blocos: g.blocos.filter((b) => blocosAntes.get(b.id) !== chave({ g: g.id, ...b })) }))
-    .filter((g) => g.blocos.length || gruposAntes.get(g.id) !== chave([g.nome, g.duracao]));
+    .map((g) => {
+      const blocos: Bloco[] = [];
+      const andaram: { de: string; ate: string; segundos: number }[] = [];
+      let faixa: (typeof andaram)[number] | null = null;
+      for (const b of g.blocos) {
+        const d = passo(g.id, b);
+        if (d === null) blocos.push(b);
+        if (d === null || d === 0) {
+          faixa = null;
+          continue;
+        }
+        if (faixa && faixa.segundos === d) faixa.ate = b.id;
+        else {
+          faixa = { de: b.id, ate: b.id, segundos: d };
+          andaram.push(faixa);
+        }
+      }
+      return { id: g.id, nome: g.nome, duracao: g.duracao, blocos, ...(andaram.length ? { andaram } : {}) };
+    })
+    .filter((g) => g.blocos.length || g.andaram || gruposAntes.get(g.id) !== chave([g.nome, g.duracao]));
   const finaisAntes = new Map(antes.finais.map((f) => [f.id, chave(f)]));
   const finais = depois.finais.filter((f) => finaisAntes.get(f.id) !== chave(f));
   const ficaram = (lista: { id: string }[]) => new Set(lista.map((x) => x.id));
