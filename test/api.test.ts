@@ -1281,6 +1281,76 @@ describe("tempo que acompanha", () => {
   });
 });
 
+describe("animação que estica com a fala", () => {
+  type Code = { html: string; escala?: number; fixa?: boolean };
+  type Bloco = { id: string; x: number; tin: number; tout: number; code?: Code };
+  type Vista = { revisao: number; criados: string[]; grupos: { duracao: number }[]; canvas: { blocks: Bloco[] } };
+  const lote = async (id: string, revisao: number, lista: unknown[], fake: FakeExportApi | null = null) => (await comandos(id, revisao, lista, fake)).json<Vista>();
+  const b = (v: Vista, id: string) => v.canvas.blocks.find((o) => o.id === id)!;
+  const CENA = `<div id="t">Oi</div><script>tl.to("#t", { x: 10, duration: 9 }, 0.5);</script>`;
+
+  it("a fala perde pausas: a animação que a cobria inteira encolhe junto, e a fixa não", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [[3, 5]], som: true };
+    const a = await lote(id, revisao, [
+      { tipo: "adicionar", video: VIDEO, rotulo: "a" },
+      { tipo: "adicionar", html: CENA, duracao: 10, sobre: "@a", em: 0 },
+      { tipo: "adicionar", html: CENA, duracao: 2, sobre: "@a", em: 6, esticar: false },
+    ], fake);
+    const [base, toda, fixa] = a.criados as [string, string, string];
+    const r = await lote(id, a.revisao, [{ tipo: "removerPausas", bloco: base, acima: 0.5 }], fake);
+    expect(r.grupos[0]!.duracao).toBe(8.5);
+    expect(b(r, toda)).toMatchObject({ x: 0, tout: 8.5, code: { html: CENA, escala: 0.85 } });
+    expect(b(r, fixa)).toMatchObject({ x: 4.5 * 40, tout: 2, code: { fixa: true } });
+    expect(b(r, fixa).code!.escala).toBeUndefined();
+    // O ver_projeto mostra a escala e quem não estica.
+    const v = await (await api(`/api/v1/projetos/${id}?incluir=codigo`, admin)).json<{ codigo: Record<string, unknown>[] }>();
+    expect(v.codigo).toEqual([expect.objectContaining({ bloco: toda, duracao: 8.5, escala: 0.85 }), expect.objectContaining({ bloco: fixa, duracao: 2, esticar: false })]);
+  });
+
+  it("no lugar do rascunho, a animação vai do tamanho da fala estimada ao da real", async () => {
+    await env.MIDIA.put(`videos/${VIDEO2}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [[0, 1], [8.5, 10]], som: true };
+    const r = await lote(id, revisao, [{ tipo: "rascunho", fala: "Oi, gente", duracao: 3, rotulo: "r" }, { tipo: "adicionar", html: CENA, duracao: 3, sobre: "@r", em: 0 }]);
+    const t = await lote(id, r.revisao, [{ tipo: "trocar", bloco: r.criados[0], video: VIDEO2 }], fake);
+    // O vídeo fica de 0,9 a 8,7: 7,8 s.
+    expect(b(t, r.criados[1]!)).toMatchObject({ x: 0, tout: 7.8, code: { escala: 2.6 } });
+  });
+
+  it("editarCodigo: o código inteiro novo volta a escala a 1; trocas e esticar a mantêm", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [[3, 5]], som: true };
+    const a = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, rotulo: "a" }, { tipo: "adicionar", html: CENA, duracao: 10, sobre: "@a", em: 0 }], fake);
+    const cena = a.criados[1]!;
+    const r = await lote(id, a.revisao, [{ tipo: "removerPausas", bloco: a.criados[0], acima: 0.5 }], fake);
+    const t = await lote(id, r.revisao, [{ tipo: "editarCodigo", bloco: cena, trocas: [{ de: "Oi", para: "Olá" }] }, { tipo: "editarCodigo", bloco: cena, esticar: false }]);
+    expect(b(t, cena).code).toMatchObject({ escala: 0.85, fixa: true });
+    const h = await lote(id, t.revisao, [{ tipo: "editarCodigo", bloco: cena, html: "<p>novo</p>", esticar: true }]);
+    expect(b(h, cena).code).toEqual({ html: "<p>novo</p>" });
+    expect(b(h, cena).tout).toBe(8.5);
+    expect(await (await comandos(id, h.revisao, [{ tipo: "editarCodigo", bloco: cena, esticar: "sim" }])).json()).toEqual({ erro: "codigo_invalido", comando: 0 });
+  });
+
+  it("a cópia leva a escala e o esticar: false", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [[3, 5]], som: true };
+    const a = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, rotulo: "a" }, { tipo: "adicionar", html: CENA, duracao: 10, sobre: "@a", em: 0 }], fake);
+    const r = await lote(id, a.revisao, [{ tipo: "removerPausas", bloco: a.criados[0], acima: 0.5 }], fake);
+    const c = await lote(id, r.revisao, [{ tipo: "adicionar", animacao: { projeto: id, bloco: a.criados[1] }, esticar: false }]);
+    expect(b(c, c.criados[0]!)).toMatchObject({ tout: 8.5, code: { escala: 0.85, fixa: true } });
+    const d = await lote(id, c.revisao, [{ tipo: "adicionar", animacao: { projeto: id, bloco: a.criados[1] }, duracao: 4 }]);
+    expect(b(d, d.criados[0]!).code!.escala).toBeUndefined();
+  });
+});
+
 describe("pausasAcima", () => {
   it("deixa cada pausa longa com o limite e não corta a que já cabe", () => {
     expect(pausasAcima([[0, 2], [3, 3.4], [5, 7]], 0, 8, 0.5)).toEqual([[1.8, 5.3], [6.8, 8]]);

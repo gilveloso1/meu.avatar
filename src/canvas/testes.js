@@ -490,6 +490,15 @@ test("os parâmetros da animação entram no HTML escapados e nos scripts como p
   assert.equal(M.codeHtml({ html: "<p>x</p>" }), "<p>x</p>");
 });
 
+test("a escala estica a linha do tempo depois do código, e sem ela o código vai como está", () => {
+  const html = M.codeHtml({ html: "<p>x</p><script>tl.to('p',{x:1},0.5)</script>", escala: 0.85 });
+  assert.ok(html.startsWith("<p>x</p><script>tl.to('p',{x:1},0.5)</script>\n<script>(function (k) { var w = gsap.timeline();"));
+  assert.ok(html.endsWith("w.timeScale(1 / k); tl.add(w, 0); })(0.85);</script>"));
+  assert.equal(M.codeHtml({ html: "<p>x</p>", escala: 1 }), "<p>x</p>");
+  // Com parâmetros, a escala vem depois deles e do código.
+  assert.ok(M.codeHtml({ html: "<b>{{n}}</b>", params: { n: "A" }, escala: 2 }).endsWith("tl.add(w, 0); })(2);</script>"));
+});
+
 test("parâmetro usado sem valor aparece uma vez, no texto e nos scripts", () => {
   const faltam = M.missingParams({ html: '<b>{{nome}}</b>{{ preco }}{{preco}}<script>tl.to("#a",{x:params.x, y:params["y"], z:params.nome})</script>', params: { nome: "Ana" } });
   assert.deepEqual(faltam, [

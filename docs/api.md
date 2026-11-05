@@ -158,7 +158,8 @@ menos de 1 s; o mosaico vem só com `quadros: true`.
   `erro_de_script`, `passa_do_bloco` (a linha do tempo termina depois do bloco) e
   `parametro_sem_valor` (o código usa `{{chave}}` ou `params.chave` e o bloco não tem esse valor em
   `parametros`: o texto sai como está, e o script recebe `undefined`; vem do site, sem instantes).
-- `linhaDoTempo`: um tween por linha, `início-fim alvo propriedades` (de `tl.getChildren`).
+- `linhaDoTempo`: um tween por linha, `início-fim alvo propriedades` (de `tl.getChildren`), nos tempos da
+  página: com o `timeScale` de cada linha filha e a `escala` da animação que esticou com a fala.
 - `duracao`: a do bloco e a da animação (o fim do último tween).
 
 No exemplo de 8 s com os três defeitos, a resposta tem uns 1.500 caracteres; o mosaico de quatro
@@ -171,7 +172,7 @@ instantes, uns 14 mil em base64.
 | `adicionar` | `video`, `arquivo` ou `ativo` (de `listar_avatares`); `nome`, `inicio`, `fim`, `semSom`; `dur` (obrigatório em vídeo e áudio de `arquivo` e de ativo enviado; o ativo gerado usa a duração do vídeo); `depois` ou `sobre` e `em` | Bloco novo. `depois`: entra logo depois daquele bloco e empurra o resto. `sobre`: cobre o grupo a `em` segundos do começo do bloco citado (ou soma o som, se for áudio); o `em` pode passar do bloco até o fim do grupo, e do primeiro bloco é o tempo do grupo. A camada fica presa ao ponto da fala em que começa (ver "Camadas que acompanham"). Sem os dois: bloco solto, à direita de tudo. Vídeo de `arquivo` sem faixa de som (o WebM do render, uma animação) entra sem a camada de áudio, como com `semSom` |
 | `adicionar` (cópia) | `animacao: {projeto, bloco}` (de `listar_animacoes`); `parametros`, `duracao`, `nome`; `depois` ou `sobre` e `em`; `rotulo` | Copia uma animação já feita num projeto da conta (este ou outro): o código, os parâmetros, a duração e o nome. O que vier aqui muda, e os `parametros` se juntam aos dela. A cópia é independente: mudar uma não mexe na outra. Projeto ou bloco que não existe, de outra pessoa ou sem código: `animacao_inexistente`. Com `html` junto: `codigo_invalido` |
 | `adicionar` (animação) | `html`, `duracao` (0,5 a 60); `nome`; `depois` ou `sobre` e `em`; `rotulo` | Animação em código: o projeto guarda o HTML (até 100 mil caracteres, com as regras do `renderizar_html`), não um WebM. Sem `nome`, Animação 1, Animação 2... A prévia do canvas roda o código; a exportação faz o vídeo dela no tamanho do Final, uma vez só por código, tamanho e duração. `cortar` muda o tempo até 60 s; `enquadrar` não vale (o código já desenha no tamanho do Final) |
-| `editarCodigo` | `bloco`; `html` ou `trocas: [{de, para}]` (até 50); `parametros` | Troca o código da animação inteiro ou só trechos, sem reenviar a cena. Cada `de` tem de aparecer uma vez só, como está; senão, `trecho_nao_unico` com `troca` e `vezes`. Só `parametros` muda só os valores |
+| `editarCodigo` | `bloco`; `html` ou `trocas: [{de, para}]` (até 50); `parametros`; `esticar` | Troca o código da animação inteiro ou só trechos, sem reenviar a cena. Cada `de` tem de aparecer uma vez só, como está; senão, `trecho_nao_unico` com `troca` e `vezes`. Só `parametros` muda só os valores. O `html` inteiro novo é escrito para o tempo do bloco como está: a `escala` volta a 1 (as `trocas` a mantêm). `esticar: false` não deixa a animação esticar com a fala; `true` volta a deixar. Vale para as próximas mudanças da fala: a duração de agora não muda |
 
 **Reusar animações.** Não há modelos prontos: as possibilidades de estilo e layout não cabem
 numa lista. Cada animação que um agente faz fica no projeto, e o próximo agente parte dela. A
@@ -225,8 +226,15 @@ camada anda junto (como já era). Quando o próprio bloco muda, ela vai para o m
 `cortar` o começo, `velocidade`, `removerPausas` e `removerTrechos` (se o ponto saiu no corte, ela vai
 para onde a fala volta; se saiu no fim, para o fim do bloco). No `trocar`, o arquivo é outro: no lugar de
 um rascunho, a camada vai para o mesmo ponto na proporção; no lugar de um arquivo, fica no mesmo segundo
-do bloco. A duração da camada não muda: uma animação não estica quando a fala encurta. Só os comandos
-fazem isso; mexer na tela do canvas segue como era.
+do bloco. Vídeo, imagem e som por cima mantêm a duração. A animação em código leva também o fim ao mesmo
+ponto da fala e estica ou encolhe até lá (05/11/2026): a animação que cobria uma fala inteira continua
+cobrindo a fala inteira depois de tirar as pausas ou de trocar o rascunho pelo vídeo. O código não muda:
+o bloco guarda a `escala` e a linha do tempo inteira vai para o mesmo ponto, na proporção (os filhos do `tl` passam
+para uma linha interna, e só ela muda de velocidade), na prévia, na inspeção e na exportação (`codeHtml`, `src/canvas/modelo.js`). Os tempos escritos
+no código seguem os de antes da escala; o `ver_projeto` com `incluir: codigo` mostra a `escala`.
+`esticar: false` (em `adicionar` e `editarCodigo`) deixa a animação com a duração que tiver, como um selo
+de tempo fixo; ela ainda anda com a fala. `cortar` na própria animação muda só até onde ela vai, sem
+esticar. Só os comandos fazem isso; mexer na tela do canvas segue como era.
 
 Roteiro com cenas: um grupo por cena (com nome: `renomear {grupo, nome: "Cena 1"}`), de preferência até uns 30 s;
 um `rascunho` ou `adicionar` sem `depois` nem `sobre` abre uma cena nova. As cenas vão em ordem até o

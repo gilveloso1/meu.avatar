@@ -336,7 +336,7 @@ export class Api {
       atualizado: project.updated_at,
       ...resumo(data),
       ...(files ? { arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })) } : {}),
-      ...(incluir.includes("codigo") ? { codigo: data.blocks.filter((b) => b.code).map((b) => ({ bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), html: b.code!.html, ...(b.code!.params ? { parametros: b.code!.params } : {}) })) } : {}),
+      ...(incluir.includes("codigo") ? { codigo: data.blocks.filter((b) => b.code).map((b) => ({ bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), html: b.code!.html, ...(b.code!.params ? { parametros: b.code!.params } : {}), ...(b.code!.escala ? { escala: b.code!.escala } : {}), ...(b.code!.fixa ? { esticar: false } : {}) })) } : {}),
       ...(incluir.includes("canvas") ? { canvas: data } : {}),
     };
   }
@@ -481,7 +481,7 @@ export class Api {
           // Só dos projetos de quem edita, como o resto da API.
           const o = projeto === project.id ? project : await this.db.projectById(projeto);
           const b = o && o.user_id === user.id ? (JSON.parse(o.data) as CanvasProject).blocks.find((x) => x.id === bloco) : undefined;
-          return b?.code ? { html: b.code.html, params: b.code.params, duracao: +(b.tout - b.tin).toFixed(3), nome: b.name } : null;
+          return b?.code ? { html: b.code.html, params: b.code.params, escala: b.code.escala, fixa: b.code.fixa, duracao: +(b.tout - b.tin).toFixed(3), nome: b.name } : null;
         },
       });
       const text = JSON.stringify(data);
