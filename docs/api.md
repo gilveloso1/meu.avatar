@@ -122,7 +122,7 @@ o tempo dela são trocados, sem pôr outra. Até 60 s por grupo. Pede `revisao`,
 tamanho da letra segue o Final da hora (`final`, ou o primeiro): mudou o formato, legende de novo.
 
 `avisos`, no `ver_projeto`, aponta o que está aceito mas sairá errado.
-Há dois. `rascunho` (`bloco`, `fala`, `segundos`): uma fala que ainda espera o vídeo. E `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),
+Há três. `rascunho` (`bloco`, `fala`, `segundos`): uma fala que ainda espera o vídeo. `final_sem_variacao` (`final`): nenhum grupo chega a esse Final, que não exporta nada (falta ligar a última cena). E `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),
 quando uma cobertura ou um som passa do fim da sequência ou há um buraco nela. Aquele trecho sai
 sobre o fundo preto, salvo se uma cobertura opaca o preencher.
 
@@ -200,15 +200,15 @@ outro valor faz outro vídeo na exportação, e o mesmo valor reaproveita. No ca
 | `rascunho` | `fala`, `duracao` (0,5 a 30); `nome`; `depois` ou `sobre` e `em`; `rotulo` | O lugar de um vídeo que ainda não existe: um bloco sem arquivo, com a fala, do tamanho estimado. Sem `nome`, Texto 1, Texto 2..., como os blocos. No canvas e na prévia, um cartão com a fala. A exportação é recusada enquanto houver rascunho |
 | `trocar` | `bloco`; `video`, `arquivo` ou `ativo`; `inicio`, `fim`, `dur`, `nome`, `semSom` | Põe o arquivo no lugar do bloco (o vídeo pronto no lugar do rascunho): a posição e o que está por cima ficam, e a sequência acompanha a duração nova. Sem `fim`, o vídeo entra inteiro |
 | `renomear` | `bloco`, `nome` | Muda o nome do bloco, como o campo Nome dos Ajustes |
-| `cortar` | `bloco`, `inicio`, `fim` | Trecho do arquivo, em segundos; a sequência fica encostada |
+| `cortar` | `bloco`, `inicio`, `fim` | Trecho do arquivo, em segundos; a sequência fica encostada. Num rascunho, muda a duração (`inicio: 0, fim: 3` deixa 3 s) |
 | `dividir` | `bloco`, `em` | Dois blocos, no instante `em` do arquivo; 0,5 s no mínimo de cada lado |
 | `mover` | `bloco`, `depois` ou `antes` | Muda a ordem, sem buraco, também para outro grupo (assim se juntam dois); a cobertura e o som somado vão junto |
 | `velocidade` | `bloco`, `velocidade` (0,25 a 4) | Mantém o tom da voz; o resto da sequência acompanha |
 | `removerTrechos` | `bloco`, `trechos: [[inicio, fim], ...]` (até 200) | Tira esses trechos do arquivo (vícios, repetições, frases, pelos tempos da transcrição) e o resto encosta. Sobra menor que 0,5 s é recusada (`sobra_curta`): junte-a ao trecho do lado |
 | `removerPausas` | `bloco` (sem ele, todos), `pausa` (`curta`, `media`, `longa`) | Tira as pausas com a regra da Edição rápida |
 | `enquadrar` | `bloco`; `zoom` (1 a 8), `focoX`, `focoY` (0 a 1) ou `rosto: true`; `chaves: [{t, zoom, focoX, focoY}]`; `encaixe` (`preencher`, `caber`, `desfocar`); `recorte: {esquerda, topo, direita, base}`; `espelharH`, `espelharV`, `girar` (0, 90, 180, 270); `limpar` | Só muda o que vier. `t` é o tempo do bloco (negativo continua um movimento do bloco anterior); entre as chaves, a curva é suave |
-| `ligar` | `de`, `para` | Liga o grupo de um bloco a outro grupo ou a um Final (o grupo tem o id do primeiro bloco). Encadeia, não junta: para juntar dois grupos, `mover`. Recusa círculo, repetida e passar de 48 variações |
-| `remover` | `ids`, `fechar` | Blocos, Finais ou ligações (os ids de `ligacoes`). Com `fechar: true`, a sequência encosta onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois (aviso `grupo_partido`) |
+| `ligar` | `de`, `para` | Liga o grupo de um bloco a outro grupo ou a um Final (o grupo tem o id do primeiro bloco). Encadeia, não junta: para juntar dois grupos, `mover`. Ligar a outro grupo um grupo que é a única entrada de um Final (a ligação automática do primeiro bloco) tira essa ligação. Recusa círculo, repetida e passar de 48 variações |
+| `remover` | `ids`, `fechar` | Blocos, Finais ou ligações (os ids de `ligacoes`). Com `fechar: true`, a sequência encosta onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois (aviso `grupo_partido`). Tirar o primeiro bloco de um grupo passa o id do grupo e as ligações ao bloco seguinte |
 | `som` | `bloco`, `volume` (0 a 4), `mudo` | Volume do bloco |
 | `final` | `id`, `resolucao`, `formato`, `velocidade` | Muda um Final; sem `id`, cria outro. A velocidade vale para todas as variações dele |
 | `organizar` | | O mesmo Organizar da tela |
@@ -220,8 +220,9 @@ O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, com
 
 Roteiro com cenas: um grupo por cena, de preferência até uns 30 s, e cada cena ligada à seguinte, a
 última ao Final (`ligar {de: <cena 1>, para: <cena 2>}`...). Não é preciso juntar no fim: o Final
-monta a sequência. O primeiro bloco já vem ligado ao Final: no mesmo lote, remova essa ligação (o
-id está em `ligacoes`), senão a primeira cena sai sozinha como mais uma variação. Para tirar uma
+monta a sequência. O primeiro bloco já vem ligado ao Final; ao ligar essa cena à seguinte, essa ligação
+sai sozinha (assim o lote cria as cenas e as ligações de uma vez, com `rotulo`), e a última cena
+se liga ao Final. Para tirar uma
 fala do meio, `remover` com `fechar: true`. Cada edição só mexe no tempo da cena dela (a resposta fica pequena), a legenda
 cabe nos 60 s por grupo e dá para trocar ou testar uma cena sem tocar nas outras. Uma cena mais
 longa pode passar dos 30 s: não corte uma fala ou uma cobertura no meio, porque a cobertura não

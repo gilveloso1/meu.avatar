@@ -58,6 +58,10 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   bloco ao Final virou uma variação a mais e só se via no canvas inteiro, e tirar uma fala do meio
   partiu a cena sem aviso. Agora as ligações vêm com o id no resumo, há o aviso `grupo_partido`, e as
   instruções explicam `fechar`, `ligar` e `mover`.)
+  (No segundo teste, 4 chamadas e o projeto certo, mas tirar a primeira fala de uma cena apagou as
+  ligações dela, e a ligação automática não dava para tirar no mesmo lote. Agora as ligações passam
+  ao bloco seguinte do grupo (também no canvas), a automática sai ao ligar a primeira cena à
+  seguinte, e há o aviso `final_sem_variacao`.)
 - Reenviar o HTML completo a cada correção: 3 a 5 mil caracteres por cena, com o mesmo CSS do
   painel repetido em todas.
 - O raciocínio de layout e de tempos: coordenadas do SVG, posições das moedas, a matemática do

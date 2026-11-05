@@ -499,3 +499,12 @@ test("parâmetro usado sem valor aparece uma vez, no texto e nos scripts", () =>
   ]);
   assert.deepEqual(M.missingParams({ html: "<b>sem nada</b>" }), []);
 });
+
+test("tirar o primeiro bloco de um grupo não desfaz as ligações dele", () => {
+  const corpo = M.groups(p).find((g) => g.id === "corpo");
+  const antes = M.links(p).filter((l) => l.from === corpo || l.to === corpo).length;
+  const q = M.removeItems(p, ["corpo"]);
+  const novo = M.groups(q).find((g) => g.id === "produto");
+  assert.equal(M.links(q).filter((l) => l.from === novo || l.to === novo).length, antes);
+  assert.equal(M.versions(q, "final").length, M.versions(p, "final").length);
+});
