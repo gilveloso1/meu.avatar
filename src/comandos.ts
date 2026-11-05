@@ -19,7 +19,7 @@ export class ComandoError extends Error {
 }
 
 /** Os tipos que `aplicar` conhece; o teste confere que cada um tem o seu caso. */
-export const TIPOS = ["adicionar", "rascunho", "editarCodigo", "renomear", "trocar", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "remover", "som", "final", "organizar"];
+export const TIPOS = ["adicionar", "rascunho", "editarCodigo", "renomear", "trocar", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "ordenar", "remover", "som", "final", "organizar"];
 
 /** Quantas letras trocar, pôr ou tirar para ir de uma palavra à outra. */
 function distancia(a: string, b: string): number {
@@ -229,6 +229,9 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
         project = { ...project, edges: [...project.edges.filter((e) => !tirar.has(e.id)), { id: newId("e"), from: de!, to: para! }] };
         break;
       }
+      case "ordenar":
+        project = ordenar(project, c, falha);
+        break;
       case "remover": {
         const ids = Array.isArray(c.ids) ? c.ids.filter((v): v is string => typeof v === "string") : [];
         const existe = (id: string) => [...project.blocks, ...project.finals, ...project.edges].some((o) => o.id === id);
@@ -285,7 +288,31 @@ function comRotulos(c: Comando, rotulos: Map<string, string>, falha: (c: string)
   const novo = { ...c };
   for (const campo of CAMPOS_DE_BLOCO) if (campo in novo) novo[campo] = troca(novo[campo]);
   if (Array.isArray(novo.ids)) novo.ids = novo.ids.map(troca);
+  if (Array.isArray(novo.grupos)) novo.grupos = novo.grupos.map(troca);
   return novo;
+}
+
+/**
+ * A ordem das cenas de uma vez: desfaz as ligações entre esses grupos e as deles ao Final, liga na ordem dada e o
+ * último ao Final. Ligações de fora (ganchos que chegam ao primeiro) ficam.
+ */
+function ordenar(project: CanvasProject, c: Comando, falha: (c: string) => ComandoError): CanvasProject {
+  const gs = groups(project);
+  const idx = groupIndex(gs);
+  const lista = Array.isArray(c.grupos) ? c.grupos.map((id) => (typeof id === "string" ? idx.get(id) : undefined)) : [];
+  if (!lista.length || lista.some((g) => !g) || new Set(lista).size !== lista.length) throw falha("grupos_invalidos");
+  const fim = c.final === undefined ? (project.finals.length === 1 ? project.finals[0]!.id : null) : texto(c.final);
+  if (!fim || !project.finals.some((f) => f.id === fim)) throw falha("final_inexistente");
+  const meus = new Set(lista);
+  const tirar = new Set(links(project, gs).filter((l) => meus.has(l.from) && (typeof l.to === "string" ? l.to === fim : meus.has(l.to))).map((l) => l.edge.id));
+  let p: CanvasProject = { ...project, edges: project.edges.filter((e) => !tirar.has(e.id)) };
+  const ids = [...lista.map((g) => g!.id), fim];
+  for (let i = 0; i < ids.length - 1; i++) {
+    const problema = linkProblem(p, ids[i]!, ids[i + 1]!);
+    if (problema) throw falha({ cycle: "ligacao_ciclo", limit: "limite_variacoes" }[problema] ?? "grupos_invalidos");
+    p = { ...p, edges: [...p.edges, { id: newId("e"), from: ids[i]!, to: ids[i + 1]! }] };
+  }
+  return p;
 }
 
 /** Bloco novo: depois de outro, sobre um grupo (imagem por cima ou som embaixo) ou numa linha nova. */

@@ -355,6 +355,23 @@ describe("comandos", () => {
     expect(d.mudou).not.toHaveProperty("avisosResolvidos");
   });
 
+  it("ordenar liga as cenas na ordem dada e a última ao Final, no lugar das ligações antigas", async () => {
+    const { id, revisao } = await novo();
+    const cru = (rev: number, lista: unknown[]) => api(`/api/v1/projetos/${id}/comandos`, admin, { revisao: rev, comandos: lista }).then((r) => r.json<Record<string, any>>());
+    // Criar e ordenar num lote só, sem ligar: a ligação automática do primeiro também sai.
+    const a = await cru(revisao, [
+      ...["a", "b", "c"].map((r) => ({ tipo: "rascunho", fala: r, duracao: 2, rotulo: r })),
+      { tipo: "ordenar", grupos: ["@a", "@b", "@c"] },
+    ]);
+    const [x, y, z] = a.criados as [string, string, string];
+    expect(a.mudou.finais[0].variacoes).toEqual([{ nome: "Variação 1", grupos: [x, y, z], duracao: 6 }]);
+    const b = await cru(a.revisao, [{ tipo: "ordenar", grupos: [z, x, y] }]);
+    expect(b.mudou.finais[0].variacoes.map((v: { grupos: string[] }) => v.grupos)).toEqual([[z, x, y]]);
+    expect(b.mudou.removidos.ligacoes).toHaveLength(3);
+    expect(await cru(b.revisao, [{ tipo: "ordenar", grupos: [z, z] }])).toEqual({ erro: "grupos_invalidos", comando: 0 });
+    expect(await cru(b.revisao, [{ tipo: "ordenar", grupos: [z], final: "outro" }])).toEqual({ erro: "final_inexistente", comando: 0 });
+  });
+
   it("revisão velha: 409 com o projeto como está agora, e nada é escrito", async () => {
     const { id, revisao } = await novo();
     const feito = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }])).json<{ criados: string[] }>();
