@@ -3,7 +3,7 @@
  * mesmo modelo da tela. Só o administrador, como o canvas; cada projeto é só de quem o
  * criou. Exportar e baixar usam as rotas do site, com o mesmo token.
  */
-import { baseGaps, finalRate, groups, members, output, PX, versionName, versions, width } from "./canvas/modelo.js";
+import { baseGaps, finalRate, groups, members, output, PX, upgrade, versionName, versions, width } from "./canvas/modelo.js";
 import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, trechos } from "./legenda";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
@@ -108,6 +108,78 @@ function resumo(data: CanvasProject) {
       ...gs.filter((g) => g.blocks.length).flatMap((g) => baseGaps(g).map(([de, ate]) => ({ tipo: "sem_video_de_base", grupo: g.id, de, ate, segundos: +(ate! - de!).toFixed(3) }))),
       ...data.blocks.filter((b) => b.draft).map((b) => ({ tipo: "rascunho", bloco: b.id, fala: b.draft!.fala, segundos: +(b.tout - b.tin).toFixed(3) })),
     ],
+  };
+}
+
+type Resumo = ReturnType<typeof resumo>;
+type Aviso = Resumo["avisos"][number];
+
+/** O aviso sem a fala do rascunho: quem editou acabou de escrevê-la, e o ver_projeto a mostra. */
+const semFala = (a: Aviso) => ("fala" in a ? (({ fala: _, ...resto }) => resto)(a) : a);
+
+/**
+ * O que o lote mudou, para o agente não reler o projeto inteiro a cada edição (num roteiro de 30 falas, o resumo
+ * passava de 7 mil caracteres, metade nas falas dos rascunhos). Grupos novos ou alterados só com os blocos novos ou
+ * alterados, Finais alterados, o que sumiu e os avisos que apareceram ou se resolveram. Campo vazio não vem.
+ * Blocos que só andaram no grupo (um corte antes deles) vêm em andaram, uma faixa por deslocamento, e não um a um.
+ */
+function mudancas(antes: Resumo, depois: Resumo) {
+  const chave = (x: unknown) => JSON.stringify(x);
+  type Bloco = Resumo["grupos"][number]["blocos"][number];
+  const blocosAntes = new Map(antes.grupos.flatMap((g) => g.blocos.map((b) => [b.id, { g: g.id, b }] as const)));
+  const gruposAntes = new Map(antes.grupos.map((g) => [g.id, chave([g.nome, g.duracao])]));
+  /** 0 quando nada mudou; o deslocamento, quando só o início e o fim andaram juntos; null quando mudou de verdade. */
+  const passo = (g: string, b: Bloco): number | null => {
+    const a = blocosAntes.get(b.id);
+    if (!a || a.g !== g) return null;
+    const d = +(b.inicio - a.b.inicio).toFixed(3);
+    const igual = chave({ ...a.b, inicio: 0, fim: 0 }) === chave({ ...b, inicio: 0, fim: 0 }) && Math.abs(b.fim - a.b.fim - d) < 0.001;
+    return igual ? d : null;
+  };
+  const grupos = depois.grupos
+    .map((g) => {
+      const blocos: Bloco[] = [];
+      const andaram: { de: string; ate: string; segundos: number }[] = [];
+      let faixa: (typeof andaram)[number] | null = null;
+      for (const b of g.blocos) {
+        const d = passo(g.id, b);
+        if (d === null) blocos.push(b);
+        if (d === null || d === 0) {
+          faixa = null;
+          continue;
+        }
+        if (faixa && faixa.segundos === d) faixa.ate = b.id;
+        else {
+          faixa = { de: b.id, ate: b.id, segundos: d };
+          andaram.push(faixa);
+        }
+      }
+      return { id: g.id, nome: g.nome, duracao: g.duracao, blocos, ...(andaram.length ? { andaram } : {}) };
+    })
+    .filter((g) => g.blocos.length || g.andaram || gruposAntes.get(g.id) !== chave([g.nome, g.duracao]));
+  const finaisAntes = new Map(antes.finais.map((f) => [f.id, chave(f)]));
+  const finais = depois.finais.filter((f) => finaisAntes.get(f.id) !== chave(f));
+  const ficaram = (lista: { id: string }[]) => new Set(lista.map((x) => x.id));
+  const blocosDepois = new Set(depois.grupos.flatMap((g) => g.blocos.map((b) => b.id)));
+  const removidos = {
+    blocos: [...blocosAntes.keys()].filter((id) => !blocosDepois.has(id)),
+    grupos: antes.grupos.map((g) => g.id).filter((id) => !ficaram(depois.grupos).has(id)),
+    finais: antes.finais.map((f) => f.id).filter((id) => !ficaram(depois.finais).has(id)),
+  };
+  const avisosAntes = new Set(antes.avisos.map(chave));
+  const avisosDepois = new Set(depois.avisos.map(chave));
+  const avisos = depois.avisos.filter((a) => !avisosAntes.has(chave(a))).map(semFala);
+  const avisosResolvidos = antes.avisos.filter((a) => !avisosDepois.has(chave(a))).map(semFala);
+  const cheio = (x: unknown[]) => x.length > 0;
+  return {
+    mudou: {
+      ...(cheio(grupos) ? { grupos } : {}),
+      ...(cheio(finais) ? { finais } : {}),
+      ...(Object.values(removidos).some(cheio) ? { removidos: Object.fromEntries(Object.entries(removidos).filter(([, v]) => cheio(v))) } : {}),
+      ...(cheio(avisos) ? { avisos } : {}),
+      ...(cheio(avisosResolvidos) ? { avisosResolvidos } : {}),
+    },
+    avisosPendentes: depois.avisos.length,
   };
 }
 
@@ -363,7 +435,9 @@ export class Api {
     if (revisao !== project.revision) return conflito(project);
     try {
       const memo = new Map<string, { duracao: number; silencios: number[][]; som: boolean }>();
-      const { project: data, criados } = await aplicar(JSON.parse(project.data) as CanvasProject, comandos, {
+      const anterior = JSON.parse(project.data) as CanvasProject;
+      const antes = resumo(upgrade(anterior));
+      const { project: data, criados } = await aplicar(anterior, comandos, {
         fonte: (c) => this.source(user, project, c),
         silencios: async (src) => {
           if (!memo.has(src)) memo.set(src, await this.silences(user, project, src));
@@ -384,8 +458,8 @@ export class Api {
         const atual = await this.db.projectById(project.id);
         return atual ? conflito(atual) : falha(404, "nao_encontrado");
       }
-      // Só o que o lote mudou: os arquivos e o canvas inteiro ficam no ver_projeto (o maior gasto do agente).
-      return Response.json({ revisao: revision, criados, ...resumo(data), ...extra });
+      // Só o que o lote mudou: o projeto inteiro fica no ver_projeto (o maior gasto do agente).
+      return Response.json({ revisao: revision, criados, ...mudancas(antes, resumo(data)), ...extra });
     } catch (err) {
       if (err instanceof ComandoError) return falha(400, err.codigo, { comando: err.indice, ...err.extra });
       throw err;

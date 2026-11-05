@@ -50,6 +50,9 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   30 arquivos antigos e todos os blocos do canvas. De longe o maior gasto.
   (O `editar_projeto` agora devolve só o resumo, sem arquivos e canvas; o `ver_projeto` também, com
   o início e o fim de cada bloco no grupo, e os arquivos e o canvas só pedidos em `incluir`.)
+  (Num roteiro de 30 falas, em 04/11/2026, o agente ainda reclamou: o resumo inteiro voltava a cada
+  edição, uns 7,6 mil caracteres, metade nas falas dos rascunhos. Agora a resposta traz só o que o
+  lote mudou, em `mudou`, sem as falas.)
 - Reenviar o HTML completo a cada correção: 3 a 5 mil caracteres por cena, com o mesmo CSS do
   painel repetido em todas.
 - O raciocínio de layout e de tempos: coordenadas do SVG, posições das moedas, a matemática do

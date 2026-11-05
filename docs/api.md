@@ -63,7 +63,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/projetos?q=` | Projetos da conta |
 | `POST /api/v1/projetos` `{nome}` | Cria um projeto |
 | `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio, e `inicio` e `fim` em segundos do grupo), Finais com as variações e avisos. Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
-| `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) e devolve o resumo: `{revisao, criados, grupos, finais, avisos}`, como o projeto sem `incluir` |
+| `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) e devolve só o que mudou: `{revisao, criados, mudou, avisosPendentes}` (abaixo). O projeto inteiro fica no `ver_projeto` |
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
 | `GET /api/v1/projetos/<id>/animacao?bloco=&instantes=0,1.5&quadros=1&final=` | Abre o código de um bloco de animação no Chrome do render, sem fazer vídeo, no tamanho do Final (sem `final`, o primeiro), e mede cada instante (até 12, em segundos do bloco; sem `instantes`, o começo, os quartos e o fim). Volta `{largura, altura, duracao: {bloco, animacao}, problemas, instantes, linhaDoTempo}`, e `quadros` (o mosaico, JPG em base64) só com `quadros=1`. Ver "Inspeção da animação", abaixo |
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida: `{duracao, silencios, som}`; arquivo sem faixa de áudio (como o WebM do render) vem com `som: false` e nenhum silêncio |
@@ -121,7 +121,7 @@ faça depois dos cortes e, se o grupo mudar, chame de novo com `bloco` (o id da 
 o tempo dela são trocados, sem pôr outra. Até 60 s por grupo. Pede `revisao`, como os comandos. O
 tamanho da letra segue o Final da hora (`final`, ou o primeiro): mudou o formato, legende de novo.
 
-`avisos`, em `ver_projeto` e na resposta dos comandos, aponta o que está aceito mas sairá errado.
+`avisos`, no `ver_projeto`, aponta o que está aceito mas sairá errado.
 Há dois. `rascunho` (`bloco`, `fala`, `segundos`): uma fala que ainda espera o vídeo. E `sem_video_de_base` (`grupo`, `de`, `ate`, `segundos`, a partir do começo do grupo),
 quando uma cobertura ou um som passa do fim da sequência ou há um buraco nela. Aquele trecho sai
 sobre o fundo preto, salvo se uma cobertura opaca o preencher.
@@ -217,7 +217,21 @@ Em `adicionar`, `rascunho` e `dividir`, `rotulo: "nome"` permite citar o bloco c
 seguintes do mesmo lote, sem esperar a resposta.
 
 O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, como na tela.
-A resposta traz `criados`, com os ids novos na ordem dos comandos.
+
+Roteiro longo: um grupo por cena, de preferência até uns 30 s, e cada cena ligada à seguinte, a
+última ao Final (`ligar {de: <cena 1>, para: <cena 2>}`...). Não é preciso juntar no fim: o Final
+monta a sequência. Cada edição só mexe no tempo da cena dela (a resposta fica pequena), a legenda
+cabe nos 60 s por grupo e dá para trocar ou testar uma cena sem tocar nas outras. Uma cena mais
+longa pode passar dos 30 s: não corte uma fala ou uma cobertura no meio, porque a cobertura não
+passa de um grupo para o outro.
+A resposta traz `criados`, com os ids novos na ordem dos comandos, e em `mudou` só o que o lote
+mexeu, para não devolver o projeto inteiro a cada edição (num roteiro de 30 falas, o resumo inteiro
+passava de 7 mil caracteres): `grupos` novos ou alterados, cada um com só os blocos novos ou
+alterados (os que só andaram, porque um corte antes deles mudou o tempo, vêm em `andaram`: uma
+faixa `{de, ate, segundos}` por deslocamento, na ordem do grupo); `finais` alterados; `removidos` (`blocos`, `grupos`, `finais`); `avisos` que apareceram
+e `avisosResolvidos`. Campo vazio não vem. Nos avisos de `rascunho` a `fala` não vem (quem editou
+acabou de escrevê-la; o `ver_projeto` mostra). `avisosPendentes` conta os avisos que o projeto tem
+agora.
 
 ## Limites de agora
 
