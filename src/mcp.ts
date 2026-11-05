@@ -33,12 +33,12 @@ editarCodigo {bloco, html | trocas: [{de, para}], parametros} (troca o código d
 parametros: {chave: texto ou número}, até 30, os valores que mudam sem reescrever o código (nome, preço, cor da marca): no HTML, {{chave}} fora dos scripts vira o valor; nos scripts, params.chave. Em editarCodigo, junta aos que já existem, e null tira. Faça o template uma vez e repita o bloco só trocando parametros; a pessoa também troca os valores nos Ajustes do canvas.
 rascunho {fala, duracao: 0,5 a 30, nome, depois: bloco | sobre: bloco, em: segundos} (o lugar de um vídeo que ainda não existe: um cartão com a fala; sem nome, Texto 1, Texto 2...; a exportação espera a troca)
 renomear {bloco, nome} ou {grupo, nome} (com grupo, o nome da cena, como Cena 1, no lugar de Bloco 1; vale o id de qualquer bloco dele)
-trocar {bloco, video|arquivo|ativo, inicio, fim, dur, nome} (põe o arquivo no lugar do bloco, como o vídeo pronto no do rascunho; o que está em cima fica e a sequência acompanha)
+trocar {bloco, video|arquivo|ativo, inicio, fim, dur, nome, aparar} (põe o arquivo no lugar do bloco, como o vídeo pronto no do rascunho; sem inicio nem fim, o vídeo entra sem o silêncio das pontas, e aparar: false o põe inteiro; o que está em cima fica e a sequência acompanha; no lugar de um rascunho, a camada vai para o mesmo ponto da fala, na proporção)
 cortar {bloco, inicio, fim | duracao} (duracao no lugar de fim: o que fica a partir do início; num rascunho, cortar {bloco, duracao: 3} deixa 3 s)
 dividir {bloco, em}
 mover {bloco, depois|antes} (põe o bloco em outra posição, também em outro grupo: assim se juntam dois grupos)
 velocidade {bloco, velocidade: 0,25 a 4}
-removerPausas {bloco?, pausa: curta|media|longa}
+removerPausas {bloco?, pausa: curta|media|longa | acima: 0,1 a 5} (sem bloco, todos os vídeos; acima: toda pausa maior que esses segundos fica com eles, a regra para o projeto inteiro igual; pausa: a regra da Edição rápida)
 removerTrechos {bloco, trechos: [[inicio, fim], ...]} (segundos do arquivo, como os de ver_transcricao; o resto encosta)
 enquadrar {bloco, zoom: 1 a 8, focoX, focoY: 0 a 1, rosto: true, chaves: [{t, zoom, focoX, focoY}], encaixe: preencher|caber|desfocar, recorte: {esquerda, topo, direita, base}, espelharH, espelharV, girar: 0|90|180|270, limpar}
 ligar {de, para} (de e para: id de um bloco do grupo, ou o de um Final; o grupo tem o id do primeiro bloco dele; encadeia os grupos na ordem do Final, não junta: para juntar dois grupos, mover; soma uma ligação, não troca a que existe: cada saída de um grupo vira uma variação; para a sequência das cenas, ordenar)
@@ -48,8 +48,9 @@ som {bloco, volume: 0 a 4, mudo}
 final {id, resolucao, formato, velocidade}
 organizar {}
 Em adicionar, rascunho e dividir, rotulo: "nome" permite citar esse bloco como "@nome" nos comandos seguintes do mesmo lote (em bloco, depois, antes, sobre, de, para, grupo, grupos e ids).
+Com sobre, em conta do começo do bloco citado (o do primeiro bloco é o do grupo) e pode passar dele até o fim do grupo. A camada fica presa ao ponto da fala em que começa: cortar, velocidade, removerPausas e removerTrechos no bloco de baixo a levam junto, sem refazer.
 Vídeo de arquivo sem faixa de som (o WebM do render) entra sem a camada de áudio sozinho; semSom faz o mesmo com qualquer vídeo.
-O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele. Tempos de inicio, fim e em são do arquivo; t das chaves é do bloco.`;
+O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele. Tempos de inicio, fim e o em de dividir são do arquivo; o em de sobre e o t das chaves são do bloco.`;
 
 const RENDER = `Regras do HTML: anime só pela linha do tempo tl (GSAP 3, já criada e pausada), com tempos em segundos: tl.to(...), tl.fromTo(..., 1.2), tl.set(..., 3); nada de setTimeout, requestAnimationFrame, Math.random ou relógio. Posicione dentro de #root (position: relative, do tamanho do Final; cor padrão branca, fonte padrão Inter). Sem internet: nada de link, CDN ou imagem externa. Fontes, pelo nome no CSS: ${FONTES.join(", ")}; emojis saem coloridos em qualquer uma. Desfoque grande, 3D e vídeo dentro do HTML ficam lentos. Se falhar, render_falhou traz o log em detalhe.`;
 

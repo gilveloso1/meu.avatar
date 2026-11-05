@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
-import { sugestao, TIPOS } from "../src/comandos";
+import { pausasAcima, sugestao, TIPOS } from "../src/comandos";
 import { normalizar } from "../src/transcricao";
 import { ERROS } from "../src/erros";
 import { call, cookie, FakeExportApi, FakeRenderApi, FakeTranscriber, FakeVideoApi, memberCookie, SITE } from "./helpers";
@@ -1194,3 +1194,87 @@ async function edges(id: string): Promise<string[]> {
   const p = await (await api(`/api/v1/projetos/${id}?incluir=arquivos,canvas`, admin)).json<{ canvas: { edges: { id: string }[] } }>();
   return p.canvas.edges.map((e) => e.id);
 }
+
+describe("tempo que acompanha", () => {
+  type Bloco = { id: string; x: number; tin: number; tout: number };
+  type Vista = { revisao: number; criados: string[]; grupos: { duracao: number }[]; canvas: { blocks: Bloco[] } };
+  const lote = async (id: string, revisao: number, lista: unknown[], fake: FakeExportApi | null = null) => (await comandos(id, revisao, lista, fake)).json<Vista>();
+  const x = (v: Vista, id: string) => +(v.canvas.blocks.find((b) => b.id === id)!.x / 40).toFixed(3);
+  const CENA = `<div id="t">Oi</div>`;
+
+  it("sobre: o em conta do começo do bloco citado, até o fim do grupo", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" },
+      { tipo: "rascunho", fala: "Segunda fala", duracao: 3, depois: "@a", rotulo: "b" },
+      { tipo: "adicionar", html: CENA, duracao: 1, sobre: "@b", em: 1 },
+      { tipo: "adicionar", html: CENA, duracao: 1, sobre: "@a", em: 2 },
+    ]);
+    expect(x(r, r.criados[2]!)).toBe(5);
+    expect(x(r, r.criados[3]!)).toBe(2);
+    expect(await (await comandos(id, r.revisao, [{ tipo: "adicionar", html: CENA, duracao: 1, sobre: r.criados[1], em: 3 }])).json()).toEqual({ erro: "momento_invalido", comando: 0 });
+  });
+
+  it("tirar pausas leva a camada para o mesmo ponto da fala", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [[3, 5]], som: true };
+    const a = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, rotulo: "a" }, { tipo: "adicionar", html: CENA, duracao: 1, sobre: "@a", em: 6 }, { tipo: "adicionar", html: CENA, duracao: 1, sobre: "@a", em: 4 }], fake);
+    const [base, depois, noSilencio] = a.criados as [string, string, string];
+    const r = await lote(id, a.revisao, [{ tipo: "removerPausas", bloco: base, acima: 0.5 }], fake);
+    // A pausa de 2 s fica com 0,5 s: sai de 3,3 a 4,8.
+    expect(r.canvas.blocks.filter((b) => b.id === base || b.id === r.criados[0]).map((b) => [b.tin, b.tout])).toEqual([[0, 3.3], [4.8, 10]]);
+    expect(r.grupos[0]!.duracao).toBe(8.5);
+    expect(x(r, depois)).toBe(4.5);
+    // A que começava no silêncio cortado vai para onde a fala volta.
+    expect(x(r, noSilencio)).toBe(3.3);
+  });
+
+  it("velocidade e corte do começo não desalinham a camada", async () => {
+    const { id, revisao } = await novo();
+    const a = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, rotulo: "a" }, { tipo: "adicionar", html: CENA, duracao: 1, sobre: "@a", em: 4 }]);
+    const [base, cena] = a.criados as [string, string];
+    const v = await lote(id, a.revisao, [{ tipo: "velocidade", bloco: base, velocidade: 2 }]);
+    expect(x(v, cena)).toBe(2);
+    const c = await lote(id, v.revisao, [{ tipo: "velocidade", bloco: base, velocidade: 1 }, { tipo: "cortar", bloco: base, inicio: 1 }]);
+    expect(x(c, cena)).toBe(3);
+  });
+
+  it("trocar o rascunho tira o silêncio das pontas e leva a camada junto", async () => {
+    await env.MIDIA.put(`videos/${VIDEO2}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [[0, 1], [4, 5], [8.5, 10]], som: true };
+    const r = await lote(id, revisao, [{ tipo: "rascunho", fala: "Oi, gente", duracao: 3, rotulo: "r" }, { tipo: "adicionar", html: CENA, duracao: 1, sobre: "@r", em: 1.5 }]);
+    const [rascunho, cena] = r.criados as [string, string];
+    const t = await lote(id, r.revisao, [{ tipo: "trocar", bloco: rascunho, video: VIDEO2 }], fake);
+    expect(t.canvas.blocks.find((b) => b.id === rascunho)).toMatchObject({ tin: 0.9, tout: 8.7 });
+    // Na metade da fala estimada, na metade da real.
+    expect(x(t, cena)).toBe(3.9);
+    const inteiro = await lote(id, t.revisao, [{ tipo: "trocar", bloco: rascunho, video: VIDEO2, aparar: false }], fake);
+    expect(inteiro.canvas.blocks.find((b) => b.id === rascunho)).toMatchObject({ tin: 0, tout: 10 });
+    // Vídeo no lugar de vídeo: a camada fica no mesmo segundo do bloco.
+    expect(x(inteiro, cena)).toBe(3.9);
+  });
+
+  it("removerPausas recusa acima fora do limite ou junto com pausa", async () => {
+    const { id, revisao } = await novo();
+    const a = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO }]);
+    for (const c of [{ acima: 0 }, { acima: 6 }, { acima: "1" }, { acima: 1, pausa: "curta" }]) {
+      expect(await (await comandos(id, a.revisao, [{ tipo: "removerPausas", bloco: a.criados[0], ...c }])).json()).toEqual({ erro: "pausa_invalida", comando: 0 });
+    }
+  });
+});
+
+describe("pausasAcima", () => {
+  it("deixa cada pausa longa com o limite e não corta a que já cabe", () => {
+    expect(pausasAcima([[0, 2], [3, 3.4], [5, 7]], 0, 8, 0.5)).toEqual([[1.8, 5.3], [6.8, 8]]);
+  });
+  it("não deixa pedaço menor que um bloco: desfaz o corte do lado", () => {
+    expect(pausasAcima([[1, 2], [2.1, 4]], 0, 8, 0.1)).toEqual([[0, 1.06], [1.96, 8]]);
+  });
+  it("trecho todo em silêncio fica como está", () => {
+    expect(pausasAcima([[0, 5]], 0, 5, 0.5)).toEqual([[0, 5]]);
+  });
+});
