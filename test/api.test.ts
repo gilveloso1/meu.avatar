@@ -1231,6 +1231,19 @@ describe("tempo que acompanha", () => {
     expect(x(r, noSilencio)).toBe(3.3);
   });
 
+  it("sem bloco, a camada do segundo vídeo anda só o que encolheu antes dela", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    await env.MIDIA.put(`videos/${VIDEO2}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [[3, 5]], som: true };
+    const a = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, rotulo: "a" }, { tipo: "adicionar", video: VIDEO2, depois: "@a", rotulo: "b" }, { tipo: "adicionar", html: CENA, duracao: 1, sobre: "@b", em: 6 }], fake);
+    const r = await lote(id, a.revisao, [{ tipo: "removerPausas", acima: 0.5 }], fake);
+    // Cada vídeo perde 1,5 s (de 3,3 a 4,8). O segundo começa em 8,5, e o ponto 6 dele fica em 8,5 + 3,3 + 1,2.
+    expect(r.grupos[0]!.duracao).toBe(17);
+    expect(x(r, a.criados[2]!)).toBe(13);
+  });
+
   it("velocidade e corte do começo não desalinham a camada", async () => {
     const { id, revisao } = await novo();
     const a = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO, rotulo: "a" }, { tipo: "adicionar", html: CENA, duracao: 1, sobre: "@a", em: 4 }]);
@@ -1261,9 +1274,10 @@ describe("tempo que acompanha", () => {
   it("removerPausas recusa acima fora do limite ou junto com pausa", async () => {
     const { id, revisao } = await novo();
     const a = await lote(id, revisao, [{ tipo: "adicionar", video: VIDEO }]);
-    for (const c of [{ acima: 0 }, { acima: 6 }, { acima: "1" }, { acima: 1, pausa: "curta" }]) {
-      expect(await (await comandos(id, a.revisao, [{ tipo: "removerPausas", bloco: a.criados[0], ...c }])).json()).toEqual({ erro: "pausa_invalida", comando: 0 });
+    for (const c of [{ acima: 0 }, { acima: 6 }, { acima: "1" }]) {
+      expect(await (await comandos(id, a.revisao, [{ tipo: "removerPausas", bloco: a.criados[0], ...c }])).json()).toEqual({ erro: "pausa_invalida", comando: 0, minimo: 0.1, maximo: 5 });
     }
+    expect(await (await comandos(id, a.revisao, [{ tipo: "removerPausas", bloco: a.criados[0], acima: 1, pausa: "curta" }])).json()).toEqual({ erro: "pausa_invalida", comando: 0, motivo: "acima ou pausa, não os dois" });
   });
 });
 

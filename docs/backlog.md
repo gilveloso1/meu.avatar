@@ -64,8 +64,10 @@ Próximos passos, nesta ordem:
      o `em` do `sobre` conta do bloco citado, a camada segue o ponto da fala quando o bloco de baixo
      é cortado, acelerado ou perde pausas e trechos, o `trocar` tira o silêncio das pontas e leva a
      camada na proporção, e o `removerPausas` aceita `acima` em segundos. Falta a animação esticar
-     ou encolher com o bloco (hoje mantém a duração), e o mesmo acompanhamento nos cortes feitos
-     na tela do canvas.
+     ou encolher com o bloco (hoje mantém a duração), o mesmo acompanhamento nos cortes feitos
+     na tela do canvas, um aviso quando um corte tira o ponto em que a camada começava (hoje ela vai
+     para o começo ou o fim do bloco, calada) e apagar um projeto pelo MCP (o teste de 05/11/2026
+     deixou o projeto "Teste MCP tempo (agente) 05/11" na conta).
    - *Ver o resultado*: quadros do Final montado sem exportar (a animação sozinha já se vê pelo
      `inspecionar_animacao`).
    - *Pronto para usar*: em vez de templates adivinhados, o agente reusa o que já fez (feito,

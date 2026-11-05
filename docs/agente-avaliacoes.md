@@ -109,7 +109,9 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
 - Áudio: enviar música por URL ou da biblioteca do site (o base64 sem terminal é inviável) e ter
   uma biblioteca de trilhas.
 - Remover pausas por limite: cortar toda pausa acima de X segundos em todos os blocos, com realinhamento.
-  (Feito: `removerPausas {acima}`, com as camadas acompanhando.)
+  (Feito: `removerPausas {acima}`, com as camadas acompanhando. Num teste só pelo MCP, em 05/11/2026,
+  um agente conferiu os quatro casos com os números esperados; achou um erro, corrigido no mesmo dia:
+  sem `bloco`, a camada do segundo vídeo andava duas vezes o que o primeiro encolheu.)
 
 ### 6. O que seria bom ter pronto
 
