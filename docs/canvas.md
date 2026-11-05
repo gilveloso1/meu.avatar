@@ -234,10 +234,3 @@ menos custo.
   página do canvas libera `data:` nas imagens e `blob:` no fetch (miniaturas e a
   onda do som); as outras páginas não. As frases de erro vêm de `src/erros.ts` pelo config.
 - O protótipo (`prototipos/canvas/`) usa a mesma tela, com o exemplo de 6 versões.
-
-## Em aberto
-
-- **Timeline embaixo do canvas, com zoom**, para o vídeo ou o áudio escolhido:
-  cortar vendo a onda e os quadros de perto (a próxima etapa da edição fina).
-
-- Esboço da tela no canvas de design, para aprovar.

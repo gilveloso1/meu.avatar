@@ -14,8 +14,8 @@ ou fazendo anúncios no estilo UGC para marcas DTC. Ver "Direção" no `CLAUDE.m
 a anterior e será revista com o dono por essa direção.
 
 **Canvas de edição** (ver [canvas.md](canvas.md)): no ar para o administrador, com a
-exportação de até 50 versões. Falta a timeline embaixo do canvas e abrir para todos, depois
-de definir o limite de uso e o custo do contêiner por pessoa.
+exportação de até 50 versões. Falta abrir para todos, depois de definir o limite de uso e o
+custo do contêiner por pessoa. A timeline embaixo do canvas saiu dos planos (05/11/2026).
 
 **Agentes editando projetos** (ver [api.md](api.md)): a meta é um agente fazer uma edição de
 nível profissional num projeto real. O caso de teste é o projeto "Ação na Bolsa". Cada item
@@ -60,9 +60,11 @@ itens ainda vai ser revista com o dono.
 Próximos passos, nesta ordem:
 
 1. **O que o teste da Lara Resende pediu** (detalhes em [agente-avaliacoes.md](agente-avaliacoes.md)):
-   - *Tempo que acompanha*: `sobre` ancorado no bloco (não só no grupo), encaixe do vídeo no
-     rascunho cortando o silêncio, remover pausas acima de X s em todos os blocos com
-     realinhamento; `ligar` e `remover` sem desfazer as variações sem querer.
+   - *Tempo que acompanha*: a cobertura já anda com o bloco em que começa quando algo antes
+     dele muda, e `ligar`, `remover` e `ordenar` já não desfazem variações (PRs 91 a 95). Faltam:
+     `sobre` com o `em` contado do bloco (hoje é do grupo), a cobertura acompanhar o que muda
+     *dentro* do bloco dela (pausas, trechos e velocidade remapeados; animação que estica), o
+     `trocar` cortar o silêncio do vídeo pronto e o `removerPausas` com um limite em segundos.
    - *Ver o resultado*: quadros do Final montado sem exportar (a animação sozinha já se vê pelo
      `inspecionar_animacao`).
    - *Pronto para usar*: em vez de templates adivinhados, o agente reusa o que já fez (feito,
