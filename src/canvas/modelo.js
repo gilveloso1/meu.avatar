@@ -855,6 +855,15 @@ export function removeItems(project, ids) {
   };
   p.blocks = p.blocks.filter((b) => !s.has(b.id));
   p.finals = p.finals.filter((f) => !s.has(f.id));
+  // O nome do grupo também fica num bloco dele: segue para o que fica, como a ligação.
+  if (p.names) {
+    p.names = { ...p.names };
+    for (const id of ids) {
+      const outro = fica(id);
+      if (p.names[id] && outro && outro !== id && !p.names[outro]) p.names[outro] = p.names[id];
+      delete p.names[id];
+    }
+  }
   p.edges = p.edges
     .filter((e) => !s.has(e.id))
     .map((e) => ({ ...e, from: fica(e.from), to: fica(e.to) }))

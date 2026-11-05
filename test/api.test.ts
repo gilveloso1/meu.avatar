@@ -340,8 +340,16 @@ describe("comandos", () => {
     const c = await cru(b.revisao, [{ tipo: "remover", ids: [ultima.id] }]);
     expect(c.mudou.avisos).toContainEqual({ tipo: "final_sem_variacao", final: "final" });
 
+    // O nome da cena segue o grupo quando o primeiro bloco dele sai, e o rotulo vale em renomear {grupo}.
+    const n = await cru(c.revisao, [{ tipo: "rascunho", fala: "4.1", duracao: 2, rotulo: "c4" }, { tipo: "rascunho", fala: "4.2", duracao: 2, depois: "@c4", rotulo: "c42" }, { tipo: "renomear", grupo: "@c4", nome: "Extra" }]);
+    const [c4, c42] = n.criados as [string, string];
+    expect(n.mudou.grupos.find((g: { id: string }) => g.id === c4).nome).toBe("Extra");
+    const o = await cru(n.revisao, [{ tipo: "remover", ids: [c4], fechar: true }]);
+    expect(o.mudou.gruposComIdNovo).toEqual([{ de: c4, para: c42 }]);
+    expect((await (await api(`/api/v1/projetos/${id}`, admin)).json<{ grupos: { id: string; nome: string }[] }>()).grupos.find((g) => g.id === c42)!.nome).toBe("Extra");
+
     // Nome do grupo e duração do rascunho direto; o aviso do rascunho vem uma vez, com a duração nova.
-    const d = await cru(c.revisao, [{ tipo: "renomear", grupo: c32, nome: "Cena 3" }, { tipo: "cortar", bloco: c1, duracao: 3 }]);
+    const d = await cru(o.revisao, [{ tipo: "renomear", grupo: c32, nome: "Cena 3" }, { tipo: "cortar", bloco: c1, duracao: 3 }]);
     expect(d.mudou.grupos.map((g: { nome: string }) => g.nome)).toEqual([expect.any(String), "Cena 3"]);
     expect(d.mudou.avisos).toEqual([{ tipo: "rascunho", bloco: c1, segundos: 3 }]);
     expect(d.mudou).not.toHaveProperty("avisosResolvidos");

@@ -126,7 +126,7 @@ Há três. `rascunho` (`bloco`, `fala`, `segundos`): uma fala que ainda espera o
 quando uma cobertura ou um som passa do fim da sequência ou há um buraco nela. Aquele trecho sai
 sobre o fundo preto, salvo se uma cobertura opaca o preencher.
 
-Erro: `{"erro": "<código>"}`, com `comando` (a posição no lote) quando um comando é
+Erro: `{"erro": "<código>"}`, com `comando` (a posição no lote, a partir de 0) quando um comando é
 recusado. Em `comando_desconhecido`, `sugestao` traz o tipo com o nome mais parecido
 (`troca` → `trocar`) ou, se nenhum chega perto, `tipos` traz a lista. Quando o contêiner não responde (subindo, indo dormir ou ocupado), o site tenta de novo
 sozinho duas vezes; se ainda falhar, `503 conteiner_falhou` em quadros, silêncios, transcrição,
@@ -208,13 +208,13 @@ outro valor faz outro vídeo na exportação, e o mesmo valor reaproveita. No ca
 | `removerPausas` | `bloco` (sem ele, todos), `pausa` (`curta`, `media`, `longa`) | Tira as pausas com a regra da Edição rápida |
 | `enquadrar` | `bloco`; `zoom` (1 a 8), `focoX`, `focoY` (0 a 1) ou `rosto: true`; `chaves: [{t, zoom, focoX, focoY}]`; `encaixe` (`preencher`, `caber`, `desfocar`); `recorte: {esquerda, topo, direita, base}`; `espelharH`, `espelharV`, `girar` (0, 90, 180, 270); `limpar` | Só muda o que vier. `t` é o tempo do bloco (negativo continua um movimento do bloco anterior); entre as chaves, a curva é suave |
 | `ligar` | `de`, `para` | Liga o grupo de um bloco a outro grupo ou a um Final (o grupo tem o id do primeiro bloco). Encadeia, não junta: para juntar dois grupos, `mover`. Ligar a outro grupo um grupo que é a única entrada de um Final (a ligação automática do primeiro bloco) tira essa ligação. Fora isso, soma: cada saída de um grupo vira uma variação; para mudar a ordem, remova as antigas e ligue de novo. Recusa círculo, repetida e passar de 48 variações |
-| `remover` | `ids`, `fechar` | Blocos, Finais ou ligações (os ids de `ligacoes`). Com `fechar: true`, a sequência encosta onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois (aviso `grupo_partido`). Tirar o primeiro bloco de um grupo passa o id do grupo e as ligações ao bloco seguinte (`gruposComIdNovo` na resposta) |
+| `remover` | `ids`, `fechar` | Blocos, Finais ou ligações (os ids de `ligacoes`). Com `fechar: true`, a sequência encosta onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois (aviso `grupo_partido`). Tirar o primeiro bloco de um grupo passa o id do grupo e as ligações ao bloco seguinte (`gruposComIdNovo` na resposta); o nome do grupo vai junto |
 | `som` | `bloco`, `volume` (0 a 4), `mudo` | Volume do bloco |
 | `final` | `id`, `resolucao`, `formato`, `velocidade` | Muda um Final; sem `id`, cria outro. A velocidade vale para todas as variações dele |
 | `organizar` | | O mesmo Organizar da tela |
 
 Em `adicionar`, `rascunho` e `dividir`, `rotulo: "nome"` permite citar o bloco como `"@nome"` nos comandos
-seguintes do mesmo lote, sem esperar a resposta.
+seguintes do mesmo lote, sem esperar a resposta (em `bloco`, `depois`, `antes`, `sobre`, `de`, `para`, `grupo` e `ids`).
 
 O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, como na tela.
 

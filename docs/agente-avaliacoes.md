@@ -67,6 +67,9 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   vezes quando só a duração mudava, não se sabia se `ligar` troca ou soma, e faltavam a duração
   direta e o nome do grupo. Agora há `gruposComIdNovo`, o aviso vem uma vez, `cortar {duracao}` e
   `renomear {grupo}`, e a descrição do `ligar` diz que ele soma.)
+  (No quarto, o projeto ficou certo, com nomes e ordem trocada, mas o `@rotulo` não valia em
+  `renomear {grupo}` e o nome da cena se perdia quando o primeiro bloco dela saía. Corrigido: o
+  rótulo vale em `grupo`, e o nome segue o grupo como as ligações, também no canvas.)
 - Reenviar o HTML completo a cada correção: 3 a 5 mil caracteres por cena, com o mesmo CSS do
   painel repetido em todas.
 - O raciocínio de layout e de tempos: coordenadas do SVG, posições das moedas, a matemática do
