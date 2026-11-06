@@ -278,6 +278,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   o que se viu e o custo real, e o resumo no README. Leia antes de escolher um
   modelo e atualize depois de cada teste, bom ou ruim, no mesmo PR. Modelo que o provedor bloqueia para um uso
   não é contornado nem apagado: a estrutura fica e ganha a nota lá.
+- Nada de imagem, vídeo ou áudio no repositório (nem de teste, nem de exemplo): pesa o projeto
+  para sempre. Resultado de teste fica no site (projeto ou lista do modelo) ou no R2, e o doc
+  diz onde (id ou caminho); arquivo de trabalho fica na pasta temporária.
 
 ## Quando o usuário precisa agir
 
