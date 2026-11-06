@@ -19,8 +19,10 @@ const SOURCE = process.argv[2] ?? "#6750a4";
 const colors = new MaterialDynamicColors().allColors;
 
 // Blocos do canvas de edição: cada tipo tem a sua paleta (vídeo na primária,
-// imagem na secundária, áudio na terciária) e 6 tons dela para diferenciar
+// imagem na secundária, áudio na terciária, nota em amarelo) e 6 tons dela para diferenciar
 // blocos do mesmo tipo. O texto fica a 50 tons do fundo (contraste de 4,5:1).
+// A nota é uma cor própria (o amarelo do post-it), fora do esquema: matiz e croma fixos no HCT.
+const NOTA = { hue: 95, chroma: 48 };
 const BLOCO_TONS = { light: [92, 86, 80, 74, 68, 62], dark: [20, 25, 30, 35, 40, 45] };
 
 function tokens(isDark: boolean): string {
@@ -30,7 +32,7 @@ function tokens(isDark: boolean): string {
   const sys = colors
     .filter((c) => !c.name.endsWith("_palette_key_color"))
     .map((c) => `  --md-sys-color-${c.name.replace(/_/g, "-")}: ${hexFromArgb(c.getArgb(scheme))};`);
-  const palettes = { video: scheme.primaryPalette, imagem: scheme.secondaryPalette, audio: scheme.tertiaryPalette };
+  const palettes = { video: scheme.primaryPalette, imagem: scheme.secondaryPalette, audio: scheme.tertiaryPalette, nota: TonalPalette.fromHueAndChroma(NOTA.hue, NOTA.chroma) };
   const blocos = Object.entries(palettes).flatMap(([tipo, p]) => [
     ...BLOCO_TONS[isDark ? "dark" : "light"].map((t, i) => `  --bloco-${tipo}-${i + 1}: ${hexFromArgb(p.tone(t))};`),
     `  --bloco-${tipo}-on: ${hexFromArgb(p.tone(isDark ? 95 : 10))};`,

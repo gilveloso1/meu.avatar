@@ -187,7 +187,7 @@ function setTab(tab) {
   sheetBody.dataset.tab = tab;
   for (const b of document.querySelectorAll(".viewer__sheet [data-tab][role=tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   for (const p of sheetBody.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== tab;
-  for (const t of sheetBody.querySelectorAll("#f-fala, #f-descricao")) fitText(t);
+  for (const t of sheetBody.querySelectorAll("#f-fala, #f-descricao, #f-nota")) fitText(t);
   showActions();
   try {
     localStorage.setItem("canvas-aba", tab);
@@ -308,6 +308,8 @@ function groupAt(pt) {
   });
 }
 const blockEls = new Map();
+/** As notas, como os blocos: o elemento fica entre um desenho e outro. */
+const noteEls = new Map();
 
 /* ---------- onda do som: a leve no bloco, a nítida só no que está à vista com zoom alto ---------- */
 
@@ -456,8 +458,31 @@ function render({ side = true } = {}) {
     $(".blk__dur", el).textContent = fmt(M.len(b));
   }
   for (const [id, el] of blockEls) if (!seen.has(id)) el.remove(), blockEls.delete(id);
+  // Notas: blocos amarelos com o texto no lugar do quadro (como o rascunho), fora dos grupos.
+  const notesSeen = new Set();
+  for (const n of project.notes ?? []) {
+    notesSeen.add(n.id);
+    let el = noteEls.get(n.id);
+    if (!el) {
+      el = document.createElement("div");
+      el.dataset.note = n.id;
+      el.innerHTML = `<div class="blk__media"><span class="blk__fala"></span></div><div class="blk__label"><span class="icon blk__kind">sticky_note_2</span><span class="blk__name">Nota</span></div>`;
+      el.style.setProperty("--c", "var(--bloco-nota-1)");
+      el.style.setProperty("--on", "var(--bloco-nota-on)");
+      world.append(el);
+      noteEls.set(n.id, el);
+    }
+    const look = `blk blk--draft blk--nota${sel.type === "note" && sel.id === n.id ? " is-sel" : ""}${el.classList.contains("is-drag") ? " is-drag" : ""}`;
+    const state = `${look}|${n.x}|${n.y}|${n.text}`;
+    if (el.drawn === state) continue;
+    el.drawn = state;
+    el.className = look;
+    Object.assign(el.style, { left: `${n.x}px`, top: `${n.y}px`, width: `${M.NOTE_W}px`, height: `${M.VIS_H}px` });
+    $(".blk__fala", el).textContent = n.text;
+  }
+  for (const [id, el] of noteEls) if (!notesSeen.has(id)) el.remove(), noteEls.delete(id);
   const empty = $("#canvas-empty");
-  if (empty) empty.hidden = project.blocks.length > 0;
+  if (empty) empty.hidden = project.blocks.length > 0 || (project.notes?.length ?? 0) > 0;
 
   // Abas dos grupos, portas e blocos finais.
   let html = "";
@@ -565,9 +590,9 @@ const MAX_FALA = 2000;
  * O campo de texto cresce com o texto, como na página do modelo. Escondido (na aba Prévia), não
  * há o que medir: mede de novo quando a aba Ajustes abre (setTab).
  */
-/** Um campo de texto do rascunho (Descrição, Fala): cresce com o texto e conta os caracteres, sem frase de apoio. */
-function draftField(id, label, value) {
-  return `<div class="text-field"><textarea class="text-field__input" id="${id}" rows="1" maxlength="${MAX_FALA}" placeholder=" " aria-describedby="${id}-n">${esc(value)}</textarea><label class="text-field__label" for="${id}">${label}</label><p class="text-field__supporting"><span></span><span id="${id}-n">${value.length}/${MAX_FALA}</span></p></div>`;
+/** Um campo de texto do rascunho (Descrição, Fala) e da nota: cresce com o texto e conta os caracteres, sem frase de apoio. */
+function draftField(id, label, value, max = MAX_FALA) {
+  return `<div class="text-field"><textarea class="text-field__input" id="${id}" rows="1" maxlength="${max}" placeholder=" " aria-describedby="${id}-n" data-max="${max}">${esc(value)}</textarea><label class="text-field__label" for="${id}">${label}</label><p class="text-field__supporting"><span></span><span id="${id}-n">${value.length}/${max}</span></p></div>`;
 }
 
 /** O texto que o cartão do rascunho mostra: a fala ou, sem ela, a descrição. */
@@ -640,6 +665,11 @@ function renderSide(gs) {
       h += `<div class="viewer__card"><div>${row("schedule", "Duração", fmt(g.dur))}${row("movie", "Vídeos e imagens", g.blocks.length + g.covers.length)}${row("music_note", "Sons", g.audios.length + g.sounds.length)}</div></div>`;
       actions = btn("text", 'data-act="del"', "delete", "Excluir bloco");
     }
+  } else if (sel.type === "note") {
+    const n = project.notes?.find((o) => o.id === sel.id);
+    title = "Nota";
+    if (n) h += draftField("f-nota", "Texto", n.text, M.NOTE_MAX);
+    actions = btn("outlined", 'data-act="dup"', "content_copy", "Duplicar") + btn("text", 'data-act="del"', "delete", "Excluir");
   } else if (sel.type === "edge") {
     title = "Linha";
     h += `<p class="sheet-hint">Liga um bloco ao seguinte. Cada caminho até o Final é uma variação.</p>`;
@@ -654,7 +684,7 @@ function renderSide(gs) {
   }
   for (const undo of selectUndos.splice(0)) undo();
   side.innerHTML = `<h2 class="sheet-title">${title}</h2>` + h;
-  for (const t of side.querySelectorAll("#f-fala, #f-descricao")) fitText(t);
+  for (const t of side.querySelectorAll("#f-fala, #f-descricao, #f-nota")) fitText(t);
   // No site, o campo de seleção vira o menu do M3 (window.mdSelect, do script do site).
   if (window.mdSelect) for (const s of side.querySelectorAll(".text-field--select select")) selectUndos.push(window.mdSelect(s));
   sideActions.innerHTML = actions;
@@ -772,6 +802,15 @@ function onSideInput(t0) {
     commit(before);
     return render({ side: false });
   }
+  if (t0.id === "f-nota" && sel.type === "note") {
+    fitText(t0);
+    $("#f-nota-n").textContent = `${t0.value.length}/${M.NOTE_MAX}`;
+    const before = project;
+    project = structuredClone(project);
+    project.notes.find((n) => n.id === sel.id).text = t0.value;
+    commit(before);
+    return render({ side: false });
+  }
   if (sel.type !== "block") return;
   const before = project;
   project = structuredClone(project);
@@ -821,6 +860,16 @@ function removeSelection() {
 }
 
 function duplicate() {
+  if (sel.type === "note") {
+    const n = project.notes?.find((o) => o.id === sel.id);
+    if (!n) return;
+    const before = project;
+    const r = M.addNote(project, { x: n.x, y: n.y + M.VIS_H + 48 }, n.text);
+    project = r.project;
+    sel = { type: "note", id: r.id };
+    commit(before);
+    return render();
+  }
   if (sel.type !== "block") return;
   const before = project;
   project = structuredClone(project);
@@ -944,10 +993,72 @@ $("#file").onchange = (e) => {
   importFiles([...e.target.files], toWorld(r.left + r.width / 3, r.top + r.height / 3));
   e.target.value = "";
 };
-vp.addEventListener("dragover", (e) => e.preventDefault());
-vp.addEventListener("drop", (e) => {
+/* ---------- arrastar e colar: arquivos entram como blocos; texto vira nota ---------- */
+
+// Onde o mouse está no canvas: o que for colado entra ali. Fora dele, embaixo de tudo o que já está
+// no canvas (como os "Seus vídeos"), para não cair em cima de nada.
+let pointer = null;
+vp.addEventListener("pointermove", (e) => (pointer = { x: e.clientX, y: e.clientY }));
+vp.addEventListener("pointerleave", () => (pointer = null));
+function dropPoint() {
+  if (pointer) return toWorld(pointer.x, pointer.y);
+  const r = vp.getBoundingClientRect();
+  const at = toWorld(r.left + 80, r.top + 120);
+  const bottoms = [...project.blocks.map((b) => b.y + M.height(b)), ...(project.notes ?? []).map((n) => n.y + M.VIS_H)];
+  return { x: at.x, y: Math.max(at.y, ...bottoms.map((y) => y + 48)) };
+}
+
+/** Uma nota nova com esse texto, escolhida (os Ajustes abrem nela). */
+function addNote(text, at) {
+  const before = project;
+  const r = M.addNote(project, at, text);
+  project = r.project;
+  sel = { type: "note", id: r.id };
+  commit(before);
+  render();
+}
+
+/** Só imagem, vídeo e áudio entram; o resto avisa. A imagem colada não tem nome: "Imagem colada". */
+function bringIn(files, at) {
+  const ok = files.filter((f) => /^(image|video|audio)\//.test(f.type));
+  if (ok.length < files.length) toast(CONFIG.erros?.arquivo ?? "");
+  if (ok.length) importFiles(ok.map((f) => (/^image\.\w+$/.test(f.name) ? new File([f], `Imagem colada.${f.name.split(".").pop()}`, { type: f.type }) : f)), at);
+}
+
+const carries = (e) => [...(e.dataTransfer?.types ?? [])].some((t) => t === "Files" || t === "text/plain");
+const typing = (el) => el?.closest?.("input, textarea, [contenteditable]");
+// O aviso de soltar fica no canvas enquanto algo de fora passa por cima da página.
+let dragDepth = 0;
+const dropping = (on) => vp.classList.toggle("is-dropping", on);
+document.addEventListener("dragenter", (e) => {
+  if (carries(e)) dragDepth++, dropping(true);
+});
+document.addEventListener("dragleave", (e) => {
+  if (carries(e) && --dragDepth <= 0) (dragDepth = 0), dropping(false);
+});
+// Soltar fora do canvas não deixa o navegador abrir o arquivo (e sair do projeto): entra no canvas também.
+document.addEventListener("dragover", (e) => {
+  if (carries(e) && !typing(e.target)) e.preventDefault();
+});
+document.addEventListener("drop", (e) => {
+  dragDepth = 0;
+  dropping(false);
+  if (!carries(e) || typing(e.target)) return;
   e.preventDefault();
-  if (e.dataTransfer.files.length) importFiles([...e.dataTransfer.files], toWorld(e.clientX, e.clientY));
+  const at = vp.contains(e.target) ? toWorld(e.clientX, e.clientY) : dropPoint();
+  if (e.dataTransfer.files.length) return bringIn([...e.dataTransfer.files], at);
+  const text = e.dataTransfer.getData("text/plain").trim();
+  if (text) addNote(text, at);
+});
+// Colar (Ctrl+V / Cmd+V) fora de um campo: a imagem copiada vira bloco; o texto, nota.
+document.addEventListener("paste", (e) => {
+  if (typing(e.target) || !e.clipboardData) return;
+  const files = [...e.clipboardData.files];
+  const text = e.clipboardData.getData("text/plain").trim();
+  if (!files.length && !text) return;
+  e.preventDefault();
+  if (files.length) bringIn(files, dropPoint());
+  else addNote(text, dropPoint());
 });
 $("#add-final")?.addEventListener("click", () => {
   const before = project;
@@ -1053,9 +1164,10 @@ function fit() {
   const xs = [];
   const ys = [];
   for (const g of M.groups(project)) xs.push(g.x, g.x + g.w), ys.push(g.top, g.bottom);
+  for (const n of project.notes ?? []) xs.push(n.x, n.x + M.NOTE_W), ys.push(n.y, n.y + M.VIS_H);
   const r = vp.getBoundingClientRect();
   // Canvas vazio: o aviso do começo fica no meio; o Final, à direita dele.
-  if (!project.blocks.length && project.finals.length) {
+  if (!project.blocks.length && !project.notes?.length && project.finals.length) {
     const f = project.finals[0];
     view = { x: r.width * 0.8 - 90 - f.x, y: r.height / 2 - 40 - f.y, z: 1 };
     return applyView();
@@ -1282,11 +1394,13 @@ vp.addEventListener("pointerdown", (e) => {
   const trimEl = t.closest("[data-trim]");
   const port = t.closest(".port");
   const tab = t.closest(".gtab");
-  const blk = t.closest(".blk");
+  // A nota tem a cara de um bloco, mas não entra em grupo: só anda.
+  const note = t.closest("[data-note]");
+  const blk = note ? null : t.closest(".blk");
   const fin = t.closest(".fin");
   const hit = t.closest(".wire-hit");
 
-  if (e.button === 1 || (!trimEl && !port && !tab && !blk && !fin && !hit)) {
+  if (e.button === 1 || (!trimEl && !port && !tab && !blk && !note && !fin && !hit)) {
     const v0 = { ...view };
     onMove = (ev) => {
       view.x = v0.x + ev.clientX - start.x;
@@ -1330,6 +1444,19 @@ vp.addEventListener("pointerdown", (e) => {
       project = M.moveGroup(base, gid, d.x, d.y);
       renderSoon();
     };
+  } else if (note) {
+    const id = note.dataset.note;
+    const n0 = base.notes.find((n) => n.id === id);
+    sel = { type: "note", id };
+    render();
+    onMove = (ev) => {
+      const d = dW(ev);
+      project = structuredClone(base);
+      Object.assign(project.notes.find((n) => n.id === id), { x: Math.round(n0.x + d.x), y: Math.round(n0.y + d.y) });
+      noteEls.get(id)?.classList.add("is-drag");
+      renderSoon();
+    };
+    onUp = () => noteEls.get(id)?.classList.remove("is-drag");
   } else if (blk) {
     const id = blk.dataset.id;
     const b0 = base.blocks.find((b) => b.id === id);

@@ -11,10 +11,14 @@ export interface FrameKey { t: number; z: number; x: number; y: number }
 export interface Frame { fit?: "cover" | "contain" | "blur"; flipH?: boolean; flipV?: boolean; rotate?: number; crop?: { l: number; t: number; r: number; b: number }; keys?: FrameKey[] }
 export interface CanvasFinal { id: string; x: number; y: number; resolution?: string; format?: string; speed?: number }
 export interface CanvasEdge { id: string; from: string; to: string }
-export interface CanvasProject { blocks: Block[]; finals: CanvasFinal[]; edges: CanvasEdge[]; names?: Record<string, string> }
+export interface CanvasNote { id: string; x: number; y: number; text: string }
+export interface CanvasProject { blocks: Block[]; finals: CanvasFinal[]; edges: CanvasEdge[]; names?: Record<string, string>; notes?: CanvasNote[] }
 export interface Group { id: string; x: number; y: number; dur: number; bottom: number; label: string; blocks: Block[]; covers: Block[]; audios: Block[] }
 
 export const MAX_VERSOES: number;
+export const NOTE_W: number;
+export const NOTE_MAX: number;
+export function addNote(project: CanvasProject, at: { x: number; y: number }, text: string): { project: CanvasProject; id: string };
 export const IMAGE_MAX: number;
 export const CODE_MAX: number;
 export const PX: number;

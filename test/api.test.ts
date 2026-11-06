@@ -862,6 +862,20 @@ describe("legenda do grupo", () => {
   });
 });
 
+describe("notas", () => {
+  it("ver_projeto mostra as notas do canvas e remover tira uma", async () => {
+    const { id } = await novo();
+    const data = { blocks: [], finals: [{ id: "final", x: 0, y: 0 }], edges: [], notes: [{ id: "n1", x: 0, y: 0, text: "Briefing: mostrar o sérum" }, { id: "n2", x: 0, y: 200, text: "Ref: print" }] };
+    await env.DB.prepare("UPDATE projects SET data = ?, revision = revision + 1 WHERE id = ?").bind(JSON.stringify(data), id).run();
+    const vista = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ revisao: number; notas: { id: string; texto: string }[] }>();
+    expect(vista.notas).toEqual([{ id: "n1", texto: "Briefing: mostrar o sérum" }, { id: "n2", texto: "Ref: print" }]);
+    const r = await (await comandos(id, vista.revisao, [{ tipo: "remover", ids: ["n1"] }])).json<{ revisao: number }>();
+    const depois = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ notas: { id: string }[] }>();
+    expect(r.revisao).toBe(vista.revisao + 1);
+    expect(depois.notas.map((n) => n.id)).toEqual(["n2"]);
+  });
+});
+
 describe("rascunho", () => {
   type Bloco = { id: string; kind: string; src: string; x: number; tin: number; tout: number; draft?: { fala: string }; speed?: number };
   type Vista = { revisao: number; criados: string[]; grupos: { id: string; duracao: number; blocos: { id: string }[] }[]; avisos: { tipo: string; bloco?: string; fala?: string; segundos?: number }[]; canvas: { blocks: Bloco[] } };

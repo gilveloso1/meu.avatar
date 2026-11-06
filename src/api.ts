@@ -341,6 +341,8 @@ export class Api {
       revisao: project.revision,
       atualizado: project.updated_at,
       ...resumo(data),
+      // As notas que a pessoa colou ou escreveu no canvas (briefing, roteiro, referências): fora dos vídeos.
+      ...(data.notes?.length ? { notas: data.notes.map((n) => ({ id: n.id, texto: n.text })) } : {}),
       ...(files ? { arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })) } : {}),
       ...(incluir.includes("codigo") ? { codigo: data.blocks.filter((b) => b.code).map((b) => ({ bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), html: b.code!.html, ...(b.code!.params ? { parametros: b.code!.params } : {}), ...(b.code!.escala ? { escala: b.code!.escala } : {}), ...(b.code!.fixa ? { esticar: false } : {}) })) } : {}),
       ...(incluir.includes("canvas") ? { canvas: data } : {}),

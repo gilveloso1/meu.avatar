@@ -43,7 +43,7 @@ removerTrechos {bloco, trechos: [[inicio, fim], ...]} (segundos do arquivo, como
 enquadrar {bloco, zoom: 1 a 8, focoX, focoY: 0 a 1, rosto: true, chaves: [{t, zoom, focoX, focoY}], encaixe: preencher|caber|desfocar, recorte: {esquerda, topo, direita, base}, espelharH, espelharV, girar: 0|90|180|270, limpar}
 ligar {de, para} (de e para: id de um bloco do grupo, ou o de um Final; o grupo tem o id do primeiro bloco dele; encadeia os grupos na ordem do Final, não junta: para juntar dois grupos, mover; soma uma ligação, não troca a que existe: cada saída de um grupo vira uma variação; para a sequência das cenas, ordenar)
 ordenar {grupos: [ids de um bloco de cada grupo, na ordem], final} (liga as cenas nessa ordem e a última ao Final, no lugar das ligações entre elas e das delas ao Final, inclusive a automática do primeiro bloco; ligações de fora, como ganchos que chegam à primeira, ficam; sem final, o único que houver)
-remover {ids, fechar} (ids de blocos, Finais ou ligações, como as de ligacoes; fechar: true encosta a sequência onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois; tirar o primeiro bloco muda o id do grupo para o do bloco seguinte, e o nome e as ligações (com o mesmo id) vão junto, sem voltar em mudou; a resposta diz em gruposComIdNovo)
+remover {ids, fechar} (ids de blocos, Finais, ligações, como as de ligacoes, ou notas; fechar: true encosta a sequência onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois; tirar o primeiro bloco muda o id do grupo para o do bloco seguinte, e o nome e as ligações (com o mesmo id) vão junto, sem voltar em mudou; a resposta diz em gruposComIdNovo)
 som {bloco, volume: 0 a 4, mudo}
 final {id, resolucao, formato, velocidade}
 organizar {}
@@ -86,7 +86,7 @@ const FERRAMENTAS = [
   { name: "criar_projeto", description: "Cria um projeto vazio.", inputSchema: objeto({ nome: texto("Nome do projeto.") }, ["nome"]) },
   {
     name: "ver_projeto",
-    description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo), ligações (id, de, para: grupo ou Final), Finais com as variações e avisos. Os arquivos, o código das animações e o canvas inteiro são grandes: peça em incluir só quando precisar.",
+    description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo), ligações (id, de, para: grupo ou Final), Finais com as variações, avisos e as notas da pessoa (texto solto no canvas, como briefing e referências: leia antes de editar; remover {ids} tira uma). Os arquivos, o código das animações e o canvas inteiro são grandes: peça em incluir só quando precisar.",
     inputSchema: objeto({ projeto, incluir: { type: "array", items: { type: "string", enum: ["arquivos", "codigo", "canvas"] }, description: "arquivos: os arquivos do projeto (id e src para adicionar); codigo: o HTML de cada animação, para editar com editarCodigo, com escala quando ela esticou ou encolheu com a fala (os tempos do código são os de antes) e esticar: false quando não estica; canvas: o modelo inteiro, com posições e ajustes de cada bloco." } }, ["projeto"]),
   },
   {

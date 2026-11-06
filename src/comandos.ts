@@ -241,7 +241,7 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
         break;
       case "remover": {
         const ids = Array.isArray(c.ids) ? c.ids.filter((v): v is string => typeof v === "string") : [];
-        const existe = (id: string) => [...project.blocks, ...project.finals, ...project.edges].some((o) => o.id === id);
+        const existe = (id: string) => [...project.blocks, ...project.finals, ...project.edges, ...(project.notes ?? [])].some((o) => o.id === id);
         if (!ids.length || !ids.every(existe)) throw falha("bloco_inexistente");
         const antes = project;
         project = removeItems(project, ids);
