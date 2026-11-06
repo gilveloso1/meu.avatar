@@ -28,7 +28,8 @@ menos custo.
   um bloco de vídeo com o texto no lugar do quadro (`notes: [{id, x, y, text}]`, até 10 mil
   caracteres; cor `--bloco-nota-*`, gerada pelo `npm run tema`). Não entra em grupo, ligação nem
   exportação: só anda, duplica e sai. Nasce ao colar ou soltar um texto no canvas; o texto muda nos
-  Ajustes. O agente lê as notas no `ver_projeto` (`notas`) e tira com `remover {ids}`.
+  Ajustes. O agente lê as notas no `ver_projeto` (`notas`), cria com `nota {texto, perto?}`, troca o texto com
+  `editarNota {nota, texto}` e apaga com `remover {ids}`.
 - **Animação em código**: o HTML do agente (elementos, `<style>` e a linha do tempo `tl` do
   GSAP), guardado no bloco (`code: {html}`, comandos `adicionar {html, duracao}` e
   `editarCodigo`, [api.md](api.md)). É um bloco de imagem sem arquivo, como o rascunho, que vai até

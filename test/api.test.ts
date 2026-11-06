@@ -262,7 +262,7 @@ describe("comandos", () => {
 
   it("um lote com erro não muda nada", async () => {
     const { id, revisao } = await novo();
-    const res = await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }, { tipo: "nada" }]);
+    const res = await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }, { tipo: "xyzw" }]);
     expect(await res.json()).toEqual({ erro: "comando_desconhecido", comando: 1, tipos: TIPOS });
     const salvo = await (await api(`/api/v1/projetos/${id}?incluir=arquivos,canvas`, admin)).json<{ revisao: number; canvas: { blocks: unknown[] } }>();
     expect(salvo).toMatchObject({ revisao, canvas: { blocks: [] } });
@@ -863,6 +863,38 @@ describe("legenda do grupo", () => {
 });
 
 describe("notas", () => {
+  it("nota cria, editarNota troca o texto e remover apaga; a resposta diz o que mudou", async () => {
+    const { id, revisao } = await novo();
+    type Resp = { revisao: number; criados: string[]; mudou: { notas?: { id: string; texto: string }[]; removidos?: { notas?: string[] } } };
+    const a = await (await comandos(id, revisao, [
+      { tipo: "rascunho", fala: "Oi", duracao: 2, rotulo: "r" },
+      { tipo: "nota", texto: "  Briefing:\nmostrar o sérum  ", perto: "@r", rotulo: "n" },
+      { tipo: "nota", texto: "O que falta: CTA" },
+    ])).json<Resp>();
+    const [rascunho, n1, n2] = a.criados;
+    expect(a.mudou.notas).toEqual([{ id: n1, texto: "Briefing:\nmostrar o sérum" }, { id: n2, texto: "O que falta: CTA" }]);
+    const canvas = (await (await api(`/api/v1/projetos/${id}?incluir=canvas`, admin)).json<{ canvas: { blocks: { id: string; x: number; y: number }[]; notes: { id: string; x: number; y: number }[] } }>()).canvas;
+    const b = canvas.blocks.find((o) => o.id === rascunho)!;
+    // Perto: logo acima do bloco; sem perto, embaixo de tudo.
+    expect(canvas.notes[0]).toMatchObject({ x: b.x, y: b.y - 96 - 48 });
+    expect(canvas.notes[1]!.y).toBeGreaterThan(b.y);
+    const e = await (await comandos(id, a.revisao, [{ tipo: "editarNota", nota: n1, texto: "Briefing novo" }])).json<Resp>();
+    expect(e.mudou).toEqual({ notas: [{ id: n1, texto: "Briefing novo" }] });
+    const r = await (await comandos(id, e.revisao, [{ tipo: "remover", ids: [n2] }])).json<Resp>();
+    expect(r.mudou.removidos).toEqual({ notas: [n2] });
+    const vista = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ notas: { id: string; texto: string }[] }>();
+    expect(vista.notas).toEqual([{ id: n1, texto: "Briefing novo" }]);
+  });
+
+  it("recusa nota sem texto, longa demais, perto de algo que não existe e editar nota que não existe", async () => {
+    const { id, revisao } = await novo();
+    const erro = async (c: Record<string, unknown>) => (await comandos(id, revisao, [c])).json();
+    expect(await erro({ tipo: "nota", texto: " " })).toEqual({ erro: "texto_invalido", comando: 0 });
+    expect(await erro({ tipo: "nota", texto: "a".repeat(10001) })).toEqual({ erro: "texto_longo", comando: 0, maximo: 10000 });
+    expect(await erro({ tipo: "nota", texto: "oi", perto: "x" })).toEqual({ erro: "bloco_inexistente", comando: 0 });
+    expect(await erro({ tipo: "editarNota", nota: "x", texto: "oi" })).toEqual({ erro: "nota_inexistente", comando: 0 });
+  });
+
   it("ver_projeto mostra as notas do canvas e remover tira uma", async () => {
     const { id } = await novo();
     const data = { blocks: [], finals: [{ id: "final", x: 0, y: 0 }], edges: [], notes: [{ id: "n1", x: 0, y: 0, text: "Briefing: mostrar o sérum" }, { id: "n2", x: 0, y: 200, text: "Ref: print" }] };

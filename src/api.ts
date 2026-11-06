@@ -117,6 +117,16 @@ function resumo(data: CanvasProject) {
   };
 }
 
+/** As notas novas ou com o texto trocado (com o texto) e as que saíram, para a resposta dos comandos. */
+function notasMudadas(antes: CanvasProject, depois: CanvasProject) {
+  const eram = new Map((antes.notes ?? []).map((n) => [n.id, n.text]));
+  const ficam = new Set((depois.notes ?? []).map((n) => n.id));
+  return {
+    notas: (depois.notes ?? []).filter((n) => eram.get(n.id) !== n.text).map((n) => ({ id: n.id, texto: n.text })),
+    removidas: [...eram.keys()].filter((id) => !ficam.has(id)),
+  };
+}
+
 type Resumo = ReturnType<typeof resumo>;
 type Aviso = Resumo["avisos"][number];
 
@@ -553,7 +563,10 @@ export class Api {
         return atual ? conflito(atual) : falha(404, "nao_encontrado");
       }
       // Só o que o lote mudou: o projeto inteiro fica no ver_projeto (o maior gasto do agente).
-      return Response.json({ revisao: revision, criados, ...mudancas(antes, resumo(data)), ...extra });
+      const { mudou, avisosPendentes } = mudancas(antes, resumo(data));
+      const { notas, removidas } = notasMudadas(anterior, data);
+      const removidos = removidas.length ? { removidos: { ...mudou.removidos, notas: removidas } } : {};
+      return Response.json({ revisao: revision, criados, mudou: { ...mudou, ...(notas.length ? { notas } : {}), ...removidos }, avisosPendentes, ...extra });
     } catch (err) {
       if (err instanceof ComandoError) return falha(400, err.codigo, { comando: err.indice, ...err.extra });
       throw err;
