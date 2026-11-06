@@ -6,7 +6,7 @@ import type { AudioApi, ContainerPlan, Face } from "../src/audio";
 import type { ExportApi } from "../src/exportar";
 import { randomToken, sha256 } from "../src/auth";
 import type { CloneStatus, HeyGenApi, HeyGenVideo, HeyGenVideoRequest, HeyGenVoice } from "../src/heygen";
-import type { ChatRequest, ChatResult, VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
+import type { ChatRequest, ChatResult, ImageRequest, ImageResult, VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
 
 export const SITE = "https://meu-avatar.gilveloso.workers.dev";
 
@@ -67,6 +67,18 @@ export const GROK_MODEL: VideoModel = {
 };
 
 const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, GROK_MODEL];
+
+/** Nano Banana 2.1 pela lista de imagens: cobra por token de saída (endpoints). */
+export const BANANA_MODEL: VideoModel = {
+  id: "google/gemini-nano-banana-2.1",
+  name: "Google: Nano Banana 2.1",
+  supported_durations: null,
+  supported_resolutions: ["1K", "2K", "4K"],
+  supported_aspect_ratios: ["1:1", "9:16", "16:9", "4:5"],
+  supported_frame_images: null,
+  generate_audio: null,
+  pricing_skus: { output_image_token: "0.00003" },
+};
 
 /**
  * Um MP4 mínimo com a duração no cabeçalho (ftyp, mdat e moov > mvhd). A
@@ -165,6 +177,18 @@ export class FakeVideoApi implements VideoApi {
     }
     const fundo = this.rejectFrames.includes(images[0]!);
     return { text: `\`\`\`json\n{"fundo": ${fundo}, "objetos": false, "maos": false, "detalhes": ""}\n\`\`\``, images: [], cost: 0.001 };
+  }
+  /** Pedidos à API de imagens; `failImage` faz o próximo falhar. */
+  images: ImageRequest[] = [];
+  failImage: string | null = null;
+  async getImageModel(id: string) {
+    if (id !== BANANA_MODEL.id) throw new Error(`modelo de imagem ${id} não existe`);
+    return BANANA_MODEL;
+  }
+  async image(body: ImageRequest): Promise<ImageResult> {
+    if (this.failImage) throw new Error(this.failImage);
+    this.images.push(body);
+    return { bytes: new TextEncoder().encode("png-falso").buffer as ArrayBuffer, type: "image/png", cost: 0.039 };
   }
   finish(jobId: string, changes: Partial<VideoJob>) {
     this.jobs.set(jobId, { ...this.jobs.get(jobId)!, ...changes });

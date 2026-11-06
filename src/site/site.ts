@@ -27,7 +27,7 @@ import { ERROS } from "../erros";
 import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, type Field, fixedCost, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
+import { canUse, type Defaults, estimate, type Field, fixedCost, makesImage, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { temSom } from "../som";
 import { type Alarme, CHAVE as ALARME, LIMITE_MS } from "../vigia";
@@ -189,13 +189,13 @@ export class Site {
 
     // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo;
     // /videos/<id>.editado.mp4: a edição rápida.
-    const file = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.mp4$/.exec(path);
+    const file = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.(mp4|png|jpg|webp)$/.exec(path);
     if (request.method === "GET" && file) {
       const video = await this.db.videoById(file[1]!);
       const version = file[2];
       const key = version === "original" ? video?.video_key : version === "editado" ? video?.edited_key : (video?.processed_key ?? video?.video_key);
       if (!video || !key) return new Response("não encontrado", { status: 404 });
-      const name = `meu-avatar-${video.id.slice(0, 8)}${version ? `-${version}` : ""}.mp4`;
+      const name = `meu-avatar-${video.id.slice(0, 8)}${version ? `-${version}` : ""}.${file[3]}`;
       return this.object(request, key, "private, max-age=86400", url.searchParams.has("baixar") ? name : undefined);
     }
 
@@ -321,9 +321,9 @@ export class Site {
       avatar
         ? assetLibrary(assets, { key: `avatar-${avatar.id}`, avatar })
         : pending
-          ? assetLibrary([{ id: "", avatar_id: "", kind: "video", key: pending.key, name: videoAssetName(pending), type: "video/mp4", size: pending.size, face: null, source_video: pending.video.id, created_at: new Date().toISOString() }], {
+          ? assetLibrary([{ id: "", avatar_id: "", ...savedKind(pending), key: pending.key, name: videoAssetName(pending), size: pending.size, face: null, source_video: pending.video.id, created_at: new Date().toISOString() }], {
               key: "avatar-novo",
-              src: () => `/videos/${pending.video.id}.mp4`,
+              src: () => mediaSrc(pending.video),
               href: () => `/video/${pending.video.id}`,
             })
           : `<div class="library"><div class="library__head"><h2 class="library__title">Ativos <span class="pane__count">0</span></h2></div>${emptyState("face", "Nenhum ativo ainda", "Toque em Salvar para criar o avatar e adicionar arquivos.")}</div>`
@@ -470,7 +470,7 @@ ${error ? snackbar(error) : ""}`;
 
   /** Liga o vídeo aos ativos do avatar, sem copiar o arquivo. */
   private async linkVideo(saving: SavableVideo, avatarId: string): Promise<void> {
-    await this.db.insertAsset({ id: crypto.randomUUID(), avatar_id: avatarId, kind: "video", key: saving.key, name: videoAssetName(saving), type: "video/mp4", size: saving.size, source_video: saving.video.id });
+    await this.db.insertAsset({ id: crypto.randomUUID(), avatar_id: avatarId, ...savedKind(saving), key: saving.key, name: videoAssetName(saving), size: saving.size, source_video: saving.video.id });
   }
 
   /**
@@ -526,11 +526,14 @@ ${error ? snackbar(error) : ""}`;
         tile: `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">${esc(s.icon)}</span></span>`,
         badge: s.access === "admin" ? { label: "Em teste", title: "Em teste: só o administrador vê" } : undefined,
         headline: s.name,
-        supporting: n === 1 ? "1 vídeo" : `${n} vídeos`,
-        menu: [
-          { label: "Criar vídeo", icon: "add", href: `/modelo/${s.id}` },
-          { label: "Ver os vídeos", icon: "movie", href: `/videos?modelo=${s.id}` },
-        ],
+        // O modelo de imagem não tem os vídeos na aba Vídeos: as imagens ficam na página dele.
+        supporting: makesImage(s) ? plural(n, "imagem", "imagens") : plural(n, "vídeo", "vídeos"),
+        menu: makesImage(s)
+          ? [{ label: "Criar imagem", icon: "add", href: `/modelo/${s.id}` }]
+          : [
+              { label: "Criar vídeo", icon: "add", href: `/modelo/${s.id}` },
+              { label: "Ver os vídeos", icon: "movie", href: `/videos?modelo=${s.id}` },
+            ],
       });
     });
     // Só o administrador vê o alarme de contêiner ligado sem trabalho (src/vigia.ts).
@@ -774,7 +777,7 @@ ${CANVAS_BODY}
     const q = (url.searchParams.get("q") ?? "").trim();
     // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
     const only = url.searchParams.get("modelo") ?? "";
-    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && (!only || s.id === only));
+    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s) && (!only || s.id === only));
     const videos = await this.db.videosByStructures(usable.map((s) => s.id), q);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // A mesma lista da página do modelo (filtro, ordem, vista e agrupamento no navegador); a busca pela fala fica no servidor.
@@ -822,6 +825,7 @@ ${CANVAS_BODY}
       extra: model ? fixedCost(structure, model) : (structure.cost.extra ?? 0),
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
+    const image = makesImage(structure);
     const videos = await this.db.videosByStructure(structure.id);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // Os ativos abrem o painel, depois das seções que vêm antes (o "Uso"); o resto (a fala
@@ -845,7 +849,7 @@ ${CANVAS_BODY}
         ${kinds.length ? assetList(picks) : ""}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
-      ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)))}
+      ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)), image)}
     </section>
     ${kinds.length ? assetPanel(avatars, assets, kinds, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined) : ""}
     <div class="workspace__main">
@@ -853,17 +857,20 @@ ${CANVAS_BODY}
       ${videoLibrary(videos, {
         key: structure.id,
         from: `/modelo/${structure.id}`,
-        title: "Vídeos",
+        title: image ? "Imagens" : "Vídeos",
         empty: emptyState(
-          "videocam",
-          "Os vídeos gerados aparecem aqui.",
-          fields.some((f) => f.kind === "video")
+          image ? "image" : "videocam",
+          image ? "As imagens geradas aparecem aqui." : "Os vídeos gerados aparecem aqui.",
+          image
+            ? "Descreva a cena, escolha uma foto se quiser e toque em Gerar imagem."
+            : fields.some((f) => f.kind === "video")
             ? "Escolha o vídeo, a foto e os ajustes e toque em Gerar vídeo."
             : fields.some((f) => f.kind === "textarea" && f.speech)
               ? "Escolha a foto e os ajustes, escreva a fala e toque em Gerar vídeo."
               : "Escolha a foto e os ajustes, descreva o movimento e toque em Gerar vídeo.",
         ),
         structureOf: () => structure,
+        image,
       })}
     </div>
   </form>
@@ -942,7 +949,7 @@ ${error ? snackbar(error) : ""}`;
     let settings: Record<string, string> = {};
     try { settings = JSON.parse(v.settings ?? "{}"); } catch {}
     const from: Record<string, string | null | undefined> = {
-      fala: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
+      fala: v.prompt, descricao: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
       estilo: v.style, idioma: v.language, instrucoes: v.extra, movimento: settings.motion_prompt ?? v.extra,
       voz: settings.voice_id, expressividade: settings.expressiveness, roupa: settings.outfit, uso: settings.use,
       fonte: settings.source, clone: settings.voice_row,
@@ -966,20 +973,24 @@ ${error ? snackbar(error) : ""}`;
     const edited = Boolean(v.edited_key) && !showOriginal;
     const src = edited ? editedSrc(v) : videoSrc(v);
     const ratio = esc(v.aspect_ratio.replace(":", " / "));
-    const media = v.video_key
+    // O modelo de imagem usa a mesma página, com a imagem no lugar do player (como a de um ativo).
+    const image = makesImage(structure);
+    const media = v.video_key && image
+      ? `<img class="viewer__video" src="${mediaSrc(v)}" alt="${esc(v.prompt)}">`
+      : v.video_key
       ? `<div class="player viewer__player" style="--ratio:${ratio}"${quick ? " data-player" : ""}><div class="player__frame"><video autoplay preload="metadata" playsinline src="${src}"></video>${
           quick ? `<div class="player__controls" data-qe-controls hidden><button class="icon-button interactive" type="button" data-qe-play aria-label="Tocar a prévia" title="Tocar a prévia"><span class="icon">play_arrow</span></button><span class="player__time" data-qe-time></span></div>` : ""
         }</div></div>`
       : status.kind === "error"
-        ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p><p class="stage__text">${esc(ERROS.videoFalhou)}</p></div>`
-        : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">Leva alguns minutos. A página se atualiza sozinha.</p></div>`;
+        ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p><p class="stage__text">${esc(image ? ERROS.imagemFalhou : ERROS.videoFalhou)}</p></div>`
+        : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">${image ? "Leva uns 20 segundos." : "Leva alguns minutos."} A página se atualiza sozinha.</p></div>`;
     // Campos de texto livre (movimento, instruções) ganham um bloco próprio, como o Texto; vazios não aparecem.
     const usedAvatar = v.avatar_id ? await this.db.avatarById(v.avatar_id) : null;
     const all = [{ term: "Modelo", description: structure.name }, ...(usedAvatar ? [{ term: "Avatar", description: usedAvatar.name }] : []), ...structure.details(v)];
     const notes = all.filter((d) => FREE_TEXT.has(d.term) && d.description !== "—");
     const details = [
       ...all.filter((d) => !FREE_TEXT.has(d.term)),
-      { term: "Duração", description: durationLabel(v, structure) },
+      ...(image ? [] : [{ term: "Duração", description: durationLabel(v, structure) }]),
       { term: "Resolução", description: v.resolution },
       { term: "Formato", description: v.aspect_ratio },
       { term: "Custo", description: v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—" },
@@ -991,7 +1002,9 @@ ${error ? snackbar(error) : ""}`;
       v.audio_status === "failed" ? (v.audio_error === ERROS.audioDemorou ? ERROS.audioDemorou : ERROS.audioFalhou) : null,
       v.edit_status === "failed" ? (v.edit_error === ERROS.edicaoDemorou ? ERROS.edicaoDemorou : ERROS.edicaoFalhou) : null,
     ].filter((e): e is string => Boolean(e));
-    const downloads: MenuItem[] = v.video_key
+    const downloads: MenuItem[] = v.video_key && image
+      ? [{ label: "Original", icon: "image", href: `${mediaSrc(v)}?baixar`, download: true }]
+      : v.video_key
       ? [
           // "Original" é o vídeo como aparece no player sem edição (com o áudio tratado, se houver);
           // o que veio do modelo, antes do tratamento, só aparece quando existe o tratado.
@@ -1020,7 +1033,7 @@ ${error ? snackbar(error) : ""}`;
           ${editing ? `<section class="viewer__card qe-busy" role="status"><h2 class="qe-result__title">Editando o vídeo</h2><div class="linear-progress" role="progressbar" aria-label="Editando o vídeo"></div><p class="qe-result__note">Fica pronto em 1 a 2 min.</p></section>` : ""}
           ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
           <section class="viewer__section">
-            <div class="viewer__section-head"><h2 class="viewer__title">Texto</h2>${v.prompt ? `<button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button>` : ""}</div>
+            <div class="viewer__section-head"><h2 class="viewer__title">${image ? "Descrição" : "Texto"}</h2>${v.prompt ? `<button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button>` : ""}</div>
             <div class="viewer__card">${avatar}${v.prompt ? `<p class="viewer__text">${esc(v.prompt)}</p>` : ""}</div>
           </section>
           ${notes
@@ -1031,11 +1044,11 @@ ${error ? snackbar(error) : ""}`;
         </div>`;
     const body = `
 <main class="viewer" id="conteudo">
-  <section class="viewer__stage" aria-label="Vídeo" style="--ratio:${ratio}">
+  <section class="viewer__stage${image ? " viewer__stage--asset" : ""}" aria-label="${image ? "Imagem" : "Vídeo"}" style="--ratio:${ratio}">
     <a class="viewer__nav viewer__nav--prev icon-button interactive" data-nav="prev" hidden aria-label="Vídeo anterior" title="Vídeo anterior"><span class="icon">chevron_left</span></a>
     ${media}
     ${
-      v.video_key
+      v.video_key && !image
         ? `<div class="vbar" data-vbar role="group" aria-label="Controles do vídeo">
       <button class="vbar__play interactive" type="button" data-vbar-play aria-label="Tocar" title="Tocar"><span class="icon">play_arrow</span></button>
       <span class="vbar__time" data-vbar-time>0:00 / 0:00</span>
@@ -1047,7 +1060,7 @@ ${error ? snackbar(error) : ""}`;
     }
     <a class="viewer__nav viewer__nav--next icon-button interactive" data-nav="next" hidden aria-label="Próximo vídeo" title="Próximo vídeo"><span class="icon">chevron_right</span></a>
   </section>
-  <aside class="viewer__sheet" aria-label="Informações do vídeo" data-viewer="${v.id}" data-back="${esc(back)}">
+  <aside class="viewer__sheet" aria-label="${image ? "Informações da imagem" : "Informações do vídeo"}" data-viewer="${v.id}" data-back="${esc(back)}">
     <div class="viewer__head">
       <p class="status-line status-line--${status.kind}"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label)}</p>
       <a class="icon-button interactive" href="${esc(back)}" aria-label="Fechar" title="Fechar"><span class="icon">close</span></a>
@@ -1074,7 +1087,7 @@ ${error ? snackbar(error) : ""}`;
 ${saveDialog}
 ${quick ? `<form id="edicao-rapida" method="post" action="/videos/${v.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
 ${error ? snackbar(error) : ""}`;
-    return html(page(`Vídeo · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
+    return html(page(`${image ? "Imagem" : "Vídeo"} · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
   }
 
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
@@ -1085,10 +1098,11 @@ ${error ? snackbar(error) : ""}`;
       // no ar, nada (o aviso diz que a criação está pausada). Assim os testes não vão à rede.
       if (!this.studio.canGenerate) {
         if (!this.config.local) return { model: null, error: null };
-        const model = (await OpenRouterVideo.listModels()).find((m) => m.id === structure.model);
+        const list = makesImage(structure) ? await OpenRouterVideo.listImageModels() : await OpenRouterVideo.listModels();
+        const model = list.find((m) => m.id === structure.model);
         return { model: model ?? null, error: null };
       }
-      return { model: await this.studio.model(structure.model), error: null };
+      return { model: await this.studio.modelOf(structure), error: null };
     } catch (err) {
       console.error(`Não deu para ler o modelo ${structure.model}:`, err);
       return { model: null, error: ERROS.opcoesIndisponiveis };
@@ -1438,6 +1452,8 @@ interface LibraryOptions {
   /** O que mostrar sem vídeos. */
   empty: string;
   structureOf: (v: Video) => Structure;
+  /** Lista de imagens (o modelo de imagem): Descrição no lugar do Texto e Resolução no da Duração. */
+  image?: boolean;
 }
 
 /** Título, contagem e texto de uma tela de lista; `action` é o botão principal (fab). */
@@ -1672,7 +1688,9 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
     return o.intro ? `<div>${title}<p class="page__intro">${esc(o.intro)}</p></div>` : title;
   };
   const thumb = (v: Video, status: ReturnType<typeof cardStatus>) =>
-    v.video_key ? `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>` : `<span class="frame__placeholder">${statusTile(status, true)}</span>`;
+    v.video_key && makesImage(o.structureOf(v))
+      ? faceImage(mediaSrc(v), v.face)
+      : v.video_key ? `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>` : `<span class="frame__placeholder">${statusTile(status, true)}</span>`;
   return library({
     key: o.key,
     head,
@@ -1681,8 +1699,8 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
     items: videos,
     date: (v) => v.created_at,
     filters: FILTERS,
-    noMatch: "Nenhum vídeo com esse filtro.",
-    columns: `<span></span><span>Texto</span><span>Status</span><span>Duração</span><span class="vrow__wide">Formato</span><span class="vrow__wide">Custo</span><span>Criado em</span>`,
+    noMatch: o.image ? "Nenhuma imagem com esse filtro." : "Nenhum vídeo com esse filtro.",
+    columns: `<span></span><span>${o.image ? "Descrição" : "Texto"}</span><span>Status</span><span>${o.image ? "Resolução" : "Duração"}</span><span class="vrow__wide">Formato</span><span class="vrow__wide">Custo</span><span>Criado em</span>`,
     frame: (v) => {
       const status = cardStatus(v);
       const structure = o.structureOf(v);
@@ -1695,7 +1713,7 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
           <span class="vrow__thumb" role="cell">${thumb(v, status)}</span>
           <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(v.prompt)}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
           <span class="vrow__status vrow__status--${status.kind}" role="cell"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label.replace(/ · .*/, ""))}</span>
-          <span role="cell">${esc(durationLabel(v, structure))}</span>
+          <span role="cell">${esc(o.image ? v.resolution : durationLabel(v, structure))}</span>
           <span class="vrow__wide" role="cell">${esc(`${v.aspect_ratio} · ${v.resolution}`)}</span>
           <span class="vrow__wide" role="cell">${v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—"}</span>
           <span role="cell">${esc(formatDate(v.created_at))}</span>
@@ -1713,7 +1731,14 @@ interface SavableVideo {
 }
 
 function videoAssetName(s: SavableVideo): string {
-  return `${s.structure.name} ${s.video.id.slice(0, 8)}.mp4`;
+  return `${s.structure.name} ${s.video.id.slice(0, 8)}.${makesImage(s.structure) ? (s.key.split(".").pop() ?? "png") : "mp4"}`;
+}
+
+/** O tipo do ativo que um vídeo (ou imagem) gerado vira no avatar. */
+function savedKind(s: SavableVideo): { kind: AssetKind; type: string } {
+  if (!makesImage(s.structure)) return { kind: "video", type: "video/mp4" };
+  const ext = s.key.split(".").pop();
+  return { kind: "imagem", type: ext === "jpg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png" };
 }
 
 const MAX_AVATAR_DESCRIPTION = 500;
@@ -1782,15 +1807,16 @@ function assetLibrary(assets: AvatarAsset[], o: { key: string; avatar?: Avatar; 
 }
 
 /** Fim do painel de configuração: duração e custo estimados e o botão de gerar, na largura toda. */
-function generateBar(seconds: string, cost: number | undefined, enabled: boolean): string {
+function generateBar(seconds: string, cost: number | undefined, enabled: boolean, image = false): string {
   const costLabel = cost !== undefined ? `US$ ${cost.toFixed(2)}` : "—";
+  // Imagem não tem duração: só o custo.
   return `
       <div class="pane__footer">
         <div class="estimate-list">
-          <div class="estimate-list__item"><span class="icon">schedule</span><span class="estimate-list__label">Duração</span><span class="estimate-list__value" data-seconds>${esc(seconds)}</span></div>
+          ${image ? "" : `<div class="estimate-list__item"><span class="icon">schedule</span><span class="estimate-list__label">Duração</span><span class="estimate-list__value" data-seconds>${esc(seconds)}</span></div>`}
           <div class="estimate-list__item"><span class="icon">payments</span><span class="estimate-list__label">Custo estimado</span><span class="estimate-list__value" data-cost>${costLabel}</span></div>
         </div>
-        <button class="button button--filled interactive" type="submit"${enabled ? "" : " disabled"}><span class="icon">send</span>Gerar vídeo</button>
+        <button class="button button--filled interactive" type="submit"${enabled ? "" : " disabled"}><span class="icon">send</span>${image ? "Gerar imagem" : "Gerar vídeo"}</button>
       </div>`;
 }
 
@@ -2176,12 +2202,18 @@ function editedSrc(v: Video): string {
   return `/videos/${v.id}.editado.mp4?v=${encodeURIComponent(v.edited_at ?? v.updated_at)}`;
 }
 
+/** O arquivo pronto: a imagem do modelo de imagem ou o vídeo (com o áudio tratado, se houver). */
+function mediaSrc(v: Video): string {
+  return makesImage(structureById(v.structure)) ? `/videos/${v.id}.${v.video_key?.split(".").pop() ?? "png"}` : videoSrc(v);
+}
+
 function videoSrc(v: Video): string {
   return `/videos/${v.id}.mp4${v.processed_key ? "?tratado" : ""}`;
 }
 
 /** A duração do HeyGen segue a fala: até o vídeo ficar pronto, é uma estimativa. */
 function durationLabel(v: Video, structure: Structure): string {
+  if (makesImage(structure)) return "—";
   // Pela fala é estimativa; a HeyGen direta devolve a duração certa quando o vídeo fica pronto.
   const exact = videoPlatform(v) === "heygen" && v.status === "completed";
   return "speech" in structure.cost.seconds && !exact ? `≈ ${v.duration} s` : `${v.duration} s`;
@@ -2834,7 +2866,7 @@ const SCRIPT = `(() => {
       applyShowIf();
       const useAudio = audioField && val("fonte") === "audio";
       const n = speech && !speech.disabled ? speech.value.split(/\\s+/).filter(Boolean).length : 0;
-      const fixed = cfg.seconds.field ? Number(val(cfg.seconds.field)) : cfg.seconds.video ? fromSource() : useAudio ? Math.round(audioSeconds) : 0;
+      const fixed = cfg.seconds.fixed ? cfg.seconds.fixed : cfg.seconds.field ? Number(val(cfg.seconds.field)) : cfg.seconds.video ? fromSource() : useAudio ? Math.round(audioSeconds) : 0;
       const s = fixed || (n ? Math.max(1, Math.round(n / mid)) : 0);
       const price = Number(cfg.prices[cfg.sku.replace(/\\{(\\w+)\\}/g, (_, k) => val(k))]);
       for (const e of f.querySelectorAll("[data-seconds]")) e.textContent = s ? (fixed ? "" : "≈ ") + s + " s" : "—";

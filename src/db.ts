@@ -522,6 +522,22 @@ export class Db {
   }
 
   /** Preparos que começaram antes de `beforeIso` e não terminaram: o vídeo vira falha. */
+  /**
+   * Imagem que não terminou: a geração roda no próprio pedido e, se ele caiu no meio, a linha
+   * ficaria "Gerando" para sempre. Não se tenta de novo (a primeira pode ter sido cobrada).
+   */
+  async failStaleImages(structures: string[], beforeIso: string, nowIso: string): Promise<number> {
+    if (!structures.length) return 0;
+    const result = await this.d1
+      .prepare(
+        `UPDATE videos SET status = 'failed', error = 'A imagem não voltou a tempo.', updated_at = ?
+         WHERE structure IN (${structures.map(() => "?").join(", ")}) AND status = 'in_progress' AND created_at < ?`,
+      )
+      .bind(nowIso, ...structures, beforeIso)
+      .run();
+    return result.meta.changes;
+  }
+
   async failStalePrep(beforeIso: string, nowIso: string): Promise<number> {
     const result = await this.d1
       .prepare(

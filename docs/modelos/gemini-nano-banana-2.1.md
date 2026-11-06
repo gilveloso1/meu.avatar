@@ -40,3 +40,21 @@ teste do Aleph 2, não melhorou o vídeo e um quadro refeito inventou uma
 prateleira no fundo (ver [runway-aleph-2.md](runway-aleph-2.md)). **Fica o
 banana pelo chat** (768 px de largura, US$ 0,04 por quadro), como no terceiro
 teste.
+
+**Modelo de imagem para os esboços dos vídeos** (06/11/2026, item 3 do backlog). Pela API de
+imagens (`POST /api/v1/images`, `resolution: "1K"`, `aspect_ratio: "9:16"`; as referências vão em
+`input_references` como objetos `{type: "image_url", image_url: {url}}`, não como texto). Dois casos,
+os três modelos baratos que aceitam de 0 a várias referências:
+
+- **Sem referência**: só a descrição (mulher de 30 anos na cozinha, segurando um sérum roxo, estilo UGC).
+- **Com referência**: um quadro de um vídeo de referência (`origens/5f51ef4c-….mp4`, 1,5 s, recortado
+  sem as faixas) e a foto principal da avatar Camila Pinheiro, pedindo a mesma cena com ela e sem a legenda.
+
+| Modelo | Saída | Custo | Tempo | Sem referência | Com referência |
+|---|---|---|---|---|---|
+| `google/gemini-nano-banana-2.1` | 768×1376 | US$ 0,036 / 0,040 | 14 / 20 s | A mais natural, cara de foto de celular | **O melhor:** rosto da Camila, cena, produtos e rótulos iguais, legenda tirada; a expressão acompanha a cena |
+| `bytedance-seed/seedream-5-0-flash` | 720×1280 | US$ 0,018 | 19 / 13 s | Boa, mais "anúncio" | **Não serve:** tirou a legenda, mas manteve a mulher do print |
+| `qwen/qwen-image-2.1-turbo` | 576×1024 | US$ 0,018 | 17 / 17 s | Boa | Rosto da Camila e cena mantidos, mas copiou o gesto e o sorriso da foto (mão no cabelo) e sai menor |
+
+Escolhido o banana para o modelo de imagem. O Qwen Turbo fica como opção barata, se o custo pesar.
+Total do teste: US$ 0,15. As imagens ficaram fora do repositório.

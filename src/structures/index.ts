@@ -3,6 +3,7 @@ import { ALEPH } from "./aleph";
 import type { VideoModel } from "../openrouter";
 import { HEYGEN_AVATAR, speechSeconds } from "./heygen";
 import { GROK } from "./grok";
+import { NANO_BANANA } from "./imagem";
 import { HEYGEN_DIRECT } from "./heygen-direta";
 import { SEEDANCE } from "./seedance";
 import type { CostRule, Structure, Values } from "./types";
@@ -11,7 +12,10 @@ import { WAN } from "./wan";
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, SEEDANCE, ALEPH];
+export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, SEEDANCE, ALEPH, NANO_BANANA];
+
+/** A estrutura gera imagem (não vídeo)? */
+export const makesImage = (structure: Structure | undefined): boolean => structure?.output === "image";
 
 export function structureById(id: string | null | undefined): Structure | undefined {
   return STRUCTURES.find((s) => s.id === id);
@@ -60,7 +64,7 @@ export function estimate(structure: Structure, model: VideoModel, values: Values
   const seconds =
     "speech" in rule.seconds && rule.seconds.audio && values("fonte") === "audio"
       ? 0
-      : "field" in rule.seconds ? Number(values(rule.seconds.field)) : "speech" in rule.seconds ? speechSeconds(values(rule.seconds.speech), structure.wordsPerSecond) : 0;
+      : "field" in rule.seconds ? Number(values(rule.seconds.field)) : "speech" in rule.seconds ? speechSeconds(values(rule.seconds.speech), structure.wordsPerSecond) : "fixed" in rule.seconds ? rule.seconds.fixed : 0;
   return price && seconds ? price * seconds + fixedCost(structure, model) : undefined;
 }
 

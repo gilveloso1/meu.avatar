@@ -11,8 +11,9 @@ import { estimate } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
 import { GROK, GROK_GUIDE } from "../src/structures/grok";
+import { IMAGE_GUIDE, IMAGE_REFERENCE_GUIDE, NANO_BANANA } from "../src/structures/imagem";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
-import { ALEPH_MODEL, GROK_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
+import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
@@ -653,6 +654,111 @@ describe("Grok Imagine 1.5 Lite", () => {
     const res = await call(postForm("/modelo/grok", { movimento: MOVIMENTO, imagem: foto() }, { cookie: member }), api);
     expect(res.status).toBe(404);
     expect(api.submitted).toHaveLength(0);
+  });
+});
+
+describe("Nano Banana 2.1 (imagem)", () => {
+  const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
+  const CENA = "mulher na cozinha segurando um sérum roxo";
+
+  it("o custo é o preço do token vezes os tokens da resolução; só 1K e 2K", () => {
+    expect(NANO_BANANA.prices!(BANANA_MODEL)).toEqual({ "1K": String(0.00003 * 1300), "2K": String(0.00003 * 2000) });
+    expect(estimate(NANO_BANANA, BANANA_MODEL, (n) => ({ resolucao: "1K" })[n] ?? "")).toBeCloseTo(0.039);
+    expect(estimate(NANO_BANANA, BANANA_MODEL, (n) => ({ resolucao: "2K" })[n] ?? "")).toBeCloseTo(0.06);
+  });
+
+  it("o formulário pede a descrição e a foto opcional, sem duração; o botão gera imagem", async () => {
+    const page = await (await get("/modelo/nano-banana")).text();
+    expect(page).toContain('name="descricao"');
+    expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
+    expect(page).toContain('value="1K" checked');
+    expect(page).not.toContain('value="4K"');
+    expect(page).not.toContain('"estimate-list__value" data-seconds');
+    expect(page).toContain("Gerar imagem");
+    expect(page).toContain("As imagens geradas aparecem aqui.");
+  });
+
+  it("sem foto, gera só do texto na hora e guarda a imagem", async () => {
+    const api = new FakeVideoApi();
+    const res = await post(api, { descricao: `  ${CENA}  `, resolucao: "1K", formato: "9:16" }, "nano-banana");
+    expect(res.status).toBe(303);
+    expect(api.submitted).toHaveLength(0);
+    const [req] = api.images;
+    expect(req).toEqual({ model: "google/gemini-nano-banana-2.1", prompt: `${CENA} ${IMAGE_GUIDE}`, resolution: "1K", aspect_ratio: "9:16", input_references: undefined });
+
+    const [image] = await new Db(env.DB).recentVideos();
+    expect(image).toMatchObject({ structure: "nano-banana", status: "completed", prompt: CENA, duration: 0, cost: 0.039, video_key: `imagens/${image!.id}.png` });
+    const file = await get(`/videos/${image!.id}.png`, undefined, api);
+    expect(file.headers.get("content-type")).toBe("image/png");
+    expect(await file.text()).toBe("png-falso");
+
+    // A página é a do vídeo, com a imagem no lugar do player e o Baixar da imagem.
+    const pagina = await (await get(`/video/${image!.id}`, undefined, api)).text();
+    expect(pagina).toContain(`<img class="viewer__video" src="/videos/${image!.id}.png"`);
+    expect(pagina).not.toContain('class="vbar"');
+    expect(pagina).toContain(`href="/videos/${image!.id}.png?baixar" download`);
+    expect(pagina).toContain('<h2 class="viewer__title">Descrição</h2>');
+    expect(pagina).not.toContain('qe-result__label">Duração');
+    // Na lista do modelo, o card mostra a imagem; a aba Vídeos não a mostra.
+    const modelo = await (await get("/modelo/nano-banana", undefined, api)).text();
+    expect(modelo).toContain(`src="/videos/${image!.id}.png"`);
+    expect(await (await get("/videos", undefined, api)).text()).not.toContain(image!.id);
+    // Refazer volta com a descrição.
+    expect(await (await get(`/modelo/nano-banana?refazer=${image!.id}`, undefined, api)).text()).toContain(CENA);
+  });
+
+  it("com foto, ela vai como referência e o prompt pede para seguir", async () => {
+    const api = new FakeVideoApi();
+    await post(api, { descricao: CENA, imagem: foto(), resolucao: "2K", formato: "9:16" }, "nano-banana");
+    const [req] = api.images;
+    expect(req!.prompt).toBe(`${CENA} ${IMAGE_GUIDE} ${IMAGE_REFERENCE_GUIDE}`);
+    expect(req!.input_references).toHaveLength(1);
+    expect(req!.input_references![0]).toMatchObject({ type: "image_url" });
+    const [image] = await new Db(env.DB).recentVideos();
+    expect(image!.image_key).toMatch(/^avatares\//);
+  });
+
+  it("falha da API vira imagem com falha, com a frase do catálogo", async () => {
+    const api = new FakeVideoApi();
+    api.failImage = "OpenRouter respondeu HTTP 500";
+    await post(api, { descricao: CENA, resolucao: "1K", formato: "9:16" }, "nano-banana");
+    const [image] = await new Db(env.DB).recentVideos();
+    expect(image).toMatchObject({ status: "failed", error: "OpenRouter respondeu HTTP 500", video_key: null });
+    const pagina = await (await get(`/video/${image!.id}`, undefined, api)).text();
+    expect(pagina).toContain(ERROS.imagemFalhou);
+    expect(pagina).not.toContain("HTTP 500");
+  });
+
+  it("imagem presa em Gerando vira falha depois de 5 minutos", async () => {
+    const db = new Db(env.DB);
+    const old = new Date(Date.now() - 6 * 60_000).toISOString();
+    await db.insertVideo({ id: "00000000-0000-4000-8000-000000000001", prompt: CENA, model: NANO_BANANA.model, duration: 0, resolution: "1K", aspect_ratio: "9:16", image_key: null, user_id: null, request_prompt: CENA, style: null, language: null, extra: null, structure: "nano-banana", settings: null, avatar_id: null });
+    await env.DB.prepare("UPDATE videos SET status = 'in_progress', created_at = ? WHERE id = ?").bind(old, "00000000-0000-4000-8000-000000000001").run();
+    await createStudio(env, { api: new FakeVideoApi() }).syncOpen();
+    expect(await db.videoById("00000000-0000-4000-8000-000000000001")).toMatchObject({ status: "failed", error: "A imagem não voltou a tempo." });
+  });
+
+  it("recusa sem descrição e descrição longa, sem chamar a API", async () => {
+    const api = new FakeVideoApi();
+    for (const [fields, erro] of [
+      [{ descricao: " " }, ERROS.descricao],
+      [{ descricao: "a".repeat(2001) }, ERROS.descricaoLonga(2000)],
+    ] as [Record<string, string>, string][]) {
+      const res = await post(api, fields, "nano-banana");
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(erro);
+    }
+    expect(api.images).toHaveLength(0);
+  });
+
+  it("conta comum não vê nem usa o modelo de imagem", async () => {
+    const api = new FakeVideoApi();
+    const member = await memberCookie();
+    expect(await (await get("/", member)).text()).not.toContain("/modelo/nano-banana");
+    expect((await get("/modelo/nano-banana", member)).status).toBe(404);
+    const res = await call(postForm("/modelo/nano-banana", { descricao: CENA }, { cookie: member }), api);
+    expect(res.status).toBe(404);
+    expect(api.images).toHaveLength(0);
   });
 });
 
