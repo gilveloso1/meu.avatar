@@ -124,7 +124,7 @@ describe("protocolo", () => {
     const { result } = await legado("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
     expect(result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "meu-avatar" } });
     expect((await legado("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-11-25");
-    expect((await legado("tools/list")).result.tools).toHaveLength(17);
+    expect((await legado("tools/list")).result.tools).toHaveLength(18);
     expect((await legado("ping")).result).toEqual({});
   });
 
@@ -142,7 +142,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_videos", "listar_avatares", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_videos", "listar_avatares", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });
@@ -245,5 +245,70 @@ describe("ferramentas", () => {
     expect(r.isError).toBe(false);
     const { canvas } = dados<{ canvas: { blocks: { name: string; audio: string }[] } }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["canvas"] }));
     expect(canvas.blocks.map((b) => [b.name, b.audio])).toEqual([["titulo.webm", "none"], ["fala.webm", "linked"]]);
+  });
+});
+
+describe("gerar_imagem", () => {
+  /** A ferramenta com um OpenRouter falso guardado, para ver o pedido de imagem. */
+  const comApi = async (api: FakeVideoApi, name: string, args: unknown) => {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
+    const res = await call(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: "Bearer ma_admin", ...CABECALHOS("tools/call", name) } }), api);
+    return ((await res.json()) as { result: Result }).result;
+  };
+
+  it("gera no formato do projeto, devolve a imagem para o agente olhar e ela entra com adicionar {imagem}", async () => {
+    const api = new FakeVideoApi();
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Esboço" }));
+    const r = await comApi(api, "gerar_imagem", { projeto: id, descricao: "mulher na cozinha com um sérum roxo" });
+    expect(r.isError).toBeFalsy();
+    const { imagem } = dados<{ imagem: { id: string; src: string; formato: string; resolucao: string; custo: number } }>(r);
+    expect(imagem).toMatchObject({ src: `/videos/${imagem.id}.png`, formato: "9:16", resolucao: "1K", custo: 0.039 });
+    expect(r.content[1]).toEqual({ type: "image", data: btoa("png-falso"), mimeType: "image/png" });
+    expect(r.content[0]!.text).not.toContain("previa");
+    expect(api.images[0]).toMatchObject({ resolution: "1K", aspect_ratio: "9:16" });
+    expect(api.images[0]!.input_references).toBeUndefined();
+
+    // Outra, partindo da primeira: ela vai como referência.
+    await comApi(api, "gerar_imagem", { projeto: id, descricao: "a mesma cena, sorrindo mais", referencia: imagem.src, formato: "1:1" });
+    expect(api.images[1]!.input_references).toHaveLength(1);
+    expect(api.images[1]!.aspect_ratio).toBe("1:1");
+
+    const editado = await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", imagem: imagem.id, fim: 2 }] });
+    expect(editado.isError).toBe(false);
+    const { canvas } = dados<{ canvas: { blocks: { kind: string; src: string; tout: number }[] } }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["canvas"] }));
+    expect(canvas.blocks[0]).toMatchObject({ kind: "image", src: imagem.src, tout: 2 });
+  });
+
+  it("imagem não entra como vídeo, nem vídeo como imagem", async () => {
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "A" }));
+    const { imagem } = dados<{ imagem: { id: string } }>(await ferramenta("gerar_imagem", { projeto: id, descricao: "uma cena" }));
+    for (const comando of [{ tipo: "adicionar", video: imagem.id, dur: 2 }, { tipo: "adicionar", imagem: VIDEO }]) {
+      const r = await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [comando] });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain("arquivo_indisponivel");
+    }
+  });
+
+  it("recusa sem descrição, referência que não existe ou não é imagem, formato fora do modelo; falha da API vira imagem_falhou", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]), { httpMetadata: { contentType: "video/mp4" } });
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "A" }));
+    const api = new FakeVideoApi();
+    const casos: [Record<string, unknown>, string][] = [
+      [{ descricao: " " }, "descricao_obrigatoria"],
+      [{ descricao: "cena", referencia: "/videos/00000000-0000-4000-8000-000000000000.png" }, "arquivo_indisponivel"],
+      [{ descricao: "cena", referencia: `/videos/${VIDEO}.mp4` }, "referencia_nao_e_imagem"],
+      [{ descricao: "cena", formato: "7:3" }, "pedido_invalido"],
+      [{ descricao: "cena", final: "outro" }, "final_inexistente"],
+    ];
+    for (const [args, erro] of casos) {
+      const r = await comApi(api, "gerar_imagem", { projeto: id, ...args });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain(erro);
+    }
+    expect(api.images).toHaveLength(0);
+    api.failImage = "OpenRouter respondeu HTTP 500";
+    const r = await comApi(api, "gerar_imagem", { projeto: id, descricao: "cena" });
+    expect(r.content[0]!.text).toContain("imagem_falhou");
+    expect(r.content[0]!.text).not.toContain("HTTP 500");
   });
 });

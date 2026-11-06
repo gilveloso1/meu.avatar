@@ -869,7 +869,7 @@ function parseSettings(json: string | null): Record<string, string> {
   }
 }
 
-function base64(bytes: ArrayBuffer | Uint8Array<ArrayBuffer>): string {
+export function base64(bytes: ArrayBuffer | Uint8Array<ArrayBuffer>): string {
   let binary = "";
   const view = new Uint8Array(bytes);
   for (let i = 0; i < view.length; i += 0x8000) binary += String.fromCharCode(...view.subarray(i, i + 0x8000));

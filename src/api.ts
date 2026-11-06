@@ -11,6 +11,8 @@ import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
 import { canUse, InputError, makesImage, STRUCTURES, structureById } from "./structures";
+import { NANO_BANANA } from "./structures/imagem";
+import { base64, ForbiddenError, type Studio } from "./studio";
 import { FONTES, MAX_RENDER_SECONDS, RenderError } from "./render";
 import { AudioLongoError, type Palavra } from "./transcricao";
 
@@ -221,6 +223,8 @@ export class Api {
     private readonly db: Db,
     private readonly media: R2Bucket,
     private readonly exports: Exports,
+    /** Gera a imagem (gerar_imagem); sem ele, a rota responde que a criação está pausada. */
+    private readonly studio: Studio | null = null,
   ) {}
 
   async handle(request: Request, user: User, path: string, url: URL): Promise<Response> {
@@ -229,7 +233,7 @@ export class Api {
     if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
     if (path === "/api/v1/animacoes" && !post) return this.animations(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
@@ -237,6 +241,7 @@ export class Api {
     if (m[2] === "legenda") return post ? this.caption(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "limpar") return post ? this.cleanFiles(request, project) : falha(405, "metodo_invalido");
     if (m[2] === "animacao") return post ? falha(405, "metodo_invalido") : this.inspectCode(project, url);
+    if (m[2] === "imagem") return post ? this.generateImage(request, user, project) : falha(405, "metodo_invalido");
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(",")));
   }
@@ -385,6 +390,59 @@ export class Api {
   }
 
   /** O WebM no projeto, com os erros do render em códigos para o agente. */
+  /**
+   * Gera uma imagem com o modelo de imagem (gasta créditos) para entrar no projeto com
+   * adicionar {imagem}. O formato padrão é o do Final; a referência é qualquer src que o projeto
+   * aceita (ativo, arquivo do projeto, outra imagem gerada), desde que seja imagem. Com
+   * `previa`, a resposta traz a imagem em base64, que o MCP mostra ao agente.
+   */
+  private async generateImage(request: Request, user: User, project: Project): Promise<Response> {
+    if (!this.studio?.canGenerate) return falha(503, "criacao_pausada");
+    const body = await json(request);
+    const descricao = typeof body?.descricao === "string" ? body.descricao : "";
+    if (!descricao.trim()) return falha(400, "descricao_obrigatoria");
+    const data = JSON.parse(project.data) as CanvasProject;
+    const final = typeof body?.final === "string" ? data.finals.find((f) => f.id === body.final) : data.finals[0];
+    if (typeof body?.final === "string" && !final) return falha(400, "final_inexistente");
+    const formato = typeof body?.formato === "string" ? body.formato : final ? output(final).format : "9:16";
+    const resolucao = typeof body?.resolucao === "string" ? body.resolucao : "1K";
+    let image: File | null = null;
+    if (body?.referencia !== undefined) {
+      let key: string;
+      try {
+        key = await this.exports.source(project, user.role, body.referencia);
+      } catch (err) {
+        if (err instanceof InputError) return falha(404, "arquivo_indisponivel");
+        throw err;
+      }
+      const object = await this.media.get(key);
+      const type = object?.httpMetadata?.contentType ?? "";
+      if (!object) return falha(404, "arquivo_indisponivel");
+      if (!/^image\/(jpeg|png|webp)$/.test(type)) return falha(400, "referencia_nao_e_imagem");
+      image = new File([await object.arrayBuffer()], "referencia", { type });
+    }
+    const values = (name: string) => ({ descricao, resolucao, formato })[name] ?? "";
+    try {
+      const v = await this.studio.create({ structure: NANO_BANANA, values, image, user });
+      if (v.status !== "completed" || !v.video_key) return falha(502, "imagem_falhou", { id: v.id });
+      const src = `/videos/${v.id}.${v.video_key.split(".").pop()}`;
+      const resposta: Record<string, unknown> = { imagem: { id: v.id, src, resolucao: v.resolution, formato: v.aspect_ratio, custo: v.cost } };
+      if (body?.previa === true) {
+        const file = await this.media.get(v.video_key);
+        if (file) {
+          resposta.previa = base64(await file.arrayBuffer());
+          resposta.previaTipo = file.httpMetadata?.contentType ?? "image/png";
+        }
+      }
+      return Response.json(resposta, { status: 201 });
+    } catch (err) {
+      if (err instanceof ForbiddenError) return falha(404, "nao_encontrado");
+      // Formato ou resolução que o modelo não aceita, descrição longa: a frase diz o que fazer.
+      if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
+      throw err;
+    }
+  }
+
   private async render(project: Project, c: { nome: string; html: string; duracao: number; final?: string }, extra: Record<string, unknown> = {}): Promise<Response> {
     try {
       const r = await this.exports.renderHtml(project, c);
@@ -509,10 +567,17 @@ export class Api {
       const video = a.source_video ? await this.db.videoById(a.source_video) : null;
       return { src: assetSrc(a), kind: KINDS[a.kind], dur: video ? await this.duration(video) : null, name: a.name };
     }
+    // A imagem do modelo de imagem (gerar_imagem): entra como bloco de imagem.
+    if (typeof c.imagem === "string") {
+      const v = await this.db.videoById(c.imagem);
+      const structure = v && structureById(v.structure);
+      if (!v || !v.video_key || v.status !== "completed" || !structure || !makesImage(structure) || !canUse(structure, user.role)) return null;
+      return { src: `/videos/${v.id}.${v.video_key.split(".").pop()}`, kind: "image", dur: null, name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Imagem" };
+    }
     if (typeof c.video === "string") {
       const v = await this.db.videoById(c.video);
       const structure = v && structureById(v.structure);
-      if (!v || !ready(v) || !structure || !canUse(structure, user.role)) return null;
+      if (!v || !ready(v) || !structure || makesImage(structure) || !canUse(structure, user.role)) return null;
       return { src: `/videos/${v.id}.mp4`, kind: "video", dur: await this.duration(v), name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo" };
     }
     if (typeof c.arquivo !== "string") return null;
