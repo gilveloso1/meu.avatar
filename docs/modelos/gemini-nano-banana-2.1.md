@@ -58,3 +58,31 @@ os três modelos baratos que aceitam de 0 a várias referências:
 
 Escolhido o banana para o modelo de imagem. O Qwen Turbo fica como opção barata, se o custo pesar.
 Total do teste: US$ 0,15. As imagens ficaram fora do repositório.
+
+**Maquete 3D como referência de enquadramento** (06/11/2026). A pergunta: uma maquete cinza em 3D
+(caixas, um boneco e a câmera posta por números) acerta o enquadramento melhor do que só a descrição?
+As maquetes foram feitas em Three.js e fotografadas no Chrome sem tela, no computador (576×1024), e
+entraram no projeto "Teste do render" como arquivos (`maquete-a.png`, `-b`, `-c`). Para cada cena, a
+mesma descrição em inglês, detalhada no enquadramento, uma vez sem referência e outra com a maquete e
+uma frase dizendo que ela é um esboço cinza: copiar câmera, ângulo, lente e posições e virar foto.
+
+| Cena | Só a descrição | Com a maquete |
+|---|---|---|
+| A: câmera na altura da bancada, sérum grande na frente à esquerda, mulher no terço direito | Acertou | Acertou, mais preso à maquete (câmera mais baixa, janela e armário no lugar) |
+| B: do canto do teto, olhando para baixo, mulher pequena sentada abrindo uma caixa | **Errou:** fez vista de cima, a pino, e mudou a sala | **Acertou:** o mesmo canto, as duas paredes, o sofá e o chão vazio; mas a sala saiu nua e cinza como a maquete |
+| C: plano geral, mulher pequena embaixo à direita, céu livre para texto | Acertou | Acertou; o horizonte seguiu a maquete (mais alto do que a descrição pedia) |
+
+Leitura: com uma descrição detalhada em inglês, o banana já acerta enquadramentos comuns. A maquete
+ganha nos ângulos fora do comum (B) e dá controle exato e repetível; o preço é que ela copia também o
+vazio e o cinza da maquete, então a descrição precisa dizer a decoração e as cores, ou a maquete precisa
+de objetos. Não testado: a mesma cena de vários ângulos (a vantagem que mais pesa num anúncio com
+vários cortes) e a maquete junto com a foto do avatar (a ferramenta aceita uma referência só).
+
+Teste extra da cena B: a mesma maquete, com a decoração na descrição (piso de madeira, sofá verde com
+almofadas e manta, mesinha com abajur e caneca, planta, quadros e prateleira com livros, luz de fim de
+tarde) e a frase "da maquete vem só a disposição, não as cores nem o vazio". **Acertou:** a câmera, o
+canto, o tapete, a mulher e o sofá ficaram no lugar da maquete, e a sala saiu mobiliada e quente. O que
+a descrição não citou continuou vazio (o chão da metade de baixo). Regra para as maquetes: a maquete dá
+a disposição e a câmera; a descrição dá a decoração, as cores e a luz, e tudo o que não for citado sai vazio.
+
+Custo: 7 imagens em 1K, US$ 0,26.
