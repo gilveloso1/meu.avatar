@@ -10,7 +10,7 @@ import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
 import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
-import { canUse, InputError, STRUCTURES, structureById } from "./structures";
+import { canUse, InputError, makesImage, STRUCTURES, structureById } from "./structures";
 import { FONTES, MAX_RENDER_SECONDS, RenderError } from "./render";
 import { AudioLongoError, type Palavra } from "./transcricao";
 
@@ -254,7 +254,8 @@ export class Api {
     if (desde === null || ate === null) return falha(400, "data_invalida");
     const [criado, id] = (p.get("continuar") ?? "").split("|");
     if (p.get("continuar") && (!criado || !id)) return falha(400, "continuar_invalido");
-    const usable = STRUCTURES.filter((s) => canUse(s, user.role)).map((s) => s.id);
+    // Só vídeos: as imagens do modelo de imagem não entram num projeto.
+    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s)).map((s) => s.id);
     // Um a mais que o pedido diz se há outra página.
     const videos = await this.db.readyVideos(usable, { q: (p.get("q") ?? "").trim(), desde, ate, depois: criado && id ? { criado, id } : undefined, limite: limite + 1 });
     const pagina = videos.slice(0, limite);

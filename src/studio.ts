@@ -2,10 +2,10 @@ import type { AudioApi, Face } from "./audio";
 import { Db, OPEN_STATUSES, type Role, type Video, type Voice } from "./db";
 import { ERROS } from "./erros";
 import { mp4Duration, mp4Size } from "./mp4";
-import { type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
+import { type ImageRequest, type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
-import { canUse, InputError, type Lists, onPlatform, structureById, type Structure, type Values, videoPlatform } from "./structures";
+import { canUse, InputError, type Lists, makesImage, onPlatform, STRUCTURES, structureById, type Structure, type Values, videoPlatform } from "./structures";
 import { HEYGEN_AVATAR } from "./structures/heygen";
 import { AVATAR_VOICE, HEYGEN_MODEL, MAX_CLONE_NAME, NEW_CLONE, PRICE_PER_SECOND, voiceOptions } from "./structures/heygen-direta";
 import {
@@ -54,6 +54,9 @@ const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": 
 export const AUDIO_TIMEOUT_MS = 20 * 60_000;
 
 /** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
+/** Imagem que não voltou nesse tempo vira falha (src/db.ts, failStaleImages). */
+export const IMAGE_TIMEOUT_MS = 5 * 60_000;
+
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const VIDEO_TYPES: Record<string, string> = { "video/mp4": "mp4", "video/quicktime": "mov" };
@@ -169,6 +172,16 @@ export class Studio {
     return model;
   }
 
+  /** O modelo da estrutura: da lista de vídeos ou, se ela gera imagem, da de imagens. */
+  modelOf(structure: Structure): Promise<VideoModel> {
+    if (!makesImage(structure)) return this.model(structure.model);
+    const api = this.requireApi();
+    const id = `imagem:${structure.model}`;
+    let model = this.models.get(id);
+    if (!model) this.models.set(id, (model = api.getImageModel(structure.model)));
+    return model;
+  }
+
   /** Confere o acesso, valida pela estrutura, guarda a foto, registra o vídeo e envia o pedido. */
   async create(input: NewVideoInput): Promise<Video> {
     const { structure } = input;
@@ -189,7 +202,7 @@ export class Studio {
     const seconds = videoBytes ? mp4Duration(videoBytes) : null;
     if (videoBytes && seconds === null) throw new InputError(ERROS.videoLeitura);
 
-    const model = await this.model(structure.model);
+    const model = await this.modelOf(structure);
     const built = structure.build(input.values, image !== null, model, seconds !== null ? { seconds } : null);
     // O preparo (Aleph 2) roda no contêiner: sem ele, não dá para começar.
     if (built.prepare && !this.audio) throw new InputError(ERROS.trocaIndisponivel);
@@ -237,6 +250,9 @@ export class Studio {
       settings: settings || sourceKey ? JSON.stringify({ ...settings, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
     });
 
+    // A imagem sai na hora: a resposta já traz o arquivo.
+    if (makesImage(structure)) return this.generateImage(video, { model: structure.model, prompt: request.prompt, resolution: request.resolution, aspect_ratio: request.aspect_ratio, input_references: request.input_references });
+
     // O pedido sai depois, da fila de preparo (prepareNext).
     if (built.prepare) return (await this.db.updateVideo(id, { prep_status: "pending" }))!;
 
@@ -244,6 +260,20 @@ export class Studio {
       const job = await api.submit(request);
       return (await this.db.updateVideo(id, { job_id: job.id, status: job.status ?? "pending" }))!;
     } catch (err) {
+      return (await this.db.updateVideo(video.id, { status: "failed", error: errorMessage(err) }))!;
+    }
+  }
+
+  /** Gera a imagem dentro do pedido (uns 20 s) e guarda no R2; o botão mostra a espera. */
+  private async generateImage(video: Video, request: ImageRequest): Promise<Video> {
+    await this.db.updateVideo(video.id, { status: "in_progress" });
+    try {
+      const result = await this.requireApi().image(request);
+      const key = `imagens/${video.id}.${IMAGE_TYPES[result.type] ?? "png"}`;
+      await this.media.put(key, result.bytes, { httpMetadata: { contentType: result.type } });
+      return (await this.db.updateVideo(video.id, { status: "completed", video_key: key, cost: result.cost }))!;
+    } catch (err) {
+      console.error("Falha ao gerar a imagem", video.id, err);
       return (await this.db.updateVideo(video.id, { status: "failed", error: errorMessage(err) }))!;
     }
   }
@@ -669,8 +699,11 @@ export class Studio {
   }
 
   /** Agendamento: confere os vídeos ainda abertos. */
-  async syncOpen(limit = 10): Promise<Video[]> {
+  async syncOpen(limit = 10, now = new Date()): Promise<Video[]> {
     if (!this.api && !this.heygen) return [];
+    // Imagem presa em "Gerando" (o pedido caiu no meio): vira falha depois de 5 min.
+    const images = STRUCTURES.filter(makesImage).map((s) => s.id);
+    await this.db.failStaleImages(images, new Date(now.getTime() - IMAGE_TIMEOUT_MS).toISOString(), now.toISOString());
     const done: Video[] = [];
     for (const video of await this.db.openVideos(limit)) done.push(await this.sync(video));
     return done;

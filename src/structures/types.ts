@@ -88,7 +88,7 @@ export interface Defaults {
 export interface CostRule {
   sku: string;
   /** `audio`: com esse áudio enviado (e visível), os segundos são os dele, não os da fala. */
-  seconds: { field: string } | { speech: string; audio?: string } | { video: string };
+  seconds: { field: string } | { speech: string; audio?: string } | { video: string } | { fixed: number };
   /** US$ fixos por vídeo, além do preço por segundo (as imagens dos quadros-chave do Aleph 2). */
   extra?: number;
   /** SKU de um preço fixo por vídeo, lido dos preços do modelo (a foto do Grok); soma ao `extra`. */
@@ -176,6 +176,11 @@ export interface Structure {
   summary: string;
   /** Ícone do cartão (Material Symbols; precisa estar em ICONS, src/site/site.ts). */
   icon: string;
+  /**
+   * "image": gera imagem, não vídeo (a API de imagens do OpenRouter, que responde na hora). Fica
+   * na mesma tabela e nas mesmas telas dos vídeos; sem isto, vídeo.
+   */
+  output?: "image";
   /** "admin": só o administrador vê e usa (modelo em teste). */
   access: "all" | "admin";
   /** O áudio pronto passa pelo contêiner (src/audio.ts). */
