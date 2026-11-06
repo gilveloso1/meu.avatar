@@ -27,7 +27,7 @@ import { ERROS } from "../erros";
 import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, type Field, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
+import { canUse, type Defaults, estimate, type Field, fixedCost, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { temSom } from "../som";
 import { type Alarme, CHAVE as ALARME, LIMITE_MS } from "../vigia";
@@ -819,7 +819,7 @@ ${CANVAS_BODY}
       seconds: structure.cost.seconds,
       rate: structure.wordsPerSecond,
       durations: model?.supported_durations ?? null,
-      extra: structure.cost.extra ?? 0,
+      extra: model ? fixedCost(structure, model) : (structure.cost.extra ?? 0),
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const videos = await this.db.videosByStructure(structure.id);
@@ -857,7 +857,11 @@ ${CANVAS_BODY}
         empty: emptyState(
           "videocam",
           "Os vídeos gerados aparecem aqui.",
-          fields.some((f) => f.kind === "video") ? "Escolha o vídeo, a foto e os ajustes e toque em Gerar vídeo." : "Escolha a foto e os ajustes, escreva a fala e toque em Gerar vídeo.",
+          fields.some((f) => f.kind === "video")
+            ? "Escolha o vídeo, a foto e os ajustes e toque em Gerar vídeo."
+            : fields.some((f) => f.kind === "textarea" && f.speech)
+              ? "Escolha a foto e os ajustes, escreva a fala e toque em Gerar vídeo."
+              : "Escolha a foto e os ajustes, descreva o movimento e toque em Gerar vídeo.",
         ),
         structureOf: () => structure,
       })}

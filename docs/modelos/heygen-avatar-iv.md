@@ -3,6 +3,13 @@
 Em teste desde 25/10/2026: voz de texto para fala, sem o chiado do Wan.
 Próximos passos no item 1 de `docs/backlog.md`.
 
+## Cena sem fala (06/11/2026)
+
+Não serve. A API pede texto (`script`, pelo menos 1 caractere) ou áudio, e não tem modo
+parado. No vídeo `d030b5f1` (texto "Sem fala.", movimento "Imóvel, sem piscar…"), o avatar
+abriu o vídeo sem a mão na boca, disse "Sem fala." e só depois cobriu a boca. Para cena muda, ver
+[grok-imagine-video-1.5-lite.md](grok-imagine-video-1.5-lite.md).
+
 ## Pesquisa de 29/10/2026: OpenRouter ou API direta da HeyGen
 
 Hoje o Avatar IV vem pelo OpenRouter. A documentação da HeyGen
