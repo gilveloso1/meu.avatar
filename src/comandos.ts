@@ -3,7 +3,7 @@
  * vídeo depois daquele"), não a geometria do canvas. Tudo passa pelo mesmo modelo da tela
  * (src/canvas/modelo.js), com as mesmas regras. Um lote vale inteiro ou não vale nada.
  */
-import { arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, len, linkFirst, linkProblem, links, maxEnd, MIN_LEN, newId, nextTone, PX, relay, removeItems, renameGroup, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
+import { addNote, arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, len, linkFirst, linkProblem, links, maxEnd, MIN_LEN, newId, NOTE_MAX, nextTone, PX, relay, removeItems, renameGroup, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
 import type { Block, CanvasProject, Frame, FrameKey, Group } from "./canvas/modelo.js";
 import { PAUSES, planParts, RULES } from "./quickedit";
 
@@ -19,7 +19,7 @@ export class ComandoError extends Error {
 }
 
 /** Os tipos que `aplicar` conhece; o teste confere que cada um tem o seu caso. */
-export const TIPOS = ["adicionar", "rascunho", "editarCodigo", "renomear", "trocar", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "ordenar", "remover", "som", "final", "organizar"];
+export const TIPOS = ["adicionar", "rascunho", "nota", "editarNota", "editarCodigo", "renomear", "trocar", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "ordenar", "remover", "som", "final", "organizar"];
 
 /** Quantas letras trocar, pôr ou tirar para ir de uma palavra à outra. */
 function distancia(a: string, b: string): number {
@@ -167,6 +167,33 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
       case "trocar":
         project = await trocar(project, c, ctx, falha);
         break;
+      case "nota": {
+        // Texto solto no canvas (briefing, roteiro, referências), fora dos vídeos. Com perto, logo acima
+        // daquele bloco, nota ou Final; sem ele, embaixo de tudo, como no colar da tela.
+        const conteudo = textoDaNota(c.texto, falha);
+        const perto = texto(c.perto);
+        let at: { x: number; y: number };
+        if (perto) {
+          const alvo = [...project.blocks, ...project.finals, ...(project.notes ?? [])].find((o) => o.id === perto);
+          if (!alvo) throw falha("bloco_inexistente");
+          at = { x: alvo.x, y: alvo.y - VIS_H - 48 };
+        } else {
+          const xs = [...project.blocks.map((b) => b.x), ...(project.notes ?? []).map((n) => n.x)];
+          const ys = [...project.blocks.map((b) => b.y + height(b)), ...(project.notes ?? []).map((n) => n.y + VIS_H)];
+          at = { x: xs.length ? Math.min(...xs) : 0, y: ys.length ? Math.max(...ys) + 48 : 0 };
+        }
+        const novo = addNote(project, at, conteudo);
+        project = novo.project;
+        criados.push(novo.id);
+        break;
+      }
+      case "editarNota": {
+        const id = texto(c.nota);
+        if (!id || !project.notes?.some((n) => n.id === id)) throw falha("nota_inexistente");
+        const conteudo = textoDaNota(c.texto, falha);
+        project = { ...project, notes: project.notes.map((n) => (n.id === id ? { ...n, text: conteudo } : n)) };
+        break;
+      }
       case "renomear": {
         const nome = texto(c.nome);
         if (!nome) throw falha("nome_invalido");
@@ -282,7 +309,14 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
   return { project, criados };
 }
 
-const CAMPOS_DE_BLOCO = ["bloco", "depois", "antes", "sobre", "de", "para", "grupo"];
+const CAMPOS_DE_BLOCO = ["bloco", "depois", "antes", "sobre", "de", "para", "grupo", "nota", "perto"];
+
+/** O texto de uma nota: não vazio e até NOTE_MAX caracteres (guarda as quebras de linha). */
+function textoDaNota(v: unknown, falha: (codigo: string, extra?: Record<string, unknown>) => ComandoError): string {
+  if (typeof v !== "string" || !v.trim()) throw falha("texto_invalido");
+  if (v.length > NOTE_MAX) throw falha("texto_longo", { maximo: NOTE_MAX });
+  return v.trim();
+}
 
 /** Num lote, "@nome" é o bloco que um comando anterior criou com rotulo: "nome". */
 function comRotulos(c: Comando, rotulos: Map<string, string>, falha: (c: string) => ComandoError): Comando {
