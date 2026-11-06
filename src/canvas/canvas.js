@@ -617,7 +617,7 @@ function renderSide(gs) {
     // O lugar de um vídeo que ainda não existe: a fala vai para o modelo, a descrição diz o resto
     // (a cena, o enquadramento, referências), e o vídeo pronto entra aqui. As duas podem ficar vazias.
     // O mesmo campo de texto que cresce da página do modelo.
-    if (b.draft) h += draftField("f-fala", "Fala", b.draft.fala, "Gere o vídeo ou o áudio com esta fala.") + draftField("f-descricao", "Descrição", b.draft.descricao ?? "", "Cena, enquadramento e o que mais ajudar.");
+    if (b.draft) h += draftField("f-descricao", "Descrição", b.draft.descricao ?? "", "Cena, enquadramento e o que mais ajudar.") + draftField("f-fala", "Fala", b.draft.fala, "Gere o vídeo ou o áudio com esta fala.");
     if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.maxEnd(b)}"`);
     // O que o template deixa mudar sem mexer no código: nome, preço, cor da marca.
     if (b.code?.params)
