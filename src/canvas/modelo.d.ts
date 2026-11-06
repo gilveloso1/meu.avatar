@@ -18,6 +18,10 @@ export interface Group { id: string; x: number; y: number; dur: number; bottom: 
 export const MAX_VERSOES: number;
 export const NOTE_W: number;
 export const NOTE_MAX: number;
+export interface CanvasItems { blocks: Block[]; notes: CanvasNote[]; finals: CanvasFinal[] }
+export function copyItems(project: CanvasProject, sel: { type: string | null; id?: string }): CanvasItems | null;
+export function itemsBox(items: CanvasItems): { x: number; y: number; right: number; bottom: number };
+export function pasteItems(project: CanvasProject, items: CanvasItems, at: { x: number; y: number }, o?: { suffix?: boolean }): { project: CanvasProject; ids: string[] };
 export function addNote(project: CanvasProject, at: { x: number; y: number }, text: string): { project: CanvasProject; id: string };
 export const IMAGE_MAX: number;
 export const CODE_MAX: number;

@@ -211,6 +211,16 @@ menos custo.
   abrir o arquivo. Colar (Ctrl+V ou Cmd+V) fora de um campo: imagem copiada vira bloco ("Imagem
   colada"), texto vira nota. Entra onde está o mouse; sem ele no canvas, embaixo de tudo. Arquivo que não
   é imagem, vídeo nem áudio: o aviso de sempre. Colar num campo de texto continua normal.
+- **Botão direito** (o menu vertical do M3, o mesmo do card Final): em qualquer elemento (bloco, aba
+  do grupo, nota, Final), Copiar, Colar, Duplicar e Excluir, com o atalho de cada um; na linha, Colar e
+  Excluir; no vazio, só Colar. O elemento do clique fica escolhido. No Final com variações, Baixar vem
+  antes. **Colar põe no ponto do clique** (o canto de cima à esquerda do que foi copiado); Ctrl+V, onde
+  está o mouse. Copiar (menu ou Ctrl+C) guarda o elemento e põe um resumo (o texto da nota, o nome
+  dos blocos) na área de transferência: enquanto ela tiver esse texto, colar põe os elementos; se a
+  pessoa copiou outra coisa depois, vale a outra (imagem vira bloco, texto vira nota). O grupo copiado
+  continua grupo; linhas não vão junto. Duplicar põe logo embaixo, com "(cópia)" nos blocos. O Colar do
+  menu lê a área de transferência pelo navegador, que pode pedir permissão; se não der, o aviso pede o
+  Ctrl+V (`copyItems`, `pasteItems` em `modelo.js`).
 - **Do computador**: o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
   `project_files`), com os limites do site (imagem 10 MB, vídeo e áudio 50 MB), e o
   bloco usa o endereço de lá; não some ao recarregar.

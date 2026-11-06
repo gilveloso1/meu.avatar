@@ -53,12 +53,12 @@ const REFRESH_SECONDS = 20;
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
   "account_balance_wallet", "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today",
-  "check", "check_circle", "checkroom", "chevron_left", "chevron_right", "close", "cloud", "content_copy", "content_cut", "crop_square", "date_range", "delete", "download",
-  "drag_indicator", "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit", "gesture", "graphic_eq", "grid_view", "hd",
-  "hourglass_top", "image", "info", "key", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitor_heart", "monitoring", "more_horiz", "more_vert", "movie",
-  "music_note", "notes", "palette", "pause", "payments", "person", "person_add", "photo_library", "play_arrow", "play_circle", "record_voice_over", "redo", "refresh", "remove",
-  "replay", "schedule", "search", "send", "space_dashboard", "speed", "star", "sticky_note_2", "swap_vert", "switch_account", "translate", "tune", "undo", "upload",
-  "video_library", "videocam", "view_list", "volume_off", "volume_up",
+  "check", "check_circle", "checkroom", "chevron_left", "chevron_right", "close", "cloud", "content_copy", "content_cut", "content_paste", "control_point_duplicate",
+  "crop_square", "date_range", "delete", "download", "drag_indicator", "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit",
+  "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top", "image", "info", "key", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitor_heart",
+  "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments", "person", "person_add", "photo_library", "play_arrow", "play_circle",
+  "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search", "send", "space_dashboard", "speed", "star", "sticky_note_2", "swap_vert", "switch_account",
+  "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
 ];
 
 /** Filtros da página de vídeos: o grupo de status (cardStatus) que cada um mostra. */
@@ -659,6 +659,7 @@ ${error ? snackbar(error) : ""}`;
       limites: { imagem: MAX_IMAGE_BYTES, video: MAX_VIDEO_BYTES },
       erros: {
         arquivo: ERROS.canvasArquivo,
+        colar: ERROS.canvasColar,
         video: ERROS.canvasVideo,
         salvar: ERROS.canvasSalvar,
         conflito: ERROS.canvasConflito,
