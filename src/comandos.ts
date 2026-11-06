@@ -148,14 +148,16 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
         break;
       }
       case "rascunho": {
-        // O lugar de um vídeo que ainda não existe: um cartão com a fala, do tamanho estimado.
+        // O lugar de um vídeo que ainda não existe: um cartão com a fala e a descrição (as duas
+        // opcionais: pode ficar em branco), do tamanho estimado.
+        if ((c.fala !== undefined && typeof c.fala !== "string") || (c.descricao !== undefined && typeof c.descricao !== "string")) throw falha("texto_invalido");
         const fala = typeof c.fala === "string" ? c.fala.trim().slice(0, MAX_FALA) : "";
+        const descricao = typeof c.descricao === "string" ? c.descricao.trim().slice(0, MAX_FALA) : "";
         const duracao = numero(c.duracao);
-        if (!fala) throw falha("fala_invalida");
         if (duracao === null || duracao < MIN_LEN || duracao > IMAGE_MAX) throw falha("duracao_invalida");
         const nome = texto(c.nome) ?? proximoNome(project, "Texto", (b) => b.draft);
         const novo = adicionar(project, { ...c, inicio: 0, fim: duracao }, { src: "", kind: "image", dur: null, name: nome }, falha);
-        project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, draft: { fala } } : b)) };
+        project = { ...novo.project, blocks: novo.project.blocks.map((b) => (b.id === novo.id ? { ...b, draft: { fala, ...(descricao ? { descricao } : {}) } } : b)) };
         criados.push(novo.id);
         break;
       }

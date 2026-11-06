@@ -880,6 +880,19 @@ describe("rascunho", () => {
     expect(r.avisos).toEqual([{ tipo: "rascunho", bloco: rascunho.id, fala: "Agora o mais importante: o que muda para você.", segundos: 3.5 }]);
   });
 
+  it("fala e descrição são opcionais: em branco, só uma ou as duas; o aviso traz as duas", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [
+      { tipo: "rascunho", duracao: 2, rotulo: "a" },
+      { tipo: "rascunho", descricao: "  Camila na cozinha, plano médio  ", duracao: 2, depois: "@a", rotulo: "b" },
+      { tipo: "rascunho", fala: "Oi, gente", duracao: 2, depois: "@b", rotulo: "c" },
+      { tipo: "rascunho", fala: "Olha isso", descricao: "Mostra o sérum", duracao: 2, depois: "@c" },
+    ]);
+    const drafts = r.criados.map((c) => r.canvas.blocks.find((b) => b.id === c)!.draft);
+    expect(drafts).toEqual([{ fala: "" }, { fala: "", descricao: "Camila na cozinha, plano médio" }, { fala: "Oi, gente" }, { fala: "Olha isso", descricao: "Mostra o sérum" }]);
+    expect(r.avisos.find((a) => a.bloco === r.criados[3])).toEqual({ tipo: "rascunho", bloco: r.criados[3], fala: "Olha isso", descricao: "Mostra o sérum", segundos: 2 });
+  });
+
   it("trocar põe o vídeo pronto no lugar, e a sequência acompanha a duração nova", async () => {
     const { id, revisao } = await novo();
     const r = await lote(id, revisao, [
@@ -898,9 +911,10 @@ describe("rascunho", () => {
     expect(t.avisos).toEqual([]);
   });
 
-  it("recusa fala vazia, duração fora do limite e troca por áudio ou por arquivo que não existe", async () => {
+  it("recusa texto que não é texto, duração fora do limite e troca por áudio ou por arquivo que não existe", async () => {
     const { id, revisao } = await novo();
-    expect(await (await comandos(id, revisao, [{ tipo: "rascunho", fala: " ", duracao: 3 }])).json()).toEqual({ erro: "fala_invalida", comando: 0 });
+    expect(await (await comandos(id, revisao, [{ tipo: "rascunho", fala: 3, duracao: 3 }])).json()).toEqual({ erro: "texto_invalido", comando: 0 });
+    expect(await (await comandos(id, revisao, [{ tipo: "rascunho", descricao: ["a"], duracao: 3 }])).json()).toEqual({ erro: "texto_invalido", comando: 0 });
     expect(await (await comandos(id, revisao, [{ tipo: "rascunho", fala: "Oi", duracao: 31 }])).json()).toEqual({ erro: "duracao_invalida", comando: 0 });
     const r = await lote(id, revisao, [{ tipo: "rascunho", fala: "Oi", duracao: 3 }]);
     expect(await (await comandos(id, r.revisao, [{ tipo: "trocar", bloco: r.criados[0], video: OCULTO }])).json()).toEqual({ erro: "arquivo_indisponivel", comando: 0 });

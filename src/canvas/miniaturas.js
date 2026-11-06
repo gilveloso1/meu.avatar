@@ -10,7 +10,7 @@ const SHARP_H = 80;
 const peaks = new Map();
 
 export function thumb(block) {
-  const key = block.draft ? `rascunho:${block.draft.fala}` : `${block.kind}:${block.src}`;
+  const key = block.draft ? `rascunho:${draftLines(block)}` : `${block.kind}:${block.src}`;
   if (!cache.has(key)) cache.set(key, make(block).catch(() => ""));
   return cache.get(key);
 }
@@ -119,8 +119,13 @@ const DRAFT_H = 1280;
  * O rascunho: um cartão vertical com a fala, nas cores da superfície do tema. Serve de miniatura
  * e de quadro na prévia, até o vídeo de verdade entrar no lugar.
  */
+/** O texto do cartão: a fala ou, sem ela, a descrição; vazio, só o título. */
+function draftLines(b) {
+  return b.draft.fala.trim() || b.draft.descricao?.trim() || "";
+}
+
 export function draftCard(b) {
-  const fala = b.draft.fala;
+  const fala = draftLines(b);
   if (cards.has(fala)) return cards.get(fala);
   const css = getComputedStyle(document.documentElement);
   const cor = (nome, padrao) => css.getPropertyValue(nome).trim() || padrao;
