@@ -123,7 +123,7 @@ export class Site {
       if (caller.role !== "admin") return Response.json({ erro: "nao_encontrado" }, { status: 404 });
       // Cada ferramenta do MCP é um pedido às rotas abaixo, com o mesmo token.
       if (path === "/mcp") return handleMcp(request, (method, to, body, headers) => this.handle(new Request(new URL(to, url), { method, body, headers: { ...headers, authorization: `Bearer ${bearer}` } })));
-      if (API_PATH.test(path)) return new Api(this.db, this.media, this.exports).handle(request, caller, path, url);
+      if (API_PATH.test(path)) return new Api(this.db, this.media, this.exports, this.studio).handle(request, caller, path, url);
       if (PROJECT_API_PATH.test(path)) return this.projects(request, caller, path, url);
       return Response.json({ erro: "nao_encontrado" }, { status: 404 });
     }

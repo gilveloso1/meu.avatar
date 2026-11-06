@@ -14,7 +14,7 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.9.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.10.0" };
 /**
  * A lista de ferramentas não depende de quem pede. Curto: com 1 h, uma sessão aberta antes de
  * publicar seguiu com a descrição velha (sem rascunho e trocar) no teste de 02/11/2026.
@@ -23,17 +23,17 @@ export const CACHE = { ttlMs: 5 * 60_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Depois de editar, olhe os avisos novos em mudou: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Depois de editar, olhe os avisos novos em mudou: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo. Imagem sim: gerar_imagem gasta créditos (uns US$ 0,04 em 1K) e devolve a imagem para você olhar antes de usar; se não ficou boa, refaça com outra descrição ou com ela mesma como referencia. Ela entra no projeto com adicionar {imagem}.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro e diz em comando a posição do que falhou, a partir de 0. Cada um tem "tipo":
-adicionar {video|arquivo|ativo, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos}
+adicionar {video|arquivo|ativo|imagem, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos} (imagem: o id de gerar_imagem; a imagem fica na tela de inicio a fim, 3 s sem fim)
 adicionar {html, duracao: 0,5 a 60, parametros, nome, esticar, depois: bloco | sobre: bloco, em: segundos} (animação em código, guardada no projeto: títulos, selos, gráficos, legendas; as regras do HTML são as do renderizar_html; sem nome, Animação 1, Animação 2...; a tela mostra na prévia, e a exportação faz o vídeo dela; por cima de uma fala, estica ou encolhe com ela, a não ser com esticar: false)
 adicionar {animacao: {projeto, bloco}, parametros, duracao, nome, depois: bloco | sobre: bloco, em: segundos} (copia uma animação já feita, de listar_animacoes: o código, os parametros, a duração, a escala e o nome; o que vier aqui muda, e os parametros se juntam aos dela; a cópia é independente)
 editarCodigo {bloco, html | trocas: [{de, para}], parametros, esticar} (troca o código de uma animação inteiro ou só trechos; cada de aparece uma vez só no código, como está; leia o código com ver_projeto incluir: codigo; esticar liga ou desliga para as próximas mudanças da fala, sem mudar a duração de agora; se ele trouxer escala, os tempos do código são os de antes dela: as trocas a mantêm, e o html inteiro novo volta a escala a 1, escrito para a duração atual)
 parametros: {chave: texto ou número}, até 30, os valores que mudam sem reescrever o código (nome, preço, cor da marca): no HTML, {{chave}} fora dos scripts vira o valor; nos scripts, params.chave. Em editarCodigo, junta aos que já existem, e null tira. Faça o template uma vez e repita o bloco só trocando parametros; a pessoa também troca os valores nos Ajustes do canvas.
 rascunho {fala, duracao: 0,5 a 30, nome, depois: bloco | sobre: bloco, em: segundos} (o lugar de um vídeo que ainda não existe: um cartão com a fala; sem nome, Texto 1, Texto 2...; a exportação espera a troca)
 renomear {bloco, nome} ou {grupo, nome} (com grupo, o nome da cena, como Cena 1, no lugar de Bloco 1; vale o id de qualquer bloco dele)
-trocar {bloco, video|arquivo|ativo, inicio, fim, dur, nome, aparar} (põe o arquivo no lugar do bloco, como o vídeo pronto no do rascunho; sem inicio nem fim, o vídeo entra sem o silêncio das pontas, e aparar: false o põe inteiro; o que está em cima fica e a sequência acompanha; no lugar de um rascunho, a camada vai para o mesmo ponto na proporção do bloco, já aparado; sem nome, o bloco fica com o nome do arquivo)
+trocar {bloco, video|arquivo|ativo|imagem, inicio, fim, dur, nome, aparar} (põe o arquivo no lugar do bloco, como o vídeo pronto no do rascunho; sem inicio nem fim, o vídeo entra sem o silêncio das pontas, e aparar: false o põe inteiro; o que está em cima fica e a sequência acompanha; no lugar de um rascunho, a camada vai para o mesmo ponto na proporção do bloco, já aparado; sem nome, o bloco fica com o nome do arquivo)
 cortar {bloco, inicio, fim | duracao} (duracao no lugar de fim: o que fica a partir do início; num rascunho, cortar {bloco, duracao: 3} deixa 3 s)
 dividir {bloco, em}
 mover {bloco, depois|antes} (põe o bloco em outra posição, também em outro grupo: assim se juntam dois grupos)
@@ -126,6 +126,22 @@ const FERRAMENTAS = [
     inputSchema: objeto({ projeto, nome: texto("Nome do arquivo."), tipo: texto('Tipo, como "video/webm" ou "audio/mp4".'), base64: texto("Conteúdo em base64.") }, ["projeto", "nome", "tipo", "base64"]),
   },
   {
+    name: "gerar_imagem",
+    description:
+      "Gera uma imagem com o Nano Banana 2.1 (gasta créditos: uns US$ 0,04 em 1K, 0,06 em 2K) e devolve o id, o src e a própria imagem, para você conferir antes de usar. Ponha no projeto com adicionar {imagem: id} (ou trocar). Com referencia, a pessoa e o que a descrição não muda seguem aquela imagem: a foto de um ativo, um arquivo do projeto ou outra imagem gerada (para ajustar a anterior). Fica também na lista do modelo no site.",
+    inputSchema: objeto(
+      {
+        projeto,
+        descricao: texto("A cena: quem aparece, onde, a luz e o enquadramento. Até 2.000 caracteres."),
+        referencia: texto('src de uma imagem: a foto de um ativo de listar_avatares, um arquivo do projeto ou o src de outra imagem gerada ("/videos/<id>.png").'),
+        resolucao: texto('"1K" (padrão) ou "2K".'),
+        formato: texto('Como "9:16" ou "16:9"; sem isso, o do Final.'),
+        final: texto("Id do Final cujo formato vale; sem isso, o primeiro."),
+      },
+      ["projeto", "descricao"],
+    ),
+  },
+  {
     name: "renderizar_html",
     description: `Faz um vídeo transparente (WebM) de uma composição em HTML e o guarda no projeto; depois, ponha-o sobre o vídeo com adicionar {arquivo, dur, sobre, em}. Só quando precisar do arquivo: para pôr uma animação no projeto, adicionar {html, duracao} guarda o código, e a exportação faz o vídeo. ${RENDER}`,
     inputSchema: objeto(
@@ -212,6 +228,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("GET", `${p}/transcricao?src=${seguro(a.src)}`);
     case "ver_silencios":
       return chama("GET", `${p}/silencios?src=${seguro(a.src)}`);
+    case "gerar_imagem":
+      return chama("POST", `${p}/imagem`, json({ descricao: a.descricao, referencia: a.referencia, resolucao: a.resolucao, formato: a.formato, final: a.final, previa: true }));
     case "renderizar_html":
       return chama("POST", `${p}/html`, json({ nome: a.nome, html: a.html, duracao: a.duracao, final: a.final }));
     case "legendar":
@@ -244,10 +262,14 @@ async function resultado(res: Response) {
     return { content: [{ type: "image", data: base64(await res.arrayBuffer()), mimeType: res.headers.get("content-type")! }] };
   }
   const text = await res.text();
-  // O mosaico da inspeção vem em base64 no JSON: vira imagem, e o texto fica sem ele.
+  // O mosaico da inspeção e a imagem gerada vêm em base64 no JSON: viram imagem, e o texto fica sem eles.
   if (res.ok && text.includes('"quadros":"')) {
     const { quadros, ...resto } = JSON.parse(text) as { quadros?: unknown };
     if (typeof quadros === "string") return { content: [{ type: "text", text: json(resto) }, { type: "image", data: quadros, mimeType: "image/jpeg" }] };
+  }
+  if (res.ok && text.includes('"previa":"')) {
+    const { previa, previaTipo, ...resto } = JSON.parse(text) as { previa?: unknown; previaTipo?: unknown };
+    if (typeof previa === "string") return { content: [{ type: "text", text: json(resto) }, { type: "image", data: previa, mimeType: typeof previaTipo === "string" ? previaTipo : "image/png" }] };
   }
   return { content: [{ type: "text", text: text || res.statusText }], isError: !res.ok };
 }
