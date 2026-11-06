@@ -870,6 +870,67 @@ export function linkFirst(project, b) {
   return true;
 }
 
+/**
+ * O que copiar do que está escolhido: um bloco, os blocos de um grupo, uma nota ou um Final, com as
+ * posições de agora. A linha não se copia (liga dois elementos que ficam onde estão). null: nada a copiar.
+ */
+export function copyItems(project, sel) {
+  const pick = (list, id) => list.filter((o) => o.id === id).map(clone);
+  let items = null;
+  if (sel.type === "block") items = { blocks: pick(project.blocks, sel.id) };
+  if (sel.type === "note") items = { notes: pick(project.notes ?? [], sel.id) };
+  if (sel.type === "final") items = { finals: pick(project.finals, sel.id) };
+  if (sel.type === "group") {
+    const g = groups(project).find((o) => o.id === sel.id);
+    if (g) items = { blocks: members(g).map(clone) };
+  }
+  const n = items ? (items.blocks?.length ?? 0) + (items.notes?.length ?? 0) + (items.finals?.length ?? 0) : 0;
+  return n ? { blocks: [], notes: [], finals: [], ...items } : null;
+}
+
+/** O canto de cima à esquerda e o de baixo à direita do que foi copiado (o Final conta com 180 × 80). */
+export function itemsBox(items) {
+  const xs = [], ys = [], xe = [], ye = [];
+  for (const b of items.blocks) xs.push(b.x), ys.push(b.y), xe.push(b.x + width(b)), ye.push(b.y + height(b));
+  for (const n of items.notes) xs.push(n.x), ys.push(n.y), xe.push(n.x + NOTE_W), ye.push(n.y + VIS_H);
+  for (const f of items.finals) xs.push(f.x), ys.push(f.y), xe.push(f.x + 180), ye.push(f.y + 80);
+  return { x: Math.min(...xs), y: Math.min(...ys), right: Math.max(...xe), bottom: Math.max(...ye) };
+}
+
+/**
+ * Cola o que foi copiado com o canto de cima à esquerda em `at`, com ids novos (o grupo continua grupo:
+ * as posições entre os blocos ficam). `suffix` acrescenta " (cópia)" ao nome dos blocos (Duplicar).
+ * No projeto ainda vazio, o primeiro bloco já sai ligado a um Final, como ao trazer um arquivo.
+ */
+export function pasteItems(project, items, at, { suffix = false } = {}) {
+  const p = clone(project);
+  const box = itemsBox(items);
+  const dx = Math.round(at.x - box.x), dy = Math.round(at.y - box.y);
+  const empty = !p.blocks.length && !p.finals.length;
+  const ids = [];
+  for (const b of items.blocks) {
+    const c = { ...clone(b), id: newId("b"), x: b.x + dx, y: b.y + dy, ...(suffix ? { name: `${b.name} (cópia)` } : {}) };
+    p.blocks.push(c);
+    ids.push(c.id);
+  }
+  for (const n of items.notes) {
+    const c = { ...clone(n), id: newId("n"), x: n.x + dx, y: n.y + dy };
+    p.notes = [...(p.notes ?? []), c];
+    ids.push(c.id);
+  }
+  for (const f of items.finals) {
+    const c = { ...clone(f), id: newId("f"), x: f.x + dx, y: f.y + dy };
+    p.finals.push(c);
+    ids.push(c.id);
+  }
+  const first = p.blocks.find((b) => b.id === ids[0]);
+  if (empty && first && !items.finals.length) {
+    p.finals.push({ id: "final", x: first.x + width(first) + 160, y: first.y + (VIS_H - 80) / 2 });
+    p.edges.push({ id: newId("e"), from: first.id, to: "final" });
+  }
+  return { project: p, ids };
+}
+
 export function removeItems(project, ids) {
   const p = clone(project);
   const s = new Set(ids);

@@ -528,3 +528,35 @@ test("a nota fica fora dos grupos, das variações e da exportação; remover ti
   // Texto colado grande demais fica no limite.
   assert.equal(M.addNote(p, { x: 0, y: 0 }, "a".repeat(M.NOTE_MAX + 5)).project.notes[0].text.length, M.NOTE_MAX);
 });
+
+test("copiar e colar: bloco, grupo inteiro, nota e Final, com ids novos, no ponto pedido", () => {
+  const corpo = M.groups(p).find((g) => g.id === "corpo");
+  const grupo = M.copyItems(p, { type: "group", id: "corpo" });
+  assert.equal(grupo.blocks.length, M.members(corpo).length);
+  const box = M.itemsBox(grupo);
+  const { project: q, ids } = M.pasteItems(p, grupo, { x: 5000, y: 3000 });
+  assert.equal(ids.length, grupo.blocks.length);
+  assert.ok(ids.every((id) => !p.blocks.some((b) => b.id === id)));
+  // As posições entre os blocos ficam: o grupo colado é igual ao original, só que em outro lugar.
+  const novo = M.groups(q).find((g) => g.id === ids[0]) ?? M.groups(q).find((g) => M.members(g).some((b) => b.id === ids[0]));
+  assert.equal(novo.dur, corpo.dur);
+  const colado = q.blocks.find((b) => b.id === ids[0]);
+  const original = grupo.blocks[0];
+  assert.deepEqual([colado.x - original.x, colado.y - original.y], [5000 - box.x, 3000 - box.y]);
+  // Nada a copiar: linha, nada escolhido.
+  assert.equal(M.copyItems(p, { type: "edge", id: p.edges[0].id }), null);
+  assert.equal(M.copyItems(p, { type: null }), null);
+  // Nota e Final.
+  const { project: n, id } = M.addNote(p, { x: 0, y: 0 }, "oi");
+  const nota = M.pasteItems(n, M.copyItems(n, { type: "note", id }), { x: 10, y: 20 });
+  assert.deepEqual(nota.project.notes.at(-1), { id: nota.ids[0], x: 10, y: 20, text: "oi" });
+  const fin = M.pasteItems(p, M.copyItems(p, { type: "final", id: "final" }), { x: 0, y: 0 });
+  assert.equal(fin.project.finals.length, p.finals.length + 1);
+  // Duplicar põe "(cópia)" no nome.
+  const dup = M.pasteItems(p, M.copyItems(p, { type: "block", id: "broll" }), { x: 0, y: 0 }, { suffix: true });
+  assert.match(dup.project.blocks.at(-1).name, / \(cópia\)$/);
+  // No projeto vazio, o primeiro bloco colado já sai ligado a um Final.
+  const vazio = M.pasteItems({ blocks: [], finals: [], edges: [] }, M.copyItems(p, { type: "block", id: "broll" }), { x: 0, y: 0 });
+  assert.equal(vazio.project.finals.length, 1);
+  assert.deepEqual(vazio.project.edges.map((e) => [e.from, e.to]), [[vazio.ids[0], "final"]]);
+});

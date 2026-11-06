@@ -656,20 +656,20 @@ function renderSide(gs) {
     else if (b.kind !== "image")
       h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3><label class="switch-row" for="f-mute">Sem som<span class="switch"><input type="checkbox" role="switch" id="f-mute" ${b.mute ? "checked" : ""}><span class="switch__track"></span><span class="switch__handle"></span></span></label>
         <div class="slider-field"><span class="slider-field__label"><span>Volume</span><span id="f-vol-n">${Math.round(b.vol * 100)}%</span></span><input class="vbar__seek" type="range" id="f-vol" min="0" max="1" step="0.05" value="${b.vol}" style="--p:${b.vol * 100}%" aria-label="Volume" ${b.mute ? "disabled" : ""}></div>${b.kind === "video" ? `<button class="button button--outlined interactive" type="button" data-act="unlink"><span class="icon">link_off</span>Desvincular o áudio</button>` : ""}${b.origin === "video" ? `<button class="button button--outlined interactive" type="button" data-act="tovideo"><span class="icon">link</span>Vincular ao vídeo</button>` : ""}</section>`;
-    actions = btn("outlined", 'data-act="dup"', "content_copy", "Duplicar") + btn("text", 'data-act="del"', "delete", "Excluir");
+    actions = btn("outlined", 'data-act="dup"', "control_point_duplicate", "Duplicar") + btn("text", 'data-act="del"', "delete", "Excluir");
   } else if (sel.type === "group") {
     const g = gs.find((g) => g.id === sel.id);
     if (g) {
       title = "Bloco";
       if (M.hasArea(g)) h += field("f-group", "Nome", g.label, 'maxlength="60"');
       h += `<div class="viewer__card"><div>${row("schedule", "Duração", fmt(g.dur))}${row("movie", "Vídeos e imagens", g.blocks.length + g.covers.length)}${row("music_note", "Sons", g.audios.length + g.sounds.length)}</div></div>`;
-      actions = btn("text", 'data-act="del"', "delete", "Excluir bloco");
+      actions = btn("outlined", 'data-act="dup"', "control_point_duplicate", "Duplicar") + btn("text", 'data-act="del"', "delete", "Excluir bloco");
     }
   } else if (sel.type === "note") {
     const n = project.notes?.find((o) => o.id === sel.id);
     title = "Nota";
     if (n) h += draftField("f-nota", "Texto", n.text, M.NOTE_MAX);
-    actions = btn("outlined", 'data-act="dup"', "content_copy", "Duplicar") + btn("text", 'data-act="del"', "delete", "Excluir");
+    actions = btn("outlined", 'data-act="dup"', "control_point_duplicate", "Duplicar") + btn("text", 'data-act="del"', "delete", "Excluir");
   } else if (sel.type === "edge") {
     title = "Linha";
     h += `<p class="sheet-hint">Liga um bloco ao seguinte. Cada caminho até o Final é uma variação.</p>`;
@@ -859,24 +859,23 @@ function removeSelection() {
   render();
 }
 
+/** Duplicar: o que está escolhido (bloco, grupo, nota ou Final) de novo, logo embaixo, com "(cópia)" nos blocos. */
 function duplicate() {
-  if (sel.type === "note") {
-    const n = project.notes?.find((o) => o.id === sel.id);
-    if (!n) return;
-    const before = project;
-    const r = M.addNote(project, { x: n.x, y: n.y + M.VIS_H + 48 }, n.text);
-    project = r.project;
-    sel = { type: "note", id: r.id };
-    commit(before);
-    return render();
-  }
-  if (sel.type !== "block") return;
+  const items = M.copyItems(project, sel);
+  if (!items) return;
+  const box = M.itemsBox(items);
+  placeItems(items, { x: box.x, y: box.bottom + 140 }, { suffix: true });
+}
+
+/** Põe no canvas o que foi copiado (ou duplicado) e escolhe o primeiro elemento novo. */
+function placeItems(items, at, o = {}) {
   const before = project;
-  project = structuredClone(project);
-  const b = project.blocks.find((b) => b.id === sel.id);
-  const c = { ...b, id: M.newId("b"), y: b.y + M.height(b) + 140, name: `${b.name} (cópia)` };
-  project.blocks.push(c);
-  sel = { type: "block", id: c.id };
+  const r = M.pasteItems(project, items, at, o);
+  project = r.project;
+  const id = r.ids[0];
+  // Um grupo inteiro colado continua escolhido como grupo; o resto, pelo tipo.
+  const type = items.blocks.length > 1 ? "group" : items.blocks.length ? "block" : items.notes.length ? "note" : "final";
+  sel = { type, id: type === "group" ? (M.groups(project).find((g) => M.members(g).some((b) => b.id === id))?.id ?? id) : id };
   commit(before);
   render();
 }
@@ -1050,15 +1049,77 @@ document.addEventListener("drop", (e) => {
   const text = e.dataTransfer.getData("text/plain").trim();
   if (text) addNote(text, at);
 });
-// Colar (Ctrl+V / Cmd+V) fora de um campo: a imagem copiada vira bloco; o texto, nota.
+/* ---------- copiar e colar elementos do canvas ---------- */
+
+// O que foi copiado no canvas e o texto que foi junto para a área de transferência: enquanto ela tiver
+// esse texto, colar põe os elementos; se a pessoa copiou outra coisa depois, vale a outra coisa.
+let copied = null;
+let copiedText = null;
+const summary = (items) => [...items.notes.map((n) => n.text), ...items.blocks.map((b) => b.name), ...items.finals.map(() => "Final")].join("\n");
+
+/** Copiar pelo menu: os elementos ficam aqui e o resumo vai para a área de transferência. */
+async function copySelection() {
+  const items = M.copyItems(project, sel);
+  if (!items) return;
+  copied = items;
+  copiedText = summary(items);
+  try {
+    await navigator.clipboard.writeText(copiedText);
+  } catch {
+    // Sem permissão para escrever: o colar daqui confia no que ficou guardado.
+    copiedText = null;
+  }
+}
+
+/**
+ * Cola em `at`: os elementos copiados no canvas (se a área de transferência ainda tem o texto deles,
+ * ou se não dá para lê-la), senão a imagem (vira bloco) ou o texto (vira nota) de fora.
+ */
+function pasteFrom({ files, text }, at, fromMenu = false) {
+  const outside = files.length > 0 || Boolean(text?.trim());
+  const own = copied && (copiedText === null ? !outside : !files.length && text === copiedText);
+  if (own) return placeItems(copied, at);
+  if (files.length) return bringIn(files, at);
+  if (text?.trim()) return addNote(text.trim(), at);
+  if (fromMenu) toast(CONFIG.erros?.colar ?? "");
+}
+
+/** Colar pelo menu: lê a área de transferência (o navegador pode pedir permissão). */
+async function pasteHere(at) {
+  const files = [];
+  let text = null;
+  try {
+    for (const item of await navigator.clipboard.read()) {
+      const image = item.types.find((t) => t.startsWith("image/"));
+      if (image) files.push(new File([await item.getType(image)], `image.${image.split("/")[1]}`, { type: image }));
+      else if (item.types.includes("text/plain")) text = await (await item.getType("text/plain")).text();
+    }
+  } catch {
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {}
+  }
+  pasteFrom({ files, text }, at, true);
+}
+
+// Ctrl+C / Cmd+C com um elemento escolhido (e nada de texto selecionado): copia o elemento.
+document.addEventListener("copy", (e) => {
+  if (typing(e.target) || String(window.getSelection() ?? "") || !e.clipboardData) return;
+  const items = M.copyItems(project, sel);
+  if (!items) return;
+  e.preventDefault();
+  copied = items;
+  copiedText = summary(items);
+  e.clipboardData.setData("text/plain", copiedText);
+});
+// Colar (Ctrl+V / Cmd+V) fora de um campo: o que foi copiado no canvas, a imagem (vira bloco) ou o texto (vira nota).
 document.addEventListener("paste", (e) => {
   if (typing(e.target) || !e.clipboardData) return;
   const files = [...e.clipboardData.files];
-  const text = e.clipboardData.getData("text/plain").trim();
-  if (!files.length && !text) return;
+  const text = e.clipboardData.getData("text/plain");
+  if (!files.length && !text.trim() && !copied) return;
   e.preventDefault();
-  if (files.length) bringIn(files, dropPoint());
-  else addNote(text, dropPoint());
+  pasteFrom({ files, text }, dropPoint());
 });
 $("#add-final")?.addEventListener("click", () => {
   const before = project;
@@ -1248,34 +1309,75 @@ async function startExport(finalId, versoes) {
   }
 }
 
-/* ---------- menu do card Final ---------- */
+/* ---------- menu do botão direito ---------- */
 
-const finMenu = $("#fin-menu");
-const closeFinMenu = () => finMenu.matches(":popover-open") && finMenu.hidePopover();
-const finItem = (down, text) => `<button class="menu__item interactive" type="button" role="menuitem" data-down="${down}"><span class="icon" aria-hidden="true">download</span>${text}</button>`;
-// Botão direito no card: a variação do clique; fora de uma, a escolhida. Não muda o que está na prévia.
+// O menu vertical do M3, o mesmo do card Final: no Final, Baixar a variação e todas; em qualquer
+// elemento, Copiar, Colar, Duplicar e Excluir; no vazio, só Colar. Colar põe no ponto do clique.
+const ctxMenu = $("#ctx-menu");
+const closeMenu = () => ctxMenu.matches(":popover-open") && ctxMenu.hidePopover();
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+const keyHint = (k) => (MAC ? `⌘${k}` : `Ctrl+${k}`);
+const menuItem = (attr, icon, text, trail = "") =>
+  `<button class="menu__item interactive" type="button" role="menuitem" ${attr}><span class="icon" aria-hidden="true">${icon}</span>${text}${trail ? `<span class="menu__trail">${trail}</span>` : ""}</button>`;
+let menuAt = null;
 vp.addEventListener("contextmenu", (e) => {
-  const fin = e.target.closest(".fin");
-  const n = fin && PROJETO ? M.versions(project, fin.dataset.final).length : 0;
-  if (!n) return;
   e.preventDefault();
-  const el = e.target.closest("[data-variant]");
-  const i = el ? +el.dataset.variant : fin.dataset.final === previewFinal()?.id ? versionIdx : 0;
-  finMenu.dataset.final = fin.dataset.final;
-  finMenu.innerHTML = finItem(i, `Baixar ${M.versionName(i)}`) + (n > 1 ? finItem("all", `Baixar todas (${n})`) : "");
-  finMenu.showPopover();
-  const r = finMenu.getBoundingClientRect();
-  finMenu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-  finMenu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
-  finMenu.querySelector("button").focus();
+  const t = e.target;
+  const note = t.closest("[data-note]");
+  const fin = t.closest(".fin");
+  const tab = t.closest(".gtab");
+  const blk = note ? null : t.closest(".blk");
+  const edge = t.closest(".wire-hit");
+  const target = note ? { type: "note", id: note.dataset.note } : fin ? { type: "final", id: fin.dataset.final } : tab ? { type: "group", id: tab.dataset.group } : blk ? { type: "block", id: blk.dataset.id } : edge ? { type: "edge", id: edge.dataset.edge } : null;
+  // O elemento do clique fica escolhido, como no clique comum (os Ajustes mostram o que o menu vai mudar).
+  if (target && (sel.type !== target.type || sel.id !== target.id)) {
+    if (target.type === "final") versionIdx = 0;
+    sel = target;
+    render();
+  }
+  menuAt = toWorld(e.clientX, e.clientY);
+  let html = "";
+  const n = fin && PROJETO ? M.versions(project, fin.dataset.final).length : 0;
+  if (n) {
+    // A variação do clique; fora de uma, a escolhida. Não muda o que está na prévia.
+    const el = t.closest("[data-variant]");
+    const i = el ? +el.dataset.variant : fin.dataset.final === previewFinal()?.id ? versionIdx : 0;
+    ctxMenu.dataset.final = fin.dataset.final;
+    html += menuItem(`data-down="${i}"`, "download", `Baixar ${M.versionName(i)}`) + (n > 1 ? menuItem('data-down="all"', "download", `Baixar todas (${n})`) : "") + `<hr class="menu__divider">`;
+  }
+  const copies = target && target.type !== "edge";
+  if (copies) html += menuItem('data-menu="copy"', "content_copy", "Copiar", keyHint("C"));
+  html += menuItem('data-menu="paste"', "content_paste", "Colar", keyHint("V"));
+  if (copies) html += menuItem('data-menu="dup"', "control_point_duplicate", "Duplicar", keyHint("D"));
+  if (target) html += `<hr class="menu__divider">` + menuItem('data-menu="del"', "delete", "Excluir", MAC ? "⌫" : "Delete");
+  ctxMenu.innerHTML = html;
+  ctxMenu.showPopover();
+  const r = ctxMenu.getBoundingClientRect();
+  ctxMenu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
+  ctxMenu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+  ctxMenu.querySelector("button").focus();
 });
 // O menu abre com o botão ainda apertado; no "auto", soltar o botão já o fecharia.
-window.addEventListener("pointerdown", (e) => finMenu.contains(e.target) || closeFinMenu(), true);
-finMenu.addEventListener("click", (e) => {
-  const down = e.target.closest("[data-down]")?.dataset.down;
-  if (down === undefined) return;
-  closeFinMenu();
-  startExport(finMenu.dataset.final, down === "all" ? undefined : [+down]);
+window.addEventListener("pointerdown", (e) => ctxMenu.contains(e.target) || closeMenu(), true);
+ctxMenu.addEventListener("click", (e) => {
+  const item = e.target.closest("[data-down], [data-menu]");
+  if (!item) return;
+  closeMenu();
+  const { down, menu } = item.dataset;
+  if (down !== undefined) return startExport(ctxMenu.dataset.final, down === "all" ? undefined : [+down]);
+  if (menu === "copy") copySelection();
+  if (menu === "paste") pasteHere(menuAt);
+  if (menu === "dup") duplicate();
+  if (menu === "del") removeSelection();
+});
+// Setas, Home e End andam pelos itens, como no campo de seleção do site.
+ctxMenu.addEventListener("keydown", (e) => {
+  const items = [...ctxMenu.querySelectorAll("button")];
+  const i = items.indexOf(document.activeElement);
+  const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+  if (to === undefined) return;
+  e.preventDefault();
+  items[(to + items.length) % items.length].focus();
 });
 
 function failExport(msg) {
@@ -1300,7 +1402,7 @@ vp.addEventListener(
   "wheel",
   (e) => {
     e.preventDefault();
-    closeFinMenu();
+    closeMenu();
     if (e.ctrlKey || e.metaKey) smoothZoom(Math.exp(-Math.max(-WHEEL_MAX, Math.min(WHEEL_MAX, e.deltaY)) * WHEEL_SPEED), e.clientX, e.clientY);
     else {
       view.x -= e.deltaX;
@@ -1545,7 +1647,7 @@ vp.addEventListener("pointerdown", (e) => {
 });
 
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeFinMenu();
+  if (e.key === "Escape") closeMenu();
   if (e.target.closest("input, textarea, [popover]")) return;
   const mod = e.ctrlKey || e.metaKey;
   if ((e.key === "Delete" || e.key === "Backspace") && sel.type) removeSelection();
