@@ -90,6 +90,23 @@ describe("projetos do canvas", () => {
     expect([grande.status, await grande.text()]).toEqual([413, ERROS.canvasArquivoGrande(MAX_IMAGE_BYTES / 1024 / 1024)]);
   });
 
+  it("recusa SVG e HTML (podem levar script) e serve o arquivo sem adivinhar o tipo e sem script", async () => {
+    const admin = await cookie();
+    const id = await novo(admin);
+    const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    for (const type of ["image/svg+xml", "text/html", "image/gif", "application/xml"]) {
+      const res = await post(`/projetos/${id}/arquivos`, admin, svg, { "content-type": type });
+      expect([type, res.status, await res.text()]).toEqual([type, 400, ERROS.canvasArquivo]);
+    }
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM project_files WHERE project_id = ?").bind(id).first("n")).toBe(0);
+    // Um arquivo guardado antes da lista fechada, aberto direto: nosniff e CSP com sandbox, sem script.
+    await env.DB.prepare("INSERT INTO project_files (id, project_id, key, name, type, size, created_at) VALUES ('00000000-0000-4000-8000-0000000000aa', ?, 'projetos/velho.svg', 'velho.svg', 'image/svg+xml', 1, ?)").bind(id, new Date().toISOString()).run();
+    await env.MIDIA.put("projetos/velho.svg", svg, { httpMetadata: { contentType: "image/svg+xml" } });
+    const velho = await get(`/projetos/${id}/arquivos/00000000-0000-4000-8000-0000000000aa`, admin);
+    expect(velho.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(velho.headers.get("content-security-policy")).toMatch(/default-src 'none'.*sandbox/);
+  });
+
   it("apagar pede confirmação e leva o projeto e os arquivos dele", async () => {
     const admin = await cookie();
     const id = await novo(admin);

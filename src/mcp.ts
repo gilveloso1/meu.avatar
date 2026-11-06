@@ -122,7 +122,7 @@ const FERRAMENTAS = [
   { name: "ver_silencios", description: "Duração e silêncios de um arquivo, com a regra da Edição rápida; som: false quando o arquivo não tem áudio (nada a cortar).", inputSchema: objeto({ projeto, src }, ["projeto", "src"]) },
   {
     name: "enviar_arquivo",
-    description: "Guarda um arquivo no projeto (imagem até 10 MB; vídeo e áudio até 50 MB, limitados aqui a 10 MB pelo base64). WebM com transparência serve de camada sobre o vídeo.",
+    description: "Guarda um arquivo no projeto: JPG, PNG ou WebP (até 10 MB); MP4, MOV, WebM, MP3, M4A, WAV ou OGG (até 50 MB, limitados aqui a 10 MB pelo base64). SVG e HTML não entram. WebM com transparência serve de camada sobre o vídeo.",
     inputSchema: objeto({ projeto, nome: texto("Nome do arquivo."), tipo: texto('Tipo, como "video/webm" ou "audio/mp4".'), base64: texto("Conteúdo em base64.") }, ["projeto", "nome", "tipo", "base64"]),
   },
   {

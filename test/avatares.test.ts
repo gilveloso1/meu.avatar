@@ -29,8 +29,10 @@ describe("avatares", () => {
   });
 
   it("arquivo errado no formulário não cria o avatar", async () => {
-    const res = await call(postForm("/avatares", { nome: "Camila", imagem: new File(["x"], "nota.txt", { type: "text/plain" }) }, { cookie: await cookie() }));
-    expect(res.status).toBe(400);
+    for (const imagem of [new File(["x"], "nota.txt", { type: "text/plain" }), new File(["<svg><script>alert(1)</script></svg>"], "foto.svg", { type: "image/svg+xml" })]) {
+      const res = await call(postForm("/avatares", { nome: "Camila", imagem }, { cookie: await cookie() }));
+      expect(res.status).toBe(400);
+    }
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM avatars").first("n")).toBe(0);
   });
 
