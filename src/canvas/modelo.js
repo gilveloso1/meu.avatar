@@ -4,7 +4,8 @@
  *
  * Projeto: { blocks, finals, edges }
  *   bloco: { id, kind: "video" | "image" | "audio", name, src, dur, tin, tout,
- *     draft? ({ fala }: o rascunho, uma imagem sem arquivo no lugar de um vídeo que falta),
+ *     draft? ({ fala, descricao? }: o rascunho, uma imagem sem arquivo no lugar de um vídeo que falta;
+ *       a fala e a descrição podem ficar vazias),
  *     code? ({ html, params, escala, fixa }: a animação em código, uma imagem sem arquivo que o navegador roda na
  *            prévia; o tempo do bloco é o da linha do tempo `tl` dela, até CODE_MAX; params, os
  *            valores que o código usa; escala, quanto a linha do tempo foi esticada (o bloco de baixo

@@ -109,7 +109,7 @@ function loadPreview() {
     }
   }
   tl ??= v ? M.timeline(v, M.finalRate(previewFinal())) : { duration: 0, items: [] };
-  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.block.draft?.fala, i.block.code && M.codeHtml(i.block.code), i.block.tout, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
+  const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.block.draft?.fala, i.block.draft?.descricao, i.block.code && M.codeHtml(i.block.code), i.block.tout, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
   pv.title.textContent = title;
   if (key === loadedKey) return playhead(player.t);
   loadedKey = key;
@@ -187,8 +187,7 @@ function setTab(tab) {
   sheetBody.dataset.tab = tab;
   for (const b of document.querySelectorAll(".viewer__sheet [data-tab][role=tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   for (const p of sheetBody.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== tab;
-  const fala = document.getElementById("f-fala");
-  if (fala) fitText(fala);
+  for (const t of sheetBody.querySelectorAll("#f-fala, #f-descricao")) fitText(t);
   showActions();
   try {
     localStorage.setItem("canvas-aba", tab);
@@ -414,7 +413,7 @@ function render({ side = true } = {}) {
       blockEls.set(b.id, el);
     }
     // A miniatura muda com o arquivo: o rascunho trocado pelo vídeo pronto mantém o mesmo bloco.
-    const fonte = b.draft ? `rascunho:${b.draft.fala}` : b.code ? "codigo" : b.src;
+    const fonte = b.draft ? `rascunho:${draftText(b)}` : b.code ? "codigo" : b.src;
     if (el.fonte !== fonte) {
       el.fonte = fonte;
       const m = $(".blk__media", el);
@@ -439,7 +438,7 @@ function render({ side = true } = {}) {
     // Só mexe no elemento se algo mudou: arrastar um bloco não redesenha os outros.
     // O som do vídeo fica na área de som, na faixa dele.
     const sound = g?.sounds.find((s) => s.block === b);
-    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}|${b.src}|${b.draft?.fala}`;
+    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}|${b.src}|${b.draft?.fala}|${b.draft?.descricao}`;
     if (el.drawn === state) continue;
     el.drawn = state;
     el.className = look;
@@ -453,7 +452,7 @@ function render({ side = true } = {}) {
     if (b.kind === "audio") paintWave(media, b);
     $(".blk__kind", el).textContent = b.draft ? "edit_note" : b.code ? "animation" : { video: "movie", image: "image", audio: "music_note" }[b.kind];
     $(".blk__name", el).textContent = b.name;
-    if (b.draft) media.replaceChildren(Object.assign(document.createElement("span"), { className: "blk__fala", textContent: b.draft.fala }));
+    if (b.draft) media.replaceChildren(Object.assign(document.createElement("span"), { className: "blk__fala", textContent: draftText(b) }));
     $(".blk__dur", el).textContent = fmt(M.len(b));
   }
   for (const [id, el] of blockEls) if (!seen.has(id)) el.remove(), blockEls.delete(id);
@@ -566,6 +565,16 @@ const MAX_FALA = 2000;
  * O campo de texto cresce com o texto, como na página do modelo. Escondido (na aba Prévia), não
  * há o que medir: mede de novo quando a aba Ajustes abre (setTab).
  */
+/** Um campo de texto do rascunho (Descrição, Fala): cresce com o texto e conta os caracteres, sem frase de apoio. */
+function draftField(id, label, value) {
+  return `<div class="text-field"><textarea class="text-field__input" id="${id}" rows="1" maxlength="${MAX_FALA}" placeholder=" " aria-describedby="${id}-n">${esc(value)}</textarea><label class="text-field__label" for="${id}">${label}</label><p class="text-field__supporting"><span></span><span id="${id}-n">${value.length}/${MAX_FALA}</span></p></div>`;
+}
+
+/** O texto que o cartão do rascunho mostra: a fala ou, sem ela, a descrição. */
+function draftText(b) {
+  return b.draft.fala.trim() || b.draft.descricao?.trim() || "";
+}
+
 function fitText(t) {
   if (!t.offsetParent) return;
   t.style.height = "auto";
@@ -605,10 +614,10 @@ function renderSide(gs) {
     const b = project.blocks.find((b) => b.id === sel.id);
     title = b.draft ? "Rascunho" : b.code ? "Animação" : { video: "Vídeo", image: "Imagem", audio: "Áudio" }[b.kind];
     h += field("f-name", "Nome", b.name);
-    // O lugar de um vídeo que ainda não existe: a fala vai para o modelo, e o vídeo pronto entra aqui.
+    // O lugar de um vídeo que ainda não existe: a fala vai para o modelo, a descrição diz o resto
+    // (a cena, o enquadramento, referências), e o vídeo pronto entra aqui. As duas podem ficar vazias.
     // O mesmo campo de texto que cresce da página do modelo.
-    if (b.draft)
-      h += `<div class="text-field"><textarea class="text-field__input" id="f-fala" rows="1" maxlength="${MAX_FALA}" placeholder=" " aria-describedby="f-fala-ajuda">${esc(b.draft.fala)}</textarea><label class="text-field__label" for="f-fala">Fala</label><p class="text-field__supporting" id="f-fala-ajuda"><span>Gere o vídeo com esta fala.</span><span id="f-fala-n">${b.draft.fala.length}/${MAX_FALA}</span></p></div>`;
+    if (b.draft) h += draftField("f-descricao", "Descrição", b.draft.descricao ?? "") + draftField("f-fala", "Fala", b.draft.fala);
     if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.maxEnd(b)}"`);
     // O que o template deixa mudar sem mexer no código: nome, preço, cor da marca.
     if (b.code?.params)
@@ -616,7 +625,7 @@ function renderSide(gs) {
         .map(([k, v]) => field(`f-param-${k}`, esc(k), String(v), `data-param="${esc(k)}" maxlength="500"`))
         .join("")}</section>`;
     else
-      h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
+      h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div></div>`;
     if (b.kind === "video" && !M.linked(b))
       h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3>${b.audio === "none" ? `<p class="sheet-hint">Este vídeo não tem som.</p>` : `<p class="sheet-hint">O som deste vídeo está desvinculado.</p><button class="button button--outlined interactive" type="button" data-act="relink"><span class="icon">link</span>Vincular ao áudio</button>`}</section>`;
     else if (b.kind !== "image")
@@ -645,8 +654,7 @@ function renderSide(gs) {
   }
   for (const undo of selectUndos.splice(0)) undo();
   side.innerHTML = `<h2 class="sheet-title">${title}</h2>` + h;
-  const fala = $("#f-fala");
-  if (fala) fitText(fala);
+  for (const t of side.querySelectorAll("#f-fala, #f-descricao")) fitText(t);
   // No site, o campo de seleção vira o menu do M3 (window.mdSelect, do script do site).
   if (window.mdSelect) for (const s of side.querySelectorAll(".text-field--select select")) selectUndos.push(window.mdSelect(s));
   sideActions.innerHTML = actions;
@@ -775,12 +783,12 @@ function onSideInput(t0) {
     const old = b.code.params[t.dataset.param];
     b.code.params[t.dataset.param] = typeof old === "number" && t.value.trim() !== "" && Number.isFinite(+t.value) ? +t.value : t.value;
   }
-  if (t.id === "f-fala") {
+  if (t.id === "f-fala" || t.id === "f-descricao") {
     fitText(t);
-    $("#f-fala-n").textContent = `${t.value.length}/${MAX_FALA}`;
-    // Vazio não vale: o rascunho fica com a última fala até haver texto de novo.
-    if (!t.value.trim()) return;
-    b.draft.fala = t.value;
+    $(`#${t.id}-n`).textContent = `${t.value.length}/${MAX_FALA}`;
+    if (t.id === "f-fala") b.draft.fala = t.value;
+    else if (t.value) b.draft.descricao = t.value;
+    else delete b.draft.descricao;
   }
   if (t.id === "f-mute") b.mute = t.checked;
   if (t.id === "f-vol") b.vol = +t.value;

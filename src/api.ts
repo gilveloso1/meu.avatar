@@ -110,7 +110,7 @@ function resumo(data: CanvasProject) {
     }),
     avisos: [
       ...gs.filter((g) => g.blocks.length).flatMap((g) => baseGaps(g).map(([de, ate]) => ({ tipo: "sem_video_de_base", grupo: g.id, de, ate, segundos: +(ate! - de!).toFixed(3) }))),
-      ...data.blocks.filter((b) => b.draft).map((b) => ({ tipo: "rascunho", bloco: b.id, fala: b.draft!.fala, segundos: +(b.tout - b.tin).toFixed(3) })),
+      ...data.blocks.filter((b) => b.draft).map((b) => ({ tipo: "rascunho", bloco: b.id, fala: b.draft!.fala, ...(b.draft!.descricao ? { descricao: b.draft!.descricao } : {}), segundos: +(b.tout - b.tin).toFixed(3) })),
       // Um Final a que nenhum grupo chega não exporta nada (falta ligar a última cena a ele).
       ...(gs.length ? data.finals.filter((f) => !versions(data, f.id).length).map((f) => ({ tipo: "final_sem_variacao", final: f.id })) : []),
     ],
@@ -120,8 +120,8 @@ function resumo(data: CanvasProject) {
 type Resumo = ReturnType<typeof resumo>;
 type Aviso = Resumo["avisos"][number];
 
-/** O aviso sem a fala do rascunho: quem editou acabou de escrevê-la, e o ver_projeto a mostra. */
-const semFala = (a: Aviso) => ("fala" in a ? (({ fala: _, ...resto }) => resto)(a) : a);
+/** O aviso sem a fala e a descrição do rascunho: quem editou acabou de escrevê-las, e o ver_projeto as mostra. */
+const semFala = (a: Aviso) => ("fala" in a ? (({ fala: _, descricao: __, ...resto }) => resto)(a) : a);
 
 /**
  * O que o lote mudou, para o agente não reler o projeto inteiro a cada edição (num roteiro de 30 falas, o resumo

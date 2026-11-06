@@ -15,10 +15,13 @@ menos custo.
   blocos soltos, vários grupos, várias conexões e vários blocos finais.
 - **Bloco**: vídeo, imagem, áudio etc., gerado aqui ou importado. A largura é
   a duração; dá para encurtar no começo e no fim.
-- **Rascunho**: o lugar de um vídeo que ainda não existe, com a fala e a
-  duração estimada (comando `rascunho`, [api.md](api.md)). É um bloco de imagem
-  sem arquivo (`draft: {fala}`), com o nome Texto 1, Texto 2... (como os blocos;
-  muda no campo Nome ou com `renomear`): no canvas mostra a fala (editável nos Ajustes), na prévia um cartão,
+- **Rascunho**: o lugar de um vídeo que ainda não existe, com a fala, a descrição e a
+  duração estimada (comando `rascunho`, [api.md](api.md)). A fala é o que será dito (o agente a
+  copia para gerar o vídeo ou o áudio); a descrição, o resto (cena, enquadramento, referências).
+  As duas são opcionais: o rascunho pode ficar em branco, ter só uma ou as duas. É um bloco de imagem
+  sem arquivo (`draft: {fala, descricao?}`), com o nome Texto 1, Texto 2... (como os blocos;
+  muda no campo Nome ou com `renomear`): no canvas mostra a fala ou, sem ela, a descrição (as duas
+  editáveis nos Ajustes, a descrição em cima), na prévia um cartão,
   e a exportação espera até ele ser trocado pelo vídeo (`trocar`). Serve para
   montar a estrutura inteira e gerar só os vídeos que faltam.
 - **Animação em código**: o HTML do agente (elementos, `<style>` e a linha do tempo `tl` do
