@@ -565,9 +565,9 @@ const MAX_FALA = 2000;
  * O campo de texto cresce com o texto, como na página do modelo. Escondido (na aba Prévia), não
  * há o que medir: mede de novo quando a aba Ajustes abre (setTab).
  */
-/** Um campo de texto do rascunho (Fala, Descrição): cresce com o texto e conta os caracteres. */
-function draftField(id, label, value, help) {
-  return `<div class="text-field"><textarea class="text-field__input" id="${id}" rows="1" maxlength="${MAX_FALA}" placeholder=" " aria-describedby="${id}-ajuda">${esc(value)}</textarea><label class="text-field__label" for="${id}">${label}</label><p class="text-field__supporting" id="${id}-ajuda"><span>${help}</span><span id="${id}-n">${value.length}/${MAX_FALA}</span></p></div>`;
+/** Um campo de texto do rascunho (Descrição, Fala): cresce com o texto e conta os caracteres, sem frase de apoio. */
+function draftField(id, label, value) {
+  return `<div class="text-field"><textarea class="text-field__input" id="${id}" rows="1" maxlength="${MAX_FALA}" placeholder=" " aria-describedby="${id}-n">${esc(value)}</textarea><label class="text-field__label" for="${id}">${label}</label><p class="text-field__supporting"><span></span><span id="${id}-n">${value.length}/${MAX_FALA}</span></p></div>`;
 }
 
 /** O texto que o cartão do rascunho mostra: a fala ou, sem ela, a descrição. */
@@ -617,7 +617,7 @@ function renderSide(gs) {
     // O lugar de um vídeo que ainda não existe: a fala vai para o modelo, a descrição diz o resto
     // (a cena, o enquadramento, referências), e o vídeo pronto entra aqui. As duas podem ficar vazias.
     // O mesmo campo de texto que cresce da página do modelo.
-    if (b.draft) h += draftField("f-descricao", "Descrição", b.draft.descricao ?? "", "Cena, enquadramento e o que mais ajudar.") + draftField("f-fala", "Fala", b.draft.fala, "Gere o vídeo ou o áudio com esta fala.");
+    if (b.draft) h += draftField("f-descricao", "Descrição", b.draft.descricao ?? "") + draftField("f-fala", "Fala", b.draft.fala);
     if (b.kind === "image") h += field("f-tout", "Duração (s)", b.tout.toFixed(1), `type="number" step="0.1" min="${M.MIN_LEN}" max="${M.maxEnd(b)}"`);
     // O que o template deixa mudar sem mexer no código: nome, preço, cor da marca.
     if (b.code?.params)
