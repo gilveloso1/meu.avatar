@@ -625,7 +625,7 @@ function renderSide(gs) {
         .map(([k, v]) => field(`f-param-${k}`, esc(k), String(v), `data-param="${esc(k)}" maxlength="500"`))
         .join("")}</section>`;
     else
-      h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div><p class="text-field__supporting">Arquivo de ${fmt(b.dur)}. Puxe as pontas do bloco para cortar.</p></div>`;
+      h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div></div>`;
     if (b.kind === "video" && !M.linked(b))
       h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3>${b.audio === "none" ? `<p class="sheet-hint">Este vídeo não tem som.</p>` : `<p class="sheet-hint">O som deste vídeo está desvinculado.</p><button class="button button--outlined interactive" type="button" data-act="relink"><span class="icon">link</span>Vincular ao áudio</button>`}</section>`;
     else if (b.kind !== "image")
