@@ -10,3 +10,6 @@ container/render/ffmpeg
 container/render/ffmpeg.versao
 container/render/ffprobe
 container/render/fontes/
+
+# Local do Claude: tokens, conta de teste, worktrees e páginas de trabalho
+.claude/
