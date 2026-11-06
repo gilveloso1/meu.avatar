@@ -19,6 +19,8 @@
  *   final: { id, x, y, resolution, format, speed }   (o que ele exporta; ver output())
  *   linha: { id, from, to }      (from: um bloco do grupo de saída;
  *                                 to: um bloco do grupo de entrada ou um final)
+ *   nota: { id, x, y, text }     (notes, opcional: texto solto no canvas, como um post-it amarelo;
+ *                                 fica fora dos grupos, das ligações e da exportação)
  *
  * Regras (geometria, em unidades do canvas):
  *   - a largura é a duração (PX por segundo);
@@ -52,6 +54,17 @@ const LANE_ABOVE = 70;
 const LANE_BELOW = 30;
 export const MIN_LEN = 0.5;
 export const IMAGE_MAX = 30;
+/** A nota tem a largura de 6 s de vídeo e a altura de um bloco de vídeo; o texto vai até NOTE_MAX caracteres. */
+export const NOTE_W = 240;
+export const NOTE_MAX = 10000;
+
+/** Uma nota nova nesse ponto (o texto colado ou escrito), com o id dela. */
+export function addNote(project, at, text) {
+  const p = clone(project);
+  const note = { id: newId("n"), x: Math.round(at.x), y: Math.round(at.y), text: String(text).slice(0, NOTE_MAX) };
+  p.notes = [...(p.notes ?? []), note];
+  return { project: p, id: note.id };
+}
 /** A animação em código vai até o que o render faz de uma vez (src/render.ts, MAX_RENDER_SECONDS). */
 export const CODE_MAX = 60;
 /** Quantas variações cada bloco final tem; é também o que uma exportação monta de uma vez. */
@@ -869,6 +882,7 @@ export function removeItems(project, ids) {
   };
   p.blocks = p.blocks.filter((b) => !s.has(b.id));
   p.finals = p.finals.filter((f) => !s.has(f.id));
+  if (p.notes) p.notes = p.notes.filter((n) => !s.has(n.id));
   // O nome do grupo também fica num bloco dele: segue para o que fica, como a ligação.
   if (p.names) {
     p.names = { ...p.names };

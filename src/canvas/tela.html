@@ -20,6 +20,12 @@ body { min-height: 0; overflow: hidden; }
   background-image: radial-gradient(circle, var(--md-sys-color-outline-variant) 1px, transparent 1.2px);
 }
 #vp.is-panning { cursor: grabbing; }
+/* Arrastando um arquivo ou um texto de fora: o canvas inteiro é o alvo, com o contorno primary. */
+#vp.is-dropping::after {
+  content: ""; position: absolute; inset: 8px; z-index: 5; pointer-events: none;
+  border: 2px dashed var(--md-sys-color-primary); border-radius: var(--md-sys-shape-corner-large);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+}
 #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 /* Com zoom (--zi = 1 / zoom, a partir de 100%), sombras, contornos e linhas mantêm a
    espessura da tela, sem engrossar e sem passar das bordas dos blocos. */
@@ -65,6 +71,8 @@ body { min-height: 0; overflow: hidden; }
 /* O rascunho não tem quadro: a fala, em texto, no lugar dele. */
 .blk--draft .blk__media { padding: 4px 8px; box-sizing: border-box; overflow: hidden; color: var(--on); mix-blend-mode: normal; }
 .blk__fala { font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
+/* A nota guarda as quebras de linha do texto colado. */
+.blk--nota .blk__fala { white-space: pre-line; }
 .blk.is-mute .blk__media { opacity: 0.38; }
 /* Áudio vinculado: faixa de 40 px embaixo da imagem, na cor e no tom do vídeo, com a onda dele. */
 /* A onda vai de borda a borda do bloco: o x dela é o mesmo tempo do vídeo (o corte de agora). */

@@ -76,6 +76,13 @@ export const LIGHT = `
   --bloco-audio-5: #cc98a7;
   --bloco-audio-6: #bb8897;
   --bloco-audio-on: #31101d;
+  --bloco-nota-1: #ffe79a;
+  --bloco-nota-2: #f7d558;
+  --bloco-nota-3: #e5c449;
+  --bloco-nota-4: #d4b43a;
+  --bloco-nota-5: #c2a32a;
+  --bloco-nota-6: #b19318;
+  --bloco-nota-on: #231b00;
 `;
 
 export const DARK = `
@@ -149,4 +156,11 @@ export const DARK = `
   --bloco-audio-5: #7e5260;
   --bloco-audio-6: #8b5e6c;
   --bloco-audio-on: #ffecf0;
+  --bloco-nota-1: #3b2f00;
+  --bloco-nota-2: #483a00;
+  --bloco-nota-3: #554500;
+  --bloco-nota-4: #635100;
+  --bloco-nota-5: #715c00;
+  --bloco-nota-6: #7f6800;
+  --bloco-nota-on: #fff0c7;
 `;

@@ -517,3 +517,14 @@ test("tirar o primeiro bloco de um grupo não desfaz as ligações dele", () => 
   assert.equal(M.links(q).filter((l) => l.from === novo || l.to === novo).length, antes);
   assert.equal(M.versions(q, "final").length, M.versions(p, "final").length);
 });
+
+test("a nota fica fora dos grupos, das variações e da exportação; remover tira", () => {
+  const { project: com, id } = M.addNote(p, { x: 10.4, y: -300.6 }, "Briefing: mostrar o sérum");
+  assert.deepEqual(com.notes, [{ id, x: 10, y: -301, text: "Briefing: mostrar o sérum" }]);
+  assert.equal(p.notes, undefined);
+  assert.deepEqual(M.groups(com).map((g) => g.id), M.groups(p).map((g) => g.id));
+  assert.equal(M.versions(com, "final").length, 6);
+  assert.deepEqual(M.removeItems(com, [id]).notes, []);
+  // Texto colado grande demais fica no limite.
+  assert.equal(M.addNote(p, { x: 0, y: 0 }, "a".repeat(M.NOTE_MAX + 5)).project.notes[0].text.length, M.NOTE_MAX);
+});

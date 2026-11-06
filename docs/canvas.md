@@ -24,6 +24,11 @@ menos custo.
   editáveis nos Ajustes, a descrição em cima), na prévia um cartão,
   e a exportação espera até ele ser trocado pelo vídeo (`trocar`). Serve para
   montar a estrutura inteira e gerar só os vídeos que faltam.
+- **Nota**: texto solto no canvas (briefing, roteiro, referências), um bloco amarelo do tamanho de
+  um bloco de vídeo com o texto no lugar do quadro (`notes: [{id, x, y, text}]`, até 10 mil
+  caracteres; cor `--bloco-nota-*`, gerada pelo `npm run tema`). Não entra em grupo, ligação nem
+  exportação: só anda, duplica e sai. Nasce ao colar ou soltar um texto no canvas; o texto muda nos
+  Ajustes. O agente lê as notas no `ver_projeto` (`notas`) e tira com `remover {ids}`.
 - **Animação em código**: o HTML do agente (elementos, `<style>` e a linha do tempo `tl` do
   GSAP), guardado no bloco (`code: {html}`, comandos `adicionar {html, duracao}` e
   `editarCodigo`, [api.md](api.md)). É um bloco de imagem sem arquivo, como o rascunho, que vai até
@@ -201,6 +206,11 @@ menos custo.
   1 MB); se falhar, um aviso. O nome muda na barra superior (um clique no título; sair do campo salva, Esc desiste) ou
   nos Ajustes, sem nada escolhido, onde também ficam os dados do projeto: criado em,
   modificado em, criado por, blocos e variações.
+- **Arrastar e colar**: soltar arquivos em qualquer ponto da página (o canvas mostra o contorno
+  enquanto eles passam) faz o mesmo que o "Do computador"; soltar fora do canvas não deixa o navegador
+  abrir o arquivo. Colar (Ctrl+V ou Cmd+V) fora de um campo: imagem copiada vira bloco ("Imagem
+  colada"), texto vira nota. Entra onde está o mouse; sem ele no canvas, embaixo de tudo. Arquivo que não
+  é imagem, vídeo nem áudio: o aviso de sempre. Colar num campo de texto continua normal.
 - **Do computador**: o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
   `project_files`), com os limites do site (imagem 10 MB, vídeo e áudio 50 MB), e o
   bloco usa o endereço de lá; não some ao recarregar.
