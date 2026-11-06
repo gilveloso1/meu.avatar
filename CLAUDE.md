@@ -250,6 +250,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   original e porte de lá.
 - Permissões sempre conferidas no servidor; teste novo para cada caso de
   acesso negado.
+- Arquivo enviado (ativos, projetos, MCP) só de uma lista fechada de tipos (`MEDIA_KINDS`,
+  `src/site/site.ts`), nunca qualquer `image/*`: SVG e HTML levam script e são servidos pelo endereço
+  do site. Todo arquivo do R2 sai pelo `object()`, com `nosniff` e CSP com `sandbox`.
 
 ## Modelos: uma estrutura para cada
 

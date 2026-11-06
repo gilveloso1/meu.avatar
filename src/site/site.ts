@@ -757,7 +757,7 @@ ${CANVAS_BODY}
   /** Recebe um arquivo do computador (o corpo do pedido) e guarda no R2, dentro do projeto. */
   private async uploadProjectFile(request: Request, project: Project): Promise<Response> {
     const type = (request.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
-    const kind = type.startsWith("image/") ? "imagem" : type.startsWith("video/") ? "video" : type.startsWith("audio/") ? "audio" : null;
+    const kind = assetKind(type);
     if (!kind) return new Response(ERROS.canvasArquivo, { status: 400 });
     const max = kind === "imagem" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
     const tooBig = new Response(ERROS.canvasArquivoGrande(max / 1024 / 1024), { status: 413 });
@@ -1188,6 +1188,10 @@ ${error ? snackbar(error) : ""}`;
     if (!object) return new Response("não encontrado", { status: 404 });
     const headers = new Headers({ "cache-control": cache, "accept-ranges": "bytes", etag: object.httpEtag });
     object.writeHttpMetadata(headers);
+    // Aberto direto no navegador, o arquivo nunca vira página que roda script com a sessão de quem está
+    // logado (um SVG ou HTML guardado antes da lista fechada de tipos): sem adivinhar o tipo, sem script.
+    headers.set("x-content-type-options", "nosniff");
+    headers.set("content-security-policy", "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
     if (downloadName) headers.set("content-disposition", `attachment; filename="${downloadName}"`);
     if (!("body" in object)) return new Response(null, { status: 304, headers });
     const r = object.range as { offset?: number; length?: number } | undefined;
@@ -1262,8 +1266,19 @@ function overflowMenu(label: string, items: MenuItem[]): string {
  * menu fica por cima dele.
  */
 /** O tipo de ativo pelo tipo do arquivo; arquivo de outro tipo não entra. */
+/**
+ * Os tipos de arquivo que o site guarda (ativos do avatar, arquivos dos projetos, o envio do MCP): uma
+ * lista fechada, e não qualquer image/*. SVG e HTML ficam de fora: podem levar script e o arquivo é
+ * servido pelo próprio endereço do site. WebM é o vídeo das animações (render).
+ */
+const MEDIA_KINDS: Record<string, AssetKind> = {
+  "image/jpeg": "imagem", "image/png": "imagem", "image/webp": "imagem",
+  "video/mp4": "video", "video/quicktime": "video", "video/webm": "video",
+  "audio/mpeg": "audio", "audio/wav": "audio", "audio/x-wav": "audio", "audio/mp4": "audio", "audio/x-m4a": "audio", "audio/ogg": "audio",
+};
+
 function assetKind(type: string): AssetKind | null {
-  return type.startsWith("image/") ? "imagem" : type.startsWith("video/") ? "video" : type.startsWith("audio/") ? "audio" : null;
+  return MEDIA_KINDS[type.split(";")[0]!.trim().toLowerCase()] ?? null;
 }
 
 function tileCard(c: { href: string; tile: string; headline: string; supporting: string; hidden?: string; badge?: { label: string; title: string }; menu: MenuItem[] }): string {
@@ -1758,7 +1773,7 @@ interface AssetPicks {
   assets: string[];
 }
 const ASSET_ICONS: Record<AssetKind, string> = { imagem: "image", video: "movie", audio: "mic" };
-const ASSET_ACCEPT = "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/ogg";
+const ASSET_ACCEPT = Object.keys(MEDIA_KINDS).join(",");
 
 function formatBytes(n: number): string {
   return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
