@@ -30,4 +30,6 @@ caminho no R2).
 | [Runway Aleph 2](runway-aleph-2.md) (`runway/aleph-2`) | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | Em teste: a receita do terceiro teste troca o avatar e mantém o áudio. Cobrou US$ 1,40 por pedido até 20 s, mais ≈ US$ 0,22 de imagens | `aleph.ts` |
 | [Gemini Nano Banana 2.1](gemini-nano-banana-2.1.md) (`google/gemini-nano-banana-2.1`) | Trocar o rosto nos quadros-chave do Aleph 2 | Em teste, dentro do `aleph.ts` | — |
 | `anthropic/claude-haiku-5.5` | Conferir o fundo dos quadros-chave do Aleph 2 | Em teste, dentro do `aleph.ts` (ver [runway-aleph-2.md](runway-aleph-2.md)) | — |
+| [Grok Imagine Video 1.5 Lite](grok-imagine-video-1.5-lite.md) (`x-ai/grok-imagine-video-1.5-lite`) | Cena sem fala, a partir da foto | Em teste: fez as duas cenas pelo terminal (US$ 0,03/s em 720p); vem com som mesmo sem áudio. Estrutura só para o administrador, ainda não publicada | `grok.ts` |
+| [Veo 3.1 Lite](veo-3.1-lite.md) (`google/veo-3.1-lite`) | Cena sem fala, a partir da foto | Em teste pelo terminal: fez uma cena e o filtro recusou a outra (US$ 0,03/s em 720p) | — |
 | [Higgsfield Genjutsu](higgsfield-genjutsu.md) (fora do OpenRouter) | Trocar avatar | Não testado | — |

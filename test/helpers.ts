@@ -55,7 +55,18 @@ export const ALEPH_MODEL: VideoModel = {
   pricing_skus: { cents_per_second_output: "28", minimum_cents_per_generation: "56" },
 };
 
-const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL];
+export const GROK_MODEL: VideoModel = {
+  id: "x-ai/grok-imagine-video-1.5-lite",
+  name: "xAI: Grok Imagine Video 1.5 Lite",
+  supported_durations: Array.from({ length: 15 }, (_, i) => i + 1),
+  supported_resolutions: ["480p", "720p", "1080p"],
+  supported_aspect_ratios: ["16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3"],
+  supported_frame_images: ["first_frame"],
+  generate_audio: null,
+  pricing_skus: { cents_per_image_input: "1", cents_per_video_output_second_480p: "2", cents_per_video_output_second_720p: "3", cents_per_video_output_second_1080p: "14" },
+};
+
+const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, GROK_MODEL];
 
 /**
  * Um MP4 mínimo com a duração no cabeçalho (ftyp, mdat e moov > mvhd). A

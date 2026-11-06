@@ -10,8 +10,9 @@ import { mp4Duration } from "../src/mp4";
 import { estimate } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
+import { GROK, GROK_GUIDE } from "../src/structures/grok";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
-import { ALEPH_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
+import { ALEPH_MODEL, GROK_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
@@ -582,6 +583,76 @@ describe("HeyGen Avatar IV", () => {
     expect(video).toMatchObject({ status: "completed", audio_status: null, cost: 0.25 });
     expect(await studio.treatNextAudio()).toBeNull();
     expect(audio.calls).toBe(0);
+  });
+});
+
+describe("Grok Imagine 1.5 Lite", () => {
+  const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
+  const MOVIMENTO = "sorri e olha para o produto na mesa";
+
+  it("o custo é o da resolução em dólar por segundo, mais o da foto", () => {
+    const values = (name: string) => ({ resolucao: "720p", duracao: "6" })[name] ?? "";
+    expect(GROK.prices!(GROK_MODEL)).toEqual({ "480p": "0.02", "720p": "0.03", "1080p": "0.14", foto: "0.01" });
+    expect(estimate(GROK, GROK_MODEL, values)).toBeCloseTo(0.19);
+  });
+
+  it("o formulário pede o movimento, a foto e o vídeo, sem fala nem voz", async () => {
+    const page = await (await get("/modelo/grok")).text();
+    expect(page).toContain('name="movimento"');
+    expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
+    expect(page).toMatch(/name="duracao"[^>]*>[\s\S]*<option value="15"/);
+    expect(page).toContain('value="720p" checked');
+    expect(page).not.toContain('name="fala"');
+    expect(page).not.toContain('name="voz"');
+    expect(page).toContain("descreva o movimento e toque em Gerar vídeo.");
+    // O custo fixo da foto vai para a conta do navegador.
+    expect(page).toContain("&quot;extra&quot;:0.01");
+  });
+
+  it("manda o movimento com o guia, a foto como primeiro quadro e sem áudio", async () => {
+    const api = new FakeVideoApi();
+    const res = await post(api, { movimento: `  ${MOVIMENTO}  `, imagem: foto(), duracao: "6", resolucao: "720p", formato: "9:16" }, "grok");
+    expect(res.status).toBe(303);
+
+    const [req] = api.submitted;
+    expect(req).toMatchObject({ model: "x-ai/grok-imagine-video-1.5-lite", prompt: `${MOVIMENTO} ${GROK_GUIDE}`, duration: 6, resolution: "720p", aspect_ratio: "9:16", generate_audio: false });
+    expect(req!.input_references).toBeUndefined();
+    expect(req!.frame_images![0]).toMatchObject({ frame_type: "first_frame" });
+
+    const [video] = await new Db(env.DB).recentVideos();
+    expect(video).toMatchObject({ structure: "grok", prompt: "", extra: MOVIMENTO, duration: 6, request_prompt: req!.prompt });
+    const detalhes = await (await get(`/video/${video!.id}`, undefined, api)).text();
+    expect(detalhes).toContain(`<h2 class="viewer__title">Movimento</h2><div class="viewer__card"><p class="viewer__text">${MOVIMENTO}</p>`);
+    // Refazer volta com o movimento e os ajustes.
+    const refazer = await (await get(`/modelo/grok?refazer=${video!.id}`, undefined, api)).text();
+    expect(refazer).toContain(MOVIMENTO);
+  });
+
+  it("recusa sem movimento, movimento longo, sem foto e duração fora do modelo", async () => {
+    const api = new FakeVideoApi();
+    const casos: [Record<string, string | File>, string][] = [
+      [{ movimento: " ", imagem: foto() }, ERROS.movimento],
+      [{ movimento: "a".repeat(1001), imagem: foto() }, ERROS.movimentoLongo(1000)],
+      [{ movimento: MOVIMENTO }, ERROS.foto],
+      [{ movimento: MOVIMENTO, imagem: foto(), duracao: "20" }, ERROS.ajustesNaoAceitos],
+    ];
+    for (const [fields, erro] of casos) {
+      const res = await post(api, fields, "grok");
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(erro);
+    }
+    expect(api.submitted).toHaveLength(0);
+    expect(await new Db(env.DB).recentVideos()).toHaveLength(0);
+  });
+
+  it("conta comum não vê nem usa o Grok", async () => {
+    const api = new FakeVideoApi();
+    const member = await memberCookie();
+    expect(await (await get("/", member)).text()).not.toContain("/modelo/grok");
+    expect((await get("/modelo/grok", member)).status).toBe(404);
+    const res = await call(postForm("/modelo/grok", { movimento: MOVIMENTO, imagem: foto() }, { cookie: member }), api);
+    expect(res.status).toBe(404);
+    expect(api.submitted).toHaveLength(0);
   });
 });
 

@@ -91,6 +91,8 @@ export interface CostRule {
   seconds: { field: string } | { speech: string; audio?: string } | { video: string };
   /** US$ fixos por vídeo, além do preço por segundo (as imagens dos quadros-chave do Aleph 2). */
   extra?: number;
+  /** SKU de um preço fixo por vídeo, lido dos preços do modelo (a foto do Grok); soma ao `extra`. */
+  extraSku?: string;
 }
 
 /** O vídeo enviado, já lido: quantos segundos tem. */
