@@ -96,6 +96,7 @@ português, como quem usa escreve. **As quatro tentativas falharam**, sem custo,
 | `683563aa` | a mesma fala (de novo) | 17:09:12 | 17:10:07 |
 | `8f821fcc` | Sem fala (de novo) | 17:09:35 | 17:11:05 |
 | `1f9d65f0` | a mesma fala, **instruções em inglês** | 17:13:45 | 17:15:08 |
+| `8fd2b2cb` | a mesma, instruções em inglês, **8 s** | 17:30:45 | 17:31:31 |
 
 Os prompts saíram como planejado (instruções, a fala só com a mecânica ou `OMNI_SILENT`, e
 `OMNI_NO_TEXT`). A página do modelo no OpenRouter mostrava, na hora, **54% de
@@ -104,7 +105,11 @@ quatro falhas seguidas pesam contra só o acaso. Diferenças para o teste que de
 (lá, 8 s) e instruções em português (lá, tudo em inglês, menos a fala). As instruções de
 quem usa vão como foram escritas; a regra dos prompts do projeto é mandar ao gerador em
 inglês. O quinto pedido, com as instruções em inglês, também falhou: o idioma não é a causa
-(ou não sozinho). Sobram a duração de 4 s e o provedor fora do ar nesse horário.
+(ou não sozinho). O sexto, igual ao quinto mas com 8 s, também falhou: a duração não é a
+causa. A foto é a mesma em todos (o mesmo arquivo, conferido pelo hash), e a disponibilidade
+do modelo no OpenRouter estava entre 81% e 97% nas horas antes. Entre o vídeo que deu certo e
+os que falharam, só mudou o texto do pedido (o prompt curto, sem a orientação do Wan) e o
+horário.
 
 ## Próximo passo
 
