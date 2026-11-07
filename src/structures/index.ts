@@ -4,7 +4,7 @@ import type { VideoModel } from "../openrouter";
 import { HEYGEN_AVATAR, speechSeconds } from "./heygen";
 import { GROK } from "./grok";
 import { NANO_BANANA } from "./imagem";
-import { OMNI } from "./omni";
+import { OMNI, OMNI_11 } from "./omni";
 import { HEYGEN_DIRECT } from "./heygen-direta";
 import { SEEDANCE } from "./seedance";
 import type { CostRule, Structure, Values } from "./types";
@@ -13,7 +13,13 @@ import { WAN } from "./wan";
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, OMNI, SEEDANCE, ALEPH, NANO_BANANA];
+export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, OMNI, OMNI_11, SEEDANCE, ALEPH, NANO_BANANA];
+
+/** As versões do mesmo modelo (a principal primeiro); sem versões, só ela. */
+export function familyOf(structure: Structure): Structure[] {
+  const main = structure.family ?? structure.id;
+  return STRUCTURES.filter((s) => (s.family ?? s.id) === main);
+}
 
 /** A estrutura gera imagem (não vídeo)? */
 export const makesImage = (structure: Structure | undefined): boolean => structure?.output === "image";

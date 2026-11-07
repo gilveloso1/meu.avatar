@@ -580,11 +580,12 @@ export class Db {
    * As últimas instruções (`extra`) que a pessoa usou com cada avatar neste modelo, para o
    * campo voltar preenchido ao escolher o avatar (`perAvatar`). Avatar sem vídeo fica de fora.
    */
-  async lastExtraByAvatar(userId: number, structure: string): Promise<Map<string, string>> {
+  async lastExtraByAvatar(userId: number, structures: string[]): Promise<Map<string, string>> {
+    const marks = structures.map(() => "?").join(", ");
     const rows = (
       await this.d1
-        .prepare("SELECT avatar_id, extra FROM videos WHERE user_id = ? AND structure = ? AND avatar_id IS NOT NULL AND extra IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 500")
-        .bind(userId, structure)
+        .prepare(`SELECT avatar_id, extra FROM videos WHERE user_id = ? AND structure IN (${marks}) AND avatar_id IS NOT NULL AND extra IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 500`)
+        .bind(userId, ...structures)
         .all<{ avatar_id: string; extra: string }>()
     ).results;
     const last = new Map<string, string>();

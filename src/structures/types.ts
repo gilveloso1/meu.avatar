@@ -185,6 +185,13 @@ export interface Structure {
    * na mesma tabela e nas mesmas telas dos vídeos; sem isto, vídeo.
    */
   output?: "image";
+  /**
+   * Outra versão de um modelo: o id da estrutura principal. Fica fora da tela inicial e divide
+   * a página (seletor Versão) e a lista de vídeos com ela.
+   */
+  family?: string;
+  /** O nome da versão no seletor ("1.1"); só nas estruturas com versões. */
+  version?: string;
   /** "admin": só o administrador vê e usa (modelo em teste). */
   access: "all" | "admin";
   /** O áudio pronto passa pelo contêiner (src/audio.ts). */

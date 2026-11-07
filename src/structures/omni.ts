@@ -66,11 +66,19 @@ function defaultDuration(durations: number[], preferred: number): number {
   return durations.includes(preferred) ? preferred : durations.includes(8) ? 8 : durations[durations.length - 1]!;
 }
 
-export const OMNI: Structure = {
-  id: "omni",
-  name: "Gemini Omni 1.2 Flash",
-  model: "google/gemini-omni-1.2-flash",
-  summary: "O avatar da foto fala o seu texto, ou só faz a cena que você descreve. Clipes de até 15 s.",
+/**
+ * As duas versões são a mesma estrutura com outro modelo: a 1.2 é a principal (o card e a
+ * página); a 1.1 fica no seletor Versão enquanto a 1.2 estiver instável (o Google passa a 1.1
+ * para a 1.2 em 03/12/2026). Durações e preços vêm de cada modelo no OpenRouter.
+ */
+function omniVersion(v: { id: string; version: string; family?: string }): Structure {
+  return {
+  id: v.id,
+  family: v.family,
+  version: v.version,
+  name: `Gemini Omni ${v.version} Flash`,
+  model: `google/gemini-omni-${v.version}-flash`,
+  summary: "O avatar da foto fala o seu texto, ou só faz a cena que você descreve. Clipes curtos.",
   icon: "auto_awesome",
   access: "admin",
   // O áudio veio limpo no primeiro teste (−20 LUFS, sem clipping): sai como o modelo entrega.
@@ -190,4 +198,9 @@ export const OMNI: Structure = {
       { term: "Instruções", description: video.extra ?? "—" },
     ];
   },
-};
+  };
+}
+
+export const OMNI = omniVersion({ id: "omni", version: "1.2" });
+export const OMNI_11 = omniVersion({ id: "omni-11", version: "1.1", family: OMNI.id });
+

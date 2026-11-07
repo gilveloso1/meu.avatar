@@ -27,7 +27,7 @@ import { ERROS } from "../erros";
 import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, type Field, fixedCost, makesImage, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
+import { canUse, type Defaults, estimate, familyOf, type Field, fixedCost, makesImage, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { temSom } from "../som";
 import { type Alarme, CHAVE as ALARME, LIMITE_MS } from "../vigia";
@@ -519,9 +519,10 @@ ${error ? snackbar(error) : ""}`;
   private async home(user: User, url: URL): Promise<Response> {
     const q = (url.searchParams.get("q") ?? "").trim();
     const counts = await this.db.countByStructure();
-    const structures = STRUCTURES.filter((s) => canUse(s, user.role) && s.name.toLowerCase().includes(q.toLowerCase()));
+    // As versões de um modelo ficam no card da principal (o seletor Versão fica na página).
+    const structures = STRUCTURES.filter((s) => !s.family && canUse(s, user.role) && s.name.toLowerCase().includes(q.toLowerCase()));
     const cards = structures.map((s, i) => {
-      const n = counts.get(s.id) ?? 0;
+      const n = familyOf(s).reduce((sum, v) => sum + (counts.get(v.id) ?? 0), 0);
       return tileCard({
         href: `/modelo/${s.id}`,
         tile: `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">${esc(s.icon)}</span></span>`,
@@ -779,7 +780,7 @@ ${CANVAS_BODY}
     const q = (url.searchParams.get("q") ?? "").trim();
     // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
     const only = url.searchParams.get("modelo") ?? "";
-    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s) && (!only || s.id === only));
+    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s) && (!only || (s.family ?? s.id) === only));
     const videos = await this.db.videosByStructures(usable.map((s) => s.id), q);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // A mesma lista da página do modelo (filtro, ordem, vista e agrupamento no navegador); a busca pela fala fica no servidor.
@@ -828,7 +829,8 @@ ${CANVAS_BODY}
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const image = makesImage(structure);
-    const videos = await this.db.videosByStructure(structure.id);
+    // As versões do mesmo modelo dividem a lista.
+    const videos = await this.db.videosByStructures(familyOf(structure).filter((s) => canUse(s, user.role)).map((s) => s.id));
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // Os ativos abrem o painel, depois das seções que vêm antes (o "Uso"); o resto (a fala
     // inclusive) segue as seções da estrutura. O modelo aceita o que os campos dele pedem.
@@ -838,7 +840,8 @@ ${CANVAS_BODY}
     const voiceField = fields.find((f) => f.kind === "voice");
     const avatars = kinds.length ? await this.db.avatarsByUser(user.id) : [];
     // Campo que volta com o último texto usado com o avatar (as instruções do Omni, guardadas em `extra`).
-    const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.lastExtraByAvatar(user.id, structure.id) : undefined;
+    const family = familyOf(structure).filter((s) => canUse(s, user.role));
+    const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.lastExtraByAvatar(user.id, family.map((s) => s.id)) : undefined;
     const assets = kinds.length ? (await this.db.assetsByUser(user.id)).filter((a) => kinds.includes(a.kind)) : [];
     const leads = sections.filter((s) => s.lead);
     const rest = sections.filter((s) => !s.lead).map((s) => ({ ...s, fields: s.fields.filter((f) => !isFile(f)) })).filter((s) => s.fields.length);
@@ -849,6 +852,7 @@ ${CANVAS_BODY}
     <section class="pane pane--config" aria-labelledby="configuracao">
       <div class="pane__head"><h2 class="pane__headline" id="configuracao">Configuração</h2></div>
       <div class="pane__body" id="configuracao-corpo">
+        ${family.length > 1 ? versionSwitch(family, structure) : ""}
         ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
         ${kinds.length ? assetList(picks) : ""}
         ${rest.map((section) => formSection(section, value)).join("")}
@@ -1374,6 +1378,15 @@ function canQuickEdit(v: Video, structure: Structure): boolean {
 }
 
 /** Escolha única em botão segmentado; `form` liga os botões a um formulário de fora. */
+/**
+ * O seletor Versão das estruturas com versões (o Omni 1.1 e 1.2): o mesmo grupo de botões
+ * conectados, mas fora do formulário; trocar abre a página da outra versão (SCRIPT).
+ */
+function versionSwitch(family: Structure[], current: Structure): string {
+  const options = [...family].sort((a, b) => (a.version ?? "").localeCompare(b.version ?? "")).map((s) => ({ value: s.id, label: s.version ?? s.name }));
+  return segmented("versao", "Versão", options, current.id, "versao-fora").replace('<fieldset class="segmented-field">', '<fieldset class="segmented-field" data-version-switch>');
+}
+
 function segmented(name: string, label: string, options: Option[], selected: string, form?: string, hideLabel?: boolean): string {
   const owner = form ? ` form="${form}"` : "";
   // Opções com explicação: a da escolhida aparece embaixo (o script troca ao mudar).
@@ -2579,6 +2592,8 @@ const SCRIPT = `(() => {
   // botão abre um menu do M3 com as opções, igual em todos os navegadores. Também
   // em window.mdSelect(select), para campos postos depois (o painel do canvas);
   // devolve a função que desfaz (tira o menu e os ouvintes da janela).
+  // Seletor Versão (Omni 1.1 e 1.2): abre a página da versão escolhida.
+  for (const i of document.querySelectorAll("[data-version-switch] input")) i.addEventListener("change", () => { location.href = "/modelo/" + i.value; });
   let selectN = 0;
   const enhanceSelect = (sel) => {
     const n = ++selectN, label = sel.parentElement.querySelector(".text-field__label"), arrow = sel.parentElement.querySelector(".text-field__trailing");

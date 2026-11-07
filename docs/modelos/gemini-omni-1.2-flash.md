@@ -40,6 +40,15 @@ do 1.1 de 1280×720 e 5 s custou US$ 0,5068 (o preço do 1.1, 0,10136 × 5).
 
 ## Estrutura (07/11/2026)
 
+**Duas versões, um seletor (07/11/2026):** enquanto a 1.2 estiver instável, a 1.1 volta como
+segunda versão da mesma estrutura (`omniVersion` em `src/structures/omni.ts`): `omni` (1.2, a
+principal) e `omni-11` (1.1, `family: "omni"`). A página tem o seletor **Versão** (1.1 | 1.2)
+no alto do painel, que abre a página da outra versão; o card da tela inicial e a lista de
+vídeos são os dois juntos. Cada versão tem as durações e os preços do modelo dela (1.1: 3 a
+10 s, US$ 0,10/s em 720p). O Google passa a 1.1 para a 1.2 em 03/12/2026: até lá, tirar a
+`omni-11` (os vídeos dela continuam com a estrutura gravada).
+
+
 Formulário: **Instruções** (obrigatórias: a cena, o jeito de falar e o estilo, escritos por
 quem usa; ao escolher o avatar, voltam com as últimas usadas com ele neste modelo), **Idioma
 da fala** (português, inglês, espanhol ou **Sem fala**) e **Texto** (até 250 caracteres,
