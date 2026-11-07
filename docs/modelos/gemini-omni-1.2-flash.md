@@ -173,12 +173,12 @@ Gasto real dos testes pelo terminal: US$ 0,93 (o controle de 8 s em 720p e quatr
 fala. O com fala era o mesmo pedido que passou às 17:49, só com "In a single continuous shot,
 no scene cuts." (a frase do guia do Google) a mais.
 
-**Balanço de 07/11/2026 (23 pedidos ao 1.2, a mesma foto):**
+**Balanço de 07/11/2026 (22 pedidos ao 1.2, a mesma foto):**
 
 | Pedido | Prontos | Falhas |
 |---|---|---|
 | O antigo, longo (com a orientação do Wan), ou ele com a frase da fala nova | 4 | 1 (com "news anchor") |
-| Curto (só instruções e mecânica) | 2 | 16 |
+| Curto (só instruções e mecânica, com ou sem uma parte do antigo) | 2 | 15 |
 
 Testes isolados não bastam para achar a causa: o mesmo tipo de pedido passou e falhou com
 minutos de diferença. O padrão que se sustenta é o pedido longo passar e o curto falhar quase
