@@ -20,8 +20,8 @@
  */
 import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { handleMcp } from "../mcp";
-import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
-import type { AssetKind, Avatar, AvatarAsset, Db, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
+import { type Accounts, INVITE_HOURS, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
+import type { AccountRow, AssetKind, Avatar, AvatarAsset, Db, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
 import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
 import { ERROS, PARTES } from "../erros";
 import { pode } from "../permissoes";
@@ -44,6 +44,8 @@ export interface SiteConfig {
   defaults: Defaults;
   /** Rodando no computador (AMBIENTE=local no .dev.vars): esconde os avisos de configuração. */
   local?: boolean;
+  /** O endereço do site (SITE_URL), para montar o link de convite. */
+  siteUrl?: string;
 }
 
 const SITE_NAME = "Meu Avatar";
@@ -56,7 +58,7 @@ const ICONS = [
   "account_balance_wallet", "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today",
   "check", "check_circle", "checkroom", "chevron_left", "chevron_right", "close", "cloud", "content_copy", "content_cut", "content_paste", "control_point_duplicate",
   "crop_square", "date_range", "delete", "download", "drag_indicator", "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit",
-  "gesture", "graphic_eq", "grid_view", "hd", "history", "hourglass_top", "image", "info", "key", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitor_heart",
+  "gesture", "graphic_eq", "grid_view", "group", "hd", "history", "hourglass_top", "image", "info", "key", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitor_heart",
   "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments", "person", "person_add", "photo_library", "play_arrow", "play_circle",
   "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search", "send", "space_dashboard", "speed", "star", "sticky_note_2", "swap_vert", "switch_account",
   "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
@@ -139,6 +141,9 @@ export class Site {
     if (post && !sameSite(request, url)) return new Response("forbidden", { status: 403 });
 
     if (path === "/cadastro") return post ? this.signup(request) : this.signupPage();
+    // O link de convite (ou de troca de senha), aberto sem login.
+    const invite = /^\/convite\/([\w-]{20,})$/.exec(path);
+    if (invite) return post ? this.acceptInvite(request, invite[1]!) : this.invitePage(invite[1]!);
     if (path === "/entrar") {
       if (post) return this.login(request);
       return (await this.accounts.signupOpen()) ? redirect("/cadastro") : html(loginPage());
@@ -165,8 +170,15 @@ export class Site {
     if (!post && path === "/") return this.home(user, url);
     if (!post && path === "/videos") return this.videosPage(user, url);
     // O painel do administrador: para os outros, a página nem existe.
-    const panel = /^\/painel(?:\/(custos|atividade))?$/.exec(path);
-    if (!post && panel) return pode(user, "ver:painel") ? this.panelPage(user, url, (panel[1] as PanelTab | undefined) ?? "geral") : new Response("não encontrado", { status: 404 });
+    const panel = /^\/painel(?:\/(custos|atividade|contas))?$/.exec(path);
+    if (!post && panel) {
+      const tab = (panel[1] as PanelTab | undefined) ?? "geral";
+      const allowed = pode(user, "ver:painel") && (tab !== "contas" || pode(user, "gerenciar:contas"));
+      return allowed ? this.panelPage(user, url, tab) : new Response("não encontrado", { status: 404 });
+    }
+    // Contas: convidar, link de senha, suspender, reativar e os ajustes de permissão.
+    const account = /^\/painel\/contas(?:\/(\d+)\/(link|suspender|reativar|testador|canvas))?$/.exec(path);
+    if (post && account) return pode(user, "ver:painel") && pode(user, "gerenciar:contas") ? this.accountAction(request, user, url, account[1], account[2]) : new Response("não encontrado", { status: 404 });
     // Endereços da versão anterior.
     if (!post && path === "/novo") return redirect("/");
     const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
@@ -523,7 +535,7 @@ ${error ? snackbar(error) : ""}`;
    * O painel do administrador: uso e gasto do site inteiro. Abas (Visão geral e Custos), cada
    * uma com o seu endereço; os chips de período valem para as duas (30 dias por padrão).
    */
-  private async panelPage(user: User, url: URL, tab: PanelTab): Promise<Response> {
+  private async panelPage(user: User, url: URL, tab: PanelTab, accounts?: AccountsView): Promise<Response> {
     const period = PANEL_PERIODS.find((p) => p.id === url.searchParams.get("periodo")) ?? PANEL_PERIODS[1]!;
     const since = period.days ? new Date(Date.now() - period.days * 86_400_000).toISOString() : null;
     const activity = tab === "atividade";
@@ -537,8 +549,9 @@ ${error ? snackbar(error) : ""}`;
       activity ? this.db.alarm<Alarme>(ALARME) : Promise.resolve(null),
     ]);
     const machines = activity && this.machines ? await this.machines.estados() : [];
+    const list = tab === "contas" ? await this.db.accounts() : [];
     const query = `?periodo=${period.id}`;
-    const tabs = PANEL_TABS.map(
+    const tabs = PANEL_TABS.filter((t) => t.id !== "contas" || pode(user, "gerenciar:contas")).map(
       (t) => `<a class="tabs__tab interactive" href="${t.href}${query}"${t.id === tab ? ' aria-current="page"' : ""}><span class="tabs__content"><span class="icon">${t.icon}</span>${esc(t.label)}</span></a>`,
     ).join("");
     const here = PANEL_TABS.find((t) => t.id === tab)!.href;
@@ -548,16 +561,68 @@ ${error ? snackbar(error) : ""}`;
     const body = `
 <main class="page page--dash" id="conteudo">
   <nav class="tabs tabs--start" aria-label="Seções do painel">${tabs}</nav>
-  <nav class="chip-set library__tools" aria-label="Período">${chips}</nav>
+  ${tab === "contas" ? "" : `<nav class="chip-set library__tools" aria-label="Período">${chips}</nav>`}
   ${
-    tab === "custos"
+    tab === "contas"
+      ? panelAccounts(list, user, accounts ?? {})
+      : tab === "custos"
       ? panelCosts(stats, external, !!this.config.local)
       : activity
         ? panelActivity(stats, { failures, page: pageNumber, tokens, alarm, machines, since, local: !!this.config.local, from: `/painel/atividade${query}`, userId: user.id })
         : panelOverview(stats, query)
   }
 </main>`;
-    return html(page(`Painel · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Painel" } }));
+    return html(page(`Painel · ${SITE_NAME}`, body, { bar: { user, back: "/", title: "Painel" } }), accounts?.error ? 400 : 200);
+  }
+
+  /**
+   * As ações da aba Contas. Sem conta: convidar (cria a conta comum e mostra o link uma vez). Com
+   * conta (só as comuns): novo link de senha, suspender, reativar e os ajustes de testador e Canvas.
+   */
+  private async accountAction(request: Request, user: User, url: URL, id: string | undefined, action: string | undefined): Promise<Response> {
+    if (!id) {
+      const form = await request.formData();
+      const name = String(form.get("nome") ?? "");
+      const email = String(form.get("email") ?? "");
+      const result = await this.accounts.addMember(email, name);
+      if ("error" in result) return this.panelPage(user, url, "contas", { error: result.error, values: { name, email } });
+      return this.panelPage(user, url, "contas", { link: { name: result.user.name, url: `${this.origin(url)}/convite/${result.token}` } });
+    }
+    const target = await this.db.userById(Number(id));
+    // Só as contas comuns: o administrador não suspende nem ajusta a si mesmo por aqui.
+    if (!target || target.role !== "member") return new Response("não encontrado", { status: 404 });
+    if (action === "link") return this.panelPage(user, url, "contas", { link: { name: target.name, url: `${this.origin(url)}/convite/${await this.accounts.invite(target.id)}` } });
+    const toggle = (perm: string, on: boolean) => [...target.permissoes.filter((p) => p !== perm), ...(on ? [perm] : [])];
+    const has = (perm: string) => target.permissoes.includes(perm);
+    if (action === "suspender") {
+      await this.db.setPermissoes(target.id, toggle("suspensa", true));
+      await this.db.endSessions(target.id);
+    }
+    if (action === "reativar") await this.db.setPermissoes(target.id, toggle("suspensa", false));
+    if (action === "testador") await this.db.setPermissoes(target.id, toggle("usar:modelo:teste", !has("usar:modelo:teste")));
+    if (action === "canvas") await this.db.setPermissoes(target.id, toggle("usar:canvas", !has("usar:canvas")));
+    return redirect("/painel/contas");
+  }
+
+  /** O endereço do site para os links (o oficial, SITE_URL; sem ele, o do pedido). */
+  private origin(url: URL): string {
+    return this.config.siteUrl ? new URL(this.config.siteUrl).origin : url.origin;
+  }
+
+  /** A página do link de convite: criar (ou trocar) a senha. Link que não vale: o aviso e o Entrar. */
+  private async invitePage(token: string, error?: string): Promise<Response> {
+    const user = await this.accounts.inviteUser(token);
+    if (!user) return html(invalidInvitePage(), 404);
+    return html(invitePageHtml(token, user.name, user.email, Boolean(user.passwordHash), error), error ? 400 : 200);
+  }
+
+  private async acceptInvite(request: Request, token: string): Promise<Response> {
+    const form = await request.formData();
+    const password = String(form.get("senha") ?? "");
+    if (password !== String(form.get("confirmar") ?? "")) return this.invitePage(token, ERROS.senhasDiferentes);
+    const result = await this.accounts.acceptInvite(token, password);
+    if ("error" in result) return result.error === ERROS.conviteInvalido ? html(invalidInvitePage(), 404) : this.invitePage(token, result.error);
+    return redirect("/", sessionCookie(result.token));
   }
 
   /** Tela inicial: um card por estrutura que a pessoa pode usar; a busca filtra pelo nome. */
@@ -1416,6 +1481,8 @@ interface MenuItem {
   icon: string;
   href: string;
   download?: boolean;
+  /** A ação muda algo no servidor: vira um formulário POST para href (como o Sair). */
+  post?: boolean;
 }
 
 /** Menu do M3 aberto por um botão de ícone (três pontos); fecha ao escolher ou ao tocar fora (SCRIPT). */
@@ -1423,7 +1490,11 @@ function overflowMenu(label: string, items: MenuItem[]): string {
   return `<details class="menu" data-menu>
       <summary class="icon-button interactive" aria-label="${esc(label)}" title="Mais opções"><span class="icon">more_vert</span></summary>
       <div class="menu__list">${items
-        .map((i) => `<a class="menu__item interactive" href="${esc(i.href)}"${i.download ? " download" : ""}><span class="icon">${i.icon}</span>${esc(i.label)}</a>`)
+        .map((i) =>
+          i.post
+            ? `<form method="post" action="${esc(i.href)}"><button class="menu__item interactive" type="submit"><span class="icon">${i.icon}</span>${esc(i.label)}</button></form>`
+            : `<a class="menu__item interactive" href="${esc(i.href)}"${i.download ? " download" : ""}><span class="icon">${i.icon}</span>${esc(i.label)}</a>`,
+        )
         .join("")}</div>
     </details>`;
 }
@@ -2094,11 +2165,19 @@ function money(n: number): string {
   return `US$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-type PanelTab = "geral" | "custos" | "atividade";
+type PanelTab = "geral" | "custos" | "atividade" | "contas";
+
+/** O que a aba Contas mostra depois de uma ação: o erro do formulário de convite ou o link gerado (uma vez só). */
+interface AccountsView {
+  error?: string;
+  values?: { name: string; email: string };
+  link?: { name: string; url: string };
+}
 const PANEL_TABS: { id: PanelTab; href: string; label: string; icon: string }[] = [
   { id: "geral", href: "/painel", label: "Visão geral", icon: "space_dashboard" },
   { id: "custos", href: "/painel/custos", label: "Custos", icon: "payments" },
   { id: "atividade", href: "/painel/atividade", label: "Atividade", icon: "monitor_heart" },
+  { id: "contas", href: "/painel/contas", label: "Contas", icon: "group" },
 ];
 /** Na Visão geral, os modelos que mais gastaram; o resto vira "Outros" (a lista inteira fica em Custos). */
 const PANEL_TOP_MODELS = 5;
@@ -2306,6 +2385,78 @@ function panelActivity(
       </section>`,
       },
     )}
+  </div>`;
+}
+
+/**
+ * Contas (layout pedido pelo usuário em 07/11/2026): à direita, a lista das contas na metade da
+ * largura e na altura toda, com o menu de ações de cada conta comum; à esquerda, os números e,
+ * embaixo, o convite na altura que sobra (o formulário e, logo depois de gerar, o link, mostrado
+ * uma vez só: o banco guarda só o hash). O título fica dentro do card, parado; o conteúdo rola.
+ */
+function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
+  const now = new Date().toISOString();
+  const state = (a: AccountRow): { label: string; alert?: boolean } =>
+    a.permissoes.includes("suspensa") ? { label: "Suspensa", alert: true } : a.hasPassword ? { label: "Ativa" } : a.inviteUntil && a.inviteUntil > now ? { label: `Convite até ${formatDate(a.inviteUntil)}` } : { label: "Convite vencido", alert: true };
+  const suspended = list.filter((a) => a.permissoes.includes("suspensa")).length;
+  const pending = list.filter((a) => !a.hasPassword && !a.permissoes.includes("suspensa")).length;
+  const action = (a: AccountRow, path: string, icon: string, label: string): MenuItem => ({ label, icon, href: `/painel/contas/${a.id}/${path}`, post: true });
+  // Lista expressiva do M3, no estilo segmentado (a mesma dos Detalhes dos vídeos): avatar com a
+  // inicial, o nome, o e-mail e o estado numa linha de apoio, e o menu de ações à direita.
+  const rows = list.map((a) => {
+    const st = state(a);
+    const extras = [...(a.permissoes.includes("usar:modelo:teste") ? ["Testador"] : []), ...(a.permissoes.includes("usar:canvas") ? ["Canvas"] : [])];
+    const role = a.role === "admin" ? "Administrador" : ["Membro", ...extras].join(", ");
+    const menu =
+      a.role === "member"
+        ? overflowMenu(`Ações: ${a.name}`, [
+            action(a, "link", "link", a.hasPassword ? "Link de nova senha" : "Novo convite"),
+            a.permissoes.includes("suspensa") ? action(a, "reativar", "check_circle", "Reativar") : action(a, "suspender", "lock", "Suspender"),
+            action(a, "testador", "star", a.permissoes.includes("usar:modelo:teste") ? "Tirar de testador" : "Tornar testador"),
+            action(a, "canvas", "layers", a.permissoes.includes("usar:canvas") ? "Tirar o Canvas" : "Liberar o Canvas"),
+          ])
+        : "";
+    return `<li class="vrow vrow--account">
+        <span class="avatar avatar--list" aria-hidden="true">${esc((a.name.trim()[0] ?? "?").toUpperCase())}</span>
+        <span class="vrow__text">
+          <span class="vrow__headline">${esc(a.id === me.id ? `${a.name} (você)` : a.name)}</span>
+          <span class="vrow__support">${esc(a.email)}</span>
+          <span class="vrow__support${st.alert ? " vrow__support--alert" : ""}">${esc([st.label, role, plural(a.videos, "vídeo", "vídeos")].join(" · "))}</span>
+        </span>
+        ${menu}
+      </li>`;
+  });
+  const linkBox = v.link
+    ? `<section class="viewer__card" aria-labelledby="card-link">
+        <h3 class="qe-result__title" id="card-link">Link de ${esc(v.link.name)}</h3>
+        <div class="text-field"><input class="text-field__input" id="link-convite" readonly value="${esc(v.link.url)}" placeholder=" "><label class="text-field__label" for="link-convite">Link</label></div>
+        <button class="button button--filled interactive" type="button" data-copy="${esc(v.link.url)}"><span class="icon">content_copy</span><span>Copiar</span></button>
+        <p class="qe-result__note">Vale por ${INVITE_HOURS} horas e funciona uma vez. Mande por WhatsApp ou e-mail.</p>
+      </section>`
+    : "";
+  const inviteForm = `<section class="viewer__card dash__card" aria-labelledby="card-convidar">
+        <h2 class="qe-result__title" id="card-convidar">Convidar</h2>
+        <div class="dash__scroll">
+        <form class="dash__form" method="post" action="/painel/contas">
+          ${v.error ? `<p class="dialog__error" role="alert">${esc(v.error)}</p>` : ""}
+          ${textField("nome", "Nome", `type="text" autocomplete="off" required maxlength="80" value="${esc(v.values?.name ?? "")}"`)}
+          ${textField("email", "E-mail", `type="email" autocomplete="off" required value="${esc(v.values?.email ?? "")}"`, "A pessoa recebe um link para criar a senha.")}
+          <button class="button button--filled interactive" type="submit"><span class="icon">person_add</span>Gerar convite</button>
+        </form>
+        </div>
+      </section>`;
+  return `<div class="dash dash--contas">
+    <div class="dash__kpis">
+      ${statCard("group", "Contas", count(list.length), "com a sua", true)}
+      ${statCard("check_circle", "Ativas", count(list.length - pending - suspended), "já criaram a senha")}
+      ${statCard("schedule", "Convites", count(pending), "esperando a senha")}
+      ${statCard("lock", "Suspensas", count(suspended), "sem acesso ao site")}
+    </div>
+    <section class="viewer__card dash__card dash__pane--contas" aria-labelledby="card-contas">
+      <h2 class="qe-result__title" id="card-contas">Contas</h2>
+      <div class="dash__scroll"><ul class="vrows vrows--accounts">${rows.join("")}</ul></div>
+    </section>
+    <div class="dash__pane--convidar">${linkBox}${inviteForm}</div>
   </div>`;
 }
 
@@ -2632,6 +2783,7 @@ function loginPage(error?: string, email = ""): string {
     ${textField("email", "E-mail", `type="email" autocomplete="username" required autofocus value="${esc(email)}"`)}
     ${textField("senha", "Senha", `type="password" autocomplete="current-password" required`)}
     <button class="button button--filled interactive" type="submit"><span class="icon">lock</span>Entrar</button>
+    <p class="login__text">Esqueceu a senha? ${esc(PARTES.get(ERROS.conviteInvalido)![1]!)}</p>
   </form>`,
     error,
   );
@@ -2659,6 +2811,35 @@ function closedPage(): string {
     "",
     `<div class="card card--outlined login">
     ${authHead("Cadastro fechado", "O estúdio já tem administrador. Novas contas só por convite dele.")}
+    <a class="button button--filled interactive" href="/entrar"><span class="icon">lock</span>Entrar</a>
+  </div>`,
+  );
+}
+
+/** Criar (ou trocar) a senha pelo link de convite. */
+function invitePageHtml(token: string, name: string, email: string, hasPassword: boolean, error?: string): string {
+  const title = hasPassword ? "Trocar a senha" : "Criar a senha";
+  return authPage(
+    title,
+    "",
+    `<form class="card card--outlined login" method="post" action="/convite/${esc(token)}">
+    ${authHead(title, `Olá, ${name}. Escolha a senha para entrar com ${email}.`)}
+    ${textField("senha", "Senha", `type="password" autocomplete="new-password" required autofocus minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}"`, `De ${PASSWORD_MIN} a ${PASSWORD_MAX} caracteres.`)}
+    ${textField("confirmar", "Repita a senha", `type="password" autocomplete="new-password" required minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}"`)}
+    <button class="button button--filled interactive" type="submit"><span class="icon">lock</span>Salvar a senha</button>
+  </form>`,
+    error,
+  );
+}
+
+/** O link que venceu, já foi usado ou não existe. */
+function invalidInvitePage(): string {
+  const [houve, fazer] = PARTES.get(ERROS.conviteInvalido)!;
+  return authPage(
+    "Link inválido",
+    "",
+    `<div class="card card--outlined login">
+    ${authHead(houve!, fazer!)}
     <a class="button button--filled interactive" href="/entrar"><span class="icon">lock</span>Entrar</a>
   </div>`,
   );
@@ -3112,11 +3293,13 @@ const SCRIPT = `(() => {
       qeEl.querySelector("[data-qe-close]").addEventListener("click", () => qeEl.classList.remove("is-again"));
     }
 
-    for (const c of viewer.querySelectorAll("[data-copy]")) c.addEventListener("click", async () => {
-      const label = c.lastElementChild;
-      try { await navigator.clipboard.writeText(c.dataset.copy); label.textContent = "Copiado"; setTimeout(() => (label.textContent = "Copiar"), 2000); } catch {}
-    });
   }
+
+  // Copiar (o texto do vídeo, o link de convite): o rótulo vira "Copiado" por 2 segundos.
+  for (const c of document.querySelectorAll("[data-copy]")) c.addEventListener("click", async () => {
+    const label = c.lastElementChild;
+    try { await navigator.clipboard.writeText(c.dataset.copy); label.textContent = "Copiado"; setTimeout(() => (label.textContent = "Copiar"), 2000); } catch {}
+  });
 
   // Diálogos: abrir e buscar na lista de avatares (a mesma do painel de ativos).
   for (const b of document.querySelectorAll("[data-dialog-open]")) b.addEventListener("click", () => document.getElementById(b.dataset.dialogOpen).showModal());

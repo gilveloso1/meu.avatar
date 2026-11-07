@@ -84,6 +84,7 @@ export function createSite(
   machines: MaquinasApi | null = createMachines(env),
 ): Site {
   return new Site(new Db(env.DB), env.MIDIA, studio, exports, createAccounts(env), costs, machines, {
+    siteUrl: env.SITE_URL,
     defaults: {
       duration: Number(env.VIDEO_DURATION),
       resolution: env.VIDEO_RESOLUTION,

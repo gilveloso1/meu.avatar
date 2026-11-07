@@ -208,8 +208,12 @@ Portadas do estuda.mais (`src/auth.ts`):
 
 - **A primeira conta cadastrada é a do administrador** (`/cadastro`). Depois
   dela, o cadastro fecha: `/cadastro` mostra "Cadastro fechado" e recusa novos
-  pedidos. Convidar outras pessoas é a próxima etapa (o estuda.mais já tem os
-  links de convite prontos para portar).
+  pedidos. As outras contas entram por convite: no Painel, aba **Contas**, o administrador
+  escreve o nome e o e-mail e toca em **Gerar convite**; o link (vale por 72 horas, uma vez só)
+  vai por WhatsApp ou e-mail. Não há envio de e-mail pelo site.
+- Na mesma aba: **Link de nova senha** (o "esqueci a senha" de quem já tem conta), **Suspender**
+  e **Reativar** (os dados ficam; a sessão cai na hora), **Tornar testador** (vê os modelos em
+  teste) e **Liberar o Canvas**. São ajustes em `users.permissoes` (`src/permissoes.ts`).
 - **Logo depois da primeira publicação, crie a conta do administrador.**
   Enquanto não houver conta, quem abrir o endereço primeiro vira o admin.
 - A senha (10 a 64 caracteres) fica só como hash bcrypt (custo 12). Cinco
@@ -220,9 +224,9 @@ Portadas do estuda.mais (`src/auth.ts`):
 - Todo formulário precisa vir do próprio site (cabeçalho Origin), as páginas
   não ficam em cache nem abrem dentro de outros sites, e o script da página só
   roda com o nonce da CSP.
-- Esqueceu a senha? Por enquanto, apague a conta no D1
-  (`npx wrangler d1 execute meu-avatar --remote --command "DELETE FROM users"`)
-  e cadastre de novo: os vídeos continuam.
+- O administrador esqueceu a senha? `npm run link-senha -- --email <e-mail> --remoto` mostra o
+  link para criar uma nova (vale por 1 hora, uma vez só). Nunca apague a conta no D1: com as
+  chaves estrangeiras, os projetos, os avatares e as sessões iriam junto.
 
 ### Esta instalação
 

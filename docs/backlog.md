@@ -133,8 +133,6 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    para o administrador testar; ver abaixo)
 3. Voz gerada à parte e avatar falante (o HeyGen Avatar IV já faz isso numa
    chamada só; ver o item 1)
-4. Contas e permissões (cada conta vê só o que é dela; ver abaixo), com os convites
-5. Esqueci a senha
 
 ## Onde estamos (25/10/2026)
 
@@ -284,7 +282,7 @@ que sincroniza a boca com o áudio: `heygen/avatar-iv` no OpenRouter
 referência. É o que o Higgsfield faz no explainer narrado (voz à parte, juntada
 depois). Muda mais o fluxo: duas chamadas e duas esperas por vídeo.
 
-## 4. Contas e permissões (aprovado em 07/11/2026)
+## Contas e permissões (aprovado em 07/11/2026, feito)
 
 Antes de entrar a segunda pessoa, cada conta precisa ver só o que é dela, conferido no banco
 e não tela por tela. Tudo o que existe hoje é do administrador (no ar, nenhum vídeo sem dono).
@@ -303,21 +301,12 @@ e não tela por tela. Tudo o que existe hoje é do administrador (no ar, nenhum 
   ajustes em `users.permissoes` (testador, `-usar:canvas`, `suspensa`). O CHECK de `users.role`
   ficou: tirá-lo exige refazer a tabela, e no D1 isso apagaria em cascata sessões, projetos e
   avatares. Os ajustes cobrem o que um papel novo cobriria.
-- **Falta, um PR por vez:**
-  1. Convites (abaixo).
-
-Hoje o primeiro cadastro vira admin e o cadastro fecha. O admin precisa
-convidar outras pessoas. Portar do estuda.mais (`src/auth.ts` e o painel
-`src/admin/`): links de convite de uso único com validade (72 h), tabela
-`invites`, página para criar a senha pelo link e remover acesso. A tabela
-`users` já tem `role` (`admin`/`member`) e aceita `password_hash` nulo
-(convite não aceito).
-
-## 5. Esqueci a senha
-
-No estuda.mais é o mesmo link de convite, gerado de novo pelo admin. Para o
-próprio admin, hoje o caminho é apagar a conta no D1 e cadastrar de novo
-(`docs/operacao.md`). Fazer junto com o item 4.
+  Convites (porte do estuda.mais): aba **Contas** do painel (`gerenciar:contas`), link de uso
+  único por 72 horas (`invites`, migration 0020), "Link de nova senha" para quem esqueceu e
+  `npm run link-senha` para o administrador; suspender, reativar, testador e Canvas por conta.
+- **Ideias para depois:** renovar a sessão a cada uso (o TabNews renova; aqui ela vence em 30
+  dias de qualquer jeito), "Trocar a senha" no menu do perfil e o custo do bcrypt (12; o TabNews
+  usa 14), medindo antes o tempo de CPU do login no Worker.
 
 ## Painel do administrador (04/11/2026)
 

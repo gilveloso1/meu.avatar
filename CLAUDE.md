@@ -245,6 +245,7 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 
 - Painel do administrador (`/painel`, pelo item "Painel" do menu do perfil; 404 para quem não é
   administrador): abas que são links (Visão geral em `/painel`, Custos em `/painel/custos`,
+  Contas em `/painel/contas` (convidar, link de nova senha, suspender, testador e Canvas; sem os chips),
   Atividade em `/painel/atividade`: as três máquinas agora (`src/maquinas.ts`, lido do próprio
   contêiner, sem ligar), falhas com o motivo técnico, tokens e o alarme) e os
   chips de período (7 dias, 30 dias, tudo) valendo para todas. Regras de layout (da skill dataviz e

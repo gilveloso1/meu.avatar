@@ -465,6 +465,34 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
   .page--dash .dash__pane-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .page--dash .dash__mosaic { overflow-y: auto; overscroll-behavior: contain; align-content: start; }
 }
+/* Aba Contas (pedido do usuário): a lista à direita, na metade da largura e na altura toda; à
+   esquerda, os números e o convite embaixo, na altura que sobra. O título fica dentro do card,
+   parado, e o conteúdo rola por dentro (dash__scroll). No celular, um embaixo do outro. */
+.dash--contas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 24px; }
+.dash__pane--convidar { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dash__card { min-width: 0; }
+/* Contêiner, como o corpo do painel: a lista escolhe uma ou duas linhas pela largura dele. */
+.dash__scroll { min-height: 0; container-type: inline-size; }
+@media (min-width: 840px) {
+  .dash--contas { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-items: stretch; }
+  .dash--contas > .dash__kpis { grid-column: 1; grid-row: 1; align-self: start; }
+  .dash--contas > .dash__pane--convidar { grid-column: 1; grid-row: 2; min-height: 0; }
+  .dash--contas > .dash__pane--contas { grid-column: 2; grid-row: 1 / span 2; }
+  .dash--contas .dash__card { min-height: 0; }
+  .dash__pane--convidar > .dash__card { flex: 1; }
+  /* Na metade da tela, os quatro números não cabem bem lado a lado: dois por linha. */
+  .dash--contas .dash__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Só rola na vertical: a lista tem margem negativa de 8 px (a camada do item vai até a borda). */
+  .dash--contas .dash__scroll { flex: 1; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+}
+/* A lista de contas: lista expressiva segmentada (a mesma dos Detalhes), com itens de três linhas
+   (M3: 88 px), o avatar com a inicial (40 px) à esquerda e o menu de ações à direita. */
+.vrows--accounts { margin: 0; padding: 0; list-style: none; }
+/* Fundo um tom abaixo do branco (surface-container-low), ainda claro sobre o card (highest). */
+.vrow.vrow--account { grid-template-columns: 40px minmax(0, 1fr) 48px; min-height: 88px; padding: 12px 4px 12px 16px; color: var(--md-sys-color-on-surface-variant); background: var(--md-sys-color-surface-container-low); }
+.vrow--account .vrow__support { display: block; }
+.vrow--account .vrow__support--alert { color: var(--md-sys-color-error); }
+.avatar.avatar--list { width: 40px; height: 40px; border: 0; font: var(--md-sys-typescale-title-medium); }
 /* Paginação no pé do card (a das tabelas de dados do Material): o intervalo e as setas, à direita. */
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 -8px -8px 0; }
 .pager__range { margin-right: 12px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
@@ -991,6 +1019,10 @@ button.asset-upload { background: none; }
 .dash__list--failures { --cols: 24px minmax(0, 3fr) 104px minmax(0, 96px) minmax(0, 2fr) 88px; }
 .dash__list--tokens { --cols: 24px minmax(0, 1fr) minmax(0, 160px) 160px 136px; }
 .dash__list--machines { --cols: 24px minmax(0, 200px) minmax(0, 1fr) 160px; }
+/* Campo de texto dentro de um card do painel: o rótulo flutuante corta a borda com a cor do card. */
+.dash .viewer__card { --field-surface: var(--md-sys-color-surface-container-highest); }
+.dash__form { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.dash__form .text-field { align-self: stretch; }
 /* A máquina ligada sem trabalho há muito tempo (a que gasta à toa): ícone e estado na cor de erro. */
 .dash__list .dash__alert .avatar-option > .icon, .dash__list .dash__alert .dash__cell { color: var(--md-sys-color-error); }
 .dash__list .avatar-option > .icon { color: var(--md-sys-color-on-surface-variant); }
@@ -1052,6 +1084,7 @@ button.asset-upload { background: none; }
 .login__head .top-app-bar__logo { width: 56px; height: 56px; border-radius: var(--md-sys-shape-corner-large); }
 .login__title { font: var(--md-sys-typescale-headline-small); }
 .login__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.login > .login__text { text-align: center; }
 .login .button { align-self: stretch; }
 .login { --field-surface: var(--md-sys-color-surface); }
 
