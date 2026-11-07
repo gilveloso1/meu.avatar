@@ -118,6 +118,23 @@ O provedor estava no ar: **o Omni recusa o prompt curto** (instruções, a fala 
 mecânica e o pedido de nada de texto na tela), com ou sem fala, em português ou inglês, de
 4 ou 8 s. Falta achar qual parte.
 
+**Testes pelo terminal (17:37, 360p, 4 s, a mesma foto):**
+
+| Teste | Pedido | Resultado |
+|---|---|---|
+| 1 | O pedido antigo inteiro | Pronto, US$ 0,093 (`gen-vid-1794073015-zXGB7k37ET5nNEIqnnXF`) |
+| 2 | Curto + "Video: photorealistic, steady framing, natural skin texture." | Falhou |
+| 3 | Curto + a orientação de som (sem música, efeitos, eco, distorção) | Falhou |
+| 4 | Curto + a câmera (parada, plano médio, sem cortes) | Falhou |
+| 5 | Curto sem "No on-screen text…" | Falhou |
+
+"Curto": as instruções "Financial news anchor in a studio, speaking with energy and
+confidence while looking at the camera and gesturing with her hands." e a fala com a
+mecânica. Nenhuma parte do pedido antigo, sozinha, resolve. **Todos os pedidos que falharam
+falam em notícias** ("notícias financeiras", "news anchor"); o antigo, não. Hipótese: o
+filtro do Google barra vídeo realista de alguém apresentando notícias (risco de notícia
+falsa), sem dizer o motivo.
+
 ## Próximo passo
 
 Gerar um vídeo com fala e instruções (sem a orientação de voz do Wan) e um sem fala; medir o
