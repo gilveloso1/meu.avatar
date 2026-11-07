@@ -294,12 +294,12 @@ export class Exports {
     return result;
   }
 
-  /** O arquivo de um bloco no R2: só um vídeo que a pessoa pode usar, um ativo de avatar de quem é dono do projeto ou um arquivo deste projeto. */
+  /** O arquivo de um bloco no R2: só um vídeo de quem é dono do projeto (num modelo que pode usar), um ativo de avatar dele ou um arquivo deste projeto. */
   async source(project: Project, role: Role, src: unknown): Promise<string> {
     const path = typeof src === "string" ? src : "";
     const video = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.(?:mp4|png|jpg|webp)$/.exec(path);
     if (video) {
-      const v = await this.db.videoById(video[1]!);
+      const v = await this.db.conta(project.user_id).video(video[1]!);
       const structure = v && structureById(v.structure);
       const key = video[2] === "original" ? v?.video_key : video[2] === "editado" ? v?.edited_key : (v?.processed_key ?? v?.video_key);
       if (key && structure && canUse(structure, role)) return key;

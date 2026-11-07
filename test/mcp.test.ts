@@ -28,7 +28,7 @@ beforeEach(async () => {
   const { email } = (await env.DB.prepare("SELECT email FROM users WHERE role = 'admin'").first<{ email: string }>())!;
   await token(email, "ma_admin");
   const now = new Date().toISOString();
-  await env.DB.prepare("INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES (?, 'completed', 'Oi, gente', 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)").bind(VIDEO, `videos/${VIDEO}.mp4`, now, now).run();
+  await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, 'completed', 'Oi, gente', 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)").bind(VIDEO, `videos/${VIDEO}.mp4`, now, now).run();
 });
 
 describe("acesso ao MCP", () => {
@@ -310,5 +310,17 @@ describe("gerar_imagem", () => {
     const r = await comApi(api, "gerar_imagem", { projeto: id, descricao: "cena" });
     expect(r.content[0]!.text).toContain("imagem_falhou");
     expect(r.content[0]!.text).not.toContain("HTTP 500");
+  });
+});
+
+describe("vídeo de outra conta", () => {
+  it("o listar_videos do agente não traz", async () => {
+    const alheio = "55555555-5555-4555-8555-555555555555";
+    await memberCookie();
+    const now = new Date().toISOString();
+    await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES ((SELECT id FROM users WHERE email = 'membro@exemplo.com'), ?, 'completed', 'Oi, gente', 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)").bind(alheio, `videos/${alheio}.mp4`, now, now).run();
+    const ids = dados<{ videos: { id: string }[] }>(await ferramenta("listar_videos")).videos.map((v) => v.id);
+    expect(ids).toContain(VIDEO);
+    expect(ids).not.toContain(alheio);
   });
 });

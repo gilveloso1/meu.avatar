@@ -272,7 +272,7 @@ export class Api {
     // Só vídeos: as imagens do modelo de imagem não entram num projeto.
     const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s)).map((s) => s.id);
     // Um a mais que o pedido diz se há outra página.
-    const videos = await this.db.readyVideos(usable, { q: (p.get("q") ?? "").trim(), desde, ate, depois: criado && id ? { criado, id } : undefined, limite: limite + 1 });
+    const videos = await this.db.conta(user.id).readyVideos(usable, { q: (p.get("q") ?? "").trim(), desde, ate, depois: criado && id ? { criado, id } : undefined, limite: limite + 1 });
     const pagina = videos.slice(0, limite);
     const ultimo = pagina[pagina.length - 1];
     return Response.json({
@@ -297,7 +297,7 @@ export class Api {
     const projetos = (await this.db.projectsByUser(user.id)).filter((o) => !projeto || o.id === projeto);
     const dados = projetos.map((o) => ({ projeto: o, data: JSON.parse(o.data) as CanvasProject }));
     const videos = [...new Set(dados.flatMap((d) => d.data.blocks.map((b) => /^\/videos\/([0-9a-f-]{36})/.exec(b.src)?.[1]).filter((v): v is string => !!v)))];
-    const avatarDoVideo = await this.db.videoAvatars(videos);
+    const avatarDoVideo = await this.db.conta(user.id).videoAvatars(videos);
     const lista = [];
     for (const { projeto: o, data } of dados) {
       const avatares = [...new Set(data.blocks.map((b) => /^\/avatares\/([0-9a-f-]{36})\//.exec(b.src)?.[1] ?? avatarDoVideo.get(/^\/videos\/([0-9a-f-]{36})/.exec(b.src)?.[1] ?? "")).filter((v): v is string => !!v))];
@@ -573,24 +573,24 @@ export class Api {
     }
   }
 
-  /** O arquivo de um bloco novo: um vídeo que a pessoa pode usar, um ativo de um avatar dela ou um arquivo deste projeto. */
+  /** O arquivo de um bloco novo: um vídeo dela que ela pode usar, um ativo de um avatar dela ou um arquivo deste projeto. */
   private async source(user: User, project: Project, c: Record<string, unknown>): Promise<Fonte | null> {
     if (typeof c.ativo === "string") {
       const a = await this.db.assetOfUser(user.id, c.ativo);
       if (!a) return null;
       // O vídeo gerado tem a duração conhecida; o enviado, como o arquivo do projeto, pede dur.
-      const video = a.source_video ? await this.db.videoById(a.source_video) : null;
+      const video = a.source_video ? await this.db.conta(user.id).video(a.source_video) : null;
       return { src: assetSrc(a), kind: KINDS[a.kind], dur: video ? await this.duration(video) : null, name: a.name };
     }
     // A imagem do modelo de imagem (gerar_imagem): entra como bloco de imagem.
     if (typeof c.imagem === "string") {
-      const v = await this.db.videoById(c.imagem);
+      const v = await this.db.conta(user.id).video(c.imagem);
       const structure = v && structureById(v.structure);
       if (!v || !v.video_key || v.status !== "completed" || !structure || !makesImage(structure) || !canUse(structure, user.role)) return null;
       return { src: `/videos/${v.id}.${v.video_key.split(".").pop()}`, kind: "image", dur: null, name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Imagem" };
     }
     if (typeof c.video === "string") {
-      const v = await this.db.videoById(c.video);
+      const v = await this.db.conta(user.id).video(c.video);
       const structure = v && structureById(v.structure);
       if (!v || !ready(v) || !structure || makesImage(structure) || !canUse(structure, user.role)) return null;
       return { src: `/videos/${v.id}.mp4`, kind: "video", dur: await this.duration(v), name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo" };
@@ -632,7 +632,7 @@ export class Api {
   private async face(user: User, src: string): Promise<{ x: number; y: number } | null> {
     const id = /^\/videos\/([0-9a-f-]{36})/.exec(src)?.[1];
     const asset = /^\/avatares\/[0-9a-f-]{36}\/arquivos\/([0-9a-f-]{36})$/.exec(src)?.[1];
-    const face = id ? (await this.db.videoById(id))?.face : asset ? (await this.db.assetOfUser(user.id, asset))?.face : null;
+    const face = id ? (await this.db.conta(user.id).video(id))?.face : asset ? (await this.db.assetOfUser(user.id, asset))?.face : null;
     if (!face) return null;
     try {
       const { x, y } = JSON.parse(face) as { x?: unknown; y?: unknown };

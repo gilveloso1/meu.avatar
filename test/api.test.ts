@@ -35,7 +35,7 @@ const api = (path: string, code: string | null, body?: unknown, exporter = null 
 
 async function video(id: string, structure = "wan", status = "completed") {
   const now = new Date().toISOString();
-  await env.DB.prepare("INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES (?, ?, 'Oi, gente, hoje vou mostrar meu produto', 'alibaba/wan-3.0', 10, '480p', '9:16', ?, ?, ?, ?)")
+  await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, ?, 'Oi, gente, hoje vou mostrar meu produto', 'alibaba/wan-3.0', 10, '480p', '9:16', ?, ?, ?, ?)")
     .bind(id, status, `videos/${id}.mp4`, structure, now, now)
     .run();
 }
@@ -116,7 +116,7 @@ describe("listar vídeos", () => {
   async function porDia() {
     for (let d = 1; d <= 5; d++) {
       const quando = `2026-10-0${d}T12:00:00.000Z`;
-      await env.DB.prepare("INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES (?, 'completed', ?, 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)")
+      await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, 'completed', ?, 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)")
         .bind(`dia-${d}`, `Fala do dia ${d}`, `videos/dia-${d}.mp4`, quando, quando)
         .run();
     }
@@ -1420,5 +1420,49 @@ describe("pausasAcima", () => {
   });
   it("trecho todo em silêncio fica como está", () => {
     expect(pausasAcima([[0, 5]], 0, 5, 0.5)).toEqual([[0, 5]]);
+  });
+});
+
+describe("vídeo de outra conta", () => {
+  const ALHEIO = "55555555-5555-4555-8555-555555555555";
+  /** O vídeo pronto (ou a imagem) de uma conta comum, com arquivo no R2: para o agente do administrador, não existe. */
+  async function alheio(structure = "wan") {
+    await memberCookie();
+    await video(ALHEIO, structure);
+    await env.DB.prepare("UPDATE videos SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com') WHERE id = ?").bind(ALHEIO).run();
+    await env.MIDIA.put(`videos/${ALHEIO}.mp4`, new Uint8Array([1, 2, 3]));
+  }
+
+  it("não aparece no listar_videos, nem na busca", async () => {
+    await alheio();
+    for (const q of ["", "?q=produto"]) {
+      const ids = (await (await api(`/api/v1/videos${q}`, admin)).json<{ videos: { id: string }[] }>()).videos.map((v) => v.id);
+      expect(ids).toContain(VIDEO);
+      expect(ids).not.toContain(ALHEIO);
+    }
+  });
+
+  it("não entra no projeto: adicionar e trocar", async () => {
+    await alheio();
+    const { id, revisao } = await novo();
+    expect(await (await comandos(id, revisao, [{ tipo: "adicionar", video: ALHEIO }])).json()).toEqual({ erro: "arquivo_indisponivel", comando: 0 });
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const r = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO }], new FakeExportApi())).json<{ revisao: number; criados: string[] }>();
+    expect(await (await comandos(id, r.revisao, [{ tipo: "trocar", bloco: r.criados[0], video: ALHEIO }])).json()).toEqual({ erro: "arquivo_indisponivel", comando: 0 });
+  });
+
+  it("a imagem de outra conta não entra no projeto", async () => {
+    await alheio("nano-banana");
+    const { id, revisao } = await novo();
+    expect(await (await comandos(id, revisao, [{ tipo: "adicionar", imagem: ALHEIO }])).json()).toEqual({ erro: "arquivo_indisponivel", comando: 0 });
+  });
+
+  it("quadros, silêncios e transcrição: 404", async () => {
+    await alheio();
+    const { id } = await novo();
+    const fake = new FakeExportApi();
+    expect((await api(`/api/v1/projetos/${id}/quadros?src=/videos/${ALHEIO}.mp4&instantes=1`, admin, undefined, fake)).status).toBe(404);
+    expect((await api(`/api/v1/projetos/${id}/silencios?src=/videos/${ALHEIO}.mp4`, admin, undefined, fake)).status).toBe(404);
+    expect((await api(`/api/v1/projetos/${id}/transcricao?src=/videos/${ALHEIO}.mp4`, admin, undefined, fake, new FakeTranscriber())).status).toBe(404);
   });
 });

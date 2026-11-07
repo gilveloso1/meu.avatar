@@ -292,10 +292,11 @@ e não tela por tela. Tudo o que existe hoje é do administrador (no ar, nenhum 
 - **Feito:** `ContaDb` (`db.conta(userId)`, `src/db.ts`): toda consulta leva `user_id = ?1`
   (`test/dono.test.ts` confere). O site lê os vídeos por ela: listas, contagem, página,
   arquivos, rosto, edição rápida, Refazer, Salvar no avatar e "Adicionar ativo". O administrador
-  abre o vídeo de outra conta só para ver (o painel leva às falhas), sem agir nele.
+  abre o vídeo de outra conta só para ver (o painel leva às falhas), sem agir nele. Canvas, API,
+  MCP e exportação também: a lista do canvas, o `listar_videos`, os vídeos e imagens que entram
+  num projeto, quadros, silêncios, transcrição, o rosto e a exportação são só da conta dona do
+  projeto. O Canvas já pode abrir para os membros (falta o limite de uso, acima).
 - **Falta, um PR por vez:**
-  1. Canvas, API, MCP e exportação pela `ContaDb` (hoje listam e usam os vídeos de todos;
-     só o administrador entra neles). Depois disso, o Canvas pode abrir para os membros.
   2. Migration: gatilhos que recusam vídeo sem dono e ativo ligado a vídeo de outra conta,
      índice `videos(user_id, structure, created_at)`, e tirar o CHECK de `users.role`.
   3. Permissões no molde do TabNews (`models/authorization.js`): catálogo fechado
