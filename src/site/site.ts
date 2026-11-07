@@ -2355,9 +2355,10 @@ function panelActivity(
 }
 
 /**
- * Contas: os números no topo (contas como herói), a lista das contas no painel largo, à esquerda,
- * com o menu de ações de cada conta comum, e o convite à direita (o formulário e, logo depois de
- * gerar, o link, mostrado uma vez só: o banco guarda só o hash).
+ * Contas (layout pedido pelo usuário em 07/11/2026): à direita, a lista das contas num terço da
+ * largura e na altura toda, com o menu de ações de cada conta comum; à esquerda, os números e,
+ * embaixo, o convite na altura que sobra (o formulário e, logo depois de gerar, o link, mostrado
+ * uma vez só: o banco guarda só o hash). Os cards ficam do tamanho do espaço e rolam por dentro.
  */
 function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
   const now = new Date().toISOString();
@@ -2404,17 +2405,15 @@ function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
           <button class="button button--filled interactive" type="submit"><span class="icon">person_add</span>Gerar convite</button>
         </form>
       </section>`;
-  return `<div class="dash">
+  return `<div class="dash dash--contas">
     <div class="dash__kpis">
       ${statCard("group", "Contas", count(list.length), "com a sua", true)}
       ${statCard("check_circle", "Ativas", count(list.length - pending - suspended), "já criaram a senha")}
       ${statCard("schedule", "Convites", count(pending), "esperando a senha")}
       ${statCard("lock", "Suspensas", count(suspended), "sem acesso ao site")}
     </div>
-    ${panes(
-      { title: "Contas", body: `<section class="viewer__card" aria-label="Contas"><ul class="dash__list dash__list--accounts">${rows.join("")}</ul></section>` },
-      { title: "Convidar", body: `${linkBox}${inviteForm}` },
-    )}
+    ${pane("Contas", `<section class="viewer__card dash__fill" aria-label="Contas"><ul class="dash__list dash__list--accounts">${rows.join("")}</ul></section>`, "dash__pane--contas")}
+    ${pane("Convidar", `${linkBox}${inviteForm.replace('<section class="viewer__card"', '<section class="viewer__card dash__fill"')}`, "dash__pane--convidar")}
   </div>`;
 }
 
@@ -2543,12 +2542,13 @@ function pager(total: number, page: number, from: string): string {
  * dentro dele nunca rolam: têm o tamanho do conteúdo.
  */
 function panes(...list: { title: string; body: string }[]): string {
-  return `<div class="dash__panes">${list
-    .map((p) => {
-      const id = `painel-${p.title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
-      return `<section class="dash__pane" aria-labelledby="${id}"><h2 class="dash__pane-title" id="${id}">${esc(p.title)}</h2><div class="dash__pane-body">${p.body}</div></section>`;
-    })
-    .join("")}</div>`;
+  return `<div class="dash__panes">${list.map((p) => pane(p.title, p.body)).join("")}</div>`;
+}
+
+/** Um painel: o título, parado, e o corpo. `cls` posiciona o painel numa grade própria (a aba Contas). */
+function pane(title: string, body: string, cls = ""): string {
+  const id = `painel-${title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
+  return `<section class="dash__pane${cls ? ` ${cls}` : ""}" aria-labelledby="${id}"><h2 class="dash__pane-title" id="${id}">${esc(title)}</h2><div class="dash__pane-body">${body}</div></section>`;
 }
 
 const SERVICE_ICONS: Record<string, string> = { "Áudio": "graphic_eq", "Exportação": "download", "Animações": "animation", "Armazenamento": "cloud" };
