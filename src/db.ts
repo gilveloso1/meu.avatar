@@ -248,6 +248,11 @@ export interface PanelToken {
 export class Db {
   constructor(private readonly d1: D1Database) {}
 
+  /** O banco visto por uma conta: só o que é dela (ContaDb). As telas, a API e o MCP usam este. */
+  conta(userId: number): ContaDb {
+    return new ContaDb(this.d1, userId);
+  }
+
   /** As falhas do período, das mais novas, uma página: vídeos, áudio, edição rápida e exportações, juntas por data; e o total. */
   async panelFailures(since: string | null, limit = 15, offset = 0): Promise<{ items: PanelFailure[]; total: number }> {
     const from = since ?? "";
@@ -361,28 +366,6 @@ export class Db {
     return (await this.d1.prepare("SELECT * FROM videos ORDER BY created_at DESC, rowid DESC LIMIT ?").bind(limit).all<Video>()).results;
   }
 
-  /**
-   * Os vídeos (ou imagens) prontos da pessoa, de todos os modelos dados, os mais novos primeiro e
-   * uma página por vez: o "Adicionar ativo" do painel do modelo os oferece como referência.
-   */
-  async readyByUser(userId: number, structures: string[], from = 0, limit = 12): Promise<Video[]> {
-    if (!structures.length) return [];
-    const marks = structures.map(() => "?").join(", ");
-    return (
-      await this.d1
-        .prepare(`SELECT * FROM videos WHERE user_id = ? AND structure IN (${marks}) AND status = 'completed' AND video_key IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`)
-        .bind(userId, ...structures, limit, from)
-        .all<Video>()
-    ).results;
-  }
-
-  /** Os vídeos de uma estrutura, os mais novos primeiro. */
-  async videosByStructure(structure: string, limit = 50): Promise<Video[]> {
-    return (
-      await this.d1.prepare("SELECT * FROM videos WHERE structure = ? ORDER BY created_at DESC, rowid DESC LIMIT ?").bind(structure, limit).all<Video>()
-    ).results;
-  }
-
   /** Os vídeos de várias estruturas, os mais novos primeiro; com `q`, só os que têm o trecho na fala. */
   async videosByStructures(structures: string[], q = "", limit = 100): Promise<Video[]> {
     if (!structures.length) return [];
@@ -420,7 +403,6 @@ export class Db {
   }
 
 
-  /** Quantos vídeos cada estrutura tem. */
   /** Um vídeo pronto (e com o áudio já tratado, se for o caso) que ainda não teve o rosto procurado. */
   async nextWithoutFace(): Promise<Video | null> {
     return this.d1
@@ -439,11 +421,6 @@ export class Db {
 
   async updateAssetFace(id: string, face: string): Promise<void> {
     await this.d1.prepare("UPDATE avatar_assets SET face = ? WHERE id = ?").bind(face, id).run();
-  }
-
-  async countByStructure(): Promise<Map<string, number>> {
-    const rows = (await this.d1.prepare("SELECT structure, COUNT(*) AS n FROM videos GROUP BY structure").all<{ structure: string | null; n: number }>()).results;
-    return new Map(rows.map((r) => [r.structure ?? "", r.n]));
   }
 
   /** Os mais antigos primeiro: são os que mais devem estar prontos. */
@@ -591,23 +568,6 @@ export class Db {
   }
 
   /** Os avatares da pessoa (o mexido por último primeiro), com a contagem de ativos e a capa. */
-  /**
-   * As últimas instruções (`extra`) que a pessoa usou com cada avatar neste modelo, para o
-   * campo voltar preenchido ao escolher o avatar (`perAvatar`). Avatar sem vídeo fica de fora.
-   */
-  async lastExtraByAvatar(userId: number, structures: string[]): Promise<Map<string, string>> {
-    const marks = structures.map(() => "?").join(", ");
-    const rows = (
-      await this.d1
-        .prepare(`SELECT avatar_id, extra FROM videos WHERE user_id = ? AND structure IN (${marks}) AND avatar_id IS NOT NULL AND extra IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 500`)
-        .bind(userId, ...structures)
-        .all<{ avatar_id: string; extra: string }>()
-    ).results;
-    const last = new Map<string, string>();
-    for (const r of rows) if (!last.has(r.avatar_id)) last.set(r.avatar_id, r.extra);
-    return last;
-  }
-
   async avatarsByUser(userId: number, q = ""): Promise<Avatar[]> {
     return (
       await this.d1
@@ -971,5 +931,76 @@ export class Db {
       this.d1.prepare("DELETE FROM api_tokens"),
       this.d1.prepare("DELETE FROM users"),
     ]);
+  }
+}
+
+/** O trecho `%q%` do LIKE, com os curingas do texto escapados (ESCAPE '\\'). */
+function like(q: string): string {
+  return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+/**
+ * O banco visto por uma conta: toda consulta leva o dono (`user_id = ?1`), então o que é de
+ * outra pessoa não existe aqui, nem pelo id. É o que as telas usam para ler os vídeos; o `Db`
+ * fica com o que é do sistema (agendamento, painel, login). Toda SQL desta classe tem
+ * `user_id = ?1` (test/dono.test.ts confere).
+ */
+export class ContaDb {
+  constructor(
+    private readonly d1: D1Database,
+    readonly userId: number,
+  ) {}
+
+  /** O vídeo, se é desta conta. */
+  video(id: string): Promise<Video | null> {
+    return this.d1.prepare("SELECT * FROM videos WHERE user_id = ?1 AND id = ?2").bind(this.userId, id).first<Video>();
+  }
+
+  /** Os vídeos das estruturas, os mais novos primeiro; com `q`, só os que têm o trecho na fala. */
+  async videos(structures: string[], q = "", limit = 100): Promise<Video[]> {
+    if (!structures.length) return [];
+    return (
+      await this.d1
+        .prepare(`SELECT * FROM videos WHERE user_id = ?1 AND structure IN (${structures.map((_, i) => `?${i + 4}`).join(", ")}) AND prompt LIKE ?2 ESCAPE '\\' ORDER BY created_at DESC, rowid DESC LIMIT ?3`)
+        .bind(this.userId, like(q), limit, ...structures)
+        .all<Video>()
+    ).results;
+  }
+
+  /**
+   * Os vídeos (ou imagens) prontos, de todos os modelos dados, os mais novos primeiro e uma
+   * página por vez: o "Adicionar ativo" do painel do modelo os oferece como referência.
+   */
+  async ready(structures: string[], from = 0, limit = 12): Promise<Video[]> {
+    if (!structures.length) return [];
+    return (
+      await this.d1
+        .prepare(`SELECT * FROM videos WHERE user_id = ?1 AND structure IN (${structures.map((_, i) => `?${i + 4}`).join(", ")}) AND status = 'completed' AND video_key IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT ?2 OFFSET ?3`)
+        .bind(this.userId, limit, from, ...structures)
+        .all<Video>()
+    ).results;
+  }
+
+  /** Quantos vídeos a conta tem em cada estrutura. */
+  async countByStructure(): Promise<Map<string, number>> {
+    const rows = (await this.d1.prepare("SELECT structure, COUNT(*) AS n FROM videos WHERE user_id = ?1 GROUP BY structure").bind(this.userId).all<{ structure: string | null; n: number }>()).results;
+    return new Map(rows.map((r) => [r.structure ?? "", r.n]));
+  }
+
+  /**
+   * As últimas instruções (`extra`) usadas com cada avatar nestes modelos, para o campo voltar
+   * preenchido ao escolher o avatar (`perAvatar`). Avatar sem vídeo fica de fora.
+   */
+  async lastExtraByAvatar(structures: string[]): Promise<Map<string, string>> {
+    if (!structures.length) return new Map();
+    const rows = (
+      await this.d1
+        .prepare(`SELECT avatar_id, extra FROM videos WHERE user_id = ?1 AND structure IN (${structures.map((_, i) => `?${i + 2}`).join(", ")}) AND avatar_id IS NOT NULL AND extra IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 500`)
+        .bind(this.userId, ...structures)
+        .all<{ avatar_id: string; extra: string }>()
+    ).results;
+    const last = new Map<string, string>();
+    for (const r of rows) if (!last.has(r.avatar_id)) last.set(r.avatar_id, r.extra);
+    return last;
   }
 }

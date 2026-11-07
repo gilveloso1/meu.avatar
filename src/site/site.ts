@@ -98,6 +98,11 @@ export class Site {
     private readonly config: SiteConfig,
   ) {}
 
+  /** O vídeo que a pessoa vê: o dela ou, para o administrador, qualquer um (o painel leva às falhas de todos). */
+  private async visibleVideo(user: User, id: string): Promise<Video | null> {
+    return (await this.db.conta(user.id).video(id)) ?? (user.role === "admin" ? this.db.videoById(id) : null);
+  }
+
   async handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -206,7 +211,8 @@ export class Site {
     // /videos/<id>.editado.mp4: a edição rápida.
     const file = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.(mp4|png|jpg|webp)$/.exec(path);
     if (request.method === "GET" && file) {
-      const video = await this.db.videoById(file[1]!);
+      // Só de quem gerou (e o administrador); de outra pessoa, o arquivo nem existe.
+      const video = await this.visibleVideo(user, file[1]!);
       const version = file[2];
       const key = version === "original" ? video?.video_key : version === "editado" ? video?.edited_key : (video?.processed_key ?? video?.video_key);
       if (!video || !key) return new Response("não encontrado", { status: 404 });
@@ -475,7 +481,7 @@ ${error ? snackbar(error) : ""}`;
 
   /** O vídeo pronto que a pessoa pode salvar num avatar, com a versão que vale (editada, tratada ou original). */
   private async savableVideo(id: string | null, user: User): Promise<SavableVideo | null> {
-    const video = id ? await this.db.videoById(id) : null;
+    const video = id ? await this.db.conta(user.id).video(id) : null;
     const structure = video ? videoStructure(video) : undefined;
     if (!video || !structure || !canUse(structure, user.role)) return null;
     const key = video.edited_key ?? video.processed_key ?? video.video_key;
@@ -532,7 +538,7 @@ ${error ? snackbar(error) : ""}`;
   /** Tela inicial: um card por estrutura que a pessoa pode usar; a busca filtra pelo nome. */
   private async home(user: User, url: URL): Promise<Response> {
     const q = (url.searchParams.get("q") ?? "").trim();
-    const counts = await this.db.countByStructure();
+    const counts = await this.db.conta(user.id).countByStructure();
     // As versões de um modelo ficam no card da principal (o seletor Versão fica na página).
     const structures = STRUCTURES.filter((s) => !s.family && canUse(s, user.role) && s.name.toLowerCase().includes(q.toLowerCase()));
     const cards = structures.map((s, i) => {
@@ -795,7 +801,7 @@ ${CANVAS_BODY}
     // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
     const only = url.searchParams.get("modelo") ?? "";
     const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s) && (!only || (s.family ?? s.id) === only));
-    const videos = await this.db.videosByStructures(usable.map((s) => s.id), q);
+    const videos = await this.db.conta(user.id).videos(usable.map((s) => s.id), q);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // A mesma lista da página do modelo (filtro, ordem, vista e agrupamento no navegador); a busca pela fala fica no servidor.
     const from = `/videos${url.search}`;
@@ -844,7 +850,7 @@ ${CANVAS_BODY}
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const image = makesImage(structure);
     // As versões do mesmo modelo dividem a lista.
-    const videos = await this.db.videosByStructures(familyOf(structure).filter((s) => canUse(s, user.role)).map((s) => s.id));
+    const videos = await this.db.conta(user.id).videos(familyOf(structure).filter((s) => canUse(s, user.role)).map((s) => s.id));
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // Os ativos abrem o painel, depois das seções que vêm antes (o "Uso"); o resto (a fala
     // inclusive) segue as seções da estrutura. O modelo aceita o que os campos dele pedem.
@@ -855,7 +861,7 @@ ${CANVAS_BODY}
     const avatars = kinds.length ? await this.db.avatarsByUser(user.id) : [];
     // Campo que volta com o último texto usado com o avatar (as instruções do Omni, guardadas em `extra`).
     const family = familyOf(structure).filter((s) => canUse(s, user.role));
-    const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.lastExtraByAvatar(user.id, family.map((s) => s.id)) : undefined;
+    const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.conta(user.id).lastExtraByAvatar(family.map((s) => s.id)) : undefined;
     const assets = kinds.length ? (await this.db.assetsByUser(user.id)).filter((a) => kinds.includes(a.kind)) : [];
     // "Adicionar ativo": a primeira página do que a pessoa já gerou, de todos os modelos, por tipo.
     const recent = (await Promise.all(kinds.map((k) => this.recentGenerated(user, structure, k)))).filter((r): r is PickItem => r !== null);
@@ -942,7 +948,7 @@ ${error ? snackbar(error) : ""}`;
 
   /** "Gerar vídeo editado", na prévia da edição rápida: põe o vídeo na fila do contêiner e volta para ele. */
   private async quickEdit(request: Request, user: User, id: string): Promise<Response> {
-    const video = await this.db.videoById(id);
+    const video = await this.db.conta(user.id).video(id);
     const structure = video ? structureById(video.structure) : undefined;
     if (!video || !structure) return new Response("não encontrado", { status: 404 });
     const form = await request.formData();
@@ -960,7 +966,7 @@ ${error ? snackbar(error) : ""}`;
 
   /** Onde está o rosto (JSON), para a prévia da edição rápida mirar o zoom. */
   private async face(user: User, id: string): Promise<Response> {
-    const video = await this.db.videoById(id);
+    const video = await this.db.conta(user.id).video(id);
     if (!video) return new Response("não encontrado", { status: 404 });
     try {
       const face = await this.studio.face(video, user);
@@ -973,30 +979,29 @@ ${error ? snackbar(error) : ""}`;
   }
 
   /**
-   * "Refazer": os valores do formulário tirados de um vídeo já feito (texto e ajustes) e, para quem
-   * o gerou, o avatar e os arquivos usados (as cópias que o vídeo guarda). Só os campos que existem
+   * "Refazer": os valores do formulário tirados de um vídeo da própria pessoa (texto e ajustes), com
+   * o avatar e os arquivos usados (as cópias que o vídeo guarda). Só os campos que existem
    * na estrutura usam esses valores; o resto fica no padrão.
    */
   private async redo(structure: Structure, id: string | null, user: User): Promise<{ values: Values; picks?: AssetPicks } | undefined> {
-    const v = id ? await this.db.videoById(id) : null;
+    // Só os vídeos da própria pessoa: o de outra não existe aqui.
+    const v = id ? await this.db.conta(user.id).video(id) : null;
     if (!v || v.structure !== structure.id) return undefined;
     let settings: Record<string, string> = {};
     try { settings = JSON.parse(v.settings ?? "{}"); } catch {}
     const picks: AssetPicks = { avatar: "", assets: [] };
-    if (v.user_id === user.id) {
-      const avatar = v.avatar_id ? await this.db.avatarById(v.avatar_id) : null;
-      if (avatar?.user_id === user.id) picks.avatar = avatar.id;
-      for (const kind of ASSET_ORDER) {
-        // Do jeito que entrou: o ativo do avatar (se ainda existe), o vídeo gerado ou o arquivo enviado.
-        const origin = settings[`ativo_${kind}`];
-        const asset = origin && !origin.includes(":") && picks.avatar ? await this.db.asset(picks.avatar, origin) : null;
-        if (asset?.kind === kind) picks.assets.push(asset.id);
-        else if (origin?.startsWith("gerado:") && (await this.pickFile(origin, user))?.kind === kind) picks.assets.push(origin);
-        else if (await this.pickFile(`origem:${v.id}:${kind}`, user)) picks.assets.push(`origem:${v.id}:${kind}`);
-      }
+    const avatar = v.avatar_id ? await this.db.avatarById(v.avatar_id) : null;
+    if (avatar?.user_id === user.id) picks.avatar = avatar.id;
+    for (const kind of ASSET_ORDER) {
+      // Do jeito que entrou: o ativo do avatar (se ainda existe), o vídeo gerado ou o arquivo enviado.
+      const origin = settings[`ativo_${kind}`];
+      const asset = origin && !origin.includes(":") && picks.avatar ? await this.db.asset(picks.avatar, origin) : null;
+      if (asset?.kind === kind) picks.assets.push(asset.id);
+      else if (origin?.startsWith("gerado:") && (await this.pickFile(origin, user))?.kind === kind) picks.assets.push(origin);
+      else if (await this.pickFile(`origem:${v.id}:${kind}`, user)) picks.assets.push(`origem:${v.id}:${kind}`);
     }
     const { model } = await this.tryModel(structure);
-    const base = defaultValues(structure.sections(model, this.config.defaults, v.user_id ? await this.studio.lists(structure, v.user_id) : {}));
+    const base = defaultValues(structure.sections(model, this.config.defaults, await this.studio.lists(structure, user.id)));
     const from: Record<string, string | null | undefined> = {
       fala: v.prompt, descricao: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
       estilo: v.style, idioma: v.language, instrucoes: v.extra, movimento: settings.motion_prompt ?? v.extra,
@@ -1008,16 +1013,18 @@ ${error ? snackbar(error) : ""}`;
 
   /** A página do vídeo: o vídeo centralizado sobre ele mesmo desfocado e, ao lado, a folha com as informações. */
   private async videoPage(user: User, id: string, url: URL, error?: string): Promise<Response> {
-    const v = await this.db.videoById(id);
+    const v = await this.visibleVideo(user, id);
     const structure = v && videoStructure(v);
     if (!v || !structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
+    // O vídeo de outra pessoa (o administrador, vindo do painel) só se vê: sem Refazer, Salvar, Usar nem Edição rápida.
+    const mine = v.user_id === user.id;
     const avatars = await this.db.avatarsByUser(user.id);
     // De onde a pessoa veio (só caminhos do próprio site): a seta e o X voltam para lá.
     const from = url.searchParams.get("de") ?? "";
     const back = /^\/(?!\/)/.test(from) ? from : `/modelo/${structure.id}`;
     const showOriginal = url.searchParams.has("original");
     const status = cardStatus(v);
-    const quick = canQuickEdit(v, structure);
+    const quick = mine && canQuickEdit(v, structure);
     const editing = v.status === "completed" && (v.edit_status === "pending" || v.edit_status === "processing");
     const edited = Boolean(v.edited_key) && !showOriginal;
     const src = edited ? editedSrc(v) : videoSrc(v);
@@ -1065,11 +1072,11 @@ ${error ? snackbar(error) : ""}`;
     // O avatar usado para gerar vem primeiro na lista.
     const used = avatars.find((a) => a.id === v.avatar_id);
     const ordered = used ? [used, ...avatars.filter((a) => a !== used)] : avatars;
-    const saveButton = v.video_key ? `<button class="button button--outlined interactive viewer__save" type="button" data-dialog-open="salvar-avatar"><span class="icon">bookmark_add</span>Salvar no avatar</button>` : "";
+    const saveButton = mine && v.video_key ? `<button class="button button--outlined interactive viewer__save" type="button" data-dialog-open="salvar-avatar"><span class="icon">bookmark_add</span>Salvar no avatar</button>` : "";
     // "Usar para gerar": só quando a página foi aberta de um modelo que aceita este tipo; volta para ele com o arquivo no painel.
-    const useIn = await this.useTarget(v, from, user);
+    const useIn = mine ? await this.useTarget(v, from, user) : null;
     const useButton = useIn ? `<a class="button button--outlined interactive viewer__save" href="/modelo/${useIn}?usar=gerado:${v.id}"><span class="icon">auto_awesome</span>Usar para gerar</a>` : "";
-    const saveDialog = v.video_key
+    const saveDialog = mine && v.video_key
       ? avatarDialog({
           id: "salvar-avatar",
           title: "Salvar no avatar",
@@ -1132,7 +1139,7 @@ ${error ? snackbar(error) : ""}`;
       ${quick ? quickEditPreview(v, showOriginal) : ""}
     </div>
     <div class="viewer__actions">
-      <a class="button button--filled interactive" href="/modelo/${structure.id}?refazer=${v.id}"><span class="icon">refresh</span>Refazer</a>
+      ${mine ? `<a class="button button--filled interactive" href="/modelo/${structure.id}?refazer=${v.id}"><span class="icon">refresh</span>Refazer</a>` : ""}
       ${downloads.length === 1 ? `<a class="button button--outlined interactive" href="${downloads[0]!.href}" download><span class="icon">download</span>Baixar</a>` : downloads.length ? downloadMenu(downloads) : ""}
     </div>
   </aside>
@@ -1237,8 +1244,8 @@ ${error ? snackbar(error) : ""}`;
     const output = (s: Structure): AssetKind => (makesImage(s) ? "imagem" : "video");
     const all = STRUCTURES.filter((s) => output(s) === kind).map((s) => s.id);
     // O próprio modelo primeiro; sem nada gerado nele ainda, os outros que geram o tipo.
-    const own = output(structure) === kind ? (await this.db.readyByUser(user.id, familyOf(structure).map((s) => s.id), 0, 1))[0] : undefined;
-    const v = own ?? (await this.db.readyByUser(user.id, all, 0, 1))[0];
+    const own = output(structure) === kind ? (await this.db.conta(user.id).ready(familyOf(structure).map((s) => s.id), 0, 1))[0] : undefined;
+    const v = own ?? (await this.db.conta(user.id).ready(all, 0, 1))[0];
     const found = v ? await this.pickFile(`gerado:${v.id}`, user) : null;
     return found ? { id: found.id, kind: found.kind, src: found.src, name: found.name, hint: found.hint } : null;
   }
@@ -1247,7 +1254,7 @@ ${error ? snackbar(error) : ""}`;
   private async generatedFrames(user: User, kind: AssetKind, from: number): Promise<string> {
     if (kind === "audio") return "";
     const structures = STRUCTURES.filter((s) => (makesImage(s) ? "imagem" : "video") === kind).map((s) => s.id);
-    const videos = await this.db.readyByUser(user.id, structures, from, GENERATED_PAGE + 1);
+    const videos = await this.db.conta(user.id).ready(structures, from, GENERATED_PAGE + 1);
     const frames = videos.slice(0, GENERATED_PAGE).map((v) => {
       const structure = videoStructure(v)!;
       return pickFrame({ ...generatedPick(v, structure), thumb: outputThumb(v, structure) });
@@ -1262,8 +1269,8 @@ ${error ? snackbar(error) : ""}`;
    */
   private async pickFile(id: string, user: User): Promise<PickedFile | null> {
     const m = /^(?:gerado:([0-9a-f-]{36})|origem:([0-9a-f-]{36}):(imagem|video|audio))$/.exec(id);
-    const video = m ? await this.db.videoById(m[1] ?? m[2]!) : null;
-    if (!m || !video || video.user_id !== user.id) return null;
+    const video = m ? await this.db.conta(user.id).video(m[1] ?? m[2]!) : null;
+    if (!m || !video) return null;
     if (m[1]) {
       const ready = await this.savableVideo(video.id, user);
       if (!ready || video.status !== "completed") return null;

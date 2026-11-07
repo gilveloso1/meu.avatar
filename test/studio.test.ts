@@ -176,10 +176,11 @@ describe("acesso negado à estrutura em teste", () => {
     const [heygen, wan] = await new Db(env.DB).recentVideos();
     expect(heygen!.structure).toBe("heygen");
     const member = await memberCookie();
+    // Os dois da conta comum: o modelo em teste continua de fora, mesmo sendo dela.
+    await env.DB.prepare("UPDATE videos SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com')").run();
     const page = await (await get("/videos", member, api)).text();
     expect(page).toContain(wan!.id);
     expect(page).not.toContain(heygen!.id);
-    expect(await (await get("/videos", undefined, api)).text()).toContain(heygen!.id);
     // Nem pedindo só os do HeyGen.
     expect(await (await get("/videos?modelo=heygen", member, api)).text()).not.toContain(heygen!.id);
   });
@@ -1475,9 +1476,11 @@ describe("edição rápida", () => {
     expect(audio!.plans[0]).not.toHaveProperty("rosto");
   });
 
-  it("conta comum não pede o rosto de um vídeo do HeyGen", async () => {
+  it("conta comum não pede o rosto de um vídeo do HeyGen, nem dela", async () => {
     const { api, audio, video } = await pronto("heygen");
-    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: await memberCookie() } }), api, audio);
+    const member = await memberCookie();
+    await env.DB.prepare("UPDATE videos SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com') WHERE id = ?").bind(video.id).run();
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: member } }), api, audio);
     expect(res.status).toBe(403);
     expect(audio!.faces).toBe(0);
   });
@@ -1554,9 +1557,11 @@ describe("edição rápida", () => {
     expect(await new Db(env.DB).videoById(video!.id)).toMatchObject({ edit_status: null });
   });
 
-  it("conta comum não pede a edição rápida de um vídeo do HeyGen", async () => {
+  it("conta comum não pede a edição rápida de um vídeo do HeyGen, nem dela", async () => {
     const { api, audio, video } = await pronto("heygen");
-    const res = await pedir(video.id, api, audio, await memberCookie());
+    const member = await memberCookie();
+    await env.DB.prepare("UPDATE videos SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com') WHERE id = ?").bind(video.id).run();
+    const res = await pedir(video.id, api, audio, member);
     expect(res.status).toBe(403);
     expect(await new Db(env.DB).videoById(video.id)).toMatchObject({ edit_status: null });
   });
