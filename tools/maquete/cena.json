@@ -61,45 +61,45 @@
    "id": "cel_gorda",
    "tipo": "celular",
    "posicao": [
-    -1.3199999999999998,
+    -1.34,
     1.32,
-    0.28
+    0.36
    ],
    "na_mao": {
     "pessoa": "gorda",
     "lado": "D"
    },
-   "giro": 151.4,
+   "giro": 155.0,
    "inclina": 0.0
   },
   {
    "id": "cel_atual",
    "tipo": "celular",
    "posicao": [
-    -0.12,
+    -0.14,
     1.32,
-    0.28
+    0.36
    ],
    "na_mao": {
     "pessoa": "atual",
     "lado": "D"
    },
-   "giro": 151.4,
+   "giro": 155.0,
    "inclina": 0.0
   },
   {
    "id": "cel_magra",
    "tipo": "celular",
    "posicao": [
-    1.0299999999999998,
+    1.01,
     1.32,
-    0.28
+    0.36
    ],
    "na_mao": {
     "pessoa": "magra",
     "lado": "D"
    },
-   "giro": 151.4,
+   "giro": 155.0,
    "inclina": 0.0
   }
  ]
