@@ -234,6 +234,7 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
   font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; white-space: nowrap;
 }
 .menu__item .icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); }
+.menu__item[hidden] { display: none; }
 .menu__divider { height: 1px; margin: 4px 16px; border: 0; background: var(--md-sys-color-outline-variant); }
 /* Texto no fim do item (o atalho do teclado), como o trailing text do menu do M3. */
 .menu__trail { margin-left: auto; padding-left: 24px; font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }
@@ -909,6 +910,9 @@ a.frame { display: block; }
 .voice-row:has([aria-pressed="true"]) .vrow__support { color: inherit; }
 .side-panel__help { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.asset-grid__more { grid-column: 1 / -1; }
+/* Um vídeo ou imagem da lista arrastado para o painel: a lista de ativos mostra onde ele cai. */
+.file-list--drop { outline: 2px solid var(--md-sys-color-primary); outline-offset: 4px; border-radius: var(--md-sys-shape-corner-large); }
 .asset-grid .frame { padding: 0; border: 0; background: none; cursor: pointer; }
 .asset-grid .frame[aria-pressed="true"] { outline: 3px solid var(--md-sys-color-primary); outline-offset: -3px; }
 .frame__check { position: absolute; z-index: 2; top: 8px; right: 8px; display: none; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
@@ -918,7 +922,11 @@ a.frame { display: block; }
   position: relative; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
   border: 1px dashed var(--md-sys-color-outline); border-radius: 16px; font: var(--md-sys-typescale-label-large); color: var(--md-sys-color-primary); cursor: pointer;
 }
-.asset-upload:has(input:focus-visible) { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
+.asset-upload:has(input:focus-visible), .asset-upload:focus-visible { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
+.asset-upload[hidden] { display: none; }
+button.asset-upload { background: none; }
+/* O menu do botão direito (Colar imagem): o mesmo menu, preso onde a pessoa tocou. */
+.menu__list.context-menu { position: fixed; inset: auto; margin: 0; border: 0; }
 .avatar-option .spinner { position: static; flex: none; margin: 0 8px 0 auto; }
 .xlist__item .spinner { position: static; flex: none; margin: 0; }
 @keyframes spinner-turn { to { transform: rotate(360deg); } }

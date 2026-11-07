@@ -361,6 +361,21 @@ export class Db {
     return (await this.d1.prepare("SELECT * FROM videos ORDER BY created_at DESC, rowid DESC LIMIT ?").bind(limit).all<Video>()).results;
   }
 
+  /**
+   * Os vídeos (ou imagens) prontos da pessoa, de todos os modelos dados, os mais novos primeiro e
+   * uma página por vez: o "Adicionar ativo" do painel do modelo os oferece como referência.
+   */
+  async readyByUser(userId: number, structures: string[], from = 0, limit = 12): Promise<Video[]> {
+    if (!structures.length) return [];
+    const marks = structures.map(() => "?").join(", ");
+    return (
+      await this.d1
+        .prepare(`SELECT * FROM videos WHERE user_id = ? AND structure IN (${marks}) AND status = 'completed' AND video_key IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`)
+        .bind(userId, ...structures, limit, from)
+        .all<Video>()
+    ).results;
+  }
+
   /** Os vídeos de uma estrutura, os mais novos primeiro. */
   async videosByStructure(structure: string, limit = 50): Promise<Video[]> {
     return (

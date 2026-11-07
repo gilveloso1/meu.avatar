@@ -277,8 +277,10 @@ describe("gerar vídeo", () => {
     const [video] = await new Db(env.DB).recentVideos();
     expect(video).toMatchObject({
       job_id: "job-1", status: "pending", duration: 25, prompt: FALA, request_prompt: req!.prompt,
-      style: "selfie", language: "pt-BR", extra: "ela sorri no final", structure: "wan", settings: null,
+      style: "selfie", language: "pt-BR", extra: "ela sorri no final", structure: "wan",
     });
+    // A foto entrou como arquivo solto: o vídeo guarda isso para o "Refazer" trazer igual.
+    expect(JSON.parse(video!.settings!)).toEqual({ ativo_imagem: expect.stringMatching(/^arquivo:/) });
   });
 
   it("sem foto, vai só o texto", async () => {

@@ -138,10 +138,22 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 
 - Página do modelo (`/modelo/<id>`): seta de voltar no lugar do logo; à esquerda
   o painel de Configuração (400 px, não recolhe, ocupa a altura da janela, rola
-  por dentro). Nele, "Avatar" (aprovado em 01/11/2026): primeiro o avatar, e só
-  depois "Adicionar ativo". Os dois desdobram, colado ao painel (2 px, sem sombra), um menu
-  com os ativos do avatar, só dos tipos que o modelo aceita (os campos da estrutura, um de
-  cada tipo) e sem função presa ao ativo; cada escolha se acumula no painel. O bloco Fala tem a voz ou o idioma primeiro e o campo
+  por dentro). Nele, "Avatar" (aprovado em 01/11/2026): primeiro o avatar, depois
+  "Adicionar ativo" (este desde 07/11/2026 com ou sem avatar). Os dois desdobram, colado ao
+  painel (2 px, sem sombra), um menu só dos tipos que o modelo aceita (os campos da estrutura, um
+  de cada tipo): o do avatar com os ativos dele (sem função presa ao ativo; com um avatar
+  escolhido, tocar na linha dele reabre os ativos); o "Adicionar ativo" com "Enviar arquivo" e
+  tudo o que a pessoa gerou, de todos os modelos, com "Mostrar mais" (nunca os ativos do avatar).
+  Cada escolha se acumula no painel, uma por tipo, venha de onde vier; trocar de avatar só tira o
+  que veio do avatar anterior. Um vídeo ou imagem pronto da própria pessoa também entra
+  arrastado da lista do centro para o painel. Imagem copiada entra como envio ("Imagem colada"):
+  pelo quadro "Colar imagem" ao lado de "Enviar arquivo" (só aparece quando há imagem copiada, o
+  que o navegador só conta com a leitura liberada; sem imagem, nem quadro nem aviso), pelo menu do
+  botão direito em "Adicionar ativo" (com imagem ou antes de liberar a leitura, que o toque pede) ou
+  com Ctrl/Cmd+V fora dos campos de texto. O mesmo menu tem "Usar imagem recente", "Usar vídeo
+  recente" (um item por tipo que o modelo aceita): o mais recente daquele tipo que a pessoa gerou no
+  próprio modelo, se ele gera o tipo e já gerou algum; senão, dos modelos que geram o tipo. Sem nada a
+  oferecer, o botão direito abre o menu do navegador. O bloco Fala tem a voz ou o idioma primeiro e o campo
   "Texto" (cresce com o texto, como o Movimento); no fim, a estimativa (Duração
   e Custo estimado, linhas com ícone) e o "Gerar vídeo" na largura toda, sem
   fixar, com espaço sobrando embaixo. No centro, a lista de vídeos.
@@ -169,7 +181,12 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   conteúdo na mesma margem de 24 px;
   em Informações, Texto (com Copiar), os textos livres (Movimento, Instruções
   extras) em bloco próprio e Detalhes no card de linhas (ícone, rótulo, valor);
-  embaixo, Refazer (volta ao modelo com tudo preenchido, `?refazer=<id>`) e
+  abaixo de "Salvar no avatar", "Usar para gerar" (só quando a página foi aberta de um modelo,
+  `?de=/modelo/<id>`, que aceita o tipo; volta a ele com o arquivo no painel, `?usar=gerado:<id>`);
+  embaixo, Refazer (volta ao modelo exatamente como foi gerado, `?refazer=<id>`: o avatar e cada
+  arquivo pelo caminho em que entrou, guardado em `settings.ativo_<tipo>`: o mesmo ativo do avatar,
+  o mesmo vídeo ou imagem gerado ou o arquivo enviado com o nome dele; se o ativo foi apagado, ou o
+  vídeo é de antes disso, a cópia que o vídeo guarda) e
   Baixar (menu quando há mais de uma versão: Original, Editado e, se o áudio foi
   tratado, "Sem tratamento de áudio"). Na Edição rápida, o card
   "Resultado da edição", Pausas, Câmera, "Gerar prévia" e, presos embaixo,
