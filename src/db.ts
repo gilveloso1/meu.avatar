@@ -119,7 +119,8 @@ function toUserLogin(row: UserRow): UserLogin {
   return { ...toUser(row), passwordHash: row.password_hash, failedLogins: row.failed_logins, lockedUntil: row.locked_until };
 }
 
-export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "user_id" | "request_prompt" | "style" | "language" | "extra" | "structure" | "settings"> & { avatar_id?: string | null };
+/** Vídeo novo: sempre com dono (o banco recusa sem, migrations/0018_dono.sql). */
+export type NewVideo = Pick<Video, "id" | "prompt" | "model" | "duration" | "resolution" | "aspect_ratio" | "image_key" | "request_prompt" | "style" | "language" | "extra" | "structure" | "settings"> & { user_id: number; avatar_id?: string | null };
 export type VideoChanges = Partial<
   Pick<
     Video,

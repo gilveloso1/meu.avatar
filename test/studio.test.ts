@@ -15,7 +15,7 @@ import { GROK, GROK_GUIDE } from "../src/structures/grok";
 import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_11, OMNI_SILENT, OMNI_SILENT_GUIDE, OMNI_SINGLE_SHOT } from "../src/structures/omni";
 import { IMAGE_GUIDE, IMAGE_REFERENCE_GUIDE, NANO_BANANA } from "../src/structures/imagem";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
-import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, OMNI_11_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
+import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, OMNI_11_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, dono, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
@@ -902,7 +902,7 @@ describe("Nano Banana 2.1 (imagem)", () => {
   it("o Durable Object guarda o id e gera pelo alarme", async () => {
     const db = new Db(env.DB);
     const id = "00000000-0000-4000-8000-000000000002";
-    await db.insertVideo({ id, prompt: CENA, model: NANO_BANANA.model, duration: 0, resolution: "1K", aspect_ratio: "9:16", image_key: null, user_id: null, request_prompt: CENA, style: null, language: null, extra: null, structure: "nano-banana", settings: null, avatar_id: null });
+    await db.insertVideo({ id, prompt: CENA, model: NANO_BANANA.model, duration: 0, resolution: "1K", aspect_ratio: "9:16", image_key: null, user_id: await dono(), request_prompt: CENA, style: null, language: null, extra: null, structure: "nano-banana", settings: null, avatar_id: null });
     await db.updateVideo(id, { status: "in_progress" });
     const stub = env.IMAGENS!.get(env.IMAGENS!.idFromName(id));
     await stub.start(id);
@@ -916,7 +916,7 @@ describe("Nano Banana 2.1 (imagem)", () => {
   it("imagem presa em Gerando vira falha depois de 5 minutos", async () => {
     const db = new Db(env.DB);
     const old = new Date(Date.now() - 6 * 60_000).toISOString();
-    await db.insertVideo({ id: "00000000-0000-4000-8000-000000000001", prompt: CENA, model: NANO_BANANA.model, duration: 0, resolution: "1K", aspect_ratio: "9:16", image_key: null, user_id: null, request_prompt: CENA, style: null, language: null, extra: null, structure: "nano-banana", settings: null, avatar_id: null });
+    await db.insertVideo({ id: "00000000-0000-4000-8000-000000000001", prompt: CENA, model: NANO_BANANA.model, duration: 0, resolution: "1K", aspect_ratio: "9:16", image_key: null, user_id: await dono(), request_prompt: CENA, style: null, language: null, extra: null, structure: "nano-banana", settings: null, avatar_id: null });
     await env.DB.prepare("UPDATE videos SET status = 'in_progress', created_at = ? WHERE id = ?").bind(old, "00000000-0000-4000-8000-000000000001").run();
     await createStudio(env, { api: new FakeVideoApi() }).syncOpen();
     expect(await db.videoById("00000000-0000-4000-8000-000000000001")).toMatchObject({ status: "failed", error: "A imagem não voltou a tempo." });
