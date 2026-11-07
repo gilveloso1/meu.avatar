@@ -181,7 +181,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   abas principais fixas do M3, de borda a borda da folha, indicador de 3 px só sob
   o ícone e o texto; no celular, 16 px abaixo da barra do player); o status e o
   conteúdo na mesma margem de 24 px;
-  em Informações, Texto (com Copiar), os textos livres (Movimento, Instruções
+  em Informações, o campo Nome (salva ao sair dele, sem recarregar; vazio, as listas e o
+  `listar_videos` mostram a fala), Texto (com Copiar), os textos livres (Movimento, Instruções
   extras) em bloco próprio e Detalhes no card de linhas (ícone, rótulo, valor);
   abaixo de "Salvar no avatar", "Usar para gerar" (só quando a página foi aberta de um modelo,
   `?de=/modelo/<id>`, que aceita o tipo; volta a ele com o arquivo no painel, `?usar=gerado:<id>`);

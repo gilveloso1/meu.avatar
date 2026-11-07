@@ -58,7 +58,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 
 | Rota | O que faz |
 |---|---|
-| `GET /api/v1/videos?q=&desde=&ate=&limite=&continuar=` | Vídeos prontos que a conta pode usar, do mais novo ao mais antigo, 20 por vez (`limite` até 100). `desde` e `ate` são datas (`2026-11-02`, UTC; o dia do `ate` vale inteiro). Com mais vídeos, a resposta traz `continuar`, que vai no pedido seguinte |
+| `GET /api/v1/videos?q=&desde=&ate=&limite=&continuar=` | Vídeos prontos que a conta pode usar, do mais novo ao mais antigo, 20 por vez (`limite` até 100). `desde` e `ate` são datas (`2026-11-02`, UTC; o dia do `ate` vale inteiro). Com mais vídeos, a resposta traz `continuar`, que vai no pedido seguinte. `q` procura na fala e no nome; o vídeo com nome (dado na página dele) traz `nome` |
 | `GET /api/v1/animacoes?projeto=&avatar=&q=&limite=` | As animações em código já feitas nos projetos da conta, do projeto editado por último ao mais antigo (20 por vez, até 100): `{animacoes: [{projeto: {id, nome}, bloco, nome, duracao, texto, parametros, avatares, atualizado}], mais}`. `projeto` filtra um projeto; `avatar`, os projetos que usam vídeos ou ativos dele; `q` busca no nome, no texto na tela e nos valores dos parâmetros. Sem o código: leia com `ver_projeto` (`incluir: codigo`). Ver "Reusar animações", abaixo |
 | `GET /api/v1/avatares?q=` | Avatares da conta com os ativos: `id`, `nome`, `tipo` (`imagem`, `video`, `audio`), `origem` (`gerado`, `enviado`), `foto`, `voz` e `src` |
 | `GET /api/v1/projetos?q=` | Projetos da conta |
@@ -79,7 +79,7 @@ pronta deste projeto: é como o agente confere o que exportou.
 
 | Rota | O que faz |
 |---|---|
-| `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas): `{src}` e, em vídeo, `som` (`false` quando o arquivo não tem faixa de som). Só JPG, PNG, WebP, MP4, MOV, WebM, MP3, M4A, WAV e OGG; SVG e HTML não (podem levar script). Todo arquivo enviado é servido com `nosniff` e CSP com `sandbox` |
+| `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas): `{src}` e, em vídeo, `som` (`false` quando o arquivo não tem faixa de som). Só JPG, PNG, WebP, MP4, MOV, WebM, MP3, M4A, WAV e OGG; SVG e HTML não (podem levar script). Todo arquivo enviado é servido com `nosniff` e CSP com `sandbox`. O corpo é o arquivo cru, com `content-type` e `x-nome`: com terminal, o agente manda direto (`curl --data-binary @foto.png`). No MCP, `enviar_arquivo` aceita `url` (o servidor baixa, até 50 MB, e passa pela mesma conferência; o melhor caminho sem terminal) ou `base64` (até 10 MB). Erros do `url`: `url_invalida`, `url_indisponivel`, `arquivo_grande_demais` |
 | `POST /projetos/<id>/exportar` `{final, versoes?}` | Começa a exportação |
 | `POST /projetos/<id>/exportacoes/<e>` | Faz o próximo passo; sem isso, o agendamento termina |
 | `GET /projetos/<id>/exportacoes/<e>` | Estado e endereços para baixar |

@@ -53,6 +53,8 @@ export interface Video {
   prep_started_at: string | null;
   /** O avatar usado para gerar (null com arquivo solto). */
   avatar_id: string | null;
+  /** O nome dado pela pessoa (Renomear); null: as telas mostram a fala. */
+  name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -913,12 +915,18 @@ export class ContaDb {
     return this.d1.prepare("SELECT * FROM videos WHERE user_id = ?1 AND id = ?2").bind(this.userId, id).first<Video>();
   }
 
-  /** Os vídeos das estruturas, os mais novos primeiro; com `q`, só os que têm o trecho na fala. */
+  /** Dá nome ao vídeo (ou imagem); vazio tira o nome. Falso se o vídeo não é desta conta. */
+  async renameVideo(id: string, name: string | null): Promise<boolean> {
+    const r = await this.d1.prepare("UPDATE videos SET name = ?3 WHERE user_id = ?1 AND id = ?2").bind(this.userId, id, name).run();
+    return r.meta.changes > 0;
+  }
+
+  /** Os vídeos das estruturas, os mais novos primeiro; com `q`, só os que têm o trecho na fala ou no nome. */
   async videos(structures: string[], q = "", limit = 100): Promise<Video[]> {
     if (!structures.length) return [];
     return (
       await this.d1
-        .prepare(`SELECT * FROM videos WHERE user_id = ?1 AND structure IN (${structures.map((_, i) => `?${i + 4}`).join(", ")}) AND prompt LIKE ?2 ESCAPE '\\' ORDER BY created_at DESC, rowid DESC LIMIT ?3`)
+        .prepare(`SELECT * FROM videos WHERE user_id = ?1 AND structure IN (${structures.map((_, i) => `?${i + 4}`).join(", ")}) AND (prompt LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\') ORDER BY created_at DESC, rowid DESC LIMIT ?3`)
         .bind(this.userId, like(q), limit, ...structures)
         .all<Video>()
     ).results;
@@ -946,7 +954,7 @@ export class ContaDb {
     if (!structures.length) return [];
     const binds: (string | number)[] = [this.userId, like(f.q ?? "")];
     const bind = (v: string | number) => `?${binds.push(v)}`;
-    const where = [`structure IN (${structures.map(bind).join(", ")})`, "status = 'completed'", "video_key IS NOT NULL", "prompt LIKE ?2 ESCAPE '\\'"];
+    const where = [`structure IN (${structures.map(bind).join(", ")})`, "status = 'completed'", "video_key IS NOT NULL", "(prompt LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\')"];
     if (f.desde) where.push(`created_at >= ${bind(f.desde)}`);
     if (f.ate) where.push(`created_at < ${bind(f.ate)}`);
     if (f.depois) {

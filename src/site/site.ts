@@ -204,6 +204,8 @@ export class Site {
     if (/^\/avatares(\/|$)/.test(path)) return this.avatars(request, user, path, url);
     const saveToAvatar = /^\/videos\/([0-9a-f-]{36})\/salvar-avatar$/.exec(path);
     if (post && saveToAvatar) return this.saveVideoToAvatar(request, user, saveToAvatar[1]!);
+    const rename = /^\/videos\/([0-9a-f-]{36})\/nome$/.exec(path);
+    if (post && rename) return this.renameVideo(request, user, rename[1]!);
 
     // Projetos do canvas de edição: em teste, só o administrador (para os outros, as páginas nem existem).
     if (/^\/(canvas|projetos)(\/|$)/.test(path)) return pode(user, "usar:canvas") ? this.projects(request, user, path, url) : new Response("não encontrado", { status: 404 });
@@ -228,7 +230,7 @@ export class Site {
       const version = file[2];
       const key = version === "original" ? video?.video_key : version === "editado" ? video?.edited_key : (video?.processed_key ?? video?.video_key);
       if (!video || !key) return new Response("não encontrado", { status: 404 });
-      const name = `meu-avatar-${video.id.slice(0, 8)}${version ? `-${version}` : ""}.${file[3]}`;
+      const name = `${(video.name && slug(video.name)) || `meu-avatar-${video.id.slice(0, 8)}`}${version ? `-${version}` : ""}.${file[3]}`;
       return this.object(request, key, "private, max-age=86400", url.searchParams.has("baixar") ? name : undefined);
     }
 
@@ -686,7 +688,7 @@ ${error ? snackbar(error) : ""}`;
       .filter((v) => v.status === "completed" && v.video_key)
       .map((v) => ({
         id: v.id,
-        name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo",
+        name: v.name ?? (v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo"),
         src: `/videos/${v.id}.mp4`,
         when: formatDate(v.created_at),
       }));
@@ -987,6 +989,16 @@ ${error ? snackbar(error) : ""}`;
     return redirect(`/video/${video.id}`);
   }
 
+  /** "Renomear", na página do vídeo: só quem gerou; o nome vazio volta a mostrar a fala. */
+  private async renameVideo(request: Request, user: User, id: string): Promise<Response> {
+    const form = await request.formData();
+    const name = String(form.get("nome") ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_VIDEO_NAME);
+    if (!(await this.db.conta(user.id).renameVideo(id, name || null))) return new Response("não encontrado", { status: 404 });
+    if (request.headers.get("x-fetch")) return new Response(null, { status: 204, headers: SECURITY_HEADERS });
+    const from = String(form.get("de") ?? "");
+    return redirect(`/video/${id}${/^\/(?!\/)/.test(from) ? `?de=${encodeURIComponent(from)}` : ""}`);
+  }
+
   /** Onde está o rosto (JSON), para a prévia da edição rápida mirar o zoom. */
   private async face(user: User, id: string): Promise<Response> {
     const video = await this.db.conta(user.id).video(id);
@@ -1055,7 +1067,7 @@ ${error ? snackbar(error) : ""}`;
     // O modelo de imagem usa a mesma página, com a imagem no lugar do player (como a de um ativo).
     const image = makesImage(structure);
     const media = v.video_key && image
-      ? `<img class="viewer__video" src="${mediaSrc(v)}" alt="${esc(v.prompt)}">`
+      ? `<img class="viewer__video" src="${mediaSrc(v)}" alt="${esc(videoTitle(v))}">`
       : v.video_key
       ? `<div class="player viewer__player" style="--ratio:${ratio}"${quick ? " data-player" : ""}><div class="player__frame"><video autoplay preload="metadata" playsinline src="${src}"></video>${
           quick ? `<div class="player__controls" data-qe-controls hidden><button class="icon-button interactive" type="button" data-qe-play aria-label="Tocar a prévia" title="Tocar a prévia"><span class="icon">play_arrow</span></button><span class="player__time" data-qe-time></span></div>` : ""
@@ -1114,6 +1126,7 @@ ${error ? snackbar(error) : ""}`;
         <div class="viewer__panel" data-tab-panel="info">
           ${editing ? `<section class="viewer__card qe-busy" role="status"><h2 class="qe-result__title">Editando o vídeo</h2><div class="linear-progress" role="progressbar" aria-label="Editando o vídeo"></div><p class="qe-result__note">Fica pronto em 1 a 2 min.</p></section>` : ""}
           ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
+          ${mine ? nameField(v, from) : v.name ? `<section class="viewer__section"><h2 class="viewer__title">Nome</h2><div class="viewer__card"><p class="viewer__text">${esc(v.name)}</p></div></section>` : ""}
           <section class="viewer__section">
             <div class="viewer__section-head"><h2 class="viewer__title">${image ? "Descrição" : "Texto"}</h2>${v.prompt ? `<button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button>` : ""}</div>
             <div class="viewer__card">${avatar}${v.prompt ? `<p class="viewer__text">${esc(v.prompt)}</p>` : ""}</div>
@@ -1170,7 +1183,7 @@ ${error ? snackbar(error) : ""}`;
 ${saveDialog}
 ${quick ? `<form id="edicao-rapida" method="post" action="/videos/${v.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
 ${error ? snackbar(error) : ""}`;
-    return html(page(`${image ? "Imagem" : "Vídeo"} · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
+    return html(page(`${v.name ? `${v.name} · ` : ""}${image ? "Imagem" : "Vídeo"} · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
   }
 
   /** O modelo de onde a página do vídeo foi aberta, se ele aceita o vídeo (ou imagem) pronto da pessoa como referência. */
@@ -1890,6 +1903,27 @@ function outputThumb(v: Video, structure: Structure): string {
     : `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>`;
 }
 
+/** O nome de um vídeo (ou imagem) nas telas: o que a pessoa deu ou, sem nome, a fala. */
+function videoTitle(v: Pick<Video, "name" | "prompt">): string {
+  return v.name ?? v.prompt;
+}
+
+/**
+ * O Nome na folha do vídeo: um campo simples, como o nome do projeto no canvas. Sair do campo ou
+ * Enter salva (sem recarregar o vídeo); vazio tira o nome e as listas voltam a mostrar a fala.
+ */
+function nameField(v: Video, from: string): string {
+  return `<form class="name-edit" method="post" action="/videos/${v.id}/nome" data-rename>
+            ${from ? `<input type="hidden" name="de" value="${esc(from)}">` : ""}
+            ${textField("nome", "Nome", `type="text" value="${esc(v.name ?? "")}" maxlength="${MAX_VIDEO_NAME}" autocomplete="off"`)}
+          </form>`;
+}
+
+/** O nome do arquivo baixado: o nome do vídeo sem acentos nem símbolos. */
+function slug(name: string): string {
+  return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+}
+
 function videoLibrary(videos: Video[], o: LibraryOptions): string {
   const h = o.heading ?? "h2";
   const head = (count: string) => {
@@ -1911,14 +1945,14 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
     frame: (v) => {
       const status = cardStatus(v);
       const structure = o.structureOf(v);
-      const label = esc([v.prompt, status.kind === "done" ? null : status.label, formatDate(v.created_at), structure.name, durationLabel(v, structure)].filter(Boolean).join(" · "));
+      const label = esc([videoTitle(v), status.kind === "done" ? null : status.label, formatDate(v.created_at), structure.name, durationLabel(v, structure)].filter(Boolean).join(" · "));
       return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}"${dragRef(v, structure)} aria-label="${label}" title="${label}"><span class="frame__media">${thumb(v, status)}</span></a>`;
     },
     row: (v) => {
       const status = cardStatus(v), structure = o.structureOf(v);
       return `<a class="vrow interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" role="row" data-video="${v.id}" data-kind="${status.kind}"${dragRef(v, structure)}>
           <span class="vrow__thumb" role="cell">${thumb(v, status)}</span>
-          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(v.prompt)}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
+          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(videoTitle(v))}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
           <span class="vrow__status vrow__status--${status.kind}" role="cell"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label.replace(/ · .*/, ""))}</span>
           <span role="cell">${esc(o.image ? v.resolution : durationLabel(v, structure))}</span>
           <span class="vrow__wide" role="cell">${esc(`${v.aspect_ratio} · ${v.resolution}`)}</span>
@@ -1938,7 +1972,7 @@ interface SavableVideo {
 }
 
 function videoAssetName(s: SavableVideo): string {
-  return `${s.structure.name} ${s.video.id.slice(0, 8)}.${makesImage(s.structure) ? (s.key.split(".").pop() ?? "png") : "mp4"}`;
+  return `${s.video.name ?? `${s.structure.name} ${s.video.id.slice(0, 8)}`}.${makesImage(s.structure) ? (s.key.split(".").pop() ?? "png") : "mp4"}`;
 }
 
 /** O tipo do ativo que um vídeo (ou imagem) gerado vira no avatar. */
@@ -1949,6 +1983,7 @@ function savedKind(s: SavableVideo): { kind: AssetKind; type: string } {
 }
 
 const MAX_AVATAR_DESCRIPTION = 500;
+const MAX_VIDEO_NAME = 120;
 const ASSET_LABELS: Record<AssetKind, string> = { imagem: "Imagem", video: "Vídeo", audio: "Áudio" };
 const assetOrigin = (a: AvatarAsset) => `${ASSET_LABELS[a.kind]} ${a.source_video ? "gerad" : "enviad"}${a.kind === "imagem" ? "a" : "o"}`;
 /** O ativo que um campo do formulário recebe (a gravação da voz clonada fica na fala); null se não for ativo. */
@@ -1981,7 +2016,7 @@ interface PickedFile extends PickItem {
 /** Um vídeo ou imagem pronto como referência para outro modelo (painel, lista e "Usar para gerar"). */
 function generatedPick(v: Video, structure: Structure): PickItem {
   const kind: AssetKind = makesImage(structure) ? "imagem" : "video";
-  return { id: `gerado:${v.id}`, kind, name: v.prompt.slice(0, 80) || structure.name, src: mediaSrc(v), hint: kind === "imagem" ? "Imagem gerada" : "Vídeo gerado" };
+  return { id: `gerado:${v.id}`, kind, name: videoTitle(v).slice(0, 80) || structure.name, src: mediaSrc(v), hint: kind === "imagem" ? "Imagem gerada" : "Vídeo gerado" };
 }
 const ASSET_ICONS: Record<AssetKind, string> = { imagem: "image", video: "movie", audio: "mic" };
 const ASSET_ACCEPT = Object.keys(MEDIA_KINDS).join(",");
@@ -3056,6 +3091,25 @@ const SCRIPT = `(() => {
       });
       qeEl.querySelector("[data-qe-again]").addEventListener("click", () => qeEl.classList.add("is-again"));
       qeEl.querySelector("[data-qe-close]").addEventListener("click", () => qeEl.classList.remove("is-again"));
+    }
+
+    // O Nome: sair do campo ou Enter salva sem recarregar; se o envio falhar, vai pelo formulário.
+    const rename = viewer.querySelector("[data-rename]");
+    if (rename) {
+      const input = rename.elements.nome;
+      let saved = input.value.trim();
+      const save = async () => {
+        const value = input.value.replace(/\s+/g, " ").trim();
+        if (value === saved) return;
+        try {
+          const res = await fetch(rename.action, { method: "POST", body: new FormData(rename), headers: { "x-fetch": "1" } });
+          if (!res.ok) throw new Error(String(res.status));
+          document.title = (value ? value + " · " : "") + document.title.slice(saved ? saved.length + 3 : 0);
+          saved = value;
+        } catch { rename.submit(); }
+      };
+      rename.addEventListener("submit", (e) => { e.preventDefault(); input.blur(); });
+      input.addEventListener("change", save);
     }
 
     for (const c of viewer.querySelectorAll("[data-copy]")) c.addEventListener("click", async () => {

@@ -739,6 +739,8 @@ a.frame { display: block; }
 .viewer__card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-surface-container-highest); }
 .viewer__avatar { width: 72px; height: 72px; object-fit: cover; border-radius: var(--md-sys-shape-corner-medium); }
 .viewer__text { font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* O Nome do vídeo: campo simples na folha; o rótulo flutuante corta a borda com a cor da folha. */
+.name-edit { --field-surface: var(--md-sys-color-surface-container-low); }
 /* Detalhes no mesmo estilo do "Resultado da edição": título no card e uma linha por item (ícone, rótulo, valor). */
 .viewer__details { gap: 0; }
 .viewer__details dl { margin: 0; }

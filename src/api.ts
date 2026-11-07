@@ -276,7 +276,7 @@ export class Api {
     const pagina = videos.slice(0, limite);
     const ultimo = pagina[pagina.length - 1];
     return Response.json({
-      videos: pagina.map((v) => ({ id: v.id, fala: v.prompt, duracao: v.duration, resolucao: v.resolution, formato: v.aspect_ratio, criado: v.created_at, src: `/videos/${v.id}.mp4` })),
+      videos: pagina.map((v) => ({ id: v.id, ...(v.name ? { nome: v.name } : {}), fala: v.prompt, duracao: v.duration, resolucao: v.resolution, formato: v.aspect_ratio, criado: v.created_at, src: `/videos/${v.id}.mp4` })),
       ...(videos.length > limite && ultimo ? { continuar: `${ultimo.created_at}|${ultimo.id}` } : {}),
     });
   }
@@ -587,13 +587,13 @@ export class Api {
       const v = await this.db.conta(user.id).video(c.imagem);
       const structure = v && structureById(v.structure);
       if (!v || !v.video_key || v.status !== "completed" || !structure || !makesImage(structure) || !canUse(structure, user)) return null;
-      return { src: `/videos/${v.id}.${v.video_key.split(".").pop()}`, kind: "image", dur: null, name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Imagem" };
+      return { src: `/videos/${v.id}.${v.video_key.split(".").pop()}`, kind: "image", dur: null, name: v.name ?? (v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Imagem") };
     }
     if (typeof c.video === "string") {
       const v = await this.db.conta(user.id).video(c.video);
       const structure = v && structureById(v.structure);
       if (!v || !ready(v) || !structure || makesImage(structure) || !canUse(structure, user)) return null;
-      return { src: `/videos/${v.id}.mp4`, kind: "video", dur: await this.duration(v), name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo" };
+      return { src: `/videos/${v.id}.mp4`, kind: "video", dur: await this.duration(v), name: v.name ?? (v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo") };
     }
     if (typeof c.arquivo !== "string") return null;
     const file = await this.db.projectFile(project.id, c.arquivo);

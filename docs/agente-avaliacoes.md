@@ -109,6 +109,8 @@ vídeos da Marina, a troca dos rascunhos, a legenda e a trilha.
   de reescrever.
 - Áudio: enviar música por URL ou da biblioteca do site (o base64 sem terminal é inviável) e ter
   uma biblioteca de trilhas.
+  (Por URL, feito em 07/11/2026: `enviar_arquivo {url}`, o servidor baixa; vale para imagem, vídeo e
+  áudio. Arquivo que só está no computador da pessoa, sem terminal, ainda não entra.)
 - Remover pausas por limite: cortar toda pausa acima de X segundos em todos os blocos, com realinhamento.
   (Feito: `removerPausas {acima}`, com as camadas acompanhando. Num teste só pelo MCP, em 05/11/2026,
   um agente conferiu os quatro casos com os números esperados; achou um erro, corrigido no mesmo dia:

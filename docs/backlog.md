@@ -72,8 +72,8 @@ Próximos passos, nesta ordem:
      `inspecionar_animacao`).
    - *Pronto para usar*: em vez de templates adivinhados, o agente reusa o que já fez (feito,
      acima). Faltam: kit de marca por perfil, preset de legenda numa chamada, onde fica
-     o rosto de cada avatar, modelo de projeto com ganchos ligados ao corpo, música por URL ou da
-     biblioteca do site.
+     o rosto de cada avatar, modelo de projeto com ganchos ligados ao corpo, música da biblioteca do
+     site (por URL já entra: `enviar_arquivo {url}`).
 2. **Fechar o HyperFrames**: um projeto real feito só pelo MCP, do roteiro à exportação (o da Lara
    Resende está em andamento). Os modelos por marca (títulos, lower thirds, selos) saem do reuso:
    o que um agente fizer para a marca, o próximo copia.
