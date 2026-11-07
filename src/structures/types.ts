@@ -18,6 +18,8 @@ export interface Option {
   label: string;
   /** Explicação da opção, mostrada abaixo do campo quando ela está escolhida. */
   description?: string;
+  /** Vem separada das de cima por um divisor no menu (o "Sem fala" do Omni). */
+  divider?: boolean;
 }
 
 /** Uma voz pronta: a opção e o que o menu de vozes mostra dela. */

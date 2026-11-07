@@ -107,7 +107,7 @@ export const OMNI: Structure = {
             kind: "select",
             name: "idioma",
             label: "Idioma da fala",
-            options: [...LANGUAGES.map((l) => ({ value: l.id, label: l.label })), { value: NO_SPEECH, label: "Sem fala" }],
+            options: [...LANGUAGES.map((l) => ({ value: l.id, label: l.label })), { value: NO_SPEECH, label: "Sem fala", divider: true }],
             value: LANGUAGES[0]!.id,
           },
           {

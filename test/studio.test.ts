@@ -676,7 +676,7 @@ describe("Gemini Omni 1.2 Flash", () => {
     const page = await (await get("/modelo/omni")).text();
     expect(page).not.toContain('name="estilo"');
     expect(page).toMatch(/<textarea [^>]*name="instrucoes" rows="1" required maxlength="500"[^>]*data-per-avatar/);
-    expect(page).toContain(`<option value="${NO_SPEECH}">Sem fala</option>`);
+    expect(page).toContain(`<option value="${NO_SPEECH}" data-divider>Sem fala</option>`);
     // O texto só aparece com um idioma escolhido.
     expect(page).toMatch(/data-show-if="[^"]*idioma[^"]*"[\s\S]{0,400}name="fala"|name="fala"[\s\S]{0,400}data-show-if="[^"]*idioma/);
     expect(page).toMatch(new RegExp(`<textarea [^>]*name="fala" rows="1" required maxlength="${MAX_OMNI_SPEECH}"`));
@@ -724,7 +724,7 @@ describe("Gemini Omni 1.2 Flash", () => {
     const [video] = await new Db(env.DB).recentVideos();
     expect(video).toMatchObject({ prompt: "", language: NO_SPEECH, extra: CENA });
     expect(await (await get(`/video/${video!.id}`, undefined, api)).text()).toContain("Sem fala");
-    expect(await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text()).toContain(`<option value="${NO_SPEECH}" selected>`);
+    expect(await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text()).toContain(`<option value="${NO_SPEECH}" selected data-divider>`);
   });
 
   it("ao escolher o avatar, as instruções voltam com as últimas usadas com ele", async () => {

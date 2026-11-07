@@ -2300,7 +2300,7 @@ function fieldHtml(f: Field, value: Values): string {
       const supporting = description !== undefined ? `<span data-description-for="${f.name}">${esc(description)}</span>` : f.supporting ? `<span>${esc(f.supporting)}</span>` : "";
       return `<div class="text-field text-field--select">
           <select class="text-field__input" id="${f.name}" name="${f.name}"${supporting ? ` aria-describedby="${f.name}-ajuda"` : ""}>${f.options
-            .map((o) => `<option value="${esc(o.value)}"${o.value === selected ? " selected" : ""}${o.description ? ` data-description="${esc(o.description)}"` : ""}>${esc(o.label)}</option>`)
+            .map((o) => `<option value="${esc(o.value)}"${o.value === selected ? " selected" : ""}${o.description ? ` data-description="${esc(o.description)}"` : ""}${o.divider ? " data-divider" : ""}>${esc(o.label)}</option>`)
             .join("")}</select>
           <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
           <span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
@@ -2594,12 +2594,14 @@ const SCRIPT = `(() => {
       const item = document.createElement("div");
       item.className = "select-menu__item interactive"; item.setAttribute("role", "option"); item.tabIndex = -1;
       item.dataset.value = o.value; item.textContent = o.textContent;
+      // Opção de outro grupo: o divisor do menu vertical antes dela.
+      if (o.hasAttribute("data-divider")) list.insertAdjacentHTML("beforeend", '<hr class="menu__divider" aria-hidden="true">');
       list.append(item);
     }
     sel.classList.add("visually-hidden"); sel.tabIndex = -1; sel.setAttribute("aria-hidden", "true");
     sel.after(btn); document.body.append(list);
     if (label) { label.htmlFor = btn.id; label.id = btn.id + "-rotulo"; btn.setAttribute("aria-labelledby", label.id + " " + btn.id); }
-    const items = [...list.children];
+    const items = [...list.querySelectorAll("[role=option]")];
     const sync = () => {
       btn.textContent = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : "";
       for (const i of items) i.setAttribute("aria-selected", String(i.dataset.value === sel.value));
