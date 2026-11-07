@@ -86,7 +86,7 @@ describe("acesso", () => {
     const page = await (await get("/")).text();
     expect(page).toContain('href="/modelo/wan"');
     expect(page).toContain('href="/modelo/heygen"');
-    expect(page).toContain("Em teste: só o administrador vê");
+    expect(page).toContain("Em teste: só quem testa vê");
   });
 
   it("estrutura que não existe dá 404", async () => {
@@ -222,7 +222,7 @@ describe("acesso negado à estrutura em teste", () => {
     const { HEYGEN_AVATAR } = await import("../src/structures/heygen");
     const api = new FakeVideoApi();
     const studio = createStudio({ ...env, SITE_URL: SITE }, { api, audio: null });
-    await expect(studio.create({ structure: HEYGEN_AVATAR, values: () => "", user: { id: 1, role: "member" } })).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(studio.create({ structure: HEYGEN_AVATAR, values: () => "", user: { id: 1, role: "member", permissoes: [] } })).rejects.toBeInstanceOf(ForbiddenError);
     expect(api.submitted).toHaveLength(0);
   });
 });
@@ -880,7 +880,7 @@ describe("Nano Banana 2.1 (imagem)", () => {
     const started: string[] = [];
     const studio = createStudio({ ...env, SITE_URL: SITE }, { api, images: { start: async (id) => void started.push(id) } });
     await cookie();
-    const user = (await env.DB.prepare("SELECT id, email, name, role, created_at AS createdAt FROM users WHERE role = 'admin'").first<User>())!;
+    const user = { ...(await env.DB.prepare("SELECT id, email, name, role, created_at AS createdAt FROM users WHERE role = 'admin'").first<User>())!, permissoes: [] };
     const values = (n: string) => ({ descricao: CENA, resolucao: "1K", formato: "9:16" })[n] ?? "";
     const video = await studio.create({ structure: NANO_BANANA, values, image: foto(), user });
     // Sair da página agora não deixa nada preso: o pedido já voltou.

@@ -10,10 +10,13 @@
  * - Sessões são códigos aleatórios de 256 bits. O navegador leva o código; o
  *   banco guarda só o hash SHA-256 dele.
  * - 5 senhas erradas seguidas bloqueiam a conta por 15 minutos.
+ * - Conta com a marca "suspensa" (src/permissoes.ts) não entra: o login responde como senha
+ *   errada, e a sessão e o token deixam de valer.
  */
 import bcrypt from "bcryptjs";
 import type { Db, User } from "./db";
 import { ERROS } from "./erros";
+import { pode } from "./permissoes";
 
 export const SESSION_DAYS = 30;
 export const MAX_FAILED_LOGINS = 5;
@@ -64,7 +67,8 @@ export class Accounts {
 
   async login(rawEmail: string, password: string): Promise<LoginResult> {
     const user = await this.db.getUserByEmail(normalizeEmail(rawEmail));
-    if (!user?.passwordHash) {
+    // Conta suspensa responde como senha errada, no mesmo tempo (não diz que a conta existe).
+    if (!user?.passwordHash || pode(user, "suspensa")) {
       await bcrypt.compare(password, await this.dummy());
       return { ok: false, reason: "invalid" };
     }
@@ -86,12 +90,12 @@ export class Accounts {
   /** A conta da sessão, ou null se o código não vale (ou venceu). */
   async session(token: string | null): Promise<User | null> {
     if (!token) return null;
-    return this.db.sessionUser(await sha256(token), this.now().toISOString());
+    return ativa(await this.db.sessionUser(await sha256(token), this.now().toISOString()));
   }
 
   /** A conta de um token da API (docs/api.md). */
   async tokenUser(token: string): Promise<User | null> {
-    return this.db.tokenUser(await sha256(token), this.now());
+    return ativa(await this.db.tokenUser(await sha256(token), this.now()));
   }
 
   async logout(token: string | null): Promise<void> {
@@ -120,6 +124,11 @@ export class Accounts {
     this.dummyHash ??= bcrypt.hash(randomToken(), this.bcryptCost);
     return this.dummyHash;
   }
+}
+
+/** A conta, se não está suspensa (a sessão e o token dela deixam de valer na hora). */
+function ativa(user: User | null): User | null {
+  return user && !pode(user, "suspensa") ? user : null;
 }
 
 export function normalizeEmail(email: string): string {

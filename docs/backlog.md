@@ -298,14 +298,13 @@ e não tela por tela. Tudo o que existe hoje é do administrador (no ar, nenhum 
   projeto. O Canvas já pode abrir para os membros (falta o limite de uso, acima).
   No banco (`migrations/0018_dono.sql`): gatilhos recusam vídeo sem dono e ativo de avatar ligado a
   vídeo de outra conta, e o índice `videos_by_user` serve as listas de cada conta.
+  Permissões (`src/permissoes.ts`, no molde do TabNews): catálogo fechado e `pode()`, com
+  `:outros` para o que é de outra conta; os papéis são pacotes no código, e cada conta tem
+  ajustes em `users.permissoes` (testador, `-usar:canvas`, `suspensa`). O CHECK de `users.role`
+  ficou: tirá-lo exige refazer a tabela, e no D1 isso apagaria em cascata sessões, projetos e
+  avatares. Os ajustes cobrem o que um papel novo cobriria.
 - **Falta, um PR por vez:**
-  1. Permissões no molde do TabNews (`models/authorization.js`): catálogo fechado
-     (`src/permissoes.ts`) e `pode(conta, permissão, recurso?)`, com `:outros` para o que é
-     de outra conta; os papéis são pacotes de permissões no código e cada conta pode ter
-     permissões a mais ou a menos no banco (testador, suspensa). Troca os
-     `role === "admin"` e os `canUse` espalhados. Na migration dele, tirar o CHECK de `users.role`
-     (exige refazer a tabela de contas, que esse PR já mexe).
-  2. Convites (abaixo).
+  1. Convites (abaixo).
 
 Hoje o primeiro cadastro vira admin e o cadastro fecha. O admin precisa
 convidar outras pessoas. Portar do estuda.mais (`src/auth.ts` e o painel

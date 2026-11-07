@@ -24,6 +24,7 @@ import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth
 import type { AssetKind, Avatar, AvatarAsset, Db, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
 import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
 import { ERROS, PARTES } from "../erros";
+import { pode } from "../permissoes";
 import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -98,9 +99,10 @@ export class Site {
     private readonly config: SiteConfig,
   ) {}
 
-  /** O vídeo que a pessoa vê: o dela ou, para o administrador, qualquer um (o painel leva às falhas de todos). */
+  /** O vídeo que a pessoa vê: o dela ou, com "ler:video:outros", o de outra conta (o painel leva às falhas de todos). */
   private async visibleVideo(user: User, id: string): Promise<Video | null> {
-    return (await this.db.conta(user.id).video(id)) ?? (user.role === "admin" ? this.db.videoById(id) : null);
+    const video = await this.db.videoById(id);
+    return video && pode(user, "ler:video", video) ? video : null;
   }
 
   async handle(request: Request): Promise<Response> {
@@ -126,7 +128,7 @@ export class Site {
       const caller = bearer ? await this.accounts.tokenUser(bearer) : null;
       if (!caller) return Response.json({ erro: "token_invalido" }, { status: 401, headers: { "www-authenticate": "Bearer" } });
       // Em teste, como os projetos: para os outros, nada existe.
-      if (caller.role !== "admin") return Response.json({ erro: "nao_encontrado" }, { status: 404 });
+      if (!pode(caller, "usar:api")) return Response.json({ erro: "nao_encontrado" }, { status: 404 });
       // Cada ferramenta do MCP é um pedido às rotas abaixo, com o mesmo token.
       if (path === "/mcp") return handleMcp(request, (method, to, body, headers) => this.handle(new Request(new URL(to, url), { method, body, headers: { ...headers, authorization: `Bearer ${bearer}` } })));
       if (API_PATH.test(path)) return new Api(this.db, this.media, this.exports, this.studio).handle(request, caller, path, url);
@@ -164,7 +166,7 @@ export class Site {
     if (!post && path === "/videos") return this.videosPage(user, url);
     // O painel do administrador: para os outros, a página nem existe.
     const panel = /^\/painel(?:\/(custos|atividade))?$/.exec(path);
-    if (!post && panel) return user.role === "admin" ? this.panelPage(user, url, (panel[1] as PanelTab | undefined) ?? "geral") : new Response("não encontrado", { status: 404 });
+    if (!post && panel) return pode(user, "ver:painel") ? this.panelPage(user, url, (panel[1] as PanelTab | undefined) ?? "geral") : new Response("não encontrado", { status: 404 });
     // Endereços da versão anterior.
     if (!post && path === "/novo") return redirect("/");
     const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
@@ -184,7 +186,7 @@ export class Site {
     if (model) {
       // Estrutura que não existe ou que a pessoa não pode usar: a página nem aparece.
       const found = structureById(model[1]);
-      if (!found || !canUse(found, user.role)) return new Response("não encontrado", { status: 404 });
+      if (!found || !canUse(found, user)) return new Response("não encontrado", { status: 404 });
       // O HeyGen pode estar na API direta (config do banco): o formulário mostra só o que ela aceita.
       const structure = await this.studio.resolve(found);
       if (post) return this.createVideo(request, user, structure);
@@ -204,7 +206,7 @@ export class Site {
     if (post && saveToAvatar) return this.saveVideoToAvatar(request, user, saveToAvatar[1]!);
 
     // Projetos do canvas de edição: em teste, só o administrador (para os outros, as páginas nem existem).
-    if (/^\/(canvas|projetos)(\/|$)/.test(path)) return user.role === "admin" ? this.projects(request, user, path, url) : new Response("não encontrado", { status: 404 });
+    if (/^\/(canvas|projetos)(\/|$)/.test(path)) return pode(user, "usar:canvas") ? this.projects(request, user, path, url) : new Response("não encontrado", { status: 404 });
 
     const quickEdit = /^\/videos\/([0-9a-f-]{36})\/edicao-rapida$/.exec(path);
     if (post && quickEdit) return this.quickEdit(request, user, quickEdit[1]!);
@@ -504,7 +506,7 @@ ${error ? snackbar(error) : ""}`;
   private async savableVideo(id: string | null, user: User): Promise<SavableVideo | null> {
     const video = id ? await this.db.conta(user.id).video(id) : null;
     const structure = video ? videoStructure(video) : undefined;
-    if (!video || !structure || !canUse(structure, user.role)) return null;
+    if (!video || !structure || !canUse(structure, user)) return null;
     const key = video.edited_key ?? video.processed_key ?? video.video_key;
     const head = key ? await this.media.head(key) : null;
     return key && head ? { video, structure, key, size: head.size } : null;
@@ -561,13 +563,13 @@ ${error ? snackbar(error) : ""}`;
     const q = (url.searchParams.get("q") ?? "").trim();
     const counts = await this.db.conta(user.id).countByStructure();
     // As versões de um modelo ficam no card da principal (o seletor Versão fica na página).
-    const structures = STRUCTURES.filter((s) => !s.family && canUse(s, user.role) && s.name.toLowerCase().includes(q.toLowerCase()));
+    const structures = STRUCTURES.filter((s) => !s.family && canUse(s, user) && s.name.toLowerCase().includes(q.toLowerCase()));
     const cards = structures.map((s, i) => {
       const n = familyOf(s).reduce((sum, v) => sum + (counts.get(v.id) ?? 0), 0);
       return tileCard({
         href: `/modelo/${s.id}`,
         tile: `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">${esc(s.icon)}</span></span>`,
-        badge: s.access === "admin" ? { label: "Em teste", title: "Em teste: só o administrador vê" } : undefined,
+        badge: s.access === "admin" ? { label: "Em teste", title: "Em teste: só quem testa vê" } : undefined,
         headline: s.name,
         // O modelo de imagem não tem os vídeos na aba Vídeos: as imagens ficam na página dele.
         supporting: makesImage(s) ? plural(n, "imagem", "imagens") : plural(n, "vídeo", "vídeos"),
@@ -580,7 +582,7 @@ ${error ? snackbar(error) : ""}`;
       });
     });
     // Só o administrador vê o alarme de contêiner ligado sem trabalho (src/vigia.ts).
-    const alarm = user.role === "admin" && !this.config.local ? await this.db.alarm<Alarme>(ALARME) : null;
+    const alarm = pode(user, "ver:painel") && !this.config.local ? await this.db.alarm<Alarme>(ALARME) : null;
     const banners = [...(alarm?.ligados.length ? [ERROS.servicoLigado] : []), ...(alarm?.semPainel ? [ERROS.alarmeSemPainel] : [])];
     const body = `
 <main class="page" id="conteudo">
@@ -679,7 +681,7 @@ ${error ? snackbar(error) : ""}`;
 
   /** O canvas de um projeto, com os vídeos prontos de quem usa e o que já estava salvo. */
   private async canvasPage(user: User, project: Project): Promise<Response> {
-    const usable = STRUCTURES.filter((s) => canUse(s, user.role));
+    const usable = STRUCTURES.filter((s) => canUse(s, user));
     const videos = (await this.db.conta(user.id).videos(usable.map((s) => s.id)))
       .filter((v) => v.status === "completed" && v.video_key)
       .map((v) => ({
@@ -736,7 +738,7 @@ ${CANVAS_BODY}
     }
     const pick = Array.isArray(body.versoes) && body.versoes.every((v) => Number.isInteger(v)) ? (body.versoes as number[]) : undefined;
     try {
-      const row = await this.exports.start(project, user.role, typeof body.final === "string" ? body.final : "", pick);
+      const row = await this.exports.start(project, user, typeof body.final === "string" ? body.final : "", pick);
       return Response.json(this.exports.state(project, row), { status: 201 });
     } catch (err) {
       if (err instanceof InputError) return new Response(err.message, { status: 400 });
@@ -821,7 +823,7 @@ ${CANVAS_BODY}
     const q = (url.searchParams.get("q") ?? "").trim();
     // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
     const only = url.searchParams.get("modelo") ?? "";
-    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s) && (!only || (s.family ?? s.id) === only));
+    const usable = STRUCTURES.filter((s) => canUse(s, user) && !makesImage(s) && (!only || (s.family ?? s.id) === only));
     const videos = await this.db.conta(user.id).videos(usable.map((s) => s.id), q);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // A mesma lista da página do modelo (filtro, ordem, vista e agrupamento no navegador); a busca pela fala fica no servidor.
@@ -871,7 +873,7 @@ ${CANVAS_BODY}
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const image = makesImage(structure);
     // As versões do mesmo modelo dividem a lista.
-    const videos = await this.db.conta(user.id).videos(familyOf(structure).filter((s) => canUse(s, user.role)).map((s) => s.id));
+    const videos = await this.db.conta(user.id).videos(familyOf(structure).filter((s) => canUse(s, user)).map((s) => s.id));
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // Os ativos abrem o painel, depois das seções que vêm antes (o "Uso"); o resto (a fala
     // inclusive) segue as seções da estrutura. O modelo aceita o que os campos dele pedem.
@@ -881,7 +883,7 @@ ${CANVAS_BODY}
     const voiceField = fields.find((f) => f.kind === "voice");
     const avatars = kinds.length ? await this.db.avatarsByUser(user.id) : [];
     // Campo que volta com o último texto usado com o avatar (as instruções do Omni, guardadas em `extra`).
-    const family = familyOf(structure).filter((s) => canUse(s, user.role));
+    const family = familyOf(structure).filter((s) => canUse(s, user));
     const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.conta(user.id).lastExtraByAvatar(family.map((s) => s.id)) : undefined;
     const assets = kinds.length ? (await this.db.assetsByUser(user.id)).filter((a) => kinds.includes(a.kind)) : [];
     // "Adicionar ativo": a primeira página do que a pessoa já gerou, de todos os modelos, por tipo.
@@ -944,7 +946,7 @@ ${error ? snackbar(error) : ""}`;
   /** Uma página do menu de vozes, só com o que os filtros pedem. */
   private async voiceList(user: User, url: URL): Promise<Response> {
     const found = structureById("heygen");
-    if (!found || !canUse(found, user.role)) return new Response("não encontrado", { status: 404 });
+    if (!found || !canUse(found, user)) return new Response("não encontrado", { status: 404 });
     const structure = await this.studio.resolve(found);
     const lists = await this.studio.lists(structure, user.id);
     const voice = structure.sections(null, this.config.defaults, lists).flatMap((s) => s.fields).find((f) => f.kind === "voice");
@@ -957,7 +959,7 @@ ${error ? snackbar(error) : ""}`;
   /** A amostra de uma voz pronta, só para quem pode usar o modelo; a HeyGen não aparece no navegador. */
   private async voicePreview(user: User, id: string): Promise<Response> {
     const structure = structureById("heygen");
-    if (!structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
+    if (!structure || !canUse(structure, user)) return new Response("não encontrado", { status: 404 });
     try {
       const audio = await this.studio.voicePreview(id);
       if (audio) return new Response(audio.bytes, { headers: { ...SECURITY_HEADERS, "content-type": audio.type, "cache-control": "private, max-age=86400" } });
@@ -1036,7 +1038,7 @@ ${error ? snackbar(error) : ""}`;
   private async videoPage(user: User, id: string, url: URL, error?: string): Promise<Response> {
     const v = await this.visibleVideo(user, id);
     const structure = v && videoStructure(v);
-    if (!v || !structure || !canUse(structure, user.role)) return new Response("não encontrado", { status: 404 });
+    if (!v || !structure || !canUse(structure, user)) return new Response("não encontrado", { status: 404 });
     // O vídeo de outra pessoa (o administrador, vindo do painel) só se vê: sem Refazer, Salvar, Usar nem Edição rápida.
     const mine = v.user_id === user.id;
     const avatars = await this.db.avatarsByUser(user.id);
@@ -1175,7 +1177,7 @@ ${error ? snackbar(error) : ""}`;
   private async useTarget(v: Video, back: string, user: User): Promise<string | null> {
     const id = /^\/modelo\/([a-z0-9-]+)(?:[?#]|$)/.exec(back)?.[1];
     const found = id ? structureById(id) : undefined;
-    if (!found || !canUse(found, user.role)) return null;
+    if (!found || !canUse(found, user)) return null;
     // A mesma conferência da escolha no painel (dono, pronto, arquivo no R2): o botão nunca leva a nada.
     const pick = await this.pickFile(`gerado:${v.id}`, user);
     const structure = await this.studio.resolve(found);
@@ -2671,7 +2673,7 @@ function accountActions(user: User): string {
       <div class="menu__list">
         <p class="menu__header"><span class="menu__name">${esc(user.name)}</span><span class="menu__email">${esc(user.email)}</span></p>
         <hr class="menu__divider">
-        ${user.role === "admin" ? `<a class="menu__item interactive" href="/painel"><span class="icon">monitoring</span>Painel</a>` : ""}
+        ${pode(user, "ver:painel") ? `<a class="menu__item interactive" href="/painel"><span class="icon">monitoring</span>Painel</a>` : ""}
         <form method="post" action="/sair"><button class="menu__item interactive" type="submit"><span class="icon">logout</span>Sair</button></form>
       </div>
     </details>`;
@@ -2701,7 +2703,7 @@ function topAppBar(bar: Exclude<Bar, false>): string {
   const tab = (id: string, href: string, label: string) => `<a class="nav-pill interactive" href="${href}"${bar.tab === id ? ' aria-current="page"' : ""}>${label}</a>`;
   return `<header class="top-app-bar top-app-bar--home" data-app-bar>
   ${brand("/")}
-  <nav class="nav-pills" aria-label="Seções">${tab("modelos", "/", "Modelos")}${tab("avatares", "/avatares", "Avatares")}${tab("videos", "/videos", "Vídeos")}${bar.user.role === "admin" ? tab("projetos", "/projetos", "Projetos") : ""}</nav>
+  <nav class="nav-pills" aria-label="Seções">${tab("modelos", "/", "Modelos")}${tab("avatares", "/avatares", "Avatares")}${tab("videos", "/videos", "Vídeos")}${pode(bar.user, "usar:canvas") ? tab("projetos", "/projetos", "Projetos") : ""}</nav>
   <div class="top-app-bar__tools">
     <form class="search-field" role="search" method="get" action="${search.action}">
       <span class="icon" aria-hidden="true">search</span>

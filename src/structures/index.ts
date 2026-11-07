@@ -1,4 +1,5 @@
-import type { Platform, Role, Video } from "../db";
+import type { Platform, Video } from "../db";
+import { type Conta, pode } from "../permissoes";
 import { ALEPH } from "./aleph";
 import type { VideoModel } from "../openrouter";
 import { HEYGEN_AVATAR, speechSeconds } from "./heygen";
@@ -52,8 +53,9 @@ export function videoPlatform(video: Video): Platform {
 }
 
 /** A estrutura pode ser vista e usada por quem tem esse papel? */
-export function canUse(structure: Structure, role: Role): boolean {
-  return structure.access === "all" || role === "admin";
+/** A conta pode gerar com a estrutura: a liberada para todos, ou a em teste com "usar:modelo:teste". */
+export function canUse(structure: Structure, conta: Conta): boolean {
+  return pode(conta, structure.access === "all" ? "usar:modelo" : "usar:modelo:teste");
 }
 
 /** Preço por segundo de cada SKU da estrutura. */
