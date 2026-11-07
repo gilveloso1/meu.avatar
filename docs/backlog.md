@@ -133,7 +133,7 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    para o administrador testar; ver abaixo)
 3. Voz gerada à parte e avatar falante (o HeyGen Avatar IV já faz isso numa
    chamada só; ver o item 1)
-4. Convites do administrador
+4. Contas e permissões (cada conta vê só o que é dela; ver abaixo), com os convites
 5. Esqueci a senha
 
 ## Onde estamos (25/10/2026)
@@ -284,7 +284,26 @@ que sincroniza a boca com o áudio: `heygen/avatar-iv` no OpenRouter
 referência. É o que o Higgsfield faz no explainer narrado (voz à parte, juntada
 depois). Muda mais o fluxo: duas chamadas e duas esperas por vídeo.
 
-## 4. Convites do administrador
+## 4. Contas e permissões (aprovado em 07/11/2026)
+
+Antes de entrar a segunda pessoa, cada conta precisa ver só o que é dela, conferido no banco
+e não tela por tela. Tudo o que existe hoje é do administrador (no ar, nenhum vídeo sem dono).
+
+- **Feito:** `ContaDb` (`db.conta(userId)`, `src/db.ts`): toda consulta leva `user_id = ?1`
+  (`test/dono.test.ts` confere). O site lê os vídeos por ela: listas, contagem, página,
+  arquivos, rosto, edição rápida, Refazer, Salvar no avatar e "Adicionar ativo". O administrador
+  abre o vídeo de outra conta só para ver (o painel leva às falhas), sem agir nele.
+- **Falta, um PR por vez:**
+  1. Canvas, API, MCP e exportação pela `ContaDb` (hoje listam e usam os vídeos de todos;
+     só o administrador entra neles). Depois disso, o Canvas pode abrir para os membros.
+  2. Migration: gatilhos que recusam vídeo sem dono e ativo ligado a vídeo de outra conta,
+     índice `videos(user_id, structure, created_at)`, e tirar o CHECK de `users.role`.
+  3. Permissões no molde do TabNews (`models/authorization.js`): catálogo fechado
+     (`src/permissoes.ts`) e `pode(conta, permissão, recurso?)`, com `:outros` para o que é
+     de outra conta; os papéis são pacotes de permissões no código e cada conta pode ter
+     permissões a mais ou a menos no banco (testador, suspensa). Troca os
+     `role === "admin"` e os `canUse` espalhados.
+  4. Convites (abaixo).
 
 Hoje o primeiro cadastro vira admin e o cadastro fecha. O admin precisa
 convidar outras pessoas. Portar do estuda.mais (`src/auth.ts` e o painel

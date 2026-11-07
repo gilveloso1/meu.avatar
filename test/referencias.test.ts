@@ -115,14 +115,13 @@ describe("referências sem avatar", () => {
     expect(await (await get("/modelo/wan", await memberCookie())).text()).not.toContain('data-recent-item="');
   });
 
-  it("os vídeos prontos da pessoa na lista do modelo podem ser arrastados para o painel; os dos outros, não", async () => {
+  it("os vídeos prontos da pessoa na lista do modelo podem ser arrastados para o painel; os dos outros nem aparecem", async () => {
     const dono = await cookie();
     const video = await pronto(dono);
     expect(await (await get("/modelo/wan", dono)).text()).toContain(`&quot;id&quot;:&quot;gerado:${video.id}&quot;`);
     const membro = await memberCookie();
     const page = await (await get("/modelo/wan", membro)).text();
-    expect(page).toContain(`data-video="${video.id}"`);
-    expect(page).not.toContain(`gerado:${video.id}`);
+    expect(page).not.toContain(video.id);
   });
 });
 
@@ -214,10 +213,10 @@ describe("Refazer", () => {
     expect(picks.items![0]).toMatchObject({ hint: "Imagem gerada" });
   });
 
-  it("de um vídeo de outra pessoa, volta só com o texto e os ajustes", async () => {
+  it("de um vídeo de outra pessoa, nada volta: nem o texto", async () => {
     const feito = await pronto(await cookie(), { campos: { imagem: foto("foto-do-dono") } });
     const page = await (await get(`/modelo/wan?refazer=${feito.id}`, await memberCookie())).text();
-    expect(page).toContain(FALA);
+    expect(page).not.toContain(FALA);
     expect(page).not.toContain(`origem:${feito.id}`);
     expect(page).not.toContain("data-picks");
   });
