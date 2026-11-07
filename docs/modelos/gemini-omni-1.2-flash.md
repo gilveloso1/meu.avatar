@@ -83,6 +83,27 @@ resultado da eleição para presidente sai entre oito e meia e nove da noite!".
   Bem diferente do Wan (−5 LUFS, com clipping, ver [docs/prompt.md](../prompt.md)): limpo,
   só mais baixo que o alvo de −14 LUFS.
 
+## Testes de 07/11/2026, depois dos ajustes (sem orientação padrão)
+
+Publicado o formulário novo (versão `9b8553d2`). Marina, 4 s, 720p, 9:16, instruções em
+português, como quem usa escreve. **As quatro tentativas falharam**, sem custo, todas com
+"Video generation failed" e sem outro motivo no job do OpenRouter:
+
+| Vídeo (D1) | Fala | Pedido | Falhou em |
+|---|---|---|---|
+| `fa3f8946` | "O resultado sai hoje, entre oito e meia e nove!" | 17:06:30 | 17:08:06 |
+| `3e551e0b` | Sem fala | 17:06:56 | 17:08:06 |
+| `683563aa` | a mesma fala (de novo) | 17:09:12 | 17:10:07 |
+| `8f821fcc` | Sem fala (de novo) | 17:09:35 | 17:11:05 |
+
+Os prompts saíram como planejado (instruções, a fala só com a mecânica ou `OMNI_SILENT`, e
+`OMNI_NO_TEXT`). A página do modelo no OpenRouter mostrava, na hora, **54% de
+disponibilidade nas últimas 24 h** (o 1.1, 87%): metade dos pedidos falha no Google. Mas
+quatro falhas seguidas pesam contra só o acaso. Diferenças para o teste que deu certo: 4 s
+(lá, 8 s) e instruções em português (lá, tudo em inglês, menos a fala). As instruções de
+quem usa vão como foram escritas; a regra dos prompts do projeto é mandar ao gerador em
+inglês.
+
 ## Próximo passo
 
 Gerar um vídeo com fala e instruções (sem a orientação de voz do Wan) e um sem fala; medir o
