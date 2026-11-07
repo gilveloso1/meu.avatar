@@ -15,7 +15,7 @@ async function videos() {
   const now = new Date().toISOString();
   const insert = (id: string, status: string, key: string | null) =>
     env.DB.prepare(
-      "INSERT OR IGNORE INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES (?, ?, ?, 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)",
+      "INSERT OR IGNORE INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, ?, ?, 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)",
     )
       .bind(id, status, "Oi, gente! Hoje eu vou mostrar meu produto favorito.", key, now, now)
       .run();
@@ -43,6 +43,10 @@ describe("projetos do canvas", () => {
     expect(c.videos).toEqual([
       { id: "11111111-1111-4111-8111-111111111111", name: "Oi, gente! Hoje eu vou mostrar", src: "/videos/11111111-1111-4111-8111-111111111111.mp4", when: expect.any(String) },
     ]);
+    // O vídeo de outra conta não aparece na lista do canvas.
+    await memberCookie();
+    await env.DB.prepare("UPDATE videos SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com')").run();
+    expect(config(await (await get(`/canvas/${id}`, admin)).text()).videos).toEqual([]);
     expect(c.projeto).toMatchObject({ id, name: "Projeto sem nome", data: { blocks: [], edges: [] }, salvar: `/projetos/${id}/salvar`, arquivos: `/projetos/${id}/arquivos` });
     expect(c.erros).toMatchObject({ arquivo: ERROS.canvasArquivo, salvar: ERROS.canvasSalvar, nome: ERROS.projetoNome });
     expect(res.headers.get("content-security-policy")).toContain("img-src 'self' blob: data:");
@@ -361,6 +365,15 @@ describe("exportar projetos", () => {
       const res = await com(new FakeExportApi(), `/projetos/${id}/exportar`, admin, { final: "final" });
       expect([res.status, await res.text()]).toEqual([400, ERROS.exportarArquivo]);
     }
+  });
+
+  it("vídeo de outra conta não entra, nem pelo endereço", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    await memberCookie();
+    await env.DB.prepare("UPDATE videos SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com') WHERE id = ?").bind(VIDEO).run();
+    const res = await com(new FakeExportApi(), `/projetos/${id}/exportar`, admin, { final: "final" });
+    expect([res.status, await res.text()]).toEqual([400, ERROS.exportarArquivo]);
   });
 
   it("vídeo de um modelo que a pessoa não pode usar não entra", async () => {

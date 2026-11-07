@@ -258,10 +258,15 @@ describe("ContaDb", () => {
     expect(await alheia.ready(["wan"])).toHaveLength(0);
     expect((await alheia.countByStructure()).size).toBe(0);
     expect(await alheia.lastExtraByAvatar(["wan"])).toEqual(new Map());
+    expect(await alheia.readyVideos(["wan"], { limite: 10 })).toHaveLength(0);
+    await env.DB.prepare("UPDATE videos SET avatar_id = 'avatar-da-dona' WHERE id = ?").bind(video.id).run();
+    expect((await alheia.videoAvatars([video.id])).size).toBe(0);
     const propria = db().conta(dona.id);
     expect(await propria.video(video.id)).not.toBeNull();
     expect(await propria.videos(["wan"])).toHaveLength(1);
     expect(await propria.ready(["wan"])).toHaveLength(1);
     expect((await propria.countByStructure()).get("wan")).toBe(1);
+    expect(await propria.readyVideos(["wan"], { limite: 10, q: "ninguém mais" })).toHaveLength(1);
+    expect((await propria.videoAvatars([video.id])).get(video.id)).toBe("avatar-da-dona");
   });
 });

@@ -366,43 +366,6 @@ export class Db {
     return (await this.d1.prepare("SELECT * FROM videos ORDER BY created_at DESC, rowid DESC LIMIT ?").bind(limit).all<Video>()).results;
   }
 
-  /** Os vídeos de várias estruturas, os mais novos primeiro; com `q`, só os que têm o trecho na fala. */
-  async videosByStructures(structures: string[], q = "", limit = 100): Promise<Video[]> {
-    if (!structures.length) return [];
-    const marks = structures.map(() => "?").join(", ");
-    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    return (
-      await this.d1
-        .prepare(`SELECT * FROM videos WHERE structure IN (${marks}) AND prompt LIKE ? ESCAPE '\\' ORDER BY created_at DESC, rowid DESC LIMIT ?`)
-        .bind(...structures, like, limit)
-        .all<Video>()
-    ).results;
-  }
-
-  /**
-   * Os vídeos prontos (com arquivo) das estruturas, do mais novo ao mais antigo, uma página por vez.
-   * `depois` é o último da página anterior (criado e id): a página seguinte começa logo depois dele.
-   */
-  async readyVideos(structures: string[], f: { q?: string; desde?: string; ate?: string; depois?: { criado: string; id: string }; limite: number }): Promise<Video[]> {
-    if (!structures.length) return [];
-    const where = [`structure IN (${structures.map(() => "?").join(", ")})`, "status = 'completed'", "video_key IS NOT NULL", "prompt LIKE ? ESCAPE '\\'"];
-    const binds: (string | number)[] = [...structures, `%${(f.q ?? "").replace(/[\\%_]/g, (c) => `\\${c}`)}%`];
-    if (f.desde) {
-      where.push("created_at >= ?");
-      binds.push(f.desde);
-    }
-    if (f.ate) {
-      where.push("created_at < ?");
-      binds.push(f.ate);
-    }
-    if (f.depois) {
-      where.push("(created_at < ? OR (created_at = ? AND id < ?))");
-      binds.push(f.depois.criado, f.depois.criado, f.depois.id);
-    }
-    return (await this.d1.prepare(`SELECT * FROM videos WHERE ${where.join(" AND ")} ORDER BY created_at DESC, id DESC LIMIT ?`).bind(...binds, f.limite).all<Video>()).results;
-  }
-
-
   /** Um vídeo pronto (e com o áudio já tratado, se for o caso) que ainda não teve o rosto procurado. */
   async nextWithoutFace(): Promise<Video | null> {
     return this.d1
@@ -735,17 +698,6 @@ export class Db {
   }
 
   /** Os projetos da pessoa, o editado por último primeiro; q filtra pelo nome. */
-  /** O avatar de cada vídeo (os que têm), para saber que avatar um projeto usa. */
-  async videoAvatars(ids: string[]): Promise<Map<string, string>> {
-    const out = new Map<string, string>();
-    for (let i = 0; i < ids.length; i += 90) {
-      const parte = ids.slice(i, i + 90);
-      const rows = await this.d1.prepare(`SELECT id, avatar_id FROM videos WHERE avatar_id IS NOT NULL AND id IN (${parte.map(() => "?").join(",")})`).bind(...parte).all<{ id: string; avatar_id: string }>();
-      for (const r of rows.results) out.set(r.id, r.avatar_id);
-    }
-    return out;
-  }
-
   async projectsByUser(userId: number, q = "", limit = 200): Promise<Project[]> {
     const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     return (
@@ -979,6 +931,38 @@ export class ContaDb {
         .bind(this.userId, limit, from, ...structures)
         .all<Video>()
     ).results;
+  }
+
+  /**
+   * Os vídeos prontos (com arquivo) das estruturas, do mais novo ao mais antigo, uma página por vez.
+   * `depois` é o último da página anterior (criado e id): a página seguinte começa logo depois dele.
+   */
+  async readyVideos(structures: string[], f: { q?: string; desde?: string; ate?: string; depois?: { criado: string; id: string }; limite: number }): Promise<Video[]> {
+    if (!structures.length) return [];
+    const binds: (string | number)[] = [this.userId, like(f.q ?? "")];
+    const bind = (v: string | number) => `?${binds.push(v)}`;
+    const where = [`structure IN (${structures.map(bind).join(", ")})`, "status = 'completed'", "video_key IS NOT NULL", "prompt LIKE ?2 ESCAPE '\\'"];
+    if (f.desde) where.push(`created_at >= ${bind(f.desde)}`);
+    if (f.ate) where.push(`created_at < ${bind(f.ate)}`);
+    if (f.depois) {
+      const criado = bind(f.depois.criado);
+      where.push(`(created_at < ${criado} OR (created_at = ${criado} AND id < ${bind(f.depois.id)}))`);
+    }
+    return (await this.d1.prepare(`SELECT * FROM videos WHERE user_id = ?1 AND ${where.join(" AND ")} ORDER BY created_at DESC, id DESC LIMIT ${bind(f.limite)}`).bind(...binds).all<Video>()).results;
+  }
+
+  /** O avatar de cada vídeo da conta (os que têm), para saber que avatar um projeto usa. */
+  async videoAvatars(ids: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (let i = 0; i < ids.length; i += 90) {
+      const parte = ids.slice(i, i + 90);
+      const rows = await this.d1
+        .prepare(`SELECT id, avatar_id FROM videos WHERE user_id = ?1 AND avatar_id IS NOT NULL AND id IN (${parte.map((_, j) => `?${j + 2}`).join(",")})`)
+        .bind(this.userId, ...parte)
+        .all<{ id: string; avatar_id: string }>();
+      for (const r of rows.results) out.set(r.id, r.avatar_id);
+    }
+    return out;
   }
 
   /** Quantos vídeos a conta tem em cada estrutura. */

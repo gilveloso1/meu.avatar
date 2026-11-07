@@ -680,7 +680,7 @@ ${error ? snackbar(error) : ""}`;
   /** O canvas de um projeto, com os vídeos prontos de quem usa e o que já estava salvo. */
   private async canvasPage(user: User, project: Project): Promise<Response> {
     const usable = STRUCTURES.filter((s) => canUse(s, user.role));
-    const videos = (await this.db.videosByStructures(usable.map((s) => s.id)))
+    const videos = (await this.db.conta(user.id).videos(usable.map((s) => s.id)))
       .filter((v) => v.status === "completed" && v.video_key)
       .map((v) => ({
         id: v.id,
