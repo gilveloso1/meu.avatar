@@ -485,17 +485,13 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
   /* Só rola na vertical: a lista tem margem negativa de 8 px (a camada do item vai até a borda). */
   .dash--contas .dash__scroll { flex: 1; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 }
-/* A lista de contas, na metade da tela, sempre em duas linhas por conta (nome e vídeos em cima;
-   estado, papel e e-mail embaixo), com o menu à direita: em colunas, o nome e o estado cortavam. */
-.dash__list.dash__list--accounts .avatar-option { grid-template-columns: 24px minmax(0, 1fr) auto 40px; row-gap: 2px; min-height: 64px; }
-.dash__list.dash__list--accounts .avatar-option > .icon { grid-column: 1; grid-row: 1 / span 2; }
-.dash__list.dash__list--accounts .dash__title { grid-column: 2; grid-row: 1; }
-.dash__list.dash__list--accounts .dash__meta { display: flex; grid-column: 2 / 4; grid-row: 2; min-width: 0; }
-.dash__list.dash__list--accounts .dash__cell { flex: none; max-width: 100%; }
-.dash__list.dash__list--accounts .dash__cell:last-child { flex: 1 1 auto; }
-.dash__list.dash__list--accounts .dash__cell + .dash__cell::before { content: "·"; padding: 0 6px; }
-.dash__list.dash__list--accounts .avatar-option__end { grid-column: 3; grid-row: 1; }
-.dash__list.dash__list--accounts .dash__menu { grid-column: 4; grid-row: 1 / span 2; }
+/* A lista de contas: lista expressiva segmentada (a mesma dos Detalhes), com itens de três linhas
+   (M3: 88 px), o avatar com a inicial (40 px) à esquerda e o menu de ações à direita. */
+.vrows--accounts { margin: 0; padding: 0; list-style: none; }
+.vrow.vrow--account { grid-template-columns: 40px minmax(0, 1fr) 48px; min-height: 88px; padding: 12px 4px 12px 16px; color: var(--md-sys-color-on-surface-variant); }
+.vrow--account .vrow__support { display: block; }
+.vrow--account .vrow__support--alert { color: var(--md-sys-color-error); }
+.avatar.avatar--list { width: 40px; height: 40px; border: 0; font: var(--md-sys-typescale-title-medium); }
 /* Paginação no pé do card (a das tabelas de dados do Material): o intervalo e as setas, à direita. */
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 -8px -8px 0; }
 .pager__range { margin-right: 12px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }

@@ -2274,12 +2274,11 @@ const FAILURE_KINDS: Record<PanelFailure["kind"], { icon: string; label: string 
  * as colunas de `meta` e o texto no fim, numa linha só com as colunas alinhadas; no celular, o
  * título e o fim em cima e as colunas embaixo. Link quando houver.
  */
-function listItem(o: { icon: string; title: string; meta: string[]; end: string; href?: string; alert?: boolean; actions?: string }): string {
+function listItem(o: { icon: string; title: string; meta: string[]; end: string; href?: string; alert?: boolean }): string {
   const content = `<span class="icon" aria-hidden="true">${o.icon}</span><span class="dash__title" title="${esc(o.title)}">${esc(o.title)}</span><span class="dash__meta">${o.meta
     .map((m) => `<span class="dash__cell" title="${esc(m)}">${esc(m)}</span>`)
     .join("")}</span><span class="avatar-option__end">${esc(o.end)}</span>`;
-  // O menu de ações (o mesmo dos cards) é a última coluna da linha.
-  return `<li${o.alert ? ' class="dash__alert"' : ""}>${o.href ? `<a class="avatar-option interactive" href="${o.href}">${content}</a>` : `<div class="avatar-option avatar-option--static">${content}${o.actions !== undefined ? `<span class="dash__menu">${o.actions}</span>` : ""}</div>`}</li>`;
+  return `<li${o.alert ? ' class="dash__alert"' : ""}>${o.href ? `<a class="avatar-option interactive" href="${o.href}">${content}</a>` : `<div class="avatar-option avatar-option--static">${content}</div>`}</li>`;
 }
 
 /**
@@ -2367,10 +2366,13 @@ function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
   const suspended = list.filter((a) => a.permissoes.includes("suspensa")).length;
   const pending = list.filter((a) => !a.hasPassword && !a.permissoes.includes("suspensa")).length;
   const action = (a: AccountRow, path: string, icon: string, label: string): MenuItem => ({ label, icon, href: `/painel/contas/${a.id}/${path}`, post: true });
+  // Lista expressiva do M3, no estilo segmentado (a mesma dos Detalhes dos vídeos): avatar com a
+  // inicial, o nome, o e-mail e o estado numa linha de apoio, e o menu de ações à direita.
   const rows = list.map((a) => {
     const st = state(a);
     const extras = [...(a.permissoes.includes("usar:modelo:teste") ? ["Testador"] : []), ...(a.permissoes.includes("usar:canvas") ? ["Canvas"] : [])];
-    const actions =
+    const role = a.role === "admin" ? "Administrador" : ["Membro", ...extras].join(", ");
+    const menu =
       a.role === "member"
         ? overflowMenu(`Ações: ${a.name}`, [
             action(a, "link", "link", a.hasPassword ? "Link de nova senha" : "Novo convite"),
@@ -2379,14 +2381,15 @@ function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
             action(a, "canvas", "layers", a.permissoes.includes("usar:canvas") ? "Tirar o Canvas" : "Liberar o Canvas"),
           ])
         : "";
-    return listItem({
-      icon: a.role === "admin" ? "switch_account" : "person",
-      title: a.id === me.id ? `${a.name} (você)` : a.name,
-      meta: [st.label, a.role === "admin" ? "Administrador" : ["Membro", ...extras].join(", "), a.email],
-      end: plural(a.videos, "vídeo", "vídeos"),
-      alert: st.alert,
-      actions,
-    });
+    return `<li class="vrow vrow--account">
+        <span class="avatar avatar--list" aria-hidden="true">${esc((a.name.trim()[0] ?? "?").toUpperCase())}</span>
+        <span class="vrow__text">
+          <span class="vrow__headline">${esc(a.id === me.id ? `${a.name} (você)` : a.name)}</span>
+          <span class="vrow__support">${esc(a.email)}</span>
+          <span class="vrow__support${st.alert ? " vrow__support--alert" : ""}">${esc([st.label, role, plural(a.videos, "vídeo", "vídeos")].join(" · "))}</span>
+        </span>
+        ${menu}
+      </li>`;
   });
   const linkBox = v.link
     ? `<section class="viewer__card" aria-labelledby="card-link">
@@ -2416,7 +2419,7 @@ function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
     </div>
     <section class="viewer__card dash__card dash__pane--contas" aria-labelledby="card-contas">
       <h2 class="qe-result__title" id="card-contas">Contas</h2>
-      <div class="dash__scroll"><ul class="dash__list dash__list--accounts">${rows.join("")}</ul></div>
+      <div class="dash__scroll"><ul class="vrows vrows--accounts">${rows.join("")}</ul></div>
     </section>
     <div class="dash__pane--convidar">${linkBox}${inviteForm}</div>
   </div>`;
