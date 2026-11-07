@@ -135,6 +135,18 @@ falam em notícias** ("notícias financeiras", "news anchor"); o antigo, não. H
 filtro do Google barra vídeo realista de alguém apresentando notícias (risco de notícia
 falsa), sem dizer o motivo.
 
+**Confirmação (17:43, 360p, 4 s):** a hipótese não se sustentou sozinha.
+
+| Teste | Pedido | Resultado |
+|---|---|---|
+| A | Curto, sem notícias ("Woman in a studio, speaking with energy…") | Falhou |
+| B | O antigo, com "is a news anchor and" na primeira frase | Falhou |
+
+O curto falha mesmo sem notícias. O que só o antigo tem: a frase cita "the person in the
+photo", e a fala vai como "The person on camera says softly…: "…"" seguida de "Lip sync. The
+speech is in Brazilian Portuguese and says exactly the quoted words." (no curto: "The person
+speaks in Brazilian Portuguese, with lip sync, and says exactly: "…"").
+
 ## Próximo passo
 
 Gerar um vídeo com fala e instruções (sem a orientação de voz do Wan) e um sem fala; medir o
