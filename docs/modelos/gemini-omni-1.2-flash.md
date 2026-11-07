@@ -162,6 +162,35 @@ exactly: "<fala>"`) o curto falha sempre (A, E e todos do site); no pedido longo
 Citar a foto não ajuda (E). Falta testar a fala antiga sem "softly, in a calm, low voice"
 (estilo de voz, que deve vir das instruções) e o sem fala sem notícias.
 
+**Com o formato corrigido no código (17:49, 360p, 4 s):** com fala, pronto, US$ 0,093
+(`gen-vid-1794073783-Dv3VycoLs0RUUqkWqFWx`; `The person on camera says: "…"` e `Lip sync. The
+speech is in Brazilian Portuguese and says exactly the quoted words.`, sem "softly"). Sem fala
+("Woman in a studio listens in silence…" + `OMNI_SILENT` + `OMNI_NO_TEXT`), falhou.
+
+Gasto real dos testes pelo terminal: US$ 0,93 (o controle de 8 s em 720p e quatro de 360p).
+
+## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
+
+Fontes: a página do Omni no Google (ai.google.dev/gemini-api/docs/omni) e o notebook oficial
+`Get_started_Omni.ipynb` (github.com/google-gemini/cookbook). Nenhuma das duas ensina a
+escrever fala; os guias de terceiros discordam (aspas ligariam a sincronia, ou virariam
+legenda queimada). O que o Google diz e muda o pedido:
+
+- **Vários planos por padrão:** sem pedir, o Omni monta cortes e narrativa. Para um plano só:
+  "In a single unbroken scene", "In a single continuous shot", "No scene cuts". O pedido
+  curto não tem isso (o antigo tinha "no cuts").
+- **Negativas no próprio prompt** (não há negative prompt): "No dialogue or voiceover.",
+  "No text overlay on screen.", "No extra sound effects".
+- **Áudio:** sem descrever, o modelo escolhe a trilha (guias de terceiros: costuma pôr música).
+- **Idioma:** só o inglês é avaliado; outros "podem funcionar, com resultado variável".
+- **Imagem:** o modelo decide como usar a imagem pelo texto; para animar a foto, descrever o
+  movimento (não redescrever a foto). O parâmetro `task` (`image_to_video`) existe só como
+  último recurso; no OpenRouter vai como opção do provedor.
+- **Filtros:** de segurança no prompt e no vídeo gerado, variando por região; pedido
+  barrado é bloqueado. "Imagens com certas pessoas reconhecíveis" não são aceitas.
+- **OpenRouter:** um relato (blog polonês) de "Video generation failed" em todo pedido ao 1.2
+  no dia do lançamento; nada oficial. O OpenRouter não repassa o motivo da falha.
+
 ## Próximo passo
 
 Gerar um vídeo com fala e instruções (sem a orientação de voz do Wan) e um sem fala; medir o

@@ -34,9 +34,14 @@ export const OMNI_SILENT = "The person does not speak: lips stay closed, no dial
 /** A única orientação fixa: a legenda e o texto vêm depois, na edição. */
 export const OMNI_NO_TEXT = "No on-screen text, subtitles, captions or watermark.";
 
-/** A fala para o modelo: só a mecânica (idioma, sincronia, as palavras exatas), nada de estilo. */
+/**
+ * A fala para o modelo: só a mecânica (idioma, sincronia, as palavras exatas), nada de estilo.
+ * O formato importa: com "The person speaks in <idioma>, with lip sync, and says exactly: …"
+ * o Omni recusou todo prompt curto; com a citação e a sincronia em linhas separadas, passou
+ * (testes de 07/11/2026 em docs/modelos/gemini-omni-1.2-flash.md).
+ */
 export function omniSpeech(speech: string, language: Language): string {
-  return `The person speaks in ${language.english}, with lip sync, and says exactly: "${speech}"`;
+  return `The person on camera says: "${speech}"\nLip sync. The speech is in ${language.english} and says exactly the quoted words.`;
 }
 
 /**
