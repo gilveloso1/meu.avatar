@@ -69,7 +69,9 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
     "Salvar no avatar") e em `assetPanel`.
   - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
   - Voz pronta: campo `voice` no painel, escolhida em `voicePanel`, no mesmo menu (busca, idioma, gênero e prévia); as vozes vêm de `/vozes/lista`, só as do filtro.
-  - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`.
+  - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`, que também é a página de não encontrado
+    (`notFoundPage`): todo 404 em texto aberto pelo navegador vira essa página, a mesma para o que não existe
+    e para o que é de outra conta.
 
 ## Esboço e M3
 
