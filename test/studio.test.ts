@@ -12,7 +12,7 @@ import { estimate } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
 import { GROK, GROK_GUIDE } from "../src/structures/grok";
-import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_NO_TEXT, OMNI_SILENT, omniSpeech } from "../src/structures/omni";
+import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_NO_TEXT, OMNI_SILENT, OMNI_SINGLE_SHOT, omniSpeech } from "../src/structures/omni";
 import { IMAGE_GUIDE, IMAGE_REFERENCE_GUIDE, NANO_BANANA } from "../src/structures/imagem";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
 import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
@@ -700,7 +700,7 @@ describe("Gemini Omni 1.2 Flash", () => {
     const [req] = api.submitted;
     expect(req).toMatchObject({ model: "google/gemini-omni-1.2-flash", duration: 8, resolution: "720p", aspect_ratio: "9:16", generate_audio: true });
     // Sem orientação padrão: as instruções, a fala e o pedido de nada de texto na tela.
-    expect(req!.prompt).toBe(`${CENA}\n${omniSpeech(FALA, LANGUAGES[0]!)}\n${OMNI_NO_TEXT}`);
+    expect(req!.prompt).toBe(`${CENA}\n${OMNI_SINGLE_SHOT}\n${omniSpeech(FALA, LANGUAGES[0]!)}\n${OMNI_NO_TEXT}`);
     expect(req!.prompt).not.toContain("soft");
     expect(req!.frame_images![0]).toMatchObject({ frame_type: "first_frame" });
     expect(req!.input_references).toBeUndefined();
@@ -720,7 +720,7 @@ describe("Gemini Omni 1.2 Flash", () => {
     const res = await post(api, { ...PEDIDO_OMNI, idioma: NO_SPEECH, fala: FALA, imagem: foto() }, "omni");
     expect(res.status).toBe(303);
     const [req] = api.submitted;
-    expect(req!.prompt).toBe(`${CENA}\n${OMNI_SILENT}\n${OMNI_NO_TEXT}`);
+    expect(req!.prompt).toBe(`${CENA}\n${OMNI_SINGLE_SHOT}\n${OMNI_SILENT}\n${OMNI_NO_TEXT}`);
     const [video] = await new Db(env.DB).recentVideos();
     expect(video).toMatchObject({ prompt: "", language: NO_SPEECH, extra: CENA });
     expect(await (await get(`/video/${video!.id}`, undefined, api)).text()).toContain("Sem fala");

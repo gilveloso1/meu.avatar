@@ -169,6 +169,23 @@ speech is in Brazilian Portuguese and says exactly the quoted words.`, sem "soft
 
 Gasto real dos testes pelo terminal: US$ 0,93 (o controle de 8 s em 720p e quatro de 360p).
 
+**Plano único e "No dialogue or voiceover." (17:55, 360p, 4 s):** os dois falharam, com e sem
+fala. O com fala era o mesmo pedido que passou às 17:49, só com "In a single continuous shot,
+no scene cuts." (a frase do guia do Google) a mais.
+
+**Balanço de 07/11/2026 (23 pedidos ao 1.2, a mesma foto):**
+
+| Pedido | Prontos | Falhas |
+|---|---|---|
+| O antigo, longo (com a orientação do Wan), ou ele com a frase da fala nova | 4 | 1 (com "news anchor") |
+| Curto (só instruções e mecânica) | 2 | 16 |
+
+Testes isolados não bastam para achar a causa: o mesmo tipo de pedido passou e falhou com
+minutos de diferença. O padrão que se sustenta é o pedido longo passar e o curto falhar quase
+sempre. O OpenRouter marca o modelo como de raciocínio obrigatório; uma hipótese, sem prova,
+é que o pedido curto deixa o modelo inventar mais (planos, narrativa) e cair no filtro.
+Fazer outro teste agora seria seguir no escuro; o próximo passo é decidir o caminho.
+
 ## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
 
 Fontes: a página do Omni no Google (ai.google.dev/gemini-api/docs/omni) e o notebook oficial

@@ -29,8 +29,10 @@ const BASE_RESOLUTION = "1080p";
 
 /** O valor do idioma quando o avatar não fala (fica gravado no vídeo, para o Refazer). */
 export const NO_SPEECH = "sem-fala";
-/** Sem fala: a pessoa não fala. */
-export const OMNI_SILENT = "The person does not speak: lips stay closed, no dialogue, no voice-over.";
+/** Sem fala, na frase do guia do Google (o Omni não tem negative prompt: a negativa vai no texto). */
+export const OMNI_SILENT = "No dialogue or voiceover.";
+/** Um plano só: sem isto, o Omni monta vários planos e cortes por conta própria (guia do Google). */
+export const OMNI_SINGLE_SHOT = "In a single continuous shot, no scene cuts.";
 /** A única orientação fixa: a legenda e o texto vêm depois, na edição. */
 export const OMNI_NO_TEXT = "No on-screen text, subtitles, captions or watermark.";
 
@@ -45,11 +47,12 @@ export function omniSpeech(speech: string, language: Language): string {
 }
 
 /**
- * O prompt: as instruções de quem usa (a cena, o jeito de falar e o estilo), a fala (ou o
- * aviso de que não há fala) e o pedido de nada de texto na tela. Sem outra orientação padrão.
+ * O prompt: as instruções de quem usa (a cena, o jeito de falar e o estilo), o plano único, a
+ * fala (ou o aviso de que não há fala) e o pedido de nada de texto na tela. Só mecânica, sem
+ * estilo nem voz padrão.
  */
 export function omniPrompt(extra: string, speech: string, language: Language | null): string {
-  return [extra, speech && language ? omniSpeech(speech, language) : OMNI_SILENT, OMNI_NO_TEXT].join("\n");
+  return [extra, OMNI_SINGLE_SHOT, speech && language ? omniSpeech(speech, language) : OMNI_SILENT, OMNI_NO_TEXT].join("\n");
 }
 
 /** Da menor resolução para a maior (o modelo lista 720p, 1080p, 4K, 360p). */
