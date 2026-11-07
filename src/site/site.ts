@@ -3007,6 +3007,25 @@ const SCRIPT = `(() => {
   // Página do vídeo: anterior e próximo (setas e teclado), abas da folha e copiar o texto.
   const viewer = document.querySelector("[data-viewer]");
   if (viewer) {
+    // O Nome: sair do campo ou Enter salva sem recarregar; se o envio falhar, vai pelo formulário.
+    const rename = viewer.querySelector("[data-rename]");
+    if (rename) {
+      const input = rename.elements.nome;
+      let saved = input.value.trim();
+      const save = async () => {
+        const value = input.value.replace(/\s+/g, " ").trim();
+        if (value === saved) return;
+        try {
+          const res = await fetch(rename.action, { method: "POST", body: new FormData(rename), headers: { "x-fetch": "1" } });
+          if (!res.ok) throw new Error(String(res.status));
+          document.title = (value ? value + " · " : "") + document.title.slice(saved ? saved.length + 3 : 0);
+          saved = value;
+        } catch { rename.submit(); }
+      };
+      rename.addEventListener("submit", (e) => { e.preventDefault(); input.blur(); });
+      input.addEventListener("change", save);
+    }
+
     let opened = null;
     try { opened = JSON.parse(sessionStorage.getItem("videos-abertos") || "null"); } catch {}
     const ids = opened ? opened.ids : [], at = ids.indexOf(viewer.dataset.viewer);
@@ -3091,25 +3110,6 @@ const SCRIPT = `(() => {
       });
       qeEl.querySelector("[data-qe-again]").addEventListener("click", () => qeEl.classList.add("is-again"));
       qeEl.querySelector("[data-qe-close]").addEventListener("click", () => qeEl.classList.remove("is-again"));
-    }
-
-    // O Nome: sair do campo ou Enter salva sem recarregar; se o envio falhar, vai pelo formulário.
-    const rename = viewer.querySelector("[data-rename]");
-    if (rename) {
-      const input = rename.elements.nome;
-      let saved = input.value.trim();
-      const save = async () => {
-        const value = input.value.replace(/\s+/g, " ").trim();
-        if (value === saved) return;
-        try {
-          const res = await fetch(rename.action, { method: "POST", body: new FormData(rename), headers: { "x-fetch": "1" } });
-          if (!res.ok) throw new Error(String(res.status));
-          document.title = (value ? value + " · " : "") + document.title.slice(saved ? saved.length + 3 : 0);
-          saved = value;
-        } catch { rename.submit(); }
-      };
-      rename.addEventListener("submit", (e) => { e.preventDefault(); input.blur(); });
-      input.addEventListener("change", save);
     }
 
     for (const c of viewer.querySelectorAll("[data-copy]")) c.addEventListener("click", async () => {
