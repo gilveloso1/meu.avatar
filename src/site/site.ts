@@ -2355,9 +2355,9 @@ function panelActivity(
 }
 
 /**
- * Contas: os números no topo (contas como herói), o convite à esquerda (o formulário e, logo depois
- * de gerar, o link, mostrado uma vez só: o banco guarda só o hash) e a lista das contas à direita,
- * com as ações das comuns embaixo de cada uma.
+ * Contas: os números no topo (contas como herói), a lista das contas no painel largo, à esquerda,
+ * com o menu de ações de cada conta comum, e o convite à direita (o formulário e, logo depois de
+ * gerar, o link, mostrado uma vez só: o banco guarda só o hash).
  */
 function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
   const now = new Date().toISOString();
@@ -2412,8 +2412,8 @@ function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
       ${statCard("lock", "Suspensas", count(suspended), "sem acesso ao site")}
     </div>
     ${panes(
-      { title: "Convidar", body: `${linkBox}${inviteForm}` },
       { title: "Contas", body: `<section class="viewer__card" aria-label="Contas"><ul class="dash__list dash__list--accounts">${rows.join("")}</ul></section>` },
+      { title: "Convidar", body: `${linkBox}${inviteForm}` },
     )}
   </div>`;
 }
