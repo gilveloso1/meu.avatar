@@ -1041,6 +1041,8 @@ button.asset-upload { background: none; }
 }
 .empty .icon { font-size: 48px; color: var(--md-sys-color-primary); }
 .empty__title { font: var(--md-sys-typescale-title-large); color: var(--md-sys-color-on-surface); }
+/* O código da página de não encontrado (404), no lugar do ícone. */
+.empty__code { font: var(--md-sys-typescale-display-large); letter-spacing: -0.016rem; color: var(--md-sys-color-primary); }
 
 /* Entrar */
 .login { width: 100%; max-width: 400px; margin: 12vh auto 0; display: flex; flex-direction: column; gap: 24px; padding: 24px; }

@@ -232,7 +232,7 @@ export class Site {
     const [houve, fazer] = PARTES.get(ERROS.naoEncontrado)!;
     const body = `
 <main class="page" id="conteudo">
-  ${emptyState("link_off", houve!, fazer!, `<a class="button button--filled interactive" href="/">Voltar ao início</a>`)}
+  ${emptyState("404", houve!, fazer!, `<a class="button button--filled interactive" href="/">Voltar ao início</a>`)}
 </main>`;
     // A barra de sempre, sem seção marcada: dali a pessoa vai para onde quiser.
     return html(page(`Não encontrado · ${SITE_NAME}`, body, { bar: { user, search: { action: "/", label: "Pesquisar modelos", q: "" } } }), 404);
@@ -2409,8 +2409,10 @@ function detailsCard(title: string, rows: { icon: string; term: string; value: s
           </section>`;
 }
 
+/** `icon` é o ícone do topo; começando por um número (o 404), vai no lugar dele em display-large. */
 function emptyState(icon: string, title: string, text: string, action = ""): string {
-  return `<div class="empty"><span class="icon">${icon}</span><p class="empty__title">${esc(title)}</p><p>${esc(text)}</p>${action}</div>`;
+  const mark = /^\d/.test(icon) ? `<p class="empty__code">${esc(icon)}</p>` : `<span class="icon">${icon}</span>`;
+  return `<div class="empty">${mark}<p class="empty__title">${esc(title)}</p><p>${esc(text)}</p>${action}</div>`;
 }
 
 /** O navegador abrindo uma página (e não o script dela ou um arquivo pedindo dados). */

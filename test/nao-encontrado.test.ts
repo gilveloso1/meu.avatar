@@ -15,6 +15,7 @@ describe("não encontrado", () => {
     expect(res.status).toBe(404);
     expect(res.headers.get("content-type")).toContain("text/html");
     const page = await res.text();
+    expect(page).toContain('<p class="empty__code">404</p>');
     expect(page).toContain("Página não encontrada.");
     expect(page).toContain("Confira o endereço ou volte ao início.");
     expect(page).toContain('href="/">Voltar ao início</a>');
