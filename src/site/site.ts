@@ -2355,7 +2355,7 @@ function panelActivity(
 }
 
 /**
- * Contas (layout pedido pelo usuário em 07/11/2026): à direita, a lista das contas num terço da
+ * Contas (layout pedido pelo usuário em 07/11/2026): à direita, a lista das contas na metade da
  * largura e na altura toda, com o menu de ações de cada conta comum; à esquerda, os números e,
  * embaixo, o convite na altura que sobra (o formulário e, logo depois de gerar, o link, mostrado
  * uma vez só: o banco guarda só o hash). O título fica dentro do card, parado; o conteúdo rola.

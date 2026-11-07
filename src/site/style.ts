@@ -465,7 +465,7 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
   .page--dash .dash__pane-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .page--dash .dash__mosaic { overflow-y: auto; overscroll-behavior: contain; align-content: start; }
 }
-/* Aba Contas (pedido do usuário): a lista à direita, num terço da largura e na altura toda; à
+/* Aba Contas (pedido do usuário): a lista à direita, na metade da largura e na altura toda; à
    esquerda, os números e o convite embaixo, na altura que sobra. O título fica dentro do card,
    parado, e o conteúdo rola por dentro (dash__scroll). No celular, um embaixo do outro. */
 .dash--contas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 24px; }
@@ -474,15 +474,28 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 /* Contêiner, como o corpo do painel: a lista escolhe uma ou duas linhas pela largura dele. */
 .dash__scroll { min-height: 0; container-type: inline-size; }
 @media (min-width: 840px) {
-  .dash--contas { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-items: stretch; }
+  .dash--contas { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-items: stretch; }
   .dash--contas > .dash__kpis { grid-column: 1; grid-row: 1; align-self: start; }
   .dash--contas > .dash__pane--convidar { grid-column: 1; grid-row: 2; min-height: 0; }
   .dash--contas > .dash__pane--contas { grid-column: 2; grid-row: 1 / span 2; }
   .dash--contas .dash__card { min-height: 0; }
   .dash__pane--convidar > .dash__card { flex: 1; }
+  /* Na metade da tela, os quatro números não cabem bem lado a lado: dois por linha. */
+  .dash--contas .dash__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* Só rola na vertical: a lista tem margem negativa de 8 px (a camada do item vai até a borda). */
   .dash--contas .dash__scroll { flex: 1; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 }
+/* A lista de contas, na metade da tela, sempre em duas linhas por conta (nome e vídeos em cima;
+   estado, papel e e-mail embaixo), com o menu à direita: em colunas, o nome e o estado cortavam. */
+.dash__list.dash__list--accounts .avatar-option { grid-template-columns: 24px minmax(0, 1fr) auto 40px; row-gap: 2px; min-height: 64px; }
+.dash__list.dash__list--accounts .avatar-option > .icon { grid-column: 1; grid-row: 1 / span 2; }
+.dash__list.dash__list--accounts .dash__title { grid-column: 2; grid-row: 1; }
+.dash__list.dash__list--accounts .dash__meta { display: flex; grid-column: 2 / 4; grid-row: 2; min-width: 0; }
+.dash__list.dash__list--accounts .dash__cell { flex: none; max-width: 100%; }
+.dash__list.dash__list--accounts .dash__cell:last-child { flex: 1 1 auto; }
+.dash__list.dash__list--accounts .dash__cell + .dash__cell::before { content: "·"; padding: 0 6px; }
+.dash__list.dash__list--accounts .avatar-option__end { grid-column: 3; grid-row: 1; }
+.dash__list.dash__list--accounts .dash__menu { grid-column: 4; grid-row: 1 / span 2; }
 /* Paginação no pé do card (a das tabelas de dados do Material): o intervalo e as setas, à direita. */
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 -8px -8px 0; }
 .pager__range { margin-right: 12px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
@@ -1007,7 +1020,6 @@ button.asset-upload { background: none; }
 .dash__list--failures { --cols: 24px minmax(0, 3fr) 104px minmax(0, 96px) minmax(0, 2fr) 88px; }
 .dash__list--tokens { --cols: 24px minmax(0, 1fr) minmax(0, 160px) 160px 136px; }
 .dash__list--machines { --cols: 24px minmax(0, 200px) minmax(0, 1fr) 160px; }
-.dash__list--accounts { --cols: 24px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.5fr) 72px 40px; }
 /* Campo de texto dentro de um card do painel: o rótulo flutuante corta a borda com a cor do card. */
 .dash .viewer__card { --field-surface: var(--md-sys-color-surface-container-highest); }
 .dash__form { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
@@ -1030,10 +1042,6 @@ button.asset-upload { background: none; }
   .dash__cell:last-child { flex: 1 1 auto; }
   .dash__cell + .dash__cell::before { content: "·"; padding: 0 6px; }
   .dash__list .avatar-option__end { grid-column: 3; grid-row: 1; }
-  /* Com menu de ações: uma coluna a mais, à direita, nas duas linhas. */
-  .dash__list--accounts .avatar-option { grid-template-columns: 24px minmax(0, 1fr) auto 40px; }
-  .dash__list--accounts .dash__meta { grid-column: 2 / 4; }
-  .dash__list--accounts .dash__menu { grid-column: 4; grid-row: 1 / span 2; }
 }
 
 /* Avatares: a capa do card tem o tamanho do ícone dos cards de Modelos. */
