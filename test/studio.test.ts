@@ -659,16 +659,16 @@ describe("Grok Imagine 1.5 Lite", () => {
   });
 });
 
-describe("Gemini Omni 1.1 Flash", () => {
+describe("Gemini Omni 1.2 Flash", () => {
   const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
   const PEDIDO_OMNI = { ...PEDIDO, duracao: "8", resolucao: "720p", formato: "9:16" };
 
   it("o custo é o preço com áudio da resolução por segundo (1080p é o SKU sem sufixo, 4K em minúsculas)", () => {
-    expect(OMNI.prices!(OMNI_MODEL)).toEqual({ "360p": "0.0337925", "720p": "0.10136", "1080p": "0.15204", "4K": "0.30408" });
+    expect(OMNI.prices!(OMNI_MODEL)).toEqual({ "360p": "0.023172", "720p": "0.069504", "1080p": "0.104256", "4K": "0.208512" });
     const valores = (resolucao: string, duracao: string) => (name: string) => ({ resolucao, duracao })[name] ?? "";
-    expect(estimate(OMNI, OMNI_MODEL, valores("720p", "8"))).toBeCloseTo(0.81088);
-    expect(estimate(OMNI, OMNI_MODEL, valores("1080p", "10"))).toBeCloseTo(1.5204);
-    expect(estimate(OMNI, OMNI_MODEL, valores("4K", "10"))).toBeCloseTo(3.0408);
+    expect(estimate(OMNI, OMNI_MODEL, valores("720p", "8"))).toBeCloseTo(0.556032);
+    expect(estimate(OMNI, OMNI_MODEL, valores("1080p", "15"))).toBeCloseTo(1.56384);
+    expect(estimate(OMNI, OMNI_MODEL, valores("4K", "15"))).toBeCloseTo(3.12768);
   });
 
   it("o formulário pede cena, fala curta, foto e vídeo, com as opções do modelo", async () => {
@@ -678,10 +678,11 @@ describe("Gemini Omni 1.1 Flash", () => {
     expect(page).toMatch(new RegExp(`name="fala"[^>]*maxlength="${MAX_OMNI_SPEECH}"|maxlength="${MAX_OMNI_SPEECH}"[^>]*name="fala"`));
     expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
     expect(page).toContain('<option value="8" selected>8 s</option>');
-    expect(page).not.toContain('<option value="11"');
+    expect(page).toContain('<option value="15">15 s</option>');
+    expect(page).not.toContain('<option value="16"');
     expect(page).toContain('value="720p" checked');
     expect(page).toContain('value="9:16" checked');
-    expect(page).toContain("US$ 0.81");
+    expect(page).toContain("US$ 0.56");
   });
 
   it("manda o prompt com a fala, a foto como primeiro quadro e com áudio", async () => {
@@ -690,7 +691,7 @@ describe("Gemini Omni 1.1 Flash", () => {
     expect(res.status).toBe(303);
 
     const [req] = api.submitted;
-    expect(req).toMatchObject({ model: "google/gemini-omni-1.1-flash", duration: 8, resolution: "720p", aspect_ratio: "9:16", generate_audio: true });
+    expect(req).toMatchObject({ model: "google/gemini-omni-1.2-flash", duration: 8, resolution: "720p", aspect_ratio: "9:16", generate_audio: true });
     expect(req!.prompt).toBe(buildPrompt({ style: STYLES[0]!, language: LANGUAGES[0]!, speech: FALA, extra: "" }));
     expect(req!.frame_images![0]).toMatchObject({ frame_type: "first_frame" });
     expect(req!.input_references).toBeUndefined();
@@ -704,7 +705,7 @@ describe("Gemini Omni 1.1 Flash", () => {
     const casos: [Record<string, string | File>, string][] = [
       [PEDIDO_OMNI, ERROS.foto],
       [{ ...PEDIDO_OMNI, imagem: foto(), fala: "a".repeat(MAX_OMNI_SPEECH + 1) }, ERROS.falaLonga(MAX_OMNI_SPEECH)],
-      [{ ...PEDIDO_OMNI, imagem: foto(), duracao: "15" }, ERROS.ajustesNaoAceitos],
+      [{ ...PEDIDO_OMNI, imagem: foto(), duracao: "16" }, ERROS.ajustesNaoAceitos],
     ];
     for (const [fields, erro] of casos) {
       const res = await post(api, fields, "omni");

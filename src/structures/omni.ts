@@ -1,15 +1,16 @@
 /**
- * Gemini Omni 1.1 Flash (google/gemini-omni-1.1-flash): avatar falando, a partir da foto e
+ * Gemini Omni 1.2 Flash (google/gemini-omni-1.2-flash): avatar falando, a partir da foto e
  * da fala, com a voz e a boca saindo juntas do modelo (como o Wan, mas em clipes curtos).
- * Testes e custo em docs/modelos/gemini-omni-1.1-flash.md.
+ * Testes e custo em docs/modelos/gemini-omni-1.2-flash.md. O 1.1 sai em 03/12/2026 (o
+ * Google passa os pedidos dele para o 1.2), por isso a estrutura já nasce no 1.2.
  *
  * Pelo OpenRouter (conferido em 07/11/2026): foto como primeiro quadro (`frame_images`),
- * 3 a 10 s, 360p, 720p, 1080p e 4K, só 16:9 e 9:16; só há preço com áudio.
+ * 3 a 15 s, 360p, 720p, 1080p e 4K, só 16:9 e 9:16; só há preço com áudio.
  *
  * Custo: dólar por segundo, um SKU por resolução (`duration_seconds_with_audio_<r>`); o
  * 1080p é o SKU sem sufixo (`duration_seconds_with_audio`) e o do 4K vem em minúsculas
  * (`_4k`). `prices` põe tudo pelo nome da resolução. Conferido com o preço do Google
- * (tokens por segundo de cada resolução vezes US$ 17,50/M): o OpenRouter não cobra a mais.
+ * (tokens por segundo de cada resolução vezes US$ 12/M): o OpenRouter não cobra a mais.
  */
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
@@ -17,8 +18,8 @@ import { buildPrompt, cleanSpeech, languageById, MAX_EXTRA, styleById, WORDS_PER
 import { InputError, type Structure } from "./types";
 import { options, WAN } from "./wan";
 
-/** Fala curta: o modelo faz no máximo 10 s (cerca de 25 palavras). */
-export const MAX_OMNI_SPEECH = 300;
+/** Fala curta: o modelo faz no máximo 15 s (cerca de 39 palavras). */
+export const MAX_OMNI_SPEECH = 250;
 
 const SKU = "duration_seconds_with_audio";
 /** A resolução cujo preço é o SKU sem sufixo. */
@@ -31,9 +32,9 @@ function defaultDuration(durations: number[], preferred: number): number {
 
 export const OMNI: Structure = {
   id: "omni",
-  name: "Gemini Omni 1.1 Flash",
-  model: "google/gemini-omni-1.1-flash",
-  summary: "O avatar fala o seu texto a partir da foto, com a voz feita pelo modelo. Clipes de até 10 s.",
+  name: "Gemini Omni 1.2 Flash",
+  model: "google/gemini-omni-1.2-flash",
+  summary: "O avatar fala o seu texto a partir da foto, com a voz feita pelo modelo. Clipes de até 15 s.",
   icon: "auto_awesome",
   access: "admin",
   // Ainda sem teste real: o áudio sai como o modelo entrega e não há Edição rápida.
