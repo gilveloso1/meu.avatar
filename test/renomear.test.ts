@@ -25,6 +25,8 @@ describe("renomear vídeo", () => {
     const id = await video("gil@exemplo.com");
     const page = await (await get(`/video/${id}?de=/videos`, session)).text();
     expect(page).toContain(`action="/videos/${id}/nome"`);
+    // O script da página junta os espaços (\s); dentro do texto do script, a barra precisa ir dobrada.
+    expect(page).toContain("input.value.replace(/\\s+/g");
     expect(page).toContain('name="nome" type="text" value=""');
 
     const res = await call(postForm(`/videos/${id}/nome`, { nome: "  Gancho   do produto ", de: "/videos" }, { cookie: session }));
@@ -87,5 +89,36 @@ describe("renomear vídeo", () => {
     const id = await video("gil@exemplo.com");
     await call(postForm(`/videos/${id}/nome`, { nome: "Invasão" }));
     expect(await nome(id)).toBeNull();
+  });
+});
+
+describe("renomear ativo do avatar", () => {
+  async function ativo(session: string) {
+    const foto = new File([new TextEncoder().encode("foto")], "principal.png", { type: "image/png" });
+    const res = await call(postForm("/avatares", { nome: "Camila", imagem: foto }, { cookie: session }));
+    const avatar = res.headers.get("location")!.split("/").pop()!;
+    const asset = (await env.DB.prepare("SELECT id FROM avatar_assets WHERE avatar_id = ?").bind(avatar).first<string>("id"))!;
+    return { avatar, asset, nome: () => env.DB.prepare("SELECT name FROM avatar_assets WHERE id = ?").bind(asset).first<string>("name") };
+  }
+
+  it("a página do ativo tem o campo Nome; salvar muda o nome, vazio não muda", async () => {
+    const session = await cookie();
+    const a = await ativo(session);
+    const page = await (await get(`/avatares/${a.avatar}/arquivos/${a.asset}/ver`, session)).text();
+    expect(page).toContain(`action="/avatares/${a.avatar}/arquivos/${a.asset}/nome"`);
+    expect(page).toContain('value="principal.png"');
+    const res = await call(postForm(`/avatares/${a.avatar}/arquivos/${a.asset}/nome`, { nome: " Rosto  de frente " }, { cookie: session }));
+    expect(res.headers.get("location")).toBe(`/avatares/${a.avatar}/arquivos/${a.asset}/ver`);
+    expect(await a.nome()).toBe("Rosto de frente");
+    expect((await call(postForm(`/avatares/${a.avatar}/arquivos/${a.asset}/nome`, { nome: "Perfil" }, { cookie: session, "x-fetch": "1" }))).status).toBe(204);
+    await call(postForm(`/avatares/${a.avatar}/arquivos/${a.asset}/nome`, { nome: "  " }, { cookie: session }));
+    expect(await a.nome()).toBe("Perfil");
+  });
+
+  it("o ativo do avatar de outra conta não se renomeia (404)", async () => {
+    const a = await ativo(await cookie());
+    const res = await call(postForm(`/avatares/${a.avatar}/arquivos/${a.asset}/nome`, { nome: "Invasão" }, { cookie: await memberCookie() }));
+    expect(res.status).toBe(404);
+    expect(await a.nome()).toBe("principal.png");
   });
 });

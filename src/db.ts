@@ -398,6 +398,11 @@ export class Db {
     return this.d1.prepare("SELECT * FROM avatar_assets WHERE kind IN ('imagem', 'video') AND face IS NULL ORDER BY created_at DESC LIMIT 1").first<AvatarAsset>();
   }
 
+  /** Muda o nome de um ativo (a página do ativo; quem chama já conferiu o dono do avatar). */
+  async renameAsset(id: string, name: string): Promise<void> {
+    await this.d1.prepare("UPDATE avatar_assets SET name = ? WHERE id = ?").bind(name, id).run();
+  }
+
   async updateAssetFace(id: string, face: string): Promise<void> {
     await this.d1.prepare("UPDATE avatar_assets SET face = ? WHERE id = ?").bind(face, id).run();
   }

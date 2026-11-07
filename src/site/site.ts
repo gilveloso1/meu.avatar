@@ -273,7 +273,7 @@ export class Site {
       const pending = await this.savableVideo(url.searchParams.get("video"), user);
       return this.avatarPage(user, null, undefined, undefined, pending);
     }
-    const m = /^\/avatares\/([0-9a-f-]{36})(?:\/(salvar|apagar|arquivos)(?:\/([0-9a-f-]{36})(\/ver|\/apagar)?)?)?$/.exec(path);
+    const m = /^\/avatares\/([0-9a-f-]{36})(?:\/(salvar|apagar|arquivos)(?:\/([0-9a-f-]{36})(\/ver|\/apagar|\/nome)?)?)?$/.exec(path);
     const avatar = m ? await this.db.avatarById(m[1]!) : null;
     // Avatar de outra pessoa (ou que não existe): a página nem existe.
     if (!m || !avatar || avatar.user_id !== user.id) return new Response("não encontrado", { status: 404 });
@@ -291,6 +291,12 @@ export class Site {
       const asset = await this.db.asset(avatar.id, assetId);
       if (!asset) return new Response("não encontrado", { status: 404 });
       if (assetAction === "/ver" && !post) return this.assetPage(user, avatar, asset);
+      if (assetAction === "/nome" && post) {
+        // O ativo sempre tem nome: vazio não muda nada.
+        const { name } = await nameFrom(request);
+        if (name) await this.db.renameAsset(asset.id, name);
+        return nameSaved(request, `/avatares/${avatar.id}/arquivos/${asset.id}/ver`);
+      }
       if (assetAction === "/apagar" && !post) return this.deleteAssetPage(user, avatar, asset);
       if (assetAction === "/apagar" && post) {
         // O ativo gerado só some da lista: o vídeo continua nos Vídeos.
@@ -442,7 +448,7 @@ ${error ? snackbar(error) : ""}`;
       <a class="icon-button interactive" href="${back}" aria-label="Fechar" title="Fechar"><span class="icon">close</span></a>
     </div>
     <div class="viewer__body"><div class="viewer__panel">
-      <section class="viewer__section"><h2 class="viewer__title">Nome</h2><div class="viewer__card"><p class="viewer__text">${esc(asset.name)}</p></div></section>
+      ${nameField(`${src}/nome`, asset.name, { required: true })}
       ${detailsCard("Detalhes", details)}
     </div></div>
     <div class="viewer__actions">
@@ -1056,12 +1062,10 @@ ${error ? snackbar(error) : ""}`;
 
   /** "Renomear", na página do vídeo: só quem gerou; o nome vazio volta a mostrar a fala. */
   private async renameVideo(request: Request, user: User, id: string): Promise<Response> {
-    const form = await request.formData();
-    const name = String(form.get("nome") ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_VIDEO_NAME);
+    const { name, form } = await nameFrom(request);
     if (!(await this.db.conta(user.id).renameVideo(id, name || null))) return new Response("não encontrado", { status: 404 });
-    if (request.headers.get("x-fetch")) return new Response(null, { status: 204, headers: SECURITY_HEADERS });
     const from = String(form.get("de") ?? "");
-    return redirect(`/video/${id}${/^\/(?!\/)/.test(from) ? `?de=${encodeURIComponent(from)}` : ""}`);
+    return nameSaved(request, `/video/${id}${/^\/(?!\/)/.test(from) ? `?de=${encodeURIComponent(from)}` : ""}`);
   }
 
   /** Onde está o rosto (JSON), para a prévia da edição rápida mirar o zoom. */
@@ -1191,7 +1195,7 @@ ${error ? snackbar(error) : ""}`;
         <div class="viewer__panel" data-tab-panel="info">
           ${editing ? `<section class="viewer__card qe-busy" role="status"><h2 class="qe-result__title">Editando o vídeo</h2><div class="linear-progress" role="progressbar" aria-label="Editando o vídeo"></div><p class="qe-result__note">Fica pronto em 1 a 2 min.</p></section>` : ""}
           ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
-          ${mine ? nameField(v, from) : v.name ? `<section class="viewer__section"><h2 class="viewer__title">Nome</h2><div class="viewer__card"><p class="viewer__text">${esc(v.name)}</p></div></section>` : ""}
+          ${mine ? nameField(`/videos/${v.id}/nome`, v.name ?? "", { from }) : v.name ? `<section class="viewer__section"><h2 class="viewer__title">Nome</h2><div class="viewer__card"><p class="viewer__text">${esc(v.name)}</p></div></section>` : ""}
           <section class="viewer__section">
             <div class="viewer__section-head"><h2 class="viewer__title">${image ? "Descrição" : "Texto"}</h2>${v.prompt ? `<button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button>` : ""}</div>
             <div class="viewer__card">${avatar}${v.prompt ? `<p class="viewer__text">${esc(v.prompt)}</p>` : ""}</div>
@@ -1980,14 +1984,26 @@ function videoTitle(v: Pick<Video, "name" | "prompt">): string {
 }
 
 /**
- * O Nome na folha do vídeo: um campo simples, como o nome do projeto no canvas. Sair do campo ou
- * Enter salva (sem recarregar o vídeo); vazio tira o nome e as listas voltam a mostrar a fala.
+ * O Nome na folha do vídeo e do ativo: um campo simples, como o nome do projeto no canvas. Sair
+ * do campo ou Enter salva (sem recarregar a mídia). No vídeo, vazio tira o nome e as listas voltam
+ * a mostrar a fala; no ativo (`required`), o nome sempre existe e vazio não muda nada.
  */
-function nameField(v: Video, from: string): string {
-  return `<form class="name-edit" method="post" action="/videos/${v.id}/nome" data-rename>
-            ${from ? `<input type="hidden" name="de" value="${esc(from)}">` : ""}
-            ${textField("nome", "Nome", `type="text" value="${esc(v.name ?? "")}" maxlength="${MAX_VIDEO_NAME}" autocomplete="off"`)}
+function nameField(action: string, value: string, o: { from?: string; required?: boolean } = {}): string {
+  return `<form class="name-edit" method="post" action="${esc(action)}" data-rename>
+            ${o.from ? `<input type="hidden" name="de" value="${esc(o.from)}">` : ""}
+            ${textField("nome", "Nome", `type="text" value="${esc(value)}" maxlength="${MAX_NAME}" autocomplete="off"${o.required ? " required" : ""}`)}
           </form>`;
+}
+
+/** O nome enviado pelo campo Nome (vídeo ou ativo): espaços juntados e no tamanho máximo. */
+async function nameFrom(request: Request): Promise<{ name: string; form: FormData }> {
+  const form = await request.formData();
+  return { name: String(form.get("nome") ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NAME), form };
+}
+
+/** Nome salvo: o script da página recebe 204 (a mídia não recarrega); sem script, volta à página. */
+function nameSaved(request: Request, back: string): Response {
+  return request.headers.get("x-fetch") ? new Response(null, { status: 204, headers: SECURITY_HEADERS }) : redirect(back);
 }
 
 /** O nome do arquivo baixado: o nome do vídeo sem acentos nem símbolos. */
@@ -2054,7 +2070,8 @@ function savedKind(s: SavableVideo): { kind: AssetKind; type: string } {
 }
 
 const MAX_AVATAR_DESCRIPTION = 500;
-const MAX_VIDEO_NAME = 120;
+/** O tamanho máximo do nome de um vídeo ou de um ativo. */
+const MAX_NAME = 120;
 const ASSET_LABELS: Record<AssetKind, string> = { imagem: "Imagem", video: "Vídeo", audio: "Áudio" };
 const assetOrigin = (a: AvatarAsset) => `${ASSET_LABELS[a.kind]} ${a.source_video ? "gerad" : "enviad"}${a.kind === "imagem" ? "a" : "o"}`;
 /** O ativo que um campo do formulário recebe (a gravação da voz clonada fica na fala); null se não for ativo. */
@@ -3185,28 +3202,29 @@ const SCRIPT = `(() => {
     try { sessionStorage.setItem("videos-abertos", JSON.stringify({ ids: list.map((x) => x.dataset.video), de: new URL(a.href).searchParams.get("de") || "" })); } catch {}
   });
 
+  // O Nome: sair do campo ou Enter salva sem recarregar; se o envio falhar, vai pelo formulário.
+  const rename = document.querySelector("[data-rename]");
+  if (rename) {
+    const input = rename.elements.nome;
+    let saved = input.value.trim();
+    const save = async () => {
+      const value = input.value.replace(/\\s+/g, " ").trim();
+      if (!value && input.required) { input.value = saved; return; }
+      if (value === saved) return;
+      try {
+        const res = await fetch(rename.action, { method: "POST", body: new FormData(rename), headers: { "x-fetch": "1" } });
+        if (!res.ok) throw new Error(String(res.status));
+        document.title = (value ? value + " · " : "") + document.title.slice(saved ? saved.length + 3 : 0);
+        saved = value;
+      } catch { rename.submit(); }
+    };
+    rename.addEventListener("submit", (e) => { e.preventDefault(); input.blur(); });
+    input.addEventListener("change", save);
+  }
+
   // Página do vídeo: anterior e próximo (setas e teclado), abas da folha e copiar o texto.
   const viewer = document.querySelector("[data-viewer]");
   if (viewer) {
-    // O Nome: sair do campo ou Enter salva sem recarregar; se o envio falhar, vai pelo formulário.
-    const rename = viewer.querySelector("[data-rename]");
-    if (rename) {
-      const input = rename.elements.nome;
-      let saved = input.value.trim();
-      const save = async () => {
-        const value = input.value.replace(/\s+/g, " ").trim();
-        if (value === saved) return;
-        try {
-          const res = await fetch(rename.action, { method: "POST", body: new FormData(rename), headers: { "x-fetch": "1" } });
-          if (!res.ok) throw new Error(String(res.status));
-          document.title = (value ? value + " · " : "") + document.title.slice(saved ? saved.length + 3 : 0);
-          saved = value;
-        } catch { rename.submit(); }
-      };
-      rename.addEventListener("submit", (e) => { e.preventDefault(); input.blur(); });
-      input.addEventListener("change", save);
-    }
-
     let opened = null;
     try { opened = JSON.parse(sessionStorage.getItem("videos-abertos") || "null"); } catch {}
     const ids = opened ? opened.ids : [], at = ids.indexOf(viewer.dataset.viewer);
