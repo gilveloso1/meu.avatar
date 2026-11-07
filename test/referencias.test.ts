@@ -97,6 +97,24 @@ describe("referências sem avatar", () => {
     expect(page).toContain("data-paste-menu");
   });
 
+  it("Usar recente traz o gerado mais recente de cada tipo: do próprio modelo, se ele gera o tipo, senão dos que geram", async () => {
+    const session = await cookie();
+    const recente = (page: string) => JSON.parse((/data-recent-item="([^"]*)"/.exec(page)?.[1] ?? "{}").replaceAll("&quot;", '"'));
+    await pronto(session, { campos: { imagem: foto("so-um-video") } });
+    expect(await (await get("/modelo/wan", session)).text()).not.toContain('data-recent-item="');
+    await pronto(session, { imagem: true });
+    const ultima = await pronto(session, { imagem: true });
+    await pronto(session);
+    expect(recente(await (await get("/modelo/wan", session)).text())).toMatchObject({ id: `gerado:${ultima.id}`, kind: "imagem", hint: "Imagem gerada" });
+    expect(recente(await (await get("/modelo/nano-banana", session)).text())).toMatchObject({ id: `gerado:${ultima.id}` });
+    // Vale para cada tipo: no Seedance (foto e vídeo), a imagem e o vídeo mais recentes.
+    const seedance = await (await get("/modelo/seedance", session)).text();
+    expect(seedance).toContain("Usar imagem recente");
+    expect(seedance).toContain("Usar vídeo recente");
+    // A imagem de outra conta nunca aparece.
+    expect(await (await get("/modelo/wan", await memberCookie())).text()).not.toContain('data-recent-item="');
+  });
+
   it("os vídeos prontos da pessoa na lista do modelo podem ser arrastados para o painel; os dos outros, não", async () => {
     const dono = await cookie();
     const video = await pronto(dono);

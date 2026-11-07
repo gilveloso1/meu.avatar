@@ -234,6 +234,7 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
   font: var(--md-sys-typescale-body-large); letter-spacing: 0.031rem; white-space: nowrap;
 }
 .menu__item .icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); }
+.menu__item[hidden] { display: none; }
 .menu__divider { height: 1px; margin: 4px 16px; border: 0; background: var(--md-sys-color-outline-variant); }
 /* Texto no fim do item (o atalho do teclado), como o trailing text do menu do M3. */
 .menu__trail { margin-left: auto; padding-left: 24px; font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; color: var(--md-sys-color-on-surface-variant); }

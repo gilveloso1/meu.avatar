@@ -55,7 +55,7 @@ const ICONS = [
   "account_balance_wallet", "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today",
   "check", "check_circle", "checkroom", "chevron_left", "chevron_right", "close", "cloud", "content_copy", "content_cut", "content_paste", "control_point_duplicate",
   "crop_square", "date_range", "delete", "download", "drag_indicator", "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit",
-  "gesture", "graphic_eq", "grid_view", "hd", "hourglass_top", "image", "info", "key", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitor_heart",
+  "gesture", "graphic_eq", "grid_view", "hd", "history", "hourglass_top", "image", "info", "key", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitor_heart",
   "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments", "person", "person_add", "photo_library", "play_arrow", "play_circle",
   "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search", "send", "space_dashboard", "speed", "star", "sticky_note_2", "swap_vert", "switch_account",
   "translate", "tune", "undo", "upload", "video_library", "videocam", "view_list", "volume_off", "volume_up",
@@ -858,6 +858,7 @@ ${CANVAS_BODY}
     const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.lastExtraByAvatar(user.id, family.map((s) => s.id)) : undefined;
     const assets = kinds.length ? (await this.db.assetsByUser(user.id)).filter((a) => kinds.includes(a.kind)) : [];
     // "Adicionar ativo": a primeira página do que a pessoa já gerou, de todos os modelos, por tipo.
+    const recent = (await Promise.all(kinds.map((k) => this.recentGenerated(user, structure, k)))).filter((r): r is PickItem => r !== null);
     const generated = Object.fromEntries(await Promise.all(kinds.map(async (k) => [k, await this.generatedFrames(user, k, 0)] as const)));
     // As escolhas que não são ativo do avatar (Refazer, "Usar para gerar", geração com erro): só as que valem.
     if (picks) {
@@ -879,7 +880,7 @@ ${CANVAS_BODY}
       <div class="pane__body" id="configuracao-corpo">
         ${family.length > 1 ? versionSwitch(family, structure) : ""}
         ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
-        ${kinds.length ? assetList(picks, kinds) : ""}
+        ${kinds.length ? assetList(picks, kinds, recent) : ""}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
       ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)), image)}
@@ -1225,6 +1226,21 @@ ${error ? snackbar(error) : ""}`;
       ids[asset.kind] = id;
     }
     return { files, ids };
+  }
+
+  /**
+   * "Usar … recente": o mais recente daquele tipo que a pessoa gerou no próprio modelo, se ele gera
+   * esse tipo (e já gerou algum); senão, dos modelos que geram. Hoje os modelos geram imagem ou vídeo
+   * (áudio, nenhum).
+   */
+  private async recentGenerated(user: User, structure: Structure, kind: AssetKind): Promise<PickItem | null> {
+    const output = (s: Structure): AssetKind => (makesImage(s) ? "imagem" : "video");
+    const all = STRUCTURES.filter((s) => output(s) === kind).map((s) => s.id);
+    // O próprio modelo primeiro; sem nada gerado nele ainda, os outros que geram o tipo.
+    const own = output(structure) === kind ? (await this.db.readyByUser(user.id, familyOf(structure).map((s) => s.id), 0, 1))[0] : undefined;
+    const v = own ?? (await this.db.readyByUser(user.id, all, 0, 1))[0];
+    const found = v ? await this.pickFile(`gerado:${v.id}`, user) : null;
+    return found ? { id: found.id, kind: found.kind, src: found.src, name: found.name, hint: found.hint } : null;
   }
 
   /** Uma página dos vídeos ou imagens prontos da pessoa, de todos os modelos, como quadros do "Adicionar ativo". */
@@ -1645,7 +1661,7 @@ function avatarDialog(o: { id: string; title: string; avatars: Avatar[]; item: (
  * "Adicionar ativo" vale com ou sem avatar: envio e o que a pessoa já gerou (os ativos do avatar
  * ficam no caminho do avatar).
  */
-function assetList(picks: AssetPicks | undefined, kinds: AssetKind[]): string {
+function assetList(picks: AssetPicks | undefined, kinds: AssetKind[], recent: PickItem[]): string {
   const pick = picks?.avatar || picks?.assets.length ? ` data-picks="${esc(JSON.stringify(picks))}"` : "";
   return `<section class="form-section form-section--assets"${pick} aria-labelledby="ativos-titulo">
         <h2 class="form-section__title" id="ativos-titulo">Avatar</h2>
@@ -1654,7 +1670,9 @@ function assetList(picks: AssetPicks | undefined, kinds: AssetKind[]): string {
           <li><button class="file-picker interactive" type="button" data-panel-open="avatares" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty" data-avatar-preview><span class="icon">face</span></span><span class="file-picker__text"><span class="file-picker__name" data-avatar-name>Adicionar avatar</span></span></button></li>
           <li data-asset-add><button class="file-picker interactive" type="button" data-panel-open="referencias" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty"><span class="icon">add</span></span><span class="file-picker__text"><span class="file-picker__name">Adicionar ativo</span></span></button></li>
         </ul>
-        ${kinds.includes("imagem") ? `<div class="menu__list context-menu" popover role="menu" aria-label="Adicionar ativo" data-paste-menu><button class="menu__item interactive" type="button" role="menuitem" data-paste-item><span class="icon">content_paste</span>Colar imagem</button></div>` : ""}
+        <div class="menu__list context-menu" popover role="menu" aria-label="Adicionar ativo" data-paste-menu>${kinds.includes("imagem") ? `<button class="menu__item interactive" type="button" role="menuitem" data-paste-item><span class="icon">content_paste</span>Colar imagem</button>` : ""}${recent
+          .map((r) => `<button class="menu__item interactive" type="button" role="menuitem" data-recent-item="${esc(JSON.stringify(r))}"><span class="icon">history</span>Usar ${ASSET_LABELS[r.kind].toLowerCase()} recente</button>`)
+          .join("")}</div>
         <template data-asset-row><li data-asset-row><div class="file-picker"><span class="file-picker__preview" data-row-preview></span><span class="file-picker__text"><span class="file-picker__name" data-row-name></span><span class="file-picker__hint" data-row-hint></span></span><button class="icon-button interactive" type="button" data-row-remove aria-label="Remover"><span class="icon">close</span></button></div></li></template>
       </section>`;
 }
@@ -3339,12 +3357,15 @@ const SCRIPT = `(() => {
         if (val("fonte") !== "audio") { clear("audio"); update(); }
         else if (!rowOf("audio")) { showKind("audio"); show(avatarInput.value ? "ativos" : "avatares"); }
       });
-      // Geração que voltou com erro: a escolha continua como estava.
+      // O menu do botão direito em "Adicionar ativo": colar uma imagem e usar o gerado mais recente de cada tipo.
+      const quickMenu = section.querySelector("[data-paste-menu]");
+      const recentItems = [...quickMenu.querySelectorAll("[data-recent-item]")], pasteItem = quickMenu.querySelector("[data-paste-item]");
+      let canPaste = () => false;
       // Colar uma imagem da área de transferência: vira um envio, como "Enviar arquivo". Pelo quadro
       // "Colar imagem" do menu, pelo botão direito em "Adicionar ativo" ou com Ctrl/Cmd+V fora dos campos.
       const pasteInput = panel.querySelector('[data-panel-view="referencias"] [data-asset-upload="imagem"]');
       if (pasteInput) {
-        const pasteTiles = [...panel.querySelectorAll("[data-paste]")], pasteMenu = section.querySelector("[data-paste-menu]");
+        const pasteTiles = [...panel.querySelectorAll("[data-paste]")];
         const IMAGE = /^image.(png|jpeg|webp)$/;
         const usePasted = (blob) => {
           const file = new File([blob], "Imagem colada." + (blob.type.split("/")[1] === "jpeg" ? "jpg" : blob.type.split("/")[1]), { type: blob.type });
@@ -3376,18 +3397,11 @@ const SCRIPT = `(() => {
           if (pasteState === "granted") { try { hasImage = Boolean(await clipboardImage()); } catch {} }
           for (const t of pasteTiles) t.hidden = !hasImage;
         };
+        canPaste = () => hasImage || pasteState === "prompt";
         refreshPaste();
         addEventListener("focus", refreshPaste);
         for (const t of pasteTiles) t.addEventListener("click", paste);
-        add.querySelector("button").addEventListener("contextmenu", (e) => {
-          if (!hasImage && pasteState !== "prompt") return;
-          e.preventDefault();
-          pasteMenu.style.left = e.clientX + "px";
-          pasteMenu.style.top = e.clientY + "px";
-          pasteMenu.showPopover();
-          pasteMenu.querySelector("[data-paste-item]").focus();
-        });
-        pasteMenu.querySelector("[data-paste-item]").addEventListener("click", async () => { pasteMenu.hidePopover(); await paste(); refreshPaste(); });
+        pasteItem.addEventListener("click", async () => { quickMenu.hidePopover(); await paste(); refreshPaste(); });
         document.addEventListener("paste", (e) => {
           if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
           const file = [...(e.clipboardData ? e.clipboardData.files : [])].find((f) => IMAGE.test(f.type));
@@ -3396,6 +3410,24 @@ const SCRIPT = `(() => {
           usePasted(file);
         });
       }
+      add.querySelector("button").addEventListener("contextmenu", (e) => {
+        if (pasteItem) pasteItem.hidden = !canPaste();
+        const first = quickMenu.querySelector(".menu__item:not([hidden])");
+        // Nada a oferecer: fica o menu do navegador.
+        if (!first) return;
+        e.preventDefault();
+        quickMenu.style.left = e.clientX + "px";
+        quickMenu.style.top = e.clientY + "px";
+        quickMenu.showPopover();
+        first.focus();
+      });
+      // "Usar … recente": o gerado mais recente daquele tipo, como uma escolha do painel.
+      for (const r of recentItems) r.addEventListener("click", () => {
+        quickMenu.hidePopover();
+        const item = JSON.parse(r.dataset.recentItem);
+        set(item.kind, item);
+        markPicked(item.id);
+      });
       // Arrastar um vídeo ou imagem pronto da lista para o painel: entra no tipo dele, se o modelo aceitar.
       const pane = f.querySelector(".pane--config"), PREFIX = "application/x-meu-avatar-";
       const dragged = (e) => [...e.dataTransfer.types].find((t) => t.startsWith(PREFIX) && kindViews.some((v) => v.dataset.kindView === t.slice(PREFIX.length)));
