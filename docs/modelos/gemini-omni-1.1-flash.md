@@ -19,15 +19,27 @@ Preço por segundo, com áudio:
 |---|---|---|---|---|
 | 360p | `duration_seconds_with_audio_360p` | 0,0338 | 0,27 | 0,34 |
 | 720p | `duration_seconds_with_audio_720p` | 0,1014 | 0,81 | 1,01 |
-| 1080p | `duration_seconds_with_audio` (sem sufixo; suposto 1080p) | 0,1520 | 1,22 | 1,52 |
+| 1080p | `duration_seconds_with_audio` (sem sufixo) | 0,1520 | 1,22 | 1,52 |
 | 4K | `duration_seconds_with_audio_4k` | 0,3041 | 2,43 | 3,04 |
 
-O SKU sem sufixo foi tomado como o do 1080p por ser a única resolução sem SKU próprio;
-conferir no custo real do primeiro vídeo em 1080p.
+### Preço direto no Google (ai.google.dev/gemini-api/docs/pricing, 07/11/2026)
 
-**O Gemini Omni 1.2 Flash** (`google/gemini-omni-1.2-flash`, de 05/11/2026) é o sucessor:
-mesmas entradas, até 15 s e cerca de 30% mais barato (US$ 0,0695/s em 720p). Se o 1.1
-servir, vale testar o 1.2 antes de liberar.
+O Google cobra por tokens de saída: 1.931 tokens por segundo em 360p, 5.792 em 720p, 8.688
+em 1080p e 17.376 em 4K (1080p e 4K com upsampling). No 1.1, US$ 17,50 por milhão de
+tokens; no 1.2, US$ 12,00. Os preços do OpenRouter acima são exatamente esses tokens vezes
+US$ 17,50/M: **o OpenRouter não cobra a mais**, e o SKU sem sufixo é mesmo o 1080p.
+
+O único provedor no OpenRouter é o Google AI Studio (disponibilidade de 87% nos últimos 3
+dias, 07/11/2026). No playground do OpenRouter, um vídeo de 1280×720 e 5 s custou
+US$ 0,5068 (0,10136 × 5).
+
+### O 1.1 acaba em 03/12/2026
+
+O Google avisa: **a partir de 03/12/2026, todo pedido ao `gemini-omni-1.1-flash` vai para o
+`gemini-omni-1.2-flash`** e é cobrado como 1.2. O 1.2 (`google/gemini-omni-1.2-flash` no
+OpenRouter, de 05/11/2026) aceita as mesmas entradas, vai até 15 s e custa 31% menos, com
+os mesmos preços no Google e no OpenRouter: US$ 0,0232/s em 360p, 0,0695 em 720p, 0,1043
+em 1080p e 0,2085 em 4K (720p, 8 s: US$ 0,56).
 
 ## Estrutura (07/11/2026)
 

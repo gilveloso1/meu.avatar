@@ -8,7 +8,8 @@
  *
  * Custo: dólar por segundo, um SKU por resolução (`duration_seconds_with_audio_<r>`); o
  * 1080p é o SKU sem sufixo (`duration_seconds_with_audio`) e o do 4K vem em minúsculas
- * (`_4k`). `prices` põe tudo pelo nome da resolução.
+ * (`_4k`). `prices` põe tudo pelo nome da resolução. Conferido com o preço do Google
+ * (tokens por segundo de cada resolução vezes US$ 17,50/M): o OpenRouter não cobra a mais.
  */
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
