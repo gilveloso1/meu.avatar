@@ -1,6 +1,7 @@
 /**
- * Gemini Omni 1.2 Flash (google/gemini-omni-1.2-flash): avatar falando, a partir da foto e
- * da fala, com a voz e a boca saindo juntas do modelo (como o Wan, mas em clipes curtos).
+ * Gemini Omni 1.2 Flash (google/gemini-omni-1.2-flash): o avatar da foto fala o texto, com a
+ * voz e a boca saindo juntas do modelo, ou só faz a cena, sem fala (clipes curtos). Sem estilo
+ * fixo: a cena, o jeito de falar e o estilo vêm das instruções, escritas por quem usa.
  * Testes e custo em docs/modelos/gemini-omni-1.2-flash.md. O 1.1 sai em 03/12/2026 (o
  * Google passa os pedidos dele para o 1.2), por isso a estrutura já nasce no 1.2.
  *
@@ -14,9 +15,9 @@
  */
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
-import { buildPrompt, cleanSpeech, languageById, MAX_EXTRA, styleById, WORDS_PER_SECOND } from "../prompt";
+import { cleanSpeech, LANGUAGES, languageById, MAX_EXTRA, qualityGuide, SPEECH_LEAD, WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
-import { options, WAN } from "./wan";
+import { options } from "./wan";
 
 /** Fala curta: o modelo faz no máximo 15 s (cerca de 39 palavras). */
 export const MAX_OMNI_SPEECH = 250;
@@ -24,6 +25,25 @@ export const MAX_OMNI_SPEECH = 250;
 const SKU = "duration_seconds_with_audio";
 /** A resolução cujo preço é o SKU sem sufixo. */
 const BASE_RESOLUTION = "1080p";
+
+/** Sem fala: a pessoa não fala, e o fim do prompt fica só com a orientação da imagem. */
+export const OMNI_SILENT = "The person does not speak: lips stay closed, no dialogue, no voice-over.";
+export const OMNI_VIDEO_GUIDE = "Video: photorealistic, steady framing, natural skin texture. No on-screen text, subtitles, captions or watermark.";
+
+/**
+ * O prompt: as instruções, a fala (ou o aviso de que não há fala) e a orientação de
+ * qualidade. Com fala, a do Wan (voz, sincronia e idioma), que deu áudio limpo no teste.
+ */
+export function omniPrompt(extra: string, speech: string, language: (typeof LANGUAGES)[number]): string {
+  const said = speech ? `${SPEECH_LEAD} "${speech}"` : OMNI_SILENT;
+  return `${[extra, said].filter(Boolean).join("\n")}\n\n${speech ? qualityGuide(language) : OMNI_VIDEO_GUIDE}`;
+}
+
+/** Da menor resolução para a maior (o modelo lista 720p, 1080p, 4K, 360p). */
+function byHeight(resolutions: string[]): string[] {
+  const height = (r: string) => (/^(\d+)k$/i.test(r) ? Number(r.slice(0, -1)) * 540 : parseInt(r, 10) || 0);
+  return [...resolutions].sort((a, b) => height(a) - height(b));
+}
 
 /** Duração padrão: a da configuração, se o modelo aceitar; senão 8 s, ou a maior aceita. */
 function defaultDuration(durations: number[], preferred: number): number {
@@ -34,10 +54,10 @@ export const OMNI: Structure = {
   id: "omni",
   name: "Gemini Omni 1.2 Flash",
   model: "google/gemini-omni-1.2-flash",
-  summary: "O avatar fala o seu texto a partir da foto, com a voz feita pelo modelo. Clipes de até 15 s.",
+  summary: "O avatar da foto fala o seu texto, ou só faz a cena que você descreve. Clipes de até 15 s.",
   icon: "auto_awesome",
   access: "admin",
-  // Ainda sem teste real: o áudio sai como o modelo entrega e não há Edição rápida.
+  // O áudio veio limpo no primeiro teste (−20 LUFS, sem clipping): sai como o modelo entrega.
   treatAudio: false,
   quickEdit: false,
   wordsPerSecond: WORDS_PER_SECOND,
@@ -54,14 +74,40 @@ export const OMNI: Structure = {
   },
 
   sections(model: VideoModel | null, d) {
-    // Cena e Fala iguais às do Wan; a fala aqui é mais curta.
-    const [cena, fala] = WAN.sections(null, d);
     const durations = model?.supported_durations ?? [8];
-    const resolutions = model?.supported_resolutions ?? ["720p"];
+    const resolutions = byHeight(model?.supported_resolutions ?? ["720p"]);
     const ratios = model?.supported_aspect_ratios ?? [d.aspectRatio];
     return [
-      cena!,
-      { ...fala!, fields: fala!.fields.map((f) => (f.kind === "textarea" ? { ...f, maxLength: MAX_OMNI_SPEECH } : f)) },
+      {
+        title: "Cena",
+        fields: [
+          {
+            kind: "textarea",
+            name: "instrucoes",
+            label: "Instruções",
+            maxLength: MAX_EXTRA,
+            placeholder: "Ex.: apresentadora animada num estúdio, gesticula e sorri no final",
+            supporting: "A cena, o jeito de falar e o estilo do vídeo.",
+            optional: true,
+          },
+        ],
+      },
+      {
+        title: "Fala",
+        fields: [
+          { kind: "select", name: "idioma", label: "Idioma da fala", options: LANGUAGES.map((l) => ({ value: l.id, label: l.label })), value: LANGUAGES[0]!.id },
+          {
+            kind: "textarea",
+            name: "fala",
+            label: "Texto",
+            maxLength: MAX_OMNI_SPEECH,
+            placeholder: "Só o que a pessoa fala, sem aspas. Ex.: Oi, gente! Hoje eu vou mostrar…",
+            supporting: "Opcional. Sem texto, o avatar não fala.",
+            speech: true,
+            optional: true,
+          },
+        ],
+      },
       {
         title: "Avatar",
         fields: [{ kind: "image", name: "imagem", label: "Foto do avatar", required: true, supporting: "Vira o primeiro quadro do vídeo." }],
@@ -84,21 +130,19 @@ export const OMNI: Structure = {
   },
 
   build(values, hasImage) {
-    const style = styleById(values("estilo"));
-    if (!style) throw new InputError(ERROS.estilo);
     const language = languageById(values("idioma"));
     if (!language) throw new InputError(ERROS.idioma);
     const speech = cleanSpeech(values("fala"));
-    if (!speech) throw new InputError(ERROS.fala);
     if (speech.length > MAX_OMNI_SPEECH) throw new InputError(ERROS.falaLonga(MAX_OMNI_SPEECH));
     const extra = values("instrucoes").replace(/\s+/g, " ").trim();
     if (extra.length > MAX_EXTRA) throw new InputError(ERROS.instrucoesLongas(MAX_EXTRA));
+    if (!speech && !extra) throw new InputError(ERROS.falaOuInstrucoes);
     if (!hasImage) throw new InputError(ERROS.foto);
 
     const duration = Number(values("duracao"));
     const resolution = values("resolucao");
     const aspectRatio = values("formato");
-    const prompt = buildPrompt({ style, language, speech, extra });
+    const prompt = omniPrompt(extra, speech, language);
     return {
       request: { prompt, duration, resolution, aspect_ratio: aspectRatio, generate_audio: true },
       image: "first_frame",
@@ -108,8 +152,9 @@ export const OMNI: Structure = {
         resolution,
         aspect_ratio: aspectRatio,
         request_prompt: prompt,
-        style: style.id,
-        language: language.id,
+        style: null,
+        // Sem fala, o idioma não diz nada do vídeo.
+        language: speech ? language.id : null,
         extra: extra || null,
         settings: null,
       },
@@ -117,6 +162,9 @@ export const OMNI: Structure = {
   },
 
   details(video) {
-    return WAN.details(video);
+    return [
+      { term: "Idioma da fala", description: video.language ? (languageById(video.language)?.label ?? video.language) : "—" },
+      { term: "Instruções", description: video.extra ?? "—" },
+    ];
   },
 };

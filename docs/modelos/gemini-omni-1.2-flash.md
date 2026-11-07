@@ -40,12 +40,21 @@ do 1.1 de 1280×720 e 5 s custou US$ 0,5068 (o preço do 1.1, 0,10136 × 5).
 
 ## Estrutura (07/11/2026)
 
-Formulário: Cena e Fala iguais às do Wan (estilo, instruções extras, idioma e texto, este
-até 250 caracteres, cerca de 15 s de fala), foto do avatar (obrigatória, primeiro quadro),
-duração, resolução e formato, todos da lista do modelo (padrão 8 s, 720p e o formato da
-configuração). O prompt é o mesmo do Wan (`buildPrompt`, `src/prompt.ts`); o Google não
-publicou um guia de prompt do Omni no OpenRouter, então rever depois do primeiro teste. Sem
-tratamento de áudio e sem Edição rápida até ver o primeiro resultado.
+Formulário: Instruções (a cena, o jeito de falar e o estilo, escritos por quem usa; sem a
+lista fixa de estilos do Wan, que deixava tudo mais rígido), idioma e texto da fala (até 250
+caracteres, cerca de 15 s), foto do avatar (obrigatória, primeiro quadro), duração,
+resolução (da menor para a maior: o modelo lista 720p, 1080p, 4K, 360p) e formato, todos da
+lista do modelo (padrão 8 s, 720p e o formato da configuração). Instruções e fala são
+opcionais, mas uma das duas precisa vir.
+
+Prompt (`omniPrompt`): as instruções; a fala depois de `SPEECH_LEAD` ou, sem fala,
+`OMNI_SILENT` (boca fechada, sem diálogo); no fim, com fala, a orientação de qualidade do
+Wan (`qualityGuide`: voz baixa e calma, sincronia, idioma) e, sem fala, só a da imagem
+(`OMNI_VIDEO_GUIDE`). Sem fala, o vídeo guarda o texto vazio e nenhum idioma. Sem
+tratamento de áudio e sem Edição rápida.
+
+Mudou em 07/11/2026, depois do primeiro teste: saiu o Estilo, a fala ficou opcional e as
+resoluções foram ordenadas. O teste abaixo foi feito antes, com o estilo Selfie.
 
 Custo na tela: o preço da resolução por segundo vezes a duração. Em 720p, 8 s: US$ 0,56.
 

@@ -1390,12 +1390,12 @@ function segmented(name: string, label: string, options: Option[], selected: str
 
 /** A caixa da fala, embaixo do centro: o campo, a duração e o custo estimados e o botão de gerar. */
 /** Detalhes que são texto livre: saem da lista e viram um bloco próprio na página do vídeo. */
-const FREE_TEXT = new Set(["Movimento", "Instruções extras"]);
+const FREE_TEXT = new Set(["Movimento", "Instruções extras", "Instruções"]);
 
 /** Ícone de cada linha dos detalhes do vídeo (precisa estar em ICONS); o que faltar usa "info". */
 const DETAIL_ICONS: Record<string, string> = {
   Modelo: "movie", Avatar: "face", Voz: "record_voice_over", Expressividade: "face", Movimento: "gesture",
-  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", "Vídeo de origem": "videocam", Roupa: "checkroom", Uso: "auto_awesome", "Quadros-chave": "photo_library",
+  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", Instruções: "notes", "Vídeo de origem": "videocam", Roupa: "checkroom", Uso: "auto_awesome", "Quadros-chave": "photo_library",
   Duração: "schedule", Resolução: "hd", Formato: "aspect_ratio", Custo: "payments", "Criado em": "calendar_today",
 };
 
@@ -2282,7 +2282,7 @@ function fieldHtml(f: Field, value: Values): string {
   switch (f.kind) {
     case "textarea":
       return `<div class="text-field">
-          <textarea class="text-field__input" id="${f.name}" name="${f.name}" rows="1" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}>${esc(value(f.name))}</textarea>
+          <textarea class="text-field__input" id="${f.name}" name="${f.name}" rows="1"${f.optional ? "" : " required"} maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}>${esc(value(f.name))}</textarea>
           <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
           <p class="text-field__supporting" id="${f.name}-ajuda"><span${f.speech ? ` data-words data-default="${esc(f.supporting)}"` : ""}>${esc(f.supporting)}</span><span data-count>${value(f.name).length}/${f.maxLength}</span></p>
         </div>`;
@@ -2895,7 +2895,7 @@ const SCRIPT = `(() => {
         const min = Math.round(fixed * rate.min), max = Math.round(fixed * rate.max);
         words.textContent = n
           ? n + " palavras" + (n < min ? " · curta para " + fixed + " s (ideal " + min + " a " + max + ")" : n > max ? " · longa para " + fixed + " s (ideal " + min + " a " + max + ")" : " · cabe em " + fixed + " s")
-          : "Para " + fixed + " s: umas " + min + " a " + max + " palavras.";
+          : (speech.required ? "" : "Opcional. ") + "Para " + fixed + " s: umas " + min + " a " + max + " palavras.";
         words.parentElement.classList.toggle("text-field__supporting--error", n > max);
       } else {
         words.textContent = n ? n + " palavras · ≈ " + s + " s de vídeo" : words.dataset.default;

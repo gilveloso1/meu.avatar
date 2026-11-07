@@ -50,6 +50,8 @@ export type Field = (
       supporting: string;
       /** É a fala: o contador mostra palavras e quanto tempo de vídeo elas dão. */
       speech?: boolean;
+      /** Pode ir vazio (sem `required`); a estrutura confere o que falta no `build`. */
+      optional?: boolean;
     }
   | { kind: "text"; name: string; label: string; maxLength: number; placeholder: string; supporting: string }
   | { kind: "select"; name: string; label: string; options: Option[]; value: string; supporting?: string }
