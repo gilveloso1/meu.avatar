@@ -1139,10 +1139,11 @@ ${error ? snackbar(error) : ""}`;
   private async useTarget(v: Video, back: string, user: User): Promise<string | null> {
     const id = /^\/modelo\/([a-z0-9-]+)(?:[?#]|$)/.exec(back)?.[1];
     const found = id ? structureById(id) : undefined;
-    if (!found || !canUse(found, user.role) || v.user_id !== user.id || v.status !== "completed" || !v.video_key) return null;
+    if (!found || !canUse(found, user.role)) return null;
+    // A mesma conferência da escolha no painel (dono, pronto, arquivo no R2): o botão nunca leva a nada.
+    const pick = await this.pickFile(`gerado:${v.id}`, user);
     const structure = await this.studio.resolve(found);
-    const kind: AssetKind = makesImage(videoStructure(v)) ? "imagem" : "video";
-    return acceptedKinds(structure.sections(null, this.config.defaults, {}).flatMap((s) => s.fields)).includes(kind) ? structure.id : null;
+    return pick && acceptedKinds(structure.sections(null, this.config.defaults, {}).flatMap((s) => s.fields)).includes(pick.kind) ? structure.id : null;
   }
 
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {

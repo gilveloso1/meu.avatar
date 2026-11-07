@@ -126,6 +126,13 @@ describe("Usar para gerar", () => {
     await env.DB.prepare("UPDATE videos SET structure = 'wan' WHERE id = ?").bind(imagem.id).run();
     expect(await (await get(`/video/${imagem.id}?de=/modelo/seedance`, await memberCookie())).text()).not.toContain("?usar=gerado:");
   });
+
+  it("não aparece quando o arquivo do vídeo não existe: o botão nunca leva a nada", async () => {
+    const session = await cookie();
+    const video = await pronto(session);
+    await env.MIDIA.delete(video.video_key!);
+    expect(await (await get(`/video/${video.id}?de=/modelo/seedance`, session)).text()).not.toContain("?usar=gerado:");
+  });
 });
 
 describe("Refazer", () => {
