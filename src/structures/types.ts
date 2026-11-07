@@ -18,6 +18,8 @@ export interface Option {
   label: string;
   /** Explicação da opção, mostrada abaixo do campo quando ela está escolhida. */
   description?: string;
+  /** Vem separada das de cima por um divisor no menu (o "Sem fala" do Omni). */
+  divider?: boolean;
 }
 
 /** Uma voz pronta: a opção e o que o menu de vozes mostra dela. */
@@ -50,6 +52,8 @@ export type Field = (
       supporting: string;
       /** É a fala: o contador mostra palavras e quanto tempo de vídeo elas dão. */
       speech?: boolean;
+      /** Ao escolher o avatar, volta com o último texto usado com ele neste modelo (as instruções do Omni). */
+      perAvatar?: boolean;
     }
   | { kind: "text"; name: string; label: string; maxLength: number; placeholder: string; supporting: string }
   | { kind: "select"; name: string; label: string; options: Option[]; value: string; supporting?: string }
@@ -181,6 +185,13 @@ export interface Structure {
    * na mesma tabela e nas mesmas telas dos vídeos; sem isto, vídeo.
    */
   output?: "image";
+  /**
+   * Outra versão de um modelo: o id da estrutura principal. Fica fora da tela inicial e divide
+   * a página (seletor Versão) e a lista de vídeos com ela.
+   */
+  family?: string;
+  /** O nome da versão no seletor ("1.1"); só nas estruturas com versões. */
+  version?: string;
   /** "admin": só o administrador vê e usa (modelo em teste). */
   access: "all" | "admin";
   /** O áudio pronto passa pelo contêiner (src/audio.ts). */

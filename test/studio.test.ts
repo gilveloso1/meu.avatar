@@ -12,9 +12,10 @@ import { estimate } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
 import { GROK, GROK_GUIDE } from "../src/structures/grok";
+import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_11, OMNI_SILENT, OMNI_SILENT_GUIDE, OMNI_SINGLE_SHOT } from "../src/structures/omni";
 import { IMAGE_GUIDE, IMAGE_REFERENCE_GUIDE, NANO_BANANA } from "../src/structures/imagem";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
-import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
+import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, OMNI_11_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
@@ -653,6 +654,147 @@ describe("Grok Imagine 1.5 Lite", () => {
     expect(await (await get("/", member)).text()).not.toContain("/modelo/grok");
     expect((await get("/modelo/grok", member)).status).toBe(404);
     const res = await call(postForm("/modelo/grok", { movimento: MOVIMENTO, imagem: foto() }, { cookie: member }), api);
+    expect(res.status).toBe(404);
+    expect(api.submitted).toHaveLength(0);
+  });
+});
+
+describe("Gemini Omni 1.2 Flash", () => {
+  const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
+  const CENA = "apresentadora animada num estúdio, sorri no final";
+  const PEDIDO_OMNI = { idioma: "pt-BR", fala: FALA, instrucoes: CENA, duracao: "8", resolucao: "720p", formato: "9:16" };
+
+  it("o custo é o preço com áudio da resolução por segundo (1080p é o SKU sem sufixo, 4K em minúsculas)", () => {
+    expect(OMNI.prices!(OMNI_MODEL)).toEqual({ "360p": "0.023172", "720p": "0.069504", "1080p": "0.104256", "4K": "0.208512" });
+    const valores = (resolucao: string, duracao: string) => (name: string) => ({ resolucao, duracao })[name] ?? "";
+    expect(estimate(OMNI, OMNI_MODEL, valores("720p", "8"))).toBeCloseTo(0.556032);
+    expect(estimate(OMNI, OMNI_MODEL, valores("1080p", "15"))).toBeCloseTo(1.56384);
+    expect(estimate(OMNI, OMNI_MODEL, valores("4K", "15"))).toBeCloseTo(3.12768);
+  });
+
+  it("o formulário pede instruções (obrigatórias), idioma com Sem fala, texto, foto e vídeo, sem estilo", async () => {
+    const page = await (await get("/modelo/omni")).text();
+    expect(page).not.toContain('name="estilo"');
+    expect(page).toMatch(/<textarea [^>]*name="instrucoes" rows="1" required maxlength="500"[^>]*data-per-avatar/);
+    expect(page).toContain(`<option value="${NO_SPEECH}" data-divider>Sem fala</option>`);
+    // O texto só aparece com um idioma escolhido.
+    expect(page).toMatch(/data-show-if="[^"]*idioma[^"]*"[\s\S]{0,400}name="fala"|name="fala"[\s\S]{0,400}data-show-if="[^"]*idioma/);
+    expect(page).toMatch(new RegExp(`<textarea [^>]*name="fala" rows="1" required maxlength="${MAX_OMNI_SPEECH}"`));
+    expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
+    expect(page).toContain('<option value="8" selected>8 s</option>');
+    expect(page).toContain('<option value="15">15 s</option>');
+    expect(page).not.toContain('<option value="16"');
+    expect(page).toContain('value="720p" checked');
+    expect(page).toContain('value="9:16" checked');
+    expect(page).toContain("US$ 0.56");
+    // Resoluções da menor para a maior (o modelo lista 720p, 1080p, 4K, 360p).
+    const ordem = [...page.matchAll(/name="resolucao" value="([^"]+)"/g)].map((m) => m[1]);
+    expect(ordem).toEqual(["360p", "720p", "1080p", "4K"]);
+  });
+
+  it("manda as instruções e a fala, a foto como primeiro quadro e com áudio", async () => {
+    const api = new FakeVideoApi();
+    const res = await post(api, { ...PEDIDO_OMNI, instrucoes: `  ${CENA} `, imagem: foto() }, "omni");
+    expect(res.status).toBe(303);
+
+    const [req] = api.submitted;
+    expect(req).toMatchObject({ model: "google/gemini-omni-1.2-flash", duration: 8, resolution: "720p", aspect_ratio: "9:16", generate_audio: true });
+    // O pedido longo: as instruções no lugar do estilo, a fala citada e a orientação do Wan.
+    expect(req!.prompt).toBe(`${CENA}\n${OMNI_SINGLE_SHOT}\n${SPEECH_LEAD} "${FALA}"\n\n${qualityGuide(LANGUAGES[0]!)}`);
+    expect(req!.prompt).not.toContain("Selfie");
+    expect(req!.frame_images![0]).toMatchObject({ frame_type: "first_frame" });
+    expect(req!.input_references).toBeUndefined();
+
+    const [video] = await new Db(env.DB).recentVideos();
+    expect(video).toMatchObject({ structure: "omni", prompt: FALA, style: null, language: "pt-BR", extra: CENA, duration: 8, request_prompt: req!.prompt });
+    const detalhes = await (await get(`/video/${video!.id}`, undefined, api)).text();
+    expect(detalhes).toContain(`<h2 class="viewer__title">Instruções</h2><div class="viewer__card"><p class="viewer__text">${CENA}</p>`);
+    expect(detalhes).not.toContain("Estilo");
+    // Refazer volta com as instruções.
+    expect(await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text()).toContain(CENA);
+  });
+
+  it("com Sem fala, manda só as instruções e o avatar não fala", async () => {
+    const api = new FakeVideoApi();
+    // O texto escondido não vai no formulário; se vier, é ignorado.
+    const res = await post(api, { ...PEDIDO_OMNI, idioma: NO_SPEECH, fala: FALA, imagem: foto() }, "omni");
+    expect(res.status).toBe(303);
+    const [req] = api.submitted;
+    expect(req!.prompt).toBe(`${CENA}\n${OMNI_SINGLE_SHOT}\n${OMNI_SILENT}\n\n${OMNI_SILENT_GUIDE}`);
+    const [video] = await new Db(env.DB).recentVideos();
+    expect(video).toMatchObject({ prompt: "", language: NO_SPEECH, extra: CENA });
+    expect(await (await get(`/video/${video!.id}`, undefined, api)).text()).toContain("Sem fala");
+    expect(await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text()).toContain(`<option value="${NO_SPEECH}" selected data-divider>`);
+  });
+
+  it("ao escolher o avatar, as instruções voltam com as últimas usadas com ele", async () => {
+    const api = new FakeVideoApi();
+    await post(api, { ...PEDIDO_OMNI, imagem: foto() }, "omni");
+    const db = new Db(env.DB);
+    const admin = (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin'").first<{ id: number }>())!;
+    const avatar = await db.insertAvatar({ id: crypto.randomUUID(), user_id: admin.id, name: "Marina" });
+    await env.DB.prepare("UPDATE videos SET avatar_id = ?").bind(avatar.id).run();
+    const page = await (await get("/modelo/omni", undefined, api)).text();
+    expect(page).toContain(`data-avatar-pick="${avatar.id}"`);
+    expect(page).toContain(`data-avatar-text="${CENA}"`);
+    // As do Wan não voltam: só o campo marcado com perAvatar.
+    expect(await (await get("/modelo/wan", undefined, api)).text()).not.toContain("data-avatar-text");
+  });
+
+  it("recusa sem instruções, idioma sem fala, sem foto, fala longa e duração fora do modelo", async () => {
+    const api = new FakeVideoApi();
+    const casos: [Record<string, string | File>, string][] = [
+      [{ ...PEDIDO_OMNI, instrucoes: " ", imagem: foto() }, ERROS.instrucoes],
+      [{ ...PEDIDO_OMNI, fala: " ", imagem: foto() }, ERROS.fala],
+      [PEDIDO_OMNI, ERROS.foto],
+      [{ ...PEDIDO_OMNI, imagem: foto(), fala: "a".repeat(MAX_OMNI_SPEECH + 1) }, ERROS.falaLonga(MAX_OMNI_SPEECH)],
+      [{ ...PEDIDO_OMNI, imagem: foto(), duracao: "16" }, ERROS.ajustesNaoAceitos],
+    ];
+    for (const [fields, erro] of casos) {
+      const res = await post(api, fields, "omni");
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(erro);
+    }
+    expect(api.submitted).toHaveLength(0);
+  });
+
+  it("o seletor Versão troca entre o 1.2 e o 1.1, cada um com as durações e o preço dele", async () => {
+    const page = await (await get("/modelo/omni")).text();
+    expect(page).toContain("data-version-switch");
+    expect(page).toMatch(/name="versao" value="omni-11"[^>]*>[\s\S]{0,120}1\.1/);
+    expect(page).toMatch(/name="versao" value="omni" form="versao-fora" checked/);
+    expect(page).toContain('<option value="15">15 s</option>');
+
+    const old = await (await get("/modelo/omni-11")).text();
+    expect(old).toContain("<title>Gemini Omni 1.1 Flash");
+    expect(old).toMatch(/name="versao" value="omni-11" form="versao-fora" checked/);
+    expect(old).toContain('<option value="10">10 s</option>');
+    expect(old).not.toContain('<option value="11"');
+    expect(old).toContain("US$ 0.81");
+    expect(estimate(OMNI_11, OMNI_11_MODEL, (n) => ({ resolucao: "720p", duracao: "8" })[n] ?? "")).toBeCloseTo(0.81088);
+  });
+
+  it("o 1.1 manda o modelo dele, e as duas versões dividem o card e a lista", async () => {
+    const api = new FakeVideoApi();
+    expect((await post(api, { ...PEDIDO_OMNI, imagem: foto() }, "omni-11")).status).toBe(303);
+    expect(api.submitted[0]).toMatchObject({ model: "google/gemini-omni-1.1-flash", duration: 8 });
+    const [video] = await new Db(env.DB).recentVideos();
+    expect(video).toMatchObject({ structure: "omni-11", model: "google/gemini-omni-1.1-flash" });
+    // A lista do 1.2 mostra o vídeo do 1.1; a tela inicial tem um card só, com a contagem dos dois.
+    expect(await (await get("/modelo/omni", undefined, api)).text()).toContain(video!.id);
+    const home = await (await get("/", undefined, api)).text();
+    expect(home).toContain('href="/modelo/omni"');
+    expect(home).not.toContain('href="/modelo/omni-11"');
+    expect(await (await get("/videos?modelo=omni", undefined, api)).text()).toContain(video!.id);
+  });
+
+  it("conta comum não vê nem usa o Omni", async () => {
+    const api = new FakeVideoApi();
+    const member = await memberCookie();
+    expect(await (await get("/", member)).text()).not.toContain("/modelo/omni");
+    expect((await get("/modelo/omni", member)).status).toBe(404);
+    expect((await get("/modelo/omni-11", member)).status).toBe(404);
+    const res = await call(postForm("/modelo/omni", { ...PEDIDO_OMNI, imagem: foto() }, { cookie: member }), api);
     expect(res.status).toBe(404);
     expect(api.submitted).toHaveLength(0);
   });

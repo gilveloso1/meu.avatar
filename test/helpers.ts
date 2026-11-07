@@ -66,7 +66,36 @@ export const GROK_MODEL: VideoModel = {
   pricing_skus: { cents_per_image_input: "1", cents_per_video_output_second_480p: "2", cents_per_video_output_second_720p: "3", cents_per_video_output_second_1080p: "14" },
 };
 
-const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, GROK_MODEL];
+export const OMNI_MODEL: VideoModel = {
+  id: "google/gemini-omni-1.2-flash",
+  name: "Google: Gemini Omni 1.2 Flash",
+  supported_durations: Array.from({ length: 13 }, (_, i) => i + 3),
+  supported_resolutions: ["720p", "1080p", "4K", "360p"],
+  supported_aspect_ratios: ["16:9", "9:16"],
+  supported_frame_images: ["first_frame", "last_frame"],
+  generate_audio: true,
+  pricing_skus: {
+    duration_seconds_with_audio: "0.104256",
+    duration_seconds_with_audio_4k: "0.208512",
+    duration_seconds_with_audio_360p: "0.023172",
+    duration_seconds_with_audio_720p: "0.069504",
+  },
+};
+
+export const OMNI_11_MODEL: VideoModel = {
+  ...OMNI_MODEL,
+  id: "google/gemini-omni-1.1-flash",
+  name: "Google: Gemini Omni 1.1 Flash",
+  supported_durations: Array.from({ length: 8 }, (_, i) => i + 3),
+  pricing_skus: {
+    duration_seconds_with_audio: "0.15204",
+    duration_seconds_with_audio_4k: "0.30408",
+    duration_seconds_with_audio_360p: "0.0337925",
+    duration_seconds_with_audio_720p: "0.10136",
+  },
+};
+
+const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, GROK_MODEL, OMNI_MODEL, OMNI_11_MODEL];
 
 /** Nano Banana 2.1 pela lista de imagens: cobra por token de saída (endpoints). */
 export const BANANA_MODEL: VideoModel = {

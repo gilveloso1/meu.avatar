@@ -70,6 +70,7 @@ export const ERROS = {
   videoFalhou: erro("Não foi possível gerar o vídeo.", "Toque em Refazer para tentar de novo."),
   imagemFalhou: erro("Não foi possível gerar a imagem.", "Toque em Refazer para tentar de novo."),
   fala: campo("Escreva a fala do vídeo."),
+  instrucoes: campo("Escreva as instruções da cena."),
   falaLonga: (max: number) => campo(`Encurte a fala para até ${max} caracteres.`),
   movimento: campo("Descreva o movimento do avatar."),
   movimentoLongo: (max: number) => campo(`Encurte o movimento para até ${max} caracteres.`),

@@ -576,6 +576,23 @@ export class Db {
   }
 
   /** Os avatares da pessoa (o mexido por último primeiro), com a contagem de ativos e a capa. */
+  /**
+   * As últimas instruções (`extra`) que a pessoa usou com cada avatar neste modelo, para o
+   * campo voltar preenchido ao escolher o avatar (`perAvatar`). Avatar sem vídeo fica de fora.
+   */
+  async lastExtraByAvatar(userId: number, structures: string[]): Promise<Map<string, string>> {
+    const marks = structures.map(() => "?").join(", ");
+    const rows = (
+      await this.d1
+        .prepare(`SELECT avatar_id, extra FROM videos WHERE user_id = ? AND structure IN (${marks}) AND avatar_id IS NOT NULL AND extra IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 500`)
+        .bind(userId, ...structures)
+        .all<{ avatar_id: string; extra: string }>()
+    ).results;
+    const last = new Map<string, string>();
+    for (const r of rows) if (!last.has(r.avatar_id)) last.set(r.avatar_id, r.extra);
+    return last;
+  }
+
   async avatarsByUser(userId: number, q = ""): Promise<Avatar[]> {
     return (
       await this.d1

@@ -27,7 +27,7 @@ import { ERROS } from "../erros";
 import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, type Field, fixedCost, makesImage, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
+import { canUse, type Defaults, estimate, familyOf, type Field, fixedCost, makesImage, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { temSom } from "../som";
 import { type Alarme, CHAVE as ALARME, LIMITE_MS } from "../vigia";
@@ -519,9 +519,10 @@ ${error ? snackbar(error) : ""}`;
   private async home(user: User, url: URL): Promise<Response> {
     const q = (url.searchParams.get("q") ?? "").trim();
     const counts = await this.db.countByStructure();
-    const structures = STRUCTURES.filter((s) => canUse(s, user.role) && s.name.toLowerCase().includes(q.toLowerCase()));
+    // As versões de um modelo ficam no card da principal (o seletor Versão fica na página).
+    const structures = STRUCTURES.filter((s) => !s.family && canUse(s, user.role) && s.name.toLowerCase().includes(q.toLowerCase()));
     const cards = structures.map((s, i) => {
-      const n = counts.get(s.id) ?? 0;
+      const n = familyOf(s).reduce((sum, v) => sum + (counts.get(v.id) ?? 0), 0);
       return tileCard({
         href: `/modelo/${s.id}`,
         tile: `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">${esc(s.icon)}</span></span>`,
@@ -779,7 +780,7 @@ ${CANVAS_BODY}
     const q = (url.searchParams.get("q") ?? "").trim();
     // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
     const only = url.searchParams.get("modelo") ?? "";
-    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s) && (!only || s.id === only));
+    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s) && (!only || (s.family ?? s.id) === only));
     const videos = await this.db.videosByStructures(usable.map((s) => s.id), q);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // A mesma lista da página do modelo (filtro, ordem, vista e agrupamento no navegador); a busca pela fala fica no servidor.
@@ -828,7 +829,8 @@ ${CANVAS_BODY}
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const image = makesImage(structure);
-    const videos = await this.db.videosByStructure(structure.id);
+    // As versões do mesmo modelo dividem a lista.
+    const videos = await this.db.videosByStructures(familyOf(structure).filter((s) => canUse(s, user.role)).map((s) => s.id));
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // Os ativos abrem o painel, depois das seções que vêm antes (o "Uso"); o resto (a fala
     // inclusive) segue as seções da estrutura. O modelo aceita o que os campos dele pedem.
@@ -837,6 +839,9 @@ ${CANVAS_BODY}
     const isFile = (f: Field) => fieldAsset(f) !== null;
     const voiceField = fields.find((f) => f.kind === "voice");
     const avatars = kinds.length ? await this.db.avatarsByUser(user.id) : [];
+    // Campo que volta com o último texto usado com o avatar (as instruções do Omni, guardadas em `extra`).
+    const family = familyOf(structure).filter((s) => canUse(s, user.role));
+    const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.lastExtraByAvatar(user.id, family.map((s) => s.id)) : undefined;
     const assets = kinds.length ? (await this.db.assetsByUser(user.id)).filter((a) => kinds.includes(a.kind)) : [];
     const leads = sections.filter((s) => s.lead);
     const rest = sections.filter((s) => !s.lead).map((s) => ({ ...s, fields: s.fields.filter((f) => !isFile(f)) })).filter((s) => s.fields.length);
@@ -847,13 +852,14 @@ ${CANVAS_BODY}
     <section class="pane pane--config" aria-labelledby="configuracao">
       <div class="pane__head"><h2 class="pane__headline" id="configuracao">Configuração</h2></div>
       <div class="pane__body" id="configuracao-corpo">
+        ${family.length > 1 ? versionSwitch(family, structure) : ""}
         ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
         ${kinds.length ? assetList(picks) : ""}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
       ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)), image)}
     </section>
-    ${kinds.length ? assetPanel(avatars, assets, kinds, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined) : ""}
+    ${kinds.length ? assetPanel(avatars, assets, kinds, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined, lastText) : ""}
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
       ${videoLibrary(videos, {
@@ -1372,6 +1378,15 @@ function canQuickEdit(v: Video, structure: Structure): boolean {
 }
 
 /** Escolha única em botão segmentado; `form` liga os botões a um formulário de fora. */
+/**
+ * O seletor Versão das estruturas com versões (o Omni 1.1 e 1.2): o mesmo grupo de botões
+ * conectados, mas fora do formulário; trocar abre a página da outra versão (SCRIPT).
+ */
+function versionSwitch(family: Structure[], current: Structure): string {
+  const options = [...family].sort((a, b) => (a.version ?? "").localeCompare(b.version ?? "")).map((s) => ({ value: s.id, label: s.version ?? s.name }));
+  return segmented("versao", "Versão", options, current.id, "versao-fora").replace('<fieldset class="segmented-field">', '<fieldset class="segmented-field" data-version-switch>');
+}
+
 function segmented(name: string, label: string, options: Option[], selected: string, form?: string, hideLabel?: boolean): string {
   const owner = form ? ` form="${form}"` : "";
   // Opções com explicação: a da escolhida aparece embaixo (o script troca ao mudar).
@@ -1390,12 +1405,12 @@ function segmented(name: string, label: string, options: Option[], selected: str
 
 /** A caixa da fala, embaixo do centro: o campo, a duração e o custo estimados e o botão de gerar. */
 /** Detalhes que são texto livre: saem da lista e viram um bloco próprio na página do vídeo. */
-const FREE_TEXT = new Set(["Movimento", "Instruções extras"]);
+const FREE_TEXT = new Set(["Movimento", "Instruções extras", "Instruções"]);
 
 /** Ícone de cada linha dos detalhes do vídeo (precisa estar em ICONS); o que faltar usa "info". */
 const DETAIL_ICONS: Record<string, string> = {
   Modelo: "movie", Avatar: "face", Voz: "record_voice_over", Expressividade: "face", Movimento: "gesture",
-  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", "Vídeo de origem": "videocam", Roupa: "checkroom", Uso: "auto_awesome", "Quadros-chave": "photo_library",
+  Estilo: "palette", "Idioma da fala": "translate", "Instruções extras": "notes", Instruções: "notes", "Vídeo de origem": "videocam", Roupa: "checkroom", Uso: "auto_awesome", "Quadros-chave": "photo_library",
   Duração: "schedule", Resolução: "hd", Formato: "aspect_ratio", Custo: "payments", "Criado em": "calendar_today",
 };
 
@@ -1547,7 +1562,7 @@ const ASSET_UPLOAD: Record<AssetKind, { name: string; accept: string; plural: st
  * O menu que se desdobra ao lado do painel: primeiro o avatar, depois os ativos dele, só dos
  * tipos que o modelo aceita. Fica dentro do formulário: enviar um arquivo aqui vai junto.
  */
-function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[], voice?: { voices: VoiceOption[]; value: string }): string {
+function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[], voice?: { voices: VoiceOption[]; value: string }, lastText?: Map<string, string>): string {
   const src = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
   const frame = (a: AvatarAsset) => `<button class="frame interactive" type="button" data-asset="${a.id}" data-asset-of="${a.avatar_id}" data-asset-type="${a.kind}" data-asset-src="${src(a)}" data-asset-name="${esc(a.name)}" aria-label="${esc(a.name)}" title="${esc(a.name)}" aria-pressed="false" hidden><span class="frame__media">${assetThumb(a, src(a))}</span><span class="frame__check" aria-hidden="true"><span class="icon">check</span></span></button>`;
   return `<aside class="side-panel" data-side-panel aria-labelledby="painel-titulo" hidden>
@@ -1559,7 +1574,7 @@ function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[]
       <div class="side-panel__body" data-panel-view="avatares">
         ${avatarPicker({
           avatars,
-          item: (a, content) => `<button class="avatar-option interactive" type="button" data-avatar-pick="${a.id}" data-avatar-cover="${esc(a.cover ?? "")}" data-avatar-name="${esc(a.name)}"${a.voice_asset ? ` data-avatar-voice="avatar:${a.id}"` : ""}>${content}</button>`,
+          item: (a, content) => `<button class="avatar-option interactive" type="button" data-avatar-pick="${a.id}" data-avatar-cover="${esc(a.cover ?? "")}" data-avatar-name="${esc(a.name)}"${a.voice_asset ? ` data-avatar-voice="avatar:${a.id}"` : ""}${lastText?.has(a.id) ? ` data-avatar-text="${esc(lastText.get(a.id)!)}"` : ""}>${content}</button>`,
         })}
         <a class="button button--text interactive side-panel__new" href="/avatares/novo"><span class="icon">add</span>Novo avatar</a>
       </div>
@@ -2282,7 +2297,7 @@ function fieldHtml(f: Field, value: Values): string {
   switch (f.kind) {
     case "textarea":
       return `<div class="text-field">
-          <textarea class="text-field__input" id="${f.name}" name="${f.name}" rows="1" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}>${esc(value(f.name))}</textarea>
+          <textarea class="text-field__input" id="${f.name}" name="${f.name}" rows="1" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}${f.perAvatar ? " data-per-avatar" : ""}>${esc(value(f.name))}</textarea>
           <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
           <p class="text-field__supporting" id="${f.name}-ajuda"><span${f.speech ? ` data-words data-default="${esc(f.supporting)}"` : ""}>${esc(f.supporting)}</span><span data-count>${value(f.name).length}/${f.maxLength}</span></p>
         </div>`;
@@ -2298,7 +2313,7 @@ function fieldHtml(f: Field, value: Values): string {
       const supporting = description !== undefined ? `<span data-description-for="${f.name}">${esc(description)}</span>` : f.supporting ? `<span>${esc(f.supporting)}</span>` : "";
       return `<div class="text-field text-field--select">
           <select class="text-field__input" id="${f.name}" name="${f.name}"${supporting ? ` aria-describedby="${f.name}-ajuda"` : ""}>${f.options
-            .map((o) => `<option value="${esc(o.value)}"${o.value === selected ? " selected" : ""}${o.description ? ` data-description="${esc(o.description)}"` : ""}>${esc(o.label)}</option>`)
+            .map((o) => `<option value="${esc(o.value)}"${o.value === selected ? " selected" : ""}${o.description ? ` data-description="${esc(o.description)}"` : ""}${o.divider ? " data-divider" : ""}>${esc(o.label)}</option>`)
             .join("")}</select>
           <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
           <span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
@@ -2577,6 +2592,8 @@ const SCRIPT = `(() => {
   // botão abre um menu do M3 com as opções, igual em todos os navegadores. Também
   // em window.mdSelect(select), para campos postos depois (o painel do canvas);
   // devolve a função que desfaz (tira o menu e os ouvintes da janela).
+  // Seletor Versão (Omni 1.1 e 1.2): abre a página da versão escolhida.
+  for (const i of document.querySelectorAll("[data-version-switch] input")) i.addEventListener("change", () => { location.href = "/modelo/" + i.value; });
   let selectN = 0;
   const enhanceSelect = (sel) => {
     const n = ++selectN, label = sel.parentElement.querySelector(".text-field__label"), arrow = sel.parentElement.querySelector(".text-field__trailing");
@@ -2592,12 +2609,14 @@ const SCRIPT = `(() => {
       const item = document.createElement("div");
       item.className = "select-menu__item interactive"; item.setAttribute("role", "option"); item.tabIndex = -1;
       item.dataset.value = o.value; item.textContent = o.textContent;
+      // Opção de outro grupo: o divisor do menu vertical antes dela.
+      if (o.hasAttribute("data-divider")) list.insertAdjacentHTML("beforeend", '<hr class="menu__divider" aria-hidden="true">');
       list.append(item);
     }
     sel.classList.add("visually-hidden"); sel.tabIndex = -1; sel.setAttribute("aria-hidden", "true");
     sel.after(btn); document.body.append(list);
     if (label) { label.htmlFor = btn.id; label.id = btn.id + "-rotulo"; btn.setAttribute("aria-labelledby", label.id + " " + btn.id); }
-    const items = [...list.children];
+    const items = [...list.querySelectorAll("[role=option]")];
     const sync = () => {
       btn.textContent = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : "";
       for (const i of items) i.setAttribute("aria-selected", String(i.dataset.value === sel.value));
@@ -2856,7 +2875,7 @@ const SCRIPT = `(() => {
     const cfg = JSON.parse(f.dataset.composer);
     const val = (name) => (f.elements[name] ? f.elements[name].value || "" : "");
     const speech = f.querySelector("[data-speech]");
-    const words = f.querySelector("[data-words]"), count = f.querySelector("[data-count]");
+    const words = f.querySelector("[data-words]");
     const rate = cfg.rate, mid = (rate.min + rate.max) / 2;
     // Duração do vídeo enviado, lida no navegador; o vídeo gerado fica com a duração aceita mais perto.
     let sourceSeconds = 0;
@@ -2900,7 +2919,11 @@ const SCRIPT = `(() => {
       } else {
         words.textContent = n ? n + " palavras · ≈ " + s + " s de vídeo" : words.dataset.default;
       }
-      if (speech) count.textContent = speech.value.length + "/" + speech.maxLength;
+      // Cada campo de texto conta os próprios caracteres (o Omni tem dois: instruções e fala).
+      for (const t of f.querySelectorAll("textarea")) {
+        const c = f.querySelector("#" + t.name + "-ajuda [data-count]");
+        if (c) c.textContent = t.value.length + "/" + t.maxLength;
+      }
       for (const d of f.querySelectorAll("[data-description-for]")) {
         const option = f.elements[d.dataset.descriptionFor].selectedOptions[0];
         d.textContent = (option && option.dataset.description) || "";
@@ -3029,8 +3052,15 @@ const SCRIPT = `(() => {
         const file = u.files[0];
         if (file) set(u.dataset.assetUpload, { name: file.name, src: URL.createObjectURL(file), hint: "Arquivo enviado" });
       });
+      // O campo com o último texto do avatar: só troca se estiver vazio ou ainda com o texto de outro avatar.
+      const perAvatar = f.querySelector("[data-per-avatar]");
+      let autoText = "";
       const pickAvatar = (b) => {
         for (const kind of Object.keys(LABELS)) clear(kind);
+        if (perAvatar && (!perAvatar.value.trim() || perAvatar.value === autoText)) {
+          perAvatar.value = autoText = b.dataset.avatarText || "";
+          perAvatar.dispatchEvent(new Event("input", { bubbles: true }));
+        }
         avatarInput.value = b.dataset.avatarPick;
         avatarName = b.dataset.avatarName;
         cover = b.dataset.avatarCover;
