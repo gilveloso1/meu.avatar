@@ -12,7 +12,8 @@
  * fechar, o agendamento termina. Um passo só roda uma vez por causa do claim do banco.
  */
 import { type ExportWork, exportWork } from "./canvas/modelo.js";
-import type { Db, ExportRow, Project, ProjectFile, Role } from "./db";
+import type { Db, ExportRow, Project, ProjectFile } from "./db";
+import type { Conta } from "./permissoes";
 import { ligado, SleepyContainer } from "./conteiner";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
@@ -202,7 +203,7 @@ export class Exports {
   }
 
   /** Começa a exportação de um Final, sempre a partir do projeto salvo; os arquivos são conferidos aqui. */
-  async start(project: Project, role: Role, finalId: string, pick?: number[], now = new Date()): Promise<ExportRow> {
+  async start(project: Project, conta: Conta, finalId: string, pick?: number[], now = new Date()): Promise<ExportRow> {
     if (!this.api) throw new InputError(ERROS.exportarIndisponivel);
     let work: ExportWork | null = null;
     try {
@@ -230,7 +231,7 @@ export class Exports {
     }
     const id = crypto.randomUUID();
     const trechos: ExportPlan["trechos"] = [];
-    for (const t of work.trechos) trechos.push(await this.segmentPlan(project, role, work.largura, work.altura, t));
+    for (const t of work.trechos) trechos.push(await this.segmentPlan(project, conta, work.largura, work.altura, t));
     const versoes: ExportPlan["versoes"] = [];
     for (const v of work.versoes) versoes.push(await this.versionPlan(v, trechos, now));
     const plan: ExportPlan = { animacoes, trechos, versoes };
@@ -251,12 +252,12 @@ export class Exports {
   }
 
   /** O plano de um trecho, com os arquivos do R2 e a chave do que entra nele. */
-  private async segmentPlan(project: Project, role: Role, largura: number, altura: number, t: ExportWork["trechos"][number]) {
+  private async segmentPlan(project: Project, conta: Conta, largura: number, altura: number, t: ExportWork["trechos"][number]) {
     const arquivos: string[] = [];
     const itens = [];
     for (const { src, ...item } of t.itens) {
       // A animação ainda vai ser feita: a chave dela já é o hash do conteúdo.
-      const key = src.startsWith(ANIMACAO) ? src.slice(ANIMACAO.length) : await this.source(project, role, src);
+      const key = src.startsWith(ANIMACAO) ? src.slice(ANIMACAO.length) : await this.source(project, conta, src);
       if (!arquivos.includes(key)) arquivos.push(key);
       itens.push({ ...item, arquivo: arquivos.indexOf(key) });
     }
@@ -295,14 +296,14 @@ export class Exports {
   }
 
   /** O arquivo de um bloco no R2: só um vídeo de quem é dono do projeto (num modelo que pode usar), um ativo de avatar dele ou um arquivo deste projeto. */
-  async source(project: Project, role: Role, src: unknown): Promise<string> {
+  async source(project: Project, conta: Conta, src: unknown): Promise<string> {
     const path = typeof src === "string" ? src : "";
     const video = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.(?:mp4|png|jpg|webp)$/.exec(path);
     if (video) {
       const v = await this.db.conta(project.user_id).video(video[1]!);
       const structure = v && structureById(v.structure);
       const key = video[2] === "original" ? v?.video_key : video[2] === "editado" ? v?.edited_key : (v?.processed_key ?? v?.video_key);
-      if (key && structure && canUse(structure, role)) return key;
+      if (key && structure && canUse(structure, conta)) return key;
     }
     // O vídeo exportado: é assim que o agente confere o resultado do próprio trabalho.
     const exported = /^\/projetos\/([0-9a-f-]{36})\/exportacoes\/([0-9a-f-]{36})\/(\d+)\.mp4$/.exec(path);

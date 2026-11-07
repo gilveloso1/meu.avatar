@@ -270,7 +270,7 @@ export class Api {
     const [criado, id] = (p.get("continuar") ?? "").split("|");
     if (p.get("continuar") && (!criado || !id)) return falha(400, "continuar_invalido");
     // Só vídeos: as imagens do modelo de imagem não entram num projeto.
-    const usable = STRUCTURES.filter((s) => canUse(s, user.role) && !makesImage(s)).map((s) => s.id);
+    const usable = STRUCTURES.filter((s) => canUse(s, user) && !makesImage(s)).map((s) => s.id);
     // Um a mais que o pedido diz se há outra página.
     const videos = await this.db.conta(user.id).readyVideos(usable, { q: (p.get("q") ?? "").trim(), desde, ate, depois: criado && id ? { criado, id } : undefined, limite: limite + 1 });
     const pagina = videos.slice(0, limite);
@@ -422,7 +422,7 @@ export class Api {
     if (body?.referencia !== undefined) {
       let key: string;
       try {
-        key = await this.exports.source(project, user.role, body.referencia);
+        key = await this.exports.source(project, user, body.referencia);
       } catch (err) {
         if (err instanceof InputError) return falha(404, "arquivo_indisponivel");
         throw err;
@@ -495,7 +495,7 @@ export class Api {
       palavras = [];
       try {
         for (const b of quem) {
-          const t = await this.exports.transcribe(await this.exports.source(project, user.role, b.src));
+          const t = await this.exports.transcribe(await this.exports.source(project, user, b.src));
           if (!t) return falha(503, "transcricao_indisponivel");
           palavras.push(...noGrupo(g, b, t.palavras));
         }
@@ -586,13 +586,13 @@ export class Api {
     if (typeof c.imagem === "string") {
       const v = await this.db.conta(user.id).video(c.imagem);
       const structure = v && structureById(v.structure);
-      if (!v || !v.video_key || v.status !== "completed" || !structure || !makesImage(structure) || !canUse(structure, user.role)) return null;
+      if (!v || !v.video_key || v.status !== "completed" || !structure || !makesImage(structure) || !canUse(structure, user)) return null;
       return { src: `/videos/${v.id}.${v.video_key.split(".").pop()}`, kind: "image", dur: null, name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Imagem" };
     }
     if (typeof c.video === "string") {
       const v = await this.db.conta(user.id).video(c.video);
       const structure = v && structureById(v.structure);
-      if (!v || !ready(v) || !structure || makesImage(structure) || !canUse(structure, user.role)) return null;
+      if (!v || !ready(v) || !structure || makesImage(structure) || !canUse(structure, user)) return null;
       return { src: `/videos/${v.id}.mp4`, kind: "video", dur: await this.duration(v), name: v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo" };
     }
     if (typeof c.arquivo !== "string") return null;
@@ -608,12 +608,12 @@ export class Api {
     try {
       if (what === "silencios") return Response.json(await this.silences(user, project, src));
       if (what === "transcricao") {
-        const t = await this.exports.transcribe(await this.exports.source(project, user.role, src));
+        const t = await this.exports.transcribe(await this.exports.source(project, user, src));
         return t ? Response.json(t) : falha(503, "transcricao_indisponivel");
       }
       const instants = (url.searchParams.get("instantes") ?? "").split(",").filter(Boolean).map(Number);
       if (!instants.length || instants.length > MAX_QUADROS || !instants.every((t) => Number.isFinite(t) && t >= 0)) return falha(400, "instantes_invalidos");
-      const res = await this.exports.inspect(await this.exports.source(project, user.role, src), "/quadros", instants.join(","));
+      const res = await this.exports.inspect(await this.exports.source(project, user, src), "/quadros", instants.join(","));
       return new Response(res.body, { headers: { "content-type": "image/jpeg", "content-length": res.headers.get("content-length")!, "cache-control": "private, no-store" } });
     } catch (err) {
       if (err instanceof InputError) return falha(404, "arquivo_indisponivel");
@@ -624,7 +624,7 @@ export class Api {
 
   /** som: false é arquivo sem faixa de áudio (o WebM do render): não há silêncio a cortar. */
   private async silences(user: User, project: Project, src: string): Promise<{ duracao: number; silencios: number[][]; som: boolean }> {
-    const res = await this.exports.inspect(await this.exports.source(project, user.role, src), "/silencios");
+    const res = await this.exports.inspect(await this.exports.source(project, user, src), "/silencios");
     return res.json();
   }
 

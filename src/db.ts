@@ -1,4 +1,5 @@
 import { ERROS } from "./erros";
+import { lerAjustes } from "./permissoes";
 
 export type VideoStatus = "submitting" | "pending" | "in_progress" | "completed" | "failed" | "cancelled" | "expired";
 
@@ -84,12 +85,14 @@ export interface Voice {
 
 export type Role = "admin" | "member";
 
-/** Quem entra no estúdio. */
+/** Quem entra no estúdio. O que pode fazer: src/permissoes.ts (pode). */
 export interface User {
   id: number;
   email: string;
   name: string;
   role: Role;
+  /** Ajustes ao pacote do papel (users.permissoes): a mais, ou a menos com "-". */
+  permissoes: string[];
   createdAt: string;
 }
 
@@ -105,6 +108,7 @@ interface UserRow {
   email: string;
   name: string;
   role: Role;
+  permissoes: string | null;
   password_hash: string | null;
   created_at: string;
   failed_logins: number;
@@ -112,7 +116,7 @@ interface UserRow {
 }
 
 function toUser(row: UserRow): User {
-  return { id: row.id, email: row.email, name: row.name, role: row.role, createdAt: row.created_at };
+  return { id: row.id, email: row.email, name: row.name, role: row.role, permissoes: lerAjustes(row.permissoes), createdAt: row.created_at };
 }
 
 function toUserLogin(row: UserRow): UserLogin {

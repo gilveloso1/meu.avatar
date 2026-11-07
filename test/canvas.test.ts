@@ -285,7 +285,7 @@ describe("exportar projetos", () => {
     const fake = new FakeExportApi();
     const exports = new Exports(new Db(env.DB), env.MIDIA, fake);
     const depois = new Date(Date.now() + 25 * 60 * 60 * 1000);
-    const row = await exports.start((await new Db(env.DB).projectById(id))!, "admin", "final", undefined, depois);
+    const row = await exports.start((await new Db(env.DB).projectById(id))!, { id: 0, role: "admin", permissoes: [] }, "final", undefined, depois);
     for (let i = 0; i < row.total; i++) await exports.advance(row.id);
     expect([fake.segments.length, fake.joins.length]).toEqual([0, 2]);
   });
@@ -381,7 +381,7 @@ describe("exportar projetos", () => {
     const id = await projeto(admin);
     await env.DB.prepare("UPDATE videos SET structure = 'seedance'").run();
     const project = (await new Db(env.DB).projectById(id))!;
-    await expect(new Exports(new Db(env.DB), env.MIDIA, new FakeExportApi()).start(project, "member", "final")).rejects.toThrow(ERROS.exportarArquivo);
+    await expect(new Exports(new Db(env.DB), env.MIDIA, new FakeExportApi()).start(project, { id: project.user_id, role: "member", permissoes: [] }, "final")).rejects.toThrow(ERROS.exportarArquivo);
   });
 
   /** 5 ganchos × 10 CTAs = 50 versões; com 11 CTAs, 55. */

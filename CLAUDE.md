@@ -269,6 +269,13 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   original e porte de lá.
 - Permissões sempre conferidas no servidor; teste novo para cada caso de
   acesso negado.
+- O que cada conta pode fazer passa sempre por `pode(conta, permissão, recurso?)`
+  (`src/permissoes.ts`, no molde do TabNews), nunca por `role === "admin"`. O papel é um
+  pacote de permissões no código; cada conta pode ter ajustes em `users.permissoes` (a mais,
+  ou a menos com "-"; "suspensa" tira a conta do site). Permissão nova entra no catálogo e no
+  pacote, com teste dela dada e tirada (`test/permissoes.test.ts`).
+- Os dados de cada conta saem da `ContaDb` (`db.conta(userId)`, `src/db.ts`): toda consulta
+  leva o dono. O banco recusa vídeo sem dono (`migrations/0018_dono.sql`).
 - Arquivo enviado (ativos, projetos, MCP) só de uma lista fechada de tipos (`MEDIA_KINDS`,
   `src/site/site.ts`), nunca qualquer `image/*`: SVG e HTML levam script e são servidos pelo endereço
   do site. Todo arquivo do R2 sai pelo `object()`, com `nosniff` e CSP com `sandbox`.

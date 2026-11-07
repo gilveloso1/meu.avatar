@@ -1,5 +1,6 @@
 import type { AudioApi, Face } from "./audio";
-import { Db, OPEN_STATUSES, type Role, type Video, type Voice } from "./db";
+import { Db, OPEN_STATUSES, type Video, type Voice } from "./db";
+import type { Conta } from "./permissoes";
 import { ERROS } from "./erros";
 import { mp4Duration, mp4Size } from "./mp4";
 import { type ImageRequest, type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
@@ -52,7 +53,7 @@ export interface NewVideoInput {
    */
   origins?: Record<string, string>;
   /** Quem está pedindo. */
-  user: { id: number; role: Role };
+  user: Conta;
 }
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -193,7 +194,7 @@ export class Studio {
   /** Confere o acesso, valida pela estrutura, guarda a foto, registra o vídeo e envia o pedido. */
   async create(input: NewVideoInput): Promise<Video> {
     const { structure } = input;
-    if (!canUse(structure, input.user.role)) throw new ForbiddenError(ERROS.semAcessoModelo);
+    if (!canUse(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
     if (structure.platform === "heygen") return this.createDirect(input);
     const api = this.requireApi();
 
@@ -777,9 +778,9 @@ export class Studio {
    * vídeo pode ser editado, e põe na fila do contêiner com o plano. Pedir de
    * novo refaz a edição.
    */
-  async requestQuickEdit(video: Video, user: { role: Role }, plan: EditPlan, now = new Date()): Promise<Video> {
+  async requestQuickEdit(video: Video, user: Conta, plan: EditPlan, now = new Date()): Promise<Video> {
     const structure = structureById(video.structure);
-    if (!structure || !canUse(structure, user.role)) throw new ForbiddenError(ERROS.semAcessoVideo);
+    if (!structure || !canUse(structure, user)) throw new ForbiddenError(ERROS.semAcessoVideo);
     if (!structure.quickEdit) throw new InputError(ERROS.semEdicaoRapida);
     if (!this.audio) throw new InputError(ERROS.edicaoIndisponivel);
     if (video.status !== "completed" || !video.video_key) throw new InputError(ERROS.videoNaoPronto);
@@ -794,9 +795,9 @@ export class Studio {
    * na primeira vez, o que o contêiner achar (e fica guardado). Sem contêiner
    * ou se ele falhar, null (a prévia usa o padrão).
    */
-  async face(video: Video, user: { role: Role }): Promise<Face | null> {
+  async face(video: Video, user: Conta): Promise<Face | null> {
     const structure = structureById(video.structure);
-    if (!structure || !canUse(structure, user.role)) throw new ForbiddenError(ERROS.semAcessoVideo);
+    if (!structure || !canUse(structure, user)) throw new ForbiddenError(ERROS.semAcessoVideo);
     if (!structure.quickEdit) throw new InputError(ERROS.semEdicaoRapida);
     if (video.face) {
       try {
