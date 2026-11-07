@@ -909,6 +909,9 @@ a.frame { display: block; }
 .voice-row:has([aria-pressed="true"]) .vrow__support { color: inherit; }
 .side-panel__help { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.asset-grid__more { grid-column: 1 / -1; }
+/* Um vídeo ou imagem da lista arrastado para o painel: a lista de ativos mostra onde ele cai. */
+.file-list--drop { outline: 2px solid var(--md-sys-color-primary); outline-offset: 4px; border-radius: var(--md-sys-shape-corner-large); }
 .asset-grid .frame { padding: 0; border: 0; background: none; cursor: pointer; }
 .asset-grid .frame[aria-pressed="true"] { outline: 3px solid var(--md-sys-color-primary); outline-offset: -3px; }
 .frame__check { position: absolute; z-index: 2; top: 8px; right: 8px; display: none; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
