@@ -95,6 +95,7 @@ português, como quem usa escreve. **As quatro tentativas falharam**, sem custo,
 | `3e551e0b` | Sem fala | 17:06:56 | 17:08:06 |
 | `683563aa` | a mesma fala (de novo) | 17:09:12 | 17:10:07 |
 | `8f821fcc` | Sem fala (de novo) | 17:09:35 | 17:11:05 |
+| `1f9d65f0` | a mesma fala, **instruções em inglês** | 17:13:45 | 17:15:08 |
 
 Os prompts saíram como planejado (instruções, a fala só com a mecânica ou `OMNI_SILENT`, e
 `OMNI_NO_TEXT`). A página do modelo no OpenRouter mostrava, na hora, **54% de
@@ -102,7 +103,8 @@ disponibilidade nas últimas 24 h** (o 1.1, 87%): metade dos pedidos falha no Go
 quatro falhas seguidas pesam contra só o acaso. Diferenças para o teste que deu certo: 4 s
 (lá, 8 s) e instruções em português (lá, tudo em inglês, menos a fala). As instruções de
 quem usa vão como foram escritas; a regra dos prompts do projeto é mandar ao gerador em
-inglês.
+inglês. O quinto pedido, com as instruções em inglês, também falhou: o idioma não é a causa
+(ou não sozinho). Sobram a duração de 4 s e o provedor fora do ar nesse horário.
 
 ## Próximo passo
 
