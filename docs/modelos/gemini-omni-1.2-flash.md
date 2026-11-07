@@ -49,8 +49,27 @@ tratamento de áudio e sem Edição rápida até ver o primeiro resultado.
 
 Custo na tela: o preço da resolução por segundo vezes a duração. Em 720p, 8 s: US$ 0,56.
 
+## Teste de 07/11/2026
+
+Pelo site, publicado só para o administrador. Foto principal da Marina ("Apresentadora
+financeira", 941×1672), estilo Selfie, português, 8 s, 720p, 9:16. Fala: a primeira frase do
+vídeo de referência do Wan (`43d41b41`), encurtada para 19 palavras: "Já tem hora marcada: o
+resultado da eleição para presidente sai entre oito e meia e nove da noite!".
+
+| Vídeo (D1) | Job | Tempo | Custo real |
+|---|---|---|---|
+| `7121a3d8-ff36-429d-9fba-e2a6de42eb96` | `gen-vid-1794068958-wgMaaePyiGAZT3XEVWrc` | 54 s | US$ 0,556 (igual ao estimado) |
+
+- **Imagem:** 720×1280, exatamente 8 s. Rosto, óculos, colar, roupa e cenário iguais aos da
+  foto; câmera parada; gestos de mão naturais e, no fim, as mãos descem e ela sorri.
+- **Fala:** a transcrição bate palavra por palavra ("Já tem hora marcada. O resultado da
+  eleição para presidente sai entre 8h30 e 9h da noite."), dos 0,4 s aos 6,8 s; sobra 1,3 s
+  em silêncio no fim. A boca acompanhando a fala ainda precisa ser conferida assistindo.
+- **Áudio como veio** (ffmpeg): −20,1 LUFS, pico de −3,3 dBFS, sem clipping, estéreo 48 kHz.
+  Bem diferente do Wan (−5 LUFS, com clipping, ver [docs/prompt.md](../prompt.md)): limpo,
+  só mais baixo que o alvo de −14 LUFS.
+
 ## Próximo passo
 
-Gerar o primeiro vídeo pelo site (gasta créditos; precisa de autorização): mesma foto e
-fala de um vídeo do Wan, 720p, 9:16, 8 s. Ver se a boca acompanha a fala em português, a
-voz e o volume (decidir `treatAudio`), se o 9:16 sai em 720×1280 e o custo real.
+Assistir ao vídeo e decidir: se a boca e a voz servem, ligar o tratamento só para subir o
+volume (`treatAudio`) ou deixar como está, e liberar para todos (`access: "all"`).
