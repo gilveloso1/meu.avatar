@@ -435,7 +435,7 @@ export class Api {
     }
     const values = (name: string) => ({ descricao, resolucao, formato })[name] ?? "";
     try {
-      const v = await this.studio.create({ structure: NANO_BANANA, values, image, user });
+      const v = await this.studio.waitImage(await this.studio.create({ structure: NANO_BANANA, values, image, user }));
       if (v.status !== "completed" || !v.video_key) return falha(502, "imagem_falhou", { id: v.id });
       const src = `/videos/${v.id}.${v.video_key.split(".").pop()}`;
       const resposta: Record<string, unknown> = { imagem: { id: v.id, src, resolucao: v.resolution, formato: v.aspect_ratio, custo: v.cost } };
