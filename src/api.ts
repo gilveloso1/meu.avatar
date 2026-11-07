@@ -13,7 +13,7 @@ import { mp4Duration } from "./mp4";
 import { canUse, InputError, makesImage, STRUCTURES, structureById } from "./structures";
 import { NANO_BANANA } from "./structures/imagem";
 import { base64, ForbiddenError, type Studio } from "./studio";
-import { FONTES, MAX_RENDER_SECONDS, RenderError } from "./render";
+import { CenaInvalidaError, FONTES, MAX_RENDER_SECONDS, RenderError } from "./render";
 import { AudioLongoError, type Palavra } from "./transcricao";
 
 export const API_PATH = /^\/api\/v1(\/|$)/;
@@ -243,7 +243,7 @@ export class Api {
     if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
     if (path === "/api/v1/animacoes" && !post) return this.animations(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|maquete))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
@@ -252,6 +252,7 @@ export class Api {
     if (m[2] === "limpar") return post ? this.cleanFiles(request, project) : falha(405, "metodo_invalido");
     if (m[2] === "animacao") return post ? falha(405, "metodo_invalido") : this.inspectCode(project, url);
     if (m[2] === "imagem") return post ? this.generateImage(request, user, project) : falha(405, "metodo_invalido");
+    if (m[2] === "maquete") return post ? this.blockout(request, project) : falha(405, "metodo_invalido");
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(",")));
   }
@@ -452,6 +453,32 @@ export class Api {
       // Formato ou resolução que o modelo não aceita, descrição longa: a frase diz o que fazer.
       if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
       throw err;
+    }
+  }
+
+  /**
+   * A maquete 3D (montar_maquete): a cena em JSON vira a foto no projeto, com o relatório de onde
+   * cada pessoa e objeto caiu no quadro. Com previa, a imagem volta em base64 para o agente olhar.
+   */
+  private async blockout(request: Request, project: Project): Promise<Response> {
+    const body = await json(request);
+    try {
+      const r = await this.exports.maquete(project, { nome: nomeDoArquivo(body?.nome, "maquete.png"), cena: body?.cena, final: typeof body?.final === "string" ? body.final : undefined, formato: typeof body?.formato === "string" ? body.formato : undefined });
+      if (r === null) return falha(503, "render_indisponivel");
+      if (typeof r === "string") return falha(r === "cena_grande_demais" ? 413 : 400, r);
+      const resposta: Record<string, unknown> = { arquivo: { id: r.file.id, nome: r.file.name, tipo: r.file.type, src: `/projetos/${project.id}/arquivos/${r.file.id}` }, largura: r.largura, altura: r.altura, relatorio: r.relatorio };
+      if (body?.previa === true) {
+        const file = await this.media.get(r.file.key);
+        if (file) {
+          resposta.previa = base64(await file.arrayBuffer());
+          resposta.previaTipo = "image/png";
+        }
+      }
+      return Response.json(resposta, { status: 201 });
+    } catch (err) {
+      if (err instanceof CenaInvalidaError) return falha(400, "cena_invalida", { erros: err.erros });
+      if (err instanceof RenderError) return falha(422, "render_falhou", { detalhe: err.message });
+      return conteinerFalhou("Maquete", err);
     }
   }
 

@@ -37,6 +37,13 @@ const fs=require(\"fs\");
 fetch(\"http://127.0.0.1:8080/inspecionar\",{method:\"POST\",headers:{\"x-largura\":\"720\",\"x-altura\":\"1280\",\"x-duracao\":\"3\",\"x-instantes\":\"0,1,2.5\",\"x-quadros\":\"1\"},body:fs.readFileSync(\"/tmp/exemplo.html\")})
  .then(async r=>{const j=await r.json().catch(()=>null);if(!r.ok||!j||j.problemas.length||!j.quadros||!j.instantes[2].mudou.length){console.error(JSON.stringify(j));process.exit(1)}})"' || { echo "A inspeção falhou." >&2; exit 1; }
 echo "Inspeção sem rede: ok."
+# A maquete 3D usa o WebGL de software (SwiftShader): sem ele, a foto sai preta ou não sai.
+docker cp exemplo-maquete.json render-teste:/tmp/maquete.json
+docker exec render-teste sh -c 'node -e "
+const fs=require(\"fs\");
+fetch(\"http://127.0.0.1:8080/maquete\",{method:\"POST\",headers:{\"x-largura\":\"720\",\"x-altura\":\"1280\"},body:fs.readFileSync(\"/tmp/maquete.json\")})
+ .then(async r=>{const j=await r.json().catch(()=>null);const ana=j&&j.relatorio&&j.relatorio.itens.find(i=>i.id===\"ana\");if(!r.ok||!j.png||j.png.length<40000||!ana||ana.rosto!==\"de frente\"){console.error(r.status,JSON.stringify(j&&j.relatorio||j));process.exit(1)}})"' || { echo "A maquete falhou." >&2; exit 1; }
+echo "Maquete sem rede: ok."
 # O "dormir" da Cloudflare só manda SIGTERM: tem de parar na hora, com código 0.
 docker stop -t 5 render-teste >/dev/null
 [ "$(docker inspect -f '{{.State.ExitCode}}' render-teste)" = 0 ] || { echo "O servidor não saiu no SIGTERM." >&2; exit 1; }

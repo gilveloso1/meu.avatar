@@ -86,3 +86,24 @@ a descrição não citou continuou vazio (o chão da metade de baixo). Regra par
 a disposição e a câmera; a descrição dá a decoração, as cores e a luz, e tudo o que não for citado sai vazio.
 
 Custo: 7 imagens em 1K, US$ 0,26.
+
+**Maquete neutra ou em contraste** (06/11/2026, com o `montar_maquete` do PR da maquete rodando no
+computador). Três cenas de dificuldade crescente, cada uma com a mesma descrição longa e detalhada
+(pessoas, roupas, móveis, cores, luz, lente) e a mesma frase final: "a referência é uma maquete
+3D que só define a disposição; manter câmera, ângulo, lente e posições e virar foto real; cores,
+materiais, rostos, roupas e decoração vêm da descrição". A maquete foi feita nos dois estilos:
+neutro (tudo cinza e bege) e contraste (pessoa em vermelho e azul-marinho, móveis em azul, chão
+cor de madeira). Maquetes e imagens no projeto "Teste do render" (`maquete-n1-neutro.png` etc.).
+
+| Cena | Neutro | Contraste |
+|---|---|---|
+| 1. Cozinha, câmera na altura da ilha, uma mulher mostrando o sérum, quatro objetos na ilha | **Certa:** tudo no lugar, ilha branca | Disposição certa, mas a frente da ilha (que a descrição não pintou) saiu **azul**, e a borda do tampo, marrom: as cores da maquete passaram para a foto |
+| 2. Sala vista do canto, de cima, 24 mm; ela sentada no sofá com o celular, ele debruçado apontando; mesa de centro com xícaras e livros, quadro, abajur, planta, janela | Pessoas e móveis certos, mas a câmera chegou mais perto e a mesa mudou de lugar | **Mais fiel** à maquete: câmera aberta, mesa e tapete no lugar; nenhuma cor vazou (tudo estava descrito) |
+| 3. Quarto visto do canto do teto, 18 mm; mãe sentada de pernas cruzadas na cama com o sérum, caixa aberta e três produtos no lençol, filha ajoelhada no tapete, pai de braços cruzados; estante, mesinha, janela, guarda-roupa | **Certa:** as três pessoas nas poses, os produtos e a caixa na cama, câmera igual | Também certa, mas a mesinha de cabeceira (sem cor na descrição) saiu **azul** |
+
+Leitura: o banana segue a maquete muito bem, inclusive com três pessoas, poses diferentes e
+objetos pequenos, a 18 mm do canto do teto. A cor da pessoa na maquete nunca vazou (roupas
+sempre descritas); a dos móveis vazou sempre que a descrição não citou a cor daquela superfície.
+O contraste ajudou a fixar a disposição só na cena 2. **Padrão: neutro.** O contraste fica como
+opção (`estilo: "contraste"`), para cena cheia em que a descrição cita a cor de tudo. Próximo
+teste possível: pessoas em contraste e o resto neutro. Custo: 6 imagens em 1K, US$ 0,24.

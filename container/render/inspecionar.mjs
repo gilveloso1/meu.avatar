@@ -21,8 +21,12 @@ const MAX_ELEMENTOS = 80;
 const MAX_ERROS = 5;
 
 let chrome = null;
-/** O Chrome que o HyperFrames baixou na imagem (`hyperframes browser ensure`). */
-function caminhoDoChrome(hyperframes) {
+/**
+ * O Chrome que o HyperFrames baixou na imagem (`hyperframes browser ensure`). No computador,
+ * CHROME aponta para o Chrome instalado (o servidor roda fora do contêiner para testar).
+ */
+export function caminhoDoChrome(hyperframes) {
+  if (process.env.CHROME) return Promise.resolve(process.env.CHROME);
   chrome ??= new Promise((resolve, reject) => {
     const p = spawn(hyperframes, ["browser", "path"], { env: { ...process.env, HYPERFRAMES_NO_TELEMETRY: "1" } });
     let saida = "";
