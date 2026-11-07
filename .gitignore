@@ -1,5 +1,7 @@
 node_modules/
 saida/
+# Arquivos temporários e de trabalho (CLAUDE.md): nunca vão para o git
+temp/
 .env
 .wrangler/
 .dev.vars

@@ -280,7 +280,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   não é contornado nem apagado: a estrutura fica e ganha a nota lá.
 - Nada de imagem, vídeo ou áudio no repositório (nem de teste, nem de exemplo): pesa o projeto
   para sempre. Resultado de teste fica no site (projeto ou lista do modelo) ou no R2, e o doc
-  diz onde (id ou caminho); arquivo de trabalho fica na pasta temporária.
+  diz onde (id ou caminho).
+- Arquivo temporário ou de trabalho (download, saída de teste, material de referência, script
+  avulso) vai para `temp/`, na raiz do projeto, que fica fora do git (`.gitignore`). Nunca na raiz
+  nem em outra pasta do projeto.
 
 ## Quando o usuário precisa agir
 
