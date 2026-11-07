@@ -12,7 +12,7 @@ import { estimate } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
 import { GROK, GROK_GUIDE } from "../src/structures/grok";
-import { MAX_OMNI_SPEECH, OMNI, OMNI_SILENT, OMNI_VIDEO_GUIDE } from "../src/structures/omni";
+import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_NO_TEXT, OMNI_SILENT, omniSpeech } from "../src/structures/omni";
 import { IMAGE_GUIDE, IMAGE_REFERENCE_GUIDE, NANO_BANANA } from "../src/structures/imagem";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
 import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
@@ -661,8 +661,8 @@ describe("Grok Imagine 1.5 Lite", () => {
 
 describe("Gemini Omni 1.2 Flash", () => {
   const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
-  const PEDIDO_OMNI = { idioma: "pt-BR", fala: FALA, instrucoes: "", duracao: "8", resolucao: "720p", formato: "9:16" };
   const CENA = "apresentadora animada num estúdio, sorri no final";
+  const PEDIDO_OMNI = { idioma: "pt-BR", fala: FALA, instrucoes: CENA, duracao: "8", resolucao: "720p", formato: "9:16" };
 
   it("o custo é o preço com áudio da resolução por segundo (1080p é o SKU sem sufixo, 4K em minúsculas)", () => {
     expect(OMNI.prices!(OMNI_MODEL)).toEqual({ "360p": "0.023172", "720p": "0.069504", "1080p": "0.104256", "4K": "0.208512" });
@@ -672,14 +672,14 @@ describe("Gemini Omni 1.2 Flash", () => {
     expect(estimate(OMNI, OMNI_MODEL, valores("4K", "15"))).toBeCloseTo(3.12768);
   });
 
-  it("o formulário pede instruções e fala (as duas opcionais), foto e vídeo, sem estilo", async () => {
+  it("o formulário pede instruções (obrigatórias), idioma com Sem fala, texto, foto e vídeo, sem estilo", async () => {
     const page = await (await get("/modelo/omni")).text();
     expect(page).not.toContain('name="estilo"');
-    expect(page).toContain('name="idioma"');
-    // Instruções e fala podem ir vazias: nenhuma das duas é obrigatória no navegador.
-    expect(page).toMatch(/<textarea [^>]*name="instrucoes" rows="1" maxlength="500"/);
-    expect(page).toMatch(new RegExp(`<textarea [^>]*name="fala" rows="1" maxlength="${MAX_OMNI_SPEECH}"`));
-    expect(page).toContain("Opcional. Sem texto, o avatar não fala.");
+    expect(page).toMatch(/<textarea [^>]*name="instrucoes" rows="1" required maxlength="500"[^>]*data-per-avatar/);
+    expect(page).toContain(`<option value="${NO_SPEECH}">Sem fala</option>`);
+    // O texto só aparece com um idioma escolhido.
+    expect(page).toMatch(/data-show-if="[^"]*idioma[^"]*"[\s\S]{0,400}name="fala"|name="fala"[\s\S]{0,400}data-show-if="[^"]*idioma/);
+    expect(page).toMatch(new RegExp(`<textarea [^>]*name="fala" rows="1" required maxlength="${MAX_OMNI_SPEECH}"`));
     expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
     expect(page).toContain('<option value="8" selected>8 s</option>');
     expect(page).toContain('<option value="15">15 s</option>');
@@ -699,7 +699,9 @@ describe("Gemini Omni 1.2 Flash", () => {
 
     const [req] = api.submitted;
     expect(req).toMatchObject({ model: "google/gemini-omni-1.2-flash", duration: 8, resolution: "720p", aspect_ratio: "9:16", generate_audio: true });
-    expect(req!.prompt).toBe(`${CENA}\n${SPEECH_LEAD} "${FALA}"\n\n${qualityGuide(LANGUAGES[0]!)}`);
+    // Sem orientação padrão: as instruções, a fala e o pedido de nada de texto na tela.
+    expect(req!.prompt).toBe(`${CENA}\n${omniSpeech(FALA, LANGUAGES[0]!)}\n${OMNI_NO_TEXT}`);
+    expect(req!.prompt).not.toContain("soft");
     expect(req!.frame_images![0]).toMatchObject({ frame_type: "first_frame" });
     expect(req!.input_references).toBeUndefined();
 
@@ -712,20 +714,38 @@ describe("Gemini Omni 1.2 Flash", () => {
     expect(await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text()).toContain(CENA);
   });
 
-  it("sem fala, manda só as instruções e o avatar não fala", async () => {
+  it("com Sem fala, manda só as instruções e o avatar não fala", async () => {
     const api = new FakeVideoApi();
-    const res = await post(api, { ...PEDIDO_OMNI, fala: "", instrucoes: CENA, imagem: foto() }, "omni");
+    // O texto escondido não vai no formulário; se vier, é ignorado.
+    const res = await post(api, { ...PEDIDO_OMNI, idioma: NO_SPEECH, fala: FALA, imagem: foto() }, "omni");
     expect(res.status).toBe(303);
     const [req] = api.submitted;
-    expect(req!.prompt).toBe(`${CENA}\n${OMNI_SILENT}\n\n${OMNI_VIDEO_GUIDE}`);
+    expect(req!.prompt).toBe(`${CENA}\n${OMNI_SILENT}\n${OMNI_NO_TEXT}`);
     const [video] = await new Db(env.DB).recentVideos();
-    expect(video).toMatchObject({ prompt: "", language: null, extra: CENA });
+    expect(video).toMatchObject({ prompt: "", language: NO_SPEECH, extra: CENA });
+    expect(await (await get(`/video/${video!.id}`, undefined, api)).text()).toContain("Sem fala");
+    expect(await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text()).toContain(`<option value="${NO_SPEECH}" selected>`);
   });
 
-  it("recusa sem fala nem instruções, sem foto, fala longa e duração fora do modelo", async () => {
+  it("ao escolher o avatar, as instruções voltam com as últimas usadas com ele", async () => {
+    const api = new FakeVideoApi();
+    await post(api, { ...PEDIDO_OMNI, imagem: foto() }, "omni");
+    const db = new Db(env.DB);
+    const admin = (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin'").first<{ id: number }>())!;
+    const avatar = await db.insertAvatar({ id: crypto.randomUUID(), user_id: admin.id, name: "Marina" });
+    await env.DB.prepare("UPDATE videos SET avatar_id = ?").bind(avatar.id).run();
+    const page = await (await get("/modelo/omni", undefined, api)).text();
+    expect(page).toContain(`data-avatar-pick="${avatar.id}"`);
+    expect(page).toContain(`data-avatar-text="${CENA}"`);
+    // As do Wan não voltam: só o campo marcado com perAvatar.
+    expect(await (await get("/modelo/wan", undefined, api)).text()).not.toContain("data-avatar-text");
+  });
+
+  it("recusa sem instruções, idioma sem fala, sem foto, fala longa e duração fora do modelo", async () => {
     const api = new FakeVideoApi();
     const casos: [Record<string, string | File>, string][] = [
-      [{ ...PEDIDO_OMNI, fala: " ", imagem: foto() }, ERROS.falaOuInstrucoes],
+      [{ ...PEDIDO_OMNI, instrucoes: " ", imagem: foto() }, ERROS.instrucoes],
+      [{ ...PEDIDO_OMNI, fala: " ", imagem: foto() }, ERROS.fala],
       [PEDIDO_OMNI, ERROS.foto],
       [{ ...PEDIDO_OMNI, imagem: foto(), fala: "a".repeat(MAX_OMNI_SPEECH + 1) }, ERROS.falaLonga(MAX_OMNI_SPEECH)],
       [{ ...PEDIDO_OMNI, imagem: foto(), duracao: "16" }, ERROS.ajustesNaoAceitos],

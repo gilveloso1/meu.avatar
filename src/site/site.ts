@@ -837,6 +837,8 @@ ${CANVAS_BODY}
     const isFile = (f: Field) => fieldAsset(f) !== null;
     const voiceField = fields.find((f) => f.kind === "voice");
     const avatars = kinds.length ? await this.db.avatarsByUser(user.id) : [];
+    // Campo que volta com o último texto usado com o avatar (as instruções do Omni, guardadas em `extra`).
+    const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.lastExtraByAvatar(user.id, structure.id) : undefined;
     const assets = kinds.length ? (await this.db.assetsByUser(user.id)).filter((a) => kinds.includes(a.kind)) : [];
     const leads = sections.filter((s) => s.lead);
     const rest = sections.filter((s) => !s.lead).map((s) => ({ ...s, fields: s.fields.filter((f) => !isFile(f)) })).filter((s) => s.fields.length);
@@ -853,7 +855,7 @@ ${CANVAS_BODY}
       </div>
       ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)), image)}
     </section>
-    ${kinds.length ? assetPanel(avatars, assets, kinds, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined) : ""}
+    ${kinds.length ? assetPanel(avatars, assets, kinds, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined, lastText) : ""}
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
       ${videoLibrary(videos, {
@@ -1547,7 +1549,7 @@ const ASSET_UPLOAD: Record<AssetKind, { name: string; accept: string; plural: st
  * O menu que se desdobra ao lado do painel: primeiro o avatar, depois os ativos dele, só dos
  * tipos que o modelo aceita. Fica dentro do formulário: enviar um arquivo aqui vai junto.
  */
-function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[], voice?: { voices: VoiceOption[]; value: string }): string {
+function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[], voice?: { voices: VoiceOption[]; value: string }, lastText?: Map<string, string>): string {
   const src = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
   const frame = (a: AvatarAsset) => `<button class="frame interactive" type="button" data-asset="${a.id}" data-asset-of="${a.avatar_id}" data-asset-type="${a.kind}" data-asset-src="${src(a)}" data-asset-name="${esc(a.name)}" aria-label="${esc(a.name)}" title="${esc(a.name)}" aria-pressed="false" hidden><span class="frame__media">${assetThumb(a, src(a))}</span><span class="frame__check" aria-hidden="true"><span class="icon">check</span></span></button>`;
   return `<aside class="side-panel" data-side-panel aria-labelledby="painel-titulo" hidden>
@@ -1559,7 +1561,7 @@ function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[]
       <div class="side-panel__body" data-panel-view="avatares">
         ${avatarPicker({
           avatars,
-          item: (a, content) => `<button class="avatar-option interactive" type="button" data-avatar-pick="${a.id}" data-avatar-cover="${esc(a.cover ?? "")}" data-avatar-name="${esc(a.name)}"${a.voice_asset ? ` data-avatar-voice="avatar:${a.id}"` : ""}>${content}</button>`,
+          item: (a, content) => `<button class="avatar-option interactive" type="button" data-avatar-pick="${a.id}" data-avatar-cover="${esc(a.cover ?? "")}" data-avatar-name="${esc(a.name)}"${a.voice_asset ? ` data-avatar-voice="avatar:${a.id}"` : ""}${lastText?.has(a.id) ? ` data-avatar-text="${esc(lastText.get(a.id)!)}"` : ""}>${content}</button>`,
         })}
         <a class="button button--text interactive side-panel__new" href="/avatares/novo"><span class="icon">add</span>Novo avatar</a>
       </div>
@@ -2282,7 +2284,7 @@ function fieldHtml(f: Field, value: Values): string {
   switch (f.kind) {
     case "textarea":
       return `<div class="text-field">
-          <textarea class="text-field__input" id="${f.name}" name="${f.name}" rows="1"${f.optional ? "" : " required"} maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}>${esc(value(f.name))}</textarea>
+          <textarea class="text-field__input" id="${f.name}" name="${f.name}" rows="1" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}${f.perAvatar ? " data-per-avatar" : ""}>${esc(value(f.name))}</textarea>
           <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
           <p class="text-field__supporting" id="${f.name}-ajuda"><span${f.speech ? ` data-words data-default="${esc(f.supporting)}"` : ""}>${esc(f.supporting)}</span><span data-count>${value(f.name).length}/${f.maxLength}</span></p>
         </div>`;
@@ -2895,7 +2897,7 @@ const SCRIPT = `(() => {
         const min = Math.round(fixed * rate.min), max = Math.round(fixed * rate.max);
         words.textContent = n
           ? n + " palavras" + (n < min ? " · curta para " + fixed + " s (ideal " + min + " a " + max + ")" : n > max ? " · longa para " + fixed + " s (ideal " + min + " a " + max + ")" : " · cabe em " + fixed + " s")
-          : (speech.required ? "" : "Opcional. ") + "Para " + fixed + " s: umas " + min + " a " + max + " palavras.";
+          : "Para " + fixed + " s: umas " + min + " a " + max + " palavras.";
         words.parentElement.classList.toggle("text-field__supporting--error", n > max);
       } else {
         words.textContent = n ? n + " palavras · ≈ " + s + " s de vídeo" : words.dataset.default;
@@ -3033,8 +3035,15 @@ const SCRIPT = `(() => {
         const file = u.files[0];
         if (file) set(u.dataset.assetUpload, { name: file.name, src: URL.createObjectURL(file), hint: "Arquivo enviado" });
       });
+      // O campo com o último texto do avatar: só troca se estiver vazio ou ainda com o texto de outro avatar.
+      const perAvatar = f.querySelector("[data-per-avatar]");
+      let autoText = "";
       const pickAvatar = (b) => {
         for (const kind of Object.keys(LABELS)) clear(kind);
+        if (perAvatar && (!perAvatar.value.trim() || perAvatar.value === autoText)) {
+          perAvatar.value = autoText = b.dataset.avatarText || "";
+          perAvatar.dispatchEvent(new Event("input", { bubbles: true }));
+        }
         avatarInput.value = b.dataset.avatarPick;
         avatarName = b.dataset.avatarName;
         cover = b.dataset.avatarCover;

@@ -40,21 +40,26 @@ do 1.1 de 1280×720 e 5 s custou US$ 0,5068 (o preço do 1.1, 0,10136 × 5).
 
 ## Estrutura (07/11/2026)
 
-Formulário: Instruções (a cena, o jeito de falar e o estilo, escritos por quem usa; sem a
-lista fixa de estilos do Wan, que deixava tudo mais rígido), idioma e texto da fala (até 250
-caracteres, cerca de 15 s), foto do avatar (obrigatória, primeiro quadro), duração,
-resolução (da menor para a maior: o modelo lista 720p, 1080p, 4K, 360p) e formato, todos da
-lista do modelo (padrão 8 s, 720p e o formato da configuração). Instruções e fala são
-opcionais, mas uma das duas precisa vir.
+Formulário: **Instruções** (obrigatórias: a cena, o jeito de falar e o estilo, escritos por
+quem usa; ao escolher o avatar, voltam com as últimas usadas com ele neste modelo), **Idioma
+da fala** (português, inglês, espanhol ou **Sem fala**) e **Texto** (até 250 caracteres,
+cerca de 15 s; só aparece com um idioma e aí é obrigatório), foto do avatar (obrigatória,
+primeiro quadro), duração, resolução (da menor para a maior: o modelo lista 720p, 1080p,
+4K, 360p) e formato, todos da lista do modelo (padrão 8 s, 720p e o formato da configuração).
 
-Prompt (`omniPrompt`): as instruções; a fala depois de `SPEECH_LEAD` ou, sem fala,
-`OMNI_SILENT` (boca fechada, sem diálogo); no fim, com fala, a orientação de qualidade do
-Wan (`qualityGuide`: voz baixa e calma, sincronia, idioma) e, sem fala, só a da imagem
-(`OMNI_VIDEO_GUIDE`). Sem fala, o vídeo guarda o texto vazio e nenhum idioma. Sem
-tratamento de áudio e sem Edição rápida.
+Prompt (`omniPrompt`), **sem orientação padrão de estilo nem de voz**: as instruções; a fala só
+com a mecânica (`omniSpeech`: o idioma, a boca acompanhando e as palavras exatas) ou, sem
+fala, `OMNI_SILENT` (boca fechada, sem diálogo); e `OMNI_NO_TEXT` (sem legenda nem texto na
+tela, que vêm depois, na edição). Sem fala, o vídeo guarda o texto vazio e o idioma
+`sem-fala` (o Refazer volta com "Sem fala"). Sem tratamento de áudio e sem Edição rápida.
 
-Mudou em 07/11/2026, depois do primeiro teste: saiu o Estilo, a fala ficou opcional e as
-resoluções foram ordenadas. O teste abaixo foi feito antes, com o estilo Selfie.
+Mudou em 07/11/2026, depois do primeiro teste: saiu o Estilo, saiu a orientação de voz baixa
+e calma do Wan, as instruções ficaram obrigatórias, entrou o "Sem fala" e as resoluções foram
+ordenadas. O teste abaixo foi feito antes, com o estilo Selfie e a orientação do Wan: o áudio
+limpo e baixo (−20 LUFS) pode mudar sem ela.
+
+Depois: salvar instruções com nome no avatar (várias por avatar, como um ativo novo), para
+escolher entre estilos.
 
 Custo na tela: o preço da resolução por segundo vezes a duração. Em 720p, 8 s: US$ 0,56.
 
@@ -80,5 +85,5 @@ resultado da eleição para presidente sai entre oito e meia e nove da noite!".
 
 ## Próximo passo
 
-Assistir ao vídeo e decidir: se a boca e a voz servem, ligar o tratamento só para subir o
-volume (`treatAudio`) ou deixar como está, e liberar para todos (`access: "all"`).
+Gerar um vídeo com fala e instruções (sem a orientação de voz do Wan) e um sem fala; medir o
+áudio de novo e decidir o tratamento (`treatAudio`); depois, liberar para todos (`access: "all"`).
