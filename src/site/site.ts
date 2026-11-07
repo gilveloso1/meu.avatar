@@ -3347,9 +3347,16 @@ const SCRIPT = `(() => {
         const picks = JSON.parse(section.dataset.picks);
         const b = picks.avatar && panel.querySelector('[data-avatar-pick="' + picks.avatar + '"]');
         if (b) {
+          // A voz que veio no formulário (a do vídeo, no Refazer) vale mais que a do avatar.
+          const clone = f.elements.clone, voiceWas = clone && clone.value, sourceWas = val("fonte");
           pickAvatar(b);
           show(null);
           for (const kind of Object.keys(LABELS)) clear(kind);
+          if (clone && clone.value !== voiceWas) {
+            clone.value = voiceWas;
+            clone.dispatchEvent(new Event("change", { bubbles: true }));
+            setFonte(sourceWas);
+          }
         }
         for (const a of frames()) if (picks.assets.includes(a.dataset.asset) && !rowOf(a.dataset.assetType) && (!a.dataset.assetOf || a.dataset.assetOf === avatarInput.value)) { pickFrame(a); markPicked(a.dataset.asset); }
         for (const item of picks.items || []) if (!rowOf(item.kind)) { set(item.kind, item); markPicked(item.id); }
