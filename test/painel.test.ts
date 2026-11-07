@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
 import { handle } from "../src/index";
 import type { MaquinasApi } from "../src/maquinas";
-import { call, cookie, FakeVideoApi, memberCookie, SITE } from "./helpers";
+import { call, cookie, dono, FakeVideoApi, memberCookie, SITE } from "./helpers";
 
 const get = (path: string, session?: string) => call(new Request(`${SITE}${path}`, { headers: session === undefined ? {} : { cookie: session } }), new FakeVideoApi());
 
@@ -11,9 +11,9 @@ const get = (path: string, session?: string) => call(new Request(`${SITE}${path}
 async function video(id: string, o: { status: string; structure: string; cost?: number; duration?: number; daysAgo?: number; audio?: string; settings?: string }) {
   const at = new Date(Date.now() - (o.daysAgo ?? 0) * 86_400_000).toISOString();
   await env.DB.prepare(
-    "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, settings, cost, audio_status, created_at, updated_at) VALUES (?, ?, 'Oi', 'm', ?, '480p', '9:16', ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, structure, settings, cost, audio_status, created_at, updated_at) VALUES (?, ?, ?, 'Oi', 'm', ?, '480p', '9:16', ?, ?, ?, ?, ?, ?)",
   )
-    .bind(id, o.status, o.duration ?? 10, o.structure, o.settings ?? null, o.cost ?? null, o.audio ?? null, at, at)
+    .bind(await dono(), id, o.status, o.duration ?? 10, o.structure, o.settings ?? null, o.cost ?? null, o.audio ?? null, at, at)
     .run();
 }
 
@@ -100,24 +100,24 @@ describe("aba Atividade", () => {
     const now = Date.now();
     const at = (h: number) => new Date(now - h * 3_600_000).toISOString();
     await env.DB.prepare(
-      "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, audio_status, audio_error, created_at, updated_at) VALUES (?, ?, ?, 'm', 10, '480p', '9:16', 'wan', ?, ?, ?, ?, ?)",
+      "INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, audio_status, audio_error, created_at, updated_at) VALUES ((SELECT id FROM users ORDER BY id LIMIT 1), ?, ?, ?, 'm', 10, '480p', '9:16', 'wan', ?, ?, ?, ?, ?)",
     )
       .bind("d0000000-0000-4000-8000-000000000001", "failed", "Fala que falhou", "provider_error: <b>timeout</b>", null, null, at(1), at(1))
       .run();
     await env.DB.prepare(
-      "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, audio_status, audio_error, created_at, updated_at) VALUES (?, ?, ?, 'm', 10, '480p', '9:16', 'wan', ?, ?, ?, ?, ?)",
+      "INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, audio_status, audio_error, created_at, updated_at) VALUES ((SELECT id FROM users ORDER BY id LIMIT 1), ?, ?, ?, 'm', 10, '480p', '9:16', 'wan', ?, ?, ?, ?, ?)",
     )
       .bind("d0000000-0000-4000-8000-000000000002", "completed", "Áudio que falhou", null, "failed", "ffmpeg saiu com 1", at(2), at(2))
       .run();
     // A troca de avatar não tem fala: o título vira "Sem fala".
     await env.DB.prepare(
-      "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES (?, 'failed', '', 'm', 10, '480p', '9:16', 'aleph', 'preparo', ?, ?)",
+      "INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES ((SELECT id FROM users ORDER BY id LIMIT 1), ?, 'failed', '', 'm', 10, '480p', '9:16', 'aleph', 'preparo', ?, ?)",
     )
       .bind("d0000000-0000-4000-8000-000000000004", at(3), at(3))
       .run();
     // Uma falha antiga, fora dos 7 dias.
     await env.DB.prepare(
-      "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES (?, 'failed', 'Antiga', 'm', 10, '480p', '9:16', 'wan', 'velho', ?, ?)",
+      "INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES ((SELECT id FROM users ORDER BY id LIMIT 1), ?, 'failed', 'Antiga', 'm', 10, '480p', '9:16', 'wan', 'velho', ?, ?)",
     )
       .bind("d0000000-0000-4000-8000-000000000003", at(24 * 10), at(24 * 10))
       .run();
@@ -145,7 +145,7 @@ describe("aba Atividade", () => {
     for (let i = 0; i < 20; i++) {
       const at = new Date(Date.now() - (i + 1) * 60_000).toISOString();
       await env.DB.prepare(
-        "INSERT INTO videos (id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES (?, 'failed', ?, 'm', 10, '480p', '9:16', 'wan', 'x', ?, ?)",
+        "INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, structure, error, created_at, updated_at) VALUES ((SELECT id FROM users ORDER BY id LIMIT 1), ?, 'failed', ?, 'm', 10, '480p', '9:16', 'wan', 'x', ?, ?)",
       )
         .bind(`f0000000-0000-4000-8000-0000000000${String(i).padStart(2, "0")}`, `Falha ${i + 1}`, at, at)
         .run();

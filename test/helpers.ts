@@ -251,6 +251,14 @@ export async function memberCookie(): Promise<string> {
   return `__Host-sessao=${token}`;
 }
 
+/** O id de uma conta para ser dona dos vídeos criados direto no banco (o banco recusa vídeo sem dono). */
+export async function dono(): Promise<number> {
+  const row = await env.DB.prepare("INSERT INTO users (email, name, role, password_hash, created_at) VALUES ('dono@exemplo.com', 'Dono', 'member', NULL, ?) ON CONFLICT (email) DO UPDATE SET name = name RETURNING id")
+    .bind(new Date().toISOString())
+    .first<{ id: number }>();
+  return row!.id;
+}
+
 /** "__Host-sessao=<código>" do Set-Cookie da resposta. */
 export function sessionPair(res: Response): string {
   return res.headers.get("set-cookie")!.split(";")[0]!;

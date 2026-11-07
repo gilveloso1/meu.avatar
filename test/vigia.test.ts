@@ -10,7 +10,7 @@ import { ERROS } from "../src/erros";
 import { type Alarme, CHAVE, LIMITE_MS, ligadoDesde, Painel, type Vigiado, vigiar } from "../src/vigia";
 import { vigiaConteineres } from "../src/index";
 import type { Env } from "../src/env";
-import { call, cookie, SITE } from "./helpers";
+import { call, cookie, dono, SITE } from "./helpers";
 
 const APPS = [
   { id: "app-audio", name: "meu-avatar-audiofixer" },
@@ -57,8 +57,8 @@ describe("alarme de contêiner ligado sem trabalho", () => {
   });
 
   it("ligado há uma hora, mas com áudio sendo tratado: nenhum aviso", async () => {
-    await env.DB.prepare("INSERT INTO videos (id, prompt, model, duration, resolution, aspect_ratio, status, created_at, updated_at, audio_status) VALUES ('v1', 'oi', 'm', 5, '480p', '9:16', 'completed', ?, ?, 'processing')")
-      .bind(AGORA.toISOString(), AGORA.toISOString())
+    await env.DB.prepare("INSERT INTO videos (user_id, id, prompt, model, duration, resolution, aspect_ratio, status, created_at, updated_at, audio_status) VALUES (?, 'v1', 'oi', 'm', 5, '480p', '9:16', 'completed', ?, ?, 'processing')")
+      .bind(await dono(), AGORA.toISOString(), AGORA.toISOString())
       .run();
     expect(await vigiar(painel({ "app-audio": ligado(60) }), vigiados("tratando"), new Db(env.DB), AGORA)).toEqual({ ligados: [] });
     expect(await destruido("tratando")).toBe(false);

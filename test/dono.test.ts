@@ -270,3 +270,48 @@ describe("ContaDb", () => {
     expect((await propria.videoAvatars([video.id])).get(video.id)).toBe("avatar-da-dona");
   });
 });
+
+describe("o banco garante o dono (migrations/0018_dono.sql)", () => {
+  const novo = (id: string, userId: number | null) =>
+    env.DB.prepare("INSERT INTO videos (id, user_id, status, prompt, model, duration, resolution, aspect_ratio, structure, created_at, updated_at) VALUES (?, ?, 'completed', 'Oi', 'm', 5, '480p', '9:16', 'wan', ?, ?)")
+      .bind(id, userId, new Date().toISOString(), new Date().toISOString())
+      .run();
+  const ligar = (avatar: string, video: string) =>
+    env.DB.prepare("INSERT INTO avatar_assets (id, avatar_id, kind, key, name, type, size, source_video, created_at) VALUES (?, ?, 'video', 'k', 'v', 'video/mp4', 1, ?, ?)")
+      .bind(crypto.randomUUID(), avatar, video, new Date().toISOString())
+      .run();
+
+  it("vídeo sem dono não entra", async () => {
+    await expect(novo(crypto.randomUUID(), null)).rejects.toThrow("video sem dono");
+  });
+
+  it("o dono de um vídeo não vira vazio", async () => {
+    const { video } = await cena();
+    await expect(env.DB.prepare("UPDATE videos SET user_id = NULL WHERE id = ?").bind(video.id).run()).rejects.toThrow("video sem dono");
+    await expect(db().updateVideo(video.id, { status: "failed" })).resolves.toMatchObject({ user_id: video.user_id });
+  });
+
+  it("o ativo do avatar só liga a um vídeo da mesma conta", async () => {
+    const { dona, outra, video } = await cena();
+    const daOutra = await avatarDe(outra.id);
+    await expect(ligar(daOutra, video.id)).rejects.toThrow("video de outra conta");
+    const daDona = await avatarDe(dona.id);
+    await ligar(daDona, video.id);
+    // Nem mudando o ativo de avatar depois.
+    await expect(env.DB.prepare("UPDATE avatar_assets SET avatar_id = ? WHERE source_video = ?").bind(daOutra, video.id).run()).rejects.toThrow("video de outra conta");
+  });
+
+  it("o ativo enviado (sem vídeo) não depende de dono de vídeo", async () => {
+    const { dona } = await cena();
+    const avatar = await avatarDe(dona.id);
+    await env.DB.prepare("INSERT INTO avatar_assets (id, avatar_id, kind, key, name, type, size, source_video, created_at) VALUES (?, ?, 'imagem', 'k', 'f', 'image/png', 1, NULL, ?)")
+      .bind(crypto.randomUUID(), avatar, new Date().toISOString())
+      .run();
+    expect(await db().assetsByAvatar(avatar)).toHaveLength(1);
+  });
+
+  it("as listas da conta usam o índice do dono", async () => {
+    const plan = await env.DB.prepare("EXPLAIN QUERY PLAN SELECT * FROM videos WHERE user_id = ?1 AND structure IN ('wan') ORDER BY created_at DESC LIMIT 10").bind(1).all<{ detail: string }>();
+    expect(plan.results.map((r) => r.detail).join(" ")).toContain("videos_by_user");
+  });
+});
