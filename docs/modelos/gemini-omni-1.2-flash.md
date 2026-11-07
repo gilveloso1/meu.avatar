@@ -210,6 +210,14 @@ parada). As instruções de teste mandavam gesticular e falar com energia, e nã
 
 Gasto real dos testes pelo terminal no dia: US$ 1,11.
 
+**1.1 pelo site, com o seletor Versão (18:46, publicado na versão `17fac402`):** a Marina,
+instruções em português ("Apresentadora num estúdio, fala com confiança olhando para a câmera
+e gesticula com as mãos."), fala "O resultado sai hoje, entre oito e meia e nove!", 4 s,
+720p, 9:16, o pedido longo do código. **Pronto em 37 s, US$ 0,405** (igual ao estimado),
+vídeo `87fdc2b3-ef9b-450e-9cfa-cf3168f52278`. 720×1280, 4 s; rosto, óculos e roupa iguais aos
+da foto, um plano só, gesticulando; a fala sai inteira (a transcrição escreve "8,5" para
+"oito e meia"), sem silêncio sobrando. Áudio −20,4 LUFS, pico −3,0 dBFS.
+
 ## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
 
 Fontes: a página do Omni no Google (ai.google.dev/gemini-api/docs/omni) e o notebook oficial
