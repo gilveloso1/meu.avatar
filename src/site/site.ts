@@ -2856,7 +2856,7 @@ const SCRIPT = `(() => {
     const cfg = JSON.parse(f.dataset.composer);
     const val = (name) => (f.elements[name] ? f.elements[name].value || "" : "");
     const speech = f.querySelector("[data-speech]");
-    const words = f.querySelector("[data-words]"), count = f.querySelector("[data-count]");
+    const words = f.querySelector("[data-words]");
     const rate = cfg.rate, mid = (rate.min + rate.max) / 2;
     // Duração do vídeo enviado, lida no navegador; o vídeo gerado fica com a duração aceita mais perto.
     let sourceSeconds = 0;
@@ -2900,7 +2900,11 @@ const SCRIPT = `(() => {
       } else {
         words.textContent = n ? n + " palavras · ≈ " + s + " s de vídeo" : words.dataset.default;
       }
-      if (speech) count.textContent = speech.value.length + "/" + speech.maxLength;
+      // Cada campo de texto conta os próprios caracteres (o Omni tem dois: instruções e fala).
+      for (const t of f.querySelectorAll("textarea")) {
+        const c = f.querySelector("#" + t.name + "-ajuda [data-count]");
+        if (c) c.textContent = t.value.length + "/" + t.maxLength;
+      }
       for (const d of f.querySelectorAll("[data-description-for]")) {
         const option = f.elements[d.dataset.descriptionFor].selectedOptions[0];
         d.textContent = (option && option.dataset.description) || "";
