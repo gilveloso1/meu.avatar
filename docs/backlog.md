@@ -204,6 +204,7 @@ Valores de `GET https://openrouter.ai/api/v1/videos/models` em 25/10/2026
 | `bytedance/seedance-2.5` (**começar por este**: é o padrão do Higgsfield para vídeo) | 4 a 30 s | 480p, 720p | sim | sim | por tokens de vídeo (US$ 0,0000107/token); sem preço por segundo |
 | `kwaivgi/kling-v3.0-pro` | 3 a 15 s | 720p | sim | sim | US$ 0,168/s (15 s ≈ US$ 2,52) |
 | `google/veo-3.1-fast` | 4, 6 ou 8 s | 720p, 1080p, 4K | sim | sim | US$ 0,10/s em 720p (8 s ≈ US$ 0,80) |
+| `google/gemini-omni-1.1-flash` (estrutura `omni`, só para o administrador, desde 07/11/2026; ver [docs/modelos/gemini-omni-1.1-flash.md](modelos/gemini-omni-1.1-flash.md)) | 3 a 10 s | 360p, 720p, 1080p, 4K | sim | sim | US$ 0,10/s em 720p (8 s ≈ US$ 0,81) |
 | `google/veo-3.1` | 4, 6 ou 8 s | 720p, 1080p, 4K | sim | sim | US$ 0,40/s (8 s ≈ US$ 3,20) |
 
 O Seedance 2 em diante também aceita **áudio de referência**

@@ -4,6 +4,7 @@ import type { VideoModel } from "../openrouter";
 import { HEYGEN_AVATAR, speechSeconds } from "./heygen";
 import { GROK } from "./grok";
 import { NANO_BANANA } from "./imagem";
+import { OMNI } from "./omni";
 import { HEYGEN_DIRECT } from "./heygen-direta";
 import { SEEDANCE } from "./seedance";
 import type { CostRule, Structure, Values } from "./types";
@@ -12,7 +13,7 @@ import { WAN } from "./wan";
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, SEEDANCE, ALEPH, NANO_BANANA];
+export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, OMNI, SEEDANCE, ALEPH, NANO_BANANA];
 
 /** A estrutura gera imagem (não vídeo)? */
 export const makesImage = (structure: Structure | undefined): boolean => structure?.output === "image";
