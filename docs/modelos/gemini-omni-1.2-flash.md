@@ -111,6 +111,13 @@ do modelo no OpenRouter estava entre 81% e 97% nas horas antes. Entre o vídeo q
 os que falharam, só mudou o texto do pedido (o prompt curto, sem a orientação do Wan) e o
 horário.
 
+**Controle (17:34, pelo terminal, `npm run gerar`):** o pedido exato do `7121a3d8` (o mesmo
+prompt, a mesma foto, 8 s, 720p) **deu certo** logo depois das falhas: job
+`gen-vid-1794072860-p5ooVBrlEUlPNwQbO9uD`, US$ 0,556, vídeo só no computador (scratchpad).
+O provedor estava no ar: **o Omni recusa o prompt curto** (instruções, a fala com a
+mecânica e o pedido de nada de texto na tela), com ou sem fala, em português ou inglês, de
+4 ou 8 s. Falta achar qual parte.
+
 ## Próximo passo
 
 Gerar um vídeo com fala e instruções (sem a orientação de voz do Wan) e um sem fala; medir o
