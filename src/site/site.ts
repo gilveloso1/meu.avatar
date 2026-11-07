@@ -23,7 +23,7 @@ import { handleMcp } from "../mcp";
 import { type Accounts, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { AssetKind, Avatar, AvatarAsset, Db, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
 import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
-import { ERROS } from "../erros";
+import { ERROS, PARTES } from "../erros";
 import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
@@ -149,6 +149,16 @@ export class Site {
     }
     const user = await this.accounts.session(token);
     if (!user) return redirect("/entrar");
+    const res = await this.signedIn(request, user, url);
+    // Página aberta no navegador que não existe (ou é de outra conta): a página de não encontrado,
+    // a mesma para os dois casos. Os pedidos do script e dos arquivos continuam com o texto curto.
+    return res.status === 404 && opensPage(request) && res.headers.get("content-type")?.startsWith("text/plain") ? this.notFoundPage(user) : res;
+  }
+
+  /** As páginas de quem está logado. */
+  private async signedIn(request: Request, user: User, url: URL): Promise<Response> {
+    const path = url.pathname;
+    const post = request.method === "POST";
 
     if (!post && path === "/") return this.home(user, url);
     if (!post && path === "/videos") return this.videosPage(user, url);
@@ -221,6 +231,17 @@ export class Site {
     }
 
     return new Response("não encontrado", { status: 404 });
+  }
+
+  /** Não encontrado: o endereço não existe ou é de outra conta (a mesma página, para não dizer qual). */
+  private notFoundPage(user: User): Response {
+    const [houve, fazer] = PARTES.get(ERROS.naoEncontrado)!;
+    const body = `
+<main class="page" id="conteudo">
+  ${emptyState("404", houve!, fazer!, `<a class="button button--filled interactive" href="/">Voltar ao início</a>`)}
+</main>`;
+    // A barra de sempre, sem seção marcada: dali a pessoa vai para onde quiser.
+    return html(page(`Não encontrado · ${SITE_NAME}`, body, { bar: { user, search: { action: "/", label: "Pesquisar modelos", q: "" } } }), 404);
   }
 
   /**
@@ -2395,8 +2416,15 @@ function detailsCard(title: string, rows: { icon: string; term: string; value: s
           </section>`;
 }
 
-function emptyState(icon: string, title: string, text: string): string {
-  return `<div class="empty"><span class="icon">${icon}</span><p class="empty__title">${esc(title)}</p><p>${esc(text)}</p></div>`;
+/** `icon` é o ícone do topo; começando por um número (o 404), vai no lugar dele em display-large. */
+function emptyState(icon: string, title: string, text: string, action = ""): string {
+  const mark = /^\d/.test(icon) ? `<p class="empty__code">${esc(icon)}</p>` : `<span class="icon">${icon}</span>`;
+  return `<div class="empty">${mark}<p class="empty__title">${esc(title)}</p><p>${esc(text)}</p>${action}</div>`;
+}
+
+/** O navegador abrindo uma página (e não o script dela ou um arquivo pedindo dados). */
+function opensPage(request: Request): boolean {
+  return request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/html");
 }
 
 /**
@@ -2633,7 +2661,7 @@ function snackbar(text: string): string {
  * a marca (que volta para Modelos), o nome do modelo, o botão de sair e a conta.
  */
 type Search = { action: string; label: string; q: string; keep?: Record<string, string> };
-type Bar = false | { user: User; tab: "modelos" | "avatares" | "videos" | "projetos"; search: Search } | { user: User; back: string; title: string; actions?: string };
+type Bar = false | { user: User; tab?: "modelos" | "avatares" | "videos" | "projetos"; search: Search } | { user: User; back: string; title: string; actions?: string };
 
 function accountActions(user: User): string {
   const initial = esc((user.name.trim()[0] ?? "?").toUpperCase());

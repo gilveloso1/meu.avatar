@@ -47,6 +47,8 @@ export const ERROS = {
   contaBloqueada: (ate: string) => erro("Conta bloqueada por muitas tentativas.", `Tente de novo após ${ate}.`),
   cadastroFechado: erro("Cadastro fechado.", "Peça um convite ao administrador."),
   semAcessoVideo: erro("Você não tem acesso a este vídeo.", "Peça acesso ao administrador."),
+  // A página que não existe ou é de outra conta: a mesma frase, para não dizer qual.
+  naoEncontrado: erro("Página não encontrada.", "Confira o endereço ou volte ao início."),
   semAcessoModelo: erro("Você não tem acesso a este modelo.", "Peça acesso ao administrador."),
   nome: campo("Escreva o nome."),
   email: campo("Escreva um e-mail válido."),
