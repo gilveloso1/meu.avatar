@@ -2358,7 +2358,7 @@ function panelActivity(
  * Contas (layout pedido pelo usuário em 07/11/2026): à direita, a lista das contas num terço da
  * largura e na altura toda, com o menu de ações de cada conta comum; à esquerda, os números e,
  * embaixo, o convite na altura que sobra (o formulário e, logo depois de gerar, o link, mostrado
- * uma vez só: o banco guarda só o hash). Os cards ficam do tamanho do espaço e rolam por dentro.
+ * uma vez só: o banco guarda só o hash). O título fica dentro do card, parado; o conteúdo rola.
  */
 function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
   const now = new Date().toISOString();
@@ -2396,14 +2396,16 @@ function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
         <p class="qe-result__note">Vale por ${INVITE_HOURS} horas e funciona uma vez. Mande por WhatsApp ou e-mail.</p>
       </section>`
     : "";
-  const inviteForm = `<section class="viewer__card" aria-labelledby="card-convidar">
-        <h3 class="qe-result__title" id="card-convidar">Nova conta</h3>
+  const inviteForm = `<section class="viewer__card dash__card" aria-labelledby="card-convidar">
+        <h2 class="qe-result__title" id="card-convidar">Convidar</h2>
+        <div class="dash__scroll">
         <form class="dash__form" method="post" action="/painel/contas">
           ${v.error ? `<p class="dialog__error" role="alert">${esc(v.error)}</p>` : ""}
           ${textField("nome", "Nome", `type="text" autocomplete="off" required maxlength="80" value="${esc(v.values?.name ?? "")}"`)}
           ${textField("email", "E-mail", `type="email" autocomplete="off" required value="${esc(v.values?.email ?? "")}"`, "A pessoa recebe um link para criar a senha.")}
           <button class="button button--filled interactive" type="submit"><span class="icon">person_add</span>Gerar convite</button>
         </form>
+        </div>
       </section>`;
   return `<div class="dash dash--contas">
     <div class="dash__kpis">
@@ -2412,8 +2414,11 @@ function panelAccounts(list: AccountRow[], me: User, v: AccountsView): string {
       ${statCard("schedule", "Convites", count(pending), "esperando a senha")}
       ${statCard("lock", "Suspensas", count(suspended), "sem acesso ao site")}
     </div>
-    ${pane("Contas", `<section class="viewer__card dash__fill" aria-label="Contas"><ul class="dash__list dash__list--accounts">${rows.join("")}</ul></section>`, "dash__pane--contas")}
-    ${pane("Convidar", `${linkBox}${inviteForm.replace('<section class="viewer__card"', '<section class="viewer__card dash__fill"')}`, "dash__pane--convidar")}
+    <section class="viewer__card dash__card dash__pane--contas" aria-labelledby="card-contas">
+      <h2 class="qe-result__title" id="card-contas">Contas</h2>
+      <div class="dash__scroll"><ul class="dash__list dash__list--accounts">${rows.join("")}</ul></div>
+    </section>
+    <div class="dash__pane--convidar">${linkBox}${inviteForm}</div>
   </div>`;
 }
 
@@ -2542,13 +2547,12 @@ function pager(total: number, page: number, from: string): string {
  * dentro dele nunca rolam: têm o tamanho do conteúdo.
  */
 function panes(...list: { title: string; body: string }[]): string {
-  return `<div class="dash__panes">${list.map((p) => pane(p.title, p.body)).join("")}</div>`;
-}
-
-/** Um painel: o título, parado, e o corpo. `cls` posiciona o painel numa grade própria (a aba Contas). */
-function pane(title: string, body: string, cls = ""): string {
-  const id = `painel-${title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
-  return `<section class="dash__pane${cls ? ` ${cls}` : ""}" aria-labelledby="${id}"><h2 class="dash__pane-title" id="${id}">${esc(title)}</h2><div class="dash__pane-body">${body}</div></section>`;
+  return `<div class="dash__panes">${list
+    .map((p) => {
+      const id = `painel-${p.title.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}`;
+      return `<section class="dash__pane" aria-labelledby="${id}"><h2 class="dash__pane-title" id="${id}">${esc(p.title)}</h2><div class="dash__pane-body">${p.body}</div></section>`;
+    })
+    .join("")}</div>`;
 }
 
 const SERVICE_ICONS: Record<string, string> = { "Áudio": "graphic_eq", "Exportação": "download", "Animações": "animation", "Armazenamento": "cloud" };

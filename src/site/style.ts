@@ -466,17 +466,22 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
   .page--dash .dash__mosaic { overflow-y: auto; overscroll-behavior: contain; align-content: start; }
 }
 /* Aba Contas (pedido do usuário): a lista à direita, num terço da largura e na altura toda; à
-   esquerda, os números e o convite embaixo, na altura que sobra. Os cards preenchem o espaço e
-   rolam por dentro (dash__fill), em vez do corpo do painel. No celular, um embaixo do outro. */
+   esquerda, os números e o convite embaixo, na altura que sobra. O título fica dentro do card,
+   parado, e o conteúdo rola por dentro (dash__scroll). No celular, um embaixo do outro. */
 .dash--contas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 24px; }
+.dash__pane--convidar { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dash__card { min-width: 0; }
+/* Contêiner, como o corpo do painel: a lista escolhe uma ou duas linhas pela largura dele. */
+.dash__scroll { min-height: 0; container-type: inline-size; }
 @media (min-width: 840px) {
   .dash--contas { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-items: stretch; }
   .dash--contas > .dash__kpis { grid-column: 1; grid-row: 1; align-self: start; }
-  .dash--contas > .dash__pane--convidar { grid-column: 1; grid-row: 2; }
+  .dash--contas > .dash__pane--convidar { grid-column: 1; grid-row: 2; min-height: 0; }
   .dash--contas > .dash__pane--contas { grid-column: 2; grid-row: 1 / span 2; }
-  .page--dash .dash--contas .dash__pane { min-height: 0; }
-  .page--dash .dash--contas .dash__pane-body { flex: 1; min-height: 0; overflow: visible; }
-  .dash--contas .dash__fill { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .dash--contas .dash__card { min-height: 0; }
+  .dash__pane--convidar > .dash__card { flex: 1; }
+  /* Só rola na vertical: a lista tem margem negativa de 8 px (a camada do item vai até a borda). */
+  .dash--contas .dash__scroll { flex: 1; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 }
 /* Paginação no pé do card (a das tabelas de dados do Material): o intervalo e as setas, à direita. */
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 -8px -8px 0; }
