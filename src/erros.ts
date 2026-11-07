@@ -141,6 +141,5 @@ export const ERROS = {
   // Avatares
   avatarNome: campo("Escreva o nome do avatar."),
   ativoIndisponivel: erro("Um dos ativos escolhidos não está disponível.", "Escolha o avatar e os ativos de novo."),
-  colarSemImagem: erro("Não há imagem para colar.", "Copie uma imagem e tente de novo."),
   ativoSalvar: erro("Não foi possível salvar no avatar.", "Tente de novo em instantes."),
 };

@@ -1654,7 +1654,7 @@ function assetList(picks: AssetPicks | undefined, kinds: AssetKind[]): string {
           <li><button class="file-picker interactive" type="button" data-panel-open="avatares" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty" data-avatar-preview><span class="icon">face</span></span><span class="file-picker__text"><span class="file-picker__name" data-avatar-name>Adicionar avatar</span></span></button></li>
           <li data-asset-add><button class="file-picker interactive" type="button" data-panel-open="referencias" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty"><span class="icon">add</span></span><span class="file-picker__text"><span class="file-picker__name">Adicionar ativo</span></span></button></li>
         </ul>
-        ${kinds.includes("imagem") ? `<div class="menu__list context-menu" popover role="menu" aria-label="Adicionar ativo" data-paste-menu><button class="menu__item interactive" type="button" role="menuitem" data-paste-item><span class="icon">content_paste</span>Colar imagem</button></div>${snackbar(ERROS.colarSemImagem, "colar")}` : ""}
+        ${kinds.includes("imagem") ? `<div class="menu__list context-menu" popover role="menu" aria-label="Adicionar ativo" data-paste-menu><button class="menu__item interactive" type="button" role="menuitem" data-paste-item><span class="icon">content_paste</span>Colar imagem</button></div>` : ""}
         <template data-asset-row><li data-asset-row><div class="file-picker"><span class="file-picker__preview" data-row-preview></span><span class="file-picker__text"><span class="file-picker__name" data-row-name></span><span class="file-picker__hint" data-row-hint></span></span><button class="icon-button interactive" type="button" data-row-remove aria-label="Remover"><span class="icon">close</span></button></div></li></template>
       </section>`;
 }
@@ -2594,9 +2594,8 @@ function textField(name: string, label: string, attrs: string, supporting?: stri
     </div>`;
 }
 
-/** Aviso no rodapé. Com `name`, começa escondido e o script da página o mostra (data-snackbar="<name>"). */
-function snackbar(text: string, name?: string): string {
-  return `<div class="snackbar" role="alert" data-snackbar${name ? `="${name}" hidden` : ""}>
+function snackbar(text: string): string {
+  return `<div class="snackbar" role="alert" data-snackbar>
   <span class="snackbar__text">${esc(text)}</span>
   <button type="button" class="icon-button interactive" aria-label="Fechar" data-snackbar-close style="color:inherit"><span class="icon">close</span></button>
 </div>`;
@@ -3346,7 +3345,6 @@ const SCRIPT = `(() => {
       const pasteInput = panel.querySelector('[data-panel-view="referencias"] [data-asset-upload="imagem"]');
       if (pasteInput) {
         const pasteTiles = [...panel.querySelectorAll("[data-paste]")], pasteMenu = section.querySelector("[data-paste-menu]");
-        const noImage = section.querySelector('[data-snackbar="colar"]');
         const IMAGE = /^image.(png|jpeg|webp)$/;
         const usePasted = (blob) => {
           const file = new File([blob], "Imagem colada." + (blob.type.split("/")[1] === "jpeg" ? "jpg" : blob.type.split("/")[1]), { type: blob.type });
@@ -3362,34 +3360,39 @@ const SCRIPT = `(() => {
           }
           return null;
         };
+        // Sem imagem, nada: nem quadro, nem aviso.
         const paste = async () => {
           let image = null;
           try { image = await clipboardImage(); } catch {}
-          if (image) { noImage.hidden = true; usePasted(image); } else noImage.hidden = false;
+          if (image) usePasted(image);
         };
-        // O quadro só aparece com imagem copiada; sem a permissão ainda dada, não dá para saber: aparece.
+        // O quadro só aparece com imagem copiada, e o navegador só conta isso com a leitura liberada.
+        // Antes de liberar (state "prompt"), o botão direito oferece colar: tocar é o que pede a permissão.
+        let pasteState = "denied", hasImage = false;
         refreshPaste = async () => {
-          let state = "prompt", show = Boolean(navigator.clipboard && navigator.clipboard.read);
-          try { state = (await navigator.permissions.query({ name: "clipboard-read" })).state; } catch {}
-          if (show && state === "denied") show = false;
-          else if (show && state === "granted") { try { show = Boolean(await clipboardImage()); } catch { show = false; } }
-          for (const t of pasteTiles) t.hidden = !show;
+          pasteState = navigator.clipboard && navigator.clipboard.read ? "prompt" : "denied";
+          try { pasteState = (await navigator.permissions.query({ name: "clipboard-read" })).state; } catch {}
+          hasImage = false;
+          if (pasteState === "granted") { try { hasImage = Boolean(await clipboardImage()); } catch {} }
+          for (const t of pasteTiles) t.hidden = !hasImage;
         };
+        refreshPaste();
+        addEventListener("focus", refreshPaste);
         for (const t of pasteTiles) t.addEventListener("click", paste);
         add.querySelector("button").addEventListener("contextmenu", (e) => {
+          if (!hasImage && pasteState !== "prompt") return;
           e.preventDefault();
           pasteMenu.style.left = e.clientX + "px";
           pasteMenu.style.top = e.clientY + "px";
           pasteMenu.showPopover();
           pasteMenu.querySelector("[data-paste-item]").focus();
         });
-        pasteMenu.querySelector("[data-paste-item]").addEventListener("click", () => { pasteMenu.hidePopover(); paste(); });
+        pasteMenu.querySelector("[data-paste-item]").addEventListener("click", async () => { pasteMenu.hidePopover(); await paste(); refreshPaste(); });
         document.addEventListener("paste", (e) => {
           if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
           const file = [...(e.clipboardData ? e.clipboardData.files : [])].find((f) => IMAGE.test(f.type));
           if (!file) return;
           e.preventDefault();
-          noImage.hidden = true;
           usePasted(file);
         });
       }

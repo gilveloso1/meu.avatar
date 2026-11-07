@@ -147,9 +147,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   Cada escolha se acumula no painel, uma por tipo, venha de onde vier; trocar de avatar só tira o
   que veio do avatar anterior. Um vídeo ou imagem pronto da própria pessoa também entra
   arrastado da lista do centro para o painel. Imagem copiada entra como envio ("Imagem colada"):
-  pelo quadro "Colar imagem" ao lado de "Enviar arquivo" (só aparece quando o navegador deixa ler a
-  área de transferência; com a leitura liberada, só se houver imagem), pelo menu do botão direito em
-  "Adicionar ativo" ou com Ctrl/Cmd+V fora dos campos de texto. O bloco Fala tem a voz ou o idioma primeiro e o campo
+  pelo quadro "Colar imagem" ao lado de "Enviar arquivo" (só aparece quando há imagem copiada, o
+  que o navegador só conta com a leitura liberada; sem imagem, nem quadro nem aviso), pelo menu do
+  botão direito em "Adicionar ativo" (com imagem ou antes de liberar a leitura, que o toque pede) ou
+  com Ctrl/Cmd+V fora dos campos de texto. O bloco Fala tem a voz ou o idioma primeiro e o campo
   "Texto" (cresce com o texto, como o Movimento); no fim, a estimativa (Duração
   e Custo estimado, linhas com ícone) e o "Gerar vídeo" na largura toda, sem
   fixar, com espaço sobrando embaixo. No centro, a lista de vídeos.
