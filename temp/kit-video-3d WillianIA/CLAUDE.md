@@ -1,1 +1,0 @@
-@AGENTE.md

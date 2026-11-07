@@ -1,1 +1,0 @@
-Aqui ficam config/canal.json (identidade do canal) e config/voz.json (voz escolhida). O agente cria os dois na primeira vez.
