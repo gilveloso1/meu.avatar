@@ -879,7 +879,7 @@ ${CANVAS_BODY}
       <div class="pane__body" id="configuracao-corpo">
         ${family.length > 1 ? versionSwitch(family, structure) : ""}
         ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
-        ${kinds.length ? assetList(picks) : ""}
+        ${kinds.length ? assetList(picks, kinds) : ""}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
       ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)), image)}
@@ -1645,7 +1645,7 @@ function avatarDialog(o: { id: string; title: string; avatars: Avatar[]; item: (
  * "Adicionar ativo" vale com ou sem avatar: envio e o que a pessoa já gerou (os ativos do avatar
  * ficam no caminho do avatar).
  */
-function assetList(picks?: AssetPicks): string {
+function assetList(picks: AssetPicks | undefined, kinds: AssetKind[]): string {
   const pick = picks?.avatar || picks?.assets.length ? ` data-picks="${esc(JSON.stringify(picks))}"` : "";
   return `<section class="form-section form-section--assets"${pick} aria-labelledby="ativos-titulo">
         <h2 class="form-section__title" id="ativos-titulo">Avatar</h2>
@@ -1654,6 +1654,7 @@ function assetList(picks?: AssetPicks): string {
           <li><button class="file-picker interactive" type="button" data-panel-open="avatares" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty" data-avatar-preview><span class="icon">face</span></span><span class="file-picker__text"><span class="file-picker__name" data-avatar-name>Adicionar avatar</span></span></button></li>
           <li data-asset-add><button class="file-picker interactive" type="button" data-panel-open="referencias" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty"><span class="icon">add</span></span><span class="file-picker__text"><span class="file-picker__name">Adicionar ativo</span></span></button></li>
         </ul>
+        ${kinds.includes("imagem") ? `<div class="menu__list context-menu" popover role="menu" aria-label="Adicionar ativo" data-paste-menu><button class="menu__item interactive" type="button" role="menuitem" data-paste-item><span class="icon">content_paste</span>Colar imagem</button></div>${snackbar(ERROS.colarSemImagem, "colar")}` : ""}
         <template data-asset-row><li data-asset-row><div class="file-picker"><span class="file-picker__preview" data-row-preview></span><span class="file-picker__text"><span class="file-picker__name" data-row-name></span><span class="file-picker__hint" data-row-hint></span></span><button class="icon-button interactive" type="button" data-row-remove aria-label="Remover"><span class="icon">close</span></button></div></li></template>
       </section>`;
 }
@@ -1680,6 +1681,7 @@ function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[]
           <p class="side-panel__help">Este modelo aceita ${ASSET_UPLOAD[k].one}.</p>
           <div class="asset-grid">
             <label class="asset-upload interactive"><input class="visually-hidden" type="file" name="${ASSET_UPLOAD[k].name}" accept="${ASSET_UPLOAD[k].accept}" aria-label="Enviar arquivo" data-asset-upload="${k}"><span class="icon">upload</span>Enviar arquivo</label>
+            ${k === "imagem" ? `<button class="asset-upload interactive" type="button" data-paste hidden><span class="icon">content_paste</span>Colar imagem</button>` : ""}
             ${content(k)}
           </div>
         </div>`,
@@ -2592,8 +2594,9 @@ function textField(name: string, label: string, attrs: string, supporting?: stri
     </div>`;
 }
 
-function snackbar(text: string): string {
-  return `<div class="snackbar" role="alert" data-snackbar>
+/** Aviso no rodapé. Com `name`, começa escondido e o script da página o mostra (data-snackbar="<name>"). */
+function snackbar(text: string, name?: string): string {
+  return `<div class="snackbar" role="alert" data-snackbar${name ? `="${name}" hidden` : ""}>
   <span class="snackbar__text">${esc(text)}</span>
   <button type="button" class="icon-button interactive" aria-label="Fechar" data-snackbar-close style="color:inherit"><span class="icon">close</span></button>
 </div>`;
@@ -3111,7 +3114,7 @@ const SCRIPT = `(() => {
       const chips = [...panel.querySelectorAll("[data-kind]")], kindViews = [...panel.querySelectorAll("[data-kind-view]")];
       const title = panel.querySelector("[data-panel-title]"), back = panel.querySelector("[data-panel-back]");
       const LABELS = { imagem: "Imagem", video: "Vídeo", audio: "Áudio" };
-      let view = null, avatarName = "", cover = "", voiceBefore = "pronta";
+      let view = null, avatarName = "", cover = "", voiceBefore = "pronta", refreshPaste = () => {};
       // A voz: uma amostra toca por vez e para quando o menu fecha.
       const audio = new Audio(), voiceInput = f.querySelector("[data-voice-input]");
       let playing = null, openVoices = () => {};
@@ -3130,6 +3133,7 @@ const SCRIPT = `(() => {
         back.hidden = next !== "ativos";
         title.textContent = next === "ativos" ? avatarName : next === "vozes" ? "Escolha a voz" : next === "referencias" ? "Adicionar ativo" : "Escolha o avatar";
         if (next === "vozes") openVoices();
+        if (next === "ativos" || next === "referencias") refreshPaste();
       };
       const showKind = (kind) => {
         for (const c of chips) c.setAttribute("aria-pressed", String(c.dataset.kind === kind));
@@ -3337,6 +3341,58 @@ const SCRIPT = `(() => {
         else if (!rowOf("audio")) { showKind("audio"); show(avatarInput.value ? "ativos" : "avatares"); }
       });
       // Geração que voltou com erro: a escolha continua como estava.
+      // Colar uma imagem da área de transferência: vira um envio, como "Enviar arquivo". Pelo quadro
+      // "Colar imagem" do menu, pelo botão direito em "Adicionar ativo" ou com Ctrl/Cmd+V fora dos campos.
+      const pasteInput = panel.querySelector('[data-panel-view="referencias"] [data-asset-upload="imagem"]');
+      if (pasteInput) {
+        const pasteTiles = [...panel.querySelectorAll("[data-paste]")], pasteMenu = section.querySelector("[data-paste-menu]");
+        const noImage = section.querySelector('[data-snackbar="colar"]');
+        const IMAGE = /^image.(png|jpeg|webp)$/;
+        const usePasted = (blob) => {
+          const file = new File([blob], "Imagem colada." + (blob.type.split("/")[1] === "jpeg" ? "jpg" : blob.type.split("/")[1]), { type: blob.type });
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          pasteInput.files = dt.files;
+          pasteInput.dispatchEvent(new Event("change"));
+        };
+        const clipboardImage = async () => {
+          for (const item of await navigator.clipboard.read()) {
+            const type = item.types.find((t) => IMAGE.test(t));
+            if (type) return item.getType(type);
+          }
+          return null;
+        };
+        const paste = async () => {
+          let image = null;
+          try { image = await clipboardImage(); } catch {}
+          if (image) { noImage.hidden = true; usePasted(image); } else noImage.hidden = false;
+        };
+        // O quadro só aparece com imagem copiada; sem a permissão ainda dada, não dá para saber: aparece.
+        refreshPaste = async () => {
+          let state = "prompt", show = Boolean(navigator.clipboard && navigator.clipboard.read);
+          try { state = (await navigator.permissions.query({ name: "clipboard-read" })).state; } catch {}
+          if (show && state === "denied") show = false;
+          else if (show && state === "granted") { try { show = Boolean(await clipboardImage()); } catch { show = false; } }
+          for (const t of pasteTiles) t.hidden = !show;
+        };
+        for (const t of pasteTiles) t.addEventListener("click", paste);
+        add.querySelector("button").addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          pasteMenu.style.left = e.clientX + "px";
+          pasteMenu.style.top = e.clientY + "px";
+          pasteMenu.showPopover();
+          pasteMenu.querySelector("[data-paste-item]").focus();
+        });
+        pasteMenu.querySelector("[data-paste-item]").addEventListener("click", () => { pasteMenu.hidePopover(); paste(); });
+        document.addEventListener("paste", (e) => {
+          if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
+          const file = [...(e.clipboardData ? e.clipboardData.files : [])].find((f) => IMAGE.test(f.type));
+          if (!file) return;
+          e.preventDefault();
+          noImage.hidden = true;
+          usePasted(file);
+        });
+      }
       // Arrastar um vídeo ou imagem pronto da lista para o painel: entra no tipo dele, se o modelo aceitar.
       const pane = f.querySelector(".pane--config"), PREFIX = "application/x-meu-avatar-";
       const dragged = (e) => [...e.dataTransfer.types].find((t) => t.startsWith(PREFIX) && kindViews.some((v) => v.dataset.kindView === t.slice(PREFIX.length)));

@@ -921,7 +921,11 @@ a.frame { display: block; }
   position: relative; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
   border: 1px dashed var(--md-sys-color-outline); border-radius: 16px; font: var(--md-sys-typescale-label-large); color: var(--md-sys-color-primary); cursor: pointer;
 }
-.asset-upload:has(input:focus-visible) { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
+.asset-upload:has(input:focus-visible), .asset-upload:focus-visible { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
+.asset-upload[hidden] { display: none; }
+button.asset-upload { background: none; }
+/* O menu do botão direito (Colar imagem): o mesmo menu, preso onde a pessoa tocou. */
+.menu__list.context-menu { position: fixed; inset: auto; margin: 0; border: 0; }
 .avatar-option .spinner { position: static; flex: none; margin: 0 8px 0 auto; }
 .xlist__item .spinner { position: static; flex: none; margin: 0; }
 @keyframes spinner-turn { to { transform: rotate(360deg); } }

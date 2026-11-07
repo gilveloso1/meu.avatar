@@ -91,6 +91,14 @@ describe("referências sem avatar", () => {
     expect(await (await get("/modelo/wan", membro)).text()).not.toContain(`gerado:${imagens[0]!.id}`);
   });
 
+  it("colar imagem: o quadro no menu, o item do botão direito e o aviso sem imagem", async () => {
+    const page = await (await get("/modelo/wan", await cookie())).text();
+    expect(page).toContain("data-paste hidden");
+    expect(page).toContain("data-paste-menu");
+    expect(page).toContain('data-snackbar="colar" hidden');
+    expect(page).toContain(ERROS.colarSemImagem);
+  });
+
   it("os vídeos prontos da pessoa na lista do modelo podem ser arrastados para o painel; os dos outros, não", async () => {
     const dono = await cookie();
     const video = await pronto(dono);
