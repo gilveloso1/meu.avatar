@@ -1,8 +1,8 @@
 /**
  * Gemini Omni 1.2 Flash (google/gemini-omni-1.2-flash): o avatar da foto fala o texto, com a
  * voz e a boca saindo juntas do modelo, ou só faz a cena, sem fala (clipes curtos). Sem estilo
- * fixo nem orientação padrão: a cena, o jeito de falar e o estilo vêm das instruções, que são
- * obrigatórias e voltam preenchidas com as últimas usadas com o avatar.
+ * fixo: a cena e o estilo vêm das instruções, que são obrigatórias e voltam preenchidas com
+ * as últimas usadas com o avatar. A orientação de som e imagem do Wan fica (ver `omniPrompt`).
  * Testes e custo em docs/modelos/gemini-omni-1.2-flash.md. O 1.1 sai em 03/12/2026 (o
  * Google passa os pedidos dele para o 1.2), por isso a estrutura já nasce no 1.2.
  *
@@ -16,7 +16,7 @@
  */
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
-import { cleanSpeech, type Language, LANGUAGES, languageById, MAX_EXTRA, WORDS_PER_SECOND } from "../prompt";
+import { cleanSpeech, type Language, LANGUAGES, languageById, MAX_EXTRA, qualityGuide, SPEECH_LEAD, WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
 import { options } from "./wan";
 
@@ -29,30 +29,30 @@ const BASE_RESOLUTION = "1080p";
 
 /** O valor do idioma quando o avatar não fala (fica gravado no vídeo, para o Refazer). */
 export const NO_SPEECH = "sem-fala";
-/** Sem fala, na frase do guia do Google (o Omni não tem negative prompt: a negativa vai no texto). */
-export const OMNI_SILENT = "No dialogue or voiceover.";
 /** Um plano só: sem isto, o Omni monta vários planos e cortes por conta própria (guia do Google). */
 export const OMNI_SINGLE_SHOT = "In a single continuous shot, no scene cuts.";
-/** A única orientação fixa: a legenda e o texto vêm depois, na edição. */
-export const OMNI_NO_TEXT = "No on-screen text, subtitles, captions or watermark.";
+/** Sem fala, na frase do guia do Google (o Omni não tem negative prompt: a negativa vai no texto). */
+export const OMNI_SILENT = "No dialogue or voiceover.";
+/** Sem fala: o som e a imagem, no molde da orientação do Wan, sem as linhas da voz. */
+export const OMNI_SILENT_GUIDE = [
+  "Audio: only the quiet natural ambient sound of the scene.",
+  "No background music, no sound effects, no echo, no distortion, no clipping.",
+  "Video: photorealistic, steady framing, natural skin texture. No on-screen text, subtitles, captions or watermark.",
+].join("\n");
 
 /**
- * A fala para o modelo: só a mecânica (idioma, sincronia, as palavras exatas), nada de estilo.
- * O formato importa: com "The person speaks in <idioma>, with lip sync, and says exactly: …"
- * o Omni recusou todo prompt curto; com a citação e a sincronia em linhas separadas, passou
- * (testes de 07/11/2026 em docs/modelos/gemini-omni-1.2-flash.md).
- */
-export function omniSpeech(speech: string, language: Language): string {
-  return `The person on camera says: "${speech}"\nLip sync. The speech is in ${language.english} and says exactly the quoted words.`;
-}
-
-/**
- * O prompt: as instruções de quem usa (a cena, o jeito de falar e o estilo), o plano único, a
- * fala (ou o aviso de que não há fala) e o pedido de nada de texto na tela. Só mecânica, sem
- * estilo nem voz padrão.
+ * O prompt longo, o único formato que o Omni 1.2 aceitou com constância nos testes de
+ * 07/11/2026 (docs/modelos/gemini-omni-1.2-flash.md): o do Wan, com as instruções de quem usa
+ * no lugar do estilo. Com fala: a fala citada (`SPEECH_LEAD`) e a orientação de qualidade
+ * (`qualityGuide`: voz, sincronia, idioma, imagem, nada de texto na tela). Sem fala: o aviso
+ * de que não há fala e a orientação sem as linhas da voz. Prompts curtos, só com a mecânica,
+ * falharam em 15 de 17 pedidos.
  */
 export function omniPrompt(extra: string, speech: string, language: Language | null): string {
-  return [extra, OMNI_SINGLE_SHOT, speech && language ? omniSpeech(speech, language) : OMNI_SILENT, OMNI_NO_TEXT].join("\n");
+  const scene = `${extra}\n${OMNI_SINGLE_SHOT}`;
+  return speech && language
+    ? `${scene}\n${SPEECH_LEAD} "${speech}"\n\n${qualityGuide(language)}`
+    : `${scene}\n${OMNI_SILENT}\n\n${OMNI_SILENT_GUIDE}`;
 }
 
 /** Da menor resolução para a maior (o modelo lista 720p, 1080p, 4K, 360p). */

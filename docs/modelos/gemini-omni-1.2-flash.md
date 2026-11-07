@@ -186,6 +186,21 @@ sempre. O OpenRouter marca o modelo como de raciocínio obrigatório; uma hipót
 é que o pedido curto deixa o modelo inventar mais (planos, narrativa) e cair no filtro.
 Fazer outro teste agora seria seguir no escuro; o próximo passo é decidir o caminho.
 
+**Pedido longo com as instruções no lugar do estilo (17:59, 360p, 4 s):** falhou com e sem
+fala. Com fala, era o antigo inteiro, só com a primeira frase trocada por "Woman in a studio,
+speaking with energy and confidence while looking at the camera and gesturing with her
+hands." e o plano único. **Controle logo depois (18:00):** o antigo exato, pronto, US$ 0,093
+(`gen-vid-1794074360-2mAEIxc0dv2t1EkcKdql`); 5 de 5 com ele.
+
+O que passa com constância é a primeira frase do estilo Selfie do Wan: "Vertical
+selfie-style video. The person in the photo looks straight into the camera, keeps the
+starting position and talks calmly and naturally, like a casual social media update.
+Locked-off static camera, medium close-up, no zoom, no cuts. Subtle natural head movement and
+blinking." Ela prende o vídeo à foto (a pessoa da foto, a posição de partida, a câmera
+parada). As instruções de teste mandavam gesticular e falar com energia, e não citavam a foto.
+
+Gasto real dos testes pelo terminal no dia: US$ 1,11.
+
 ## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
 
 Fontes: a página do Omni no Google (ai.google.dev/gemini-api/docs/omni) e o notebook oficial
