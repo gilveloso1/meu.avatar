@@ -136,23 +136,58 @@ describe("Usar para gerar", () => {
 });
 
 describe("Refazer", () => {
-  it("volta com o avatar e a foto usados, e a foto vai de novo para o modelo", async () => {
+  /** Os ids e itens que a página do modelo devolve escolhidos (data-picks). */
+  const escolhas = (page: string) => JSON.parse((/data-picks="([^"]*)"/.exec(page)?.[1] ?? "{}").replaceAll("&quot;", '"').replaceAll("&amp;", "&")) as { avatar?: string; assets?: string[]; items?: { id: string; name: string; hint: string }[] };
+
+  it("com o ativo do avatar, volta o mesmo avatar e o mesmo ativo, e a foto vai de novo para o modelo", async () => {
     const session = await cookie();
     const avatar = await call(postForm("/avatares", { nome: "Camila", imagem: foto("foto-do-avatar") }, { cookie: session }));
     const avatarId = avatar.headers.get("location")!.split("/").pop()!;
     const principal = (await db().avatarById(avatarId))!.photo_asset!;
     const feito = await pronto(session, { campos: { avatar: avatarId, ativo: principal } });
-    const page = await (await get(`/modelo/wan?refazer=${feito.id}`, session)).text();
-    expect(page).toContain(`&quot;avatar&quot;:&quot;${avatarId}&quot;`);
-    expect(page).toContain(`origem:${feito.id}:imagem`);
-    expect(page).toContain("Do vídeo original");
-    expect(await (await get(`/videos/${feito.id}/referencia/imagem`, session)).text()).toBe("foto-do-avatar");
+    const picks = escolhas(await (await get(`/modelo/wan?refazer=${feito.id}`, session)).text());
+    expect(picks).toMatchObject({ avatar: avatarId, assets: [principal], items: [] });
 
-    const res = await call(postForm("/modelo/wan", { ...WAN, avatar: avatarId, ativo: `origem:${feito.id}:imagem` }, { cookie: session }), new FakeVideoApi());
+    const res = await call(postForm("/modelo/wan", { ...WAN, avatar: avatarId, ativo: principal }, { cookie: session }), new FakeVideoApi());
     expect(res.status).toBe(303);
     expect(await fotoEnviada()).toBe("foto-do-avatar");
     const [novo] = await db().recentVideos(1);
     expect(novo!.avatar_id).toBe(avatarId);
+  });
+
+  it("com o ativo apagado depois, volta a cópia que o vídeo guarda", async () => {
+    const session = await cookie();
+    const avatar = await call(postForm("/avatares", { nome: "Camila", imagem: foto("foto-do-avatar") }, { cookie: session }));
+    const avatarId = avatar.headers.get("location")!.split("/").pop()!;
+    const principal = (await db().avatarById(avatarId))!.photo_asset!;
+    const feito = await pronto(session, { campos: { avatar: avatarId, ativo: principal } });
+    await call(postForm(`/avatares/${avatarId}/arquivos/${principal}/apagar`, {}, { cookie: session }));
+    const picks = escolhas(await (await get(`/modelo/wan?refazer=${feito.id}`, session)).text());
+    expect(picks.assets).toEqual([`origem:${feito.id}:imagem`]);
+    expect(picks.items![0]).toMatchObject({ hint: "Do vídeo original" });
+    expect(await (await get(`/videos/${feito.id}/referencia/imagem`, session)).text()).toBe("foto-do-avatar");
+  });
+
+  it("com arquivo enviado solto, volta o arquivo com o nome dele, sem avatar, e segue assim no próximo Refazer", async () => {
+    const session = await cookie();
+    const feito = await pronto(session, { campos: { imagem: foto("foto-solta") } });
+    const picks = escolhas(await (await get(`/modelo/wan?refazer=${feito.id}`, session)).text());
+    expect(picks).toMatchObject({ avatar: "", assets: [`origem:${feito.id}:imagem`] });
+    expect(picks.items![0]).toMatchObject({ name: "foto.png", hint: "Arquivo enviado" });
+
+    expect((await call(postForm("/modelo/wan", { ...WAN, ativo: `origem:${feito.id}:imagem` }, { cookie: session }), new FakeVideoApi())).status).toBe(303);
+    expect(await fotoEnviada()).toBe("foto-solta");
+    const [novo] = await db().recentVideos(1);
+    expect(escolhas(await (await get(`/modelo/wan?refazer=${novo!.id}`, session)).text()).items![0]).toMatchObject({ name: "foto.png", hint: "Arquivo enviado" });
+  });
+
+  it("com imagem gerada, volta a mesma imagem gerada", async () => {
+    const session = await cookie();
+    const imagem = await pronto(session, { imagem: true });
+    const feito = await pronto(session, { campos: { ativo: `gerado:${imagem.id}` } });
+    const picks = escolhas(await (await get(`/modelo/wan?refazer=${feito.id}`, session)).text());
+    expect(picks.assets).toEqual([`gerado:${imagem.id}`]);
+    expect(picks.items![0]).toMatchObject({ hint: "Imagem gerada" });
   });
 
   it("de um vídeo de outra pessoa, volta só com o texto e os ajustes", async () => {

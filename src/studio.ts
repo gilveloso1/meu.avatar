@@ -46,6 +46,11 @@ export interface NewVideoInput {
   sample?: File | null;
   /** O avatar de onde veio a foto (null com arquivo solto). */
   avatarId?: string | null;
+  /**
+   * De onde veio cada arquivo, para o "Refazer" trazer tudo como foi: `ativo_<tipo>` é o id do ativo
+   * do avatar, `gerado:<id>` ou `arquivo:<nome>` (enviado solto). Fica em `settings`.
+   */
+  origins?: Record<string, string>;
   /** Quem está pedindo. */
   user: { id: number; role: Role };
 }
@@ -250,7 +255,7 @@ export class Studio {
       user_id: input.user.id,
       structure: structure.id,
       avatar_id: input.avatarId ?? null,
-      settings: settings || sourceKey ? JSON.stringify({ ...settings, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
+      settings: settings || sourceKey || input.origins ? JSON.stringify({ ...settings, ...input.origins, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
     });
 
     // A imagem sai fora do pedido (src/imagens.ts): a página fica "Gerando" e atualiza sozinha.
@@ -581,7 +586,7 @@ export class Studio {
       user_id: input.user.id,
       structure: structure.id,
       avatar_id: input.avatarId ?? null,
-      settings: JSON.stringify({ ...settings, ...(audioKey ? { audio_key: audioKey } : {}) }),
+      settings: JSON.stringify({ ...settings, ...input.origins, ...(audioKey ? { audio_key: audioKey } : {}) }),
     });
 
     try {

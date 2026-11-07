@@ -979,16 +979,23 @@ ${error ? snackbar(error) : ""}`;
   private async redo(structure: Structure, id: string | null, user: User): Promise<{ values: Values; picks?: AssetPicks } | undefined> {
     const v = id ? await this.db.videoById(id) : null;
     if (!v || v.structure !== structure.id) return undefined;
+    let settings: Record<string, string> = {};
+    try { settings = JSON.parse(v.settings ?? "{}"); } catch {}
     const picks: AssetPicks = { avatar: "", assets: [] };
     if (v.user_id === user.id) {
       const avatar = v.avatar_id ? await this.db.avatarById(v.avatar_id) : null;
       if (avatar?.user_id === user.id) picks.avatar = avatar.id;
-      for (const kind of ASSET_ORDER) if (await this.pickFile(`origem:${v.id}:${kind}`, user)) picks.assets.push(`origem:${v.id}:${kind}`);
+      for (const kind of ASSET_ORDER) {
+        // Do jeito que entrou: o ativo do avatar (se ainda existe), o vídeo gerado ou o arquivo enviado.
+        const origin = settings[`ativo_${kind}`];
+        const asset = origin && !origin.includes(":") && picks.avatar ? await this.db.asset(picks.avatar, origin) : null;
+        if (asset?.kind === kind) picks.assets.push(asset.id);
+        else if (origin?.startsWith("gerado:") && (await this.pickFile(origin, user))?.kind === kind) picks.assets.push(origin);
+        else if (await this.pickFile(`origem:${v.id}:${kind}`, user)) picks.assets.push(`origem:${v.id}:${kind}`);
+      }
     }
     const { model } = await this.tryModel(structure);
     const base = defaultValues(structure.sections(model, this.config.defaults, v.user_id ? await this.studio.lists(structure, v.user_id) : {}));
-    let settings: Record<string, string> = {};
-    try { settings = JSON.parse(v.settings ?? "{}"); } catch {}
     const from: Record<string, string | null | undefined> = {
       fala: v.prompt, descricao: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
       estilo: v.style, idioma: v.language, instrucoes: v.extra, movimento: settings.motion_prompt ?? v.extra,
@@ -1175,11 +1182,21 @@ ${error ? snackbar(error) : ""}`;
     const file = (name: string) => form.getAll(name).find((f): f is File => f instanceof File && f.size > 0) ?? null;
     // Cada tipo vem de um arquivo solto ou de um ativo do avatar escolhido.
     const picks: AssetPicks = { avatar: String(form.get("avatar") ?? ""), assets: form.getAll("ativo").map(String) };
-    const chosen = await this.pickedFiles(picks, user, acceptedKinds(fields));
+    const kinds = acceptedKinds(fields);
+    const chosen = await this.pickedFiles(picks, user, kinds);
     if (!chosen) return this.modelPage(user, structure, values, ERROS.ativoIndisponivel);
+    // De onde veio cada arquivo (ativo do avatar, vídeo gerado ou envio solto): o "Refazer" traz igual.
+    const origins: Record<string, string> = {};
+    for (const kind of kinds) {
+      const upload = file(ASSET_UPLOAD[kind].name);
+      // O arquivo de um vídeo anterior (Refazer) é a cópia de um envio: conta como enviado, com o mesmo nome.
+      const id = chosen.ids[kind], name = id?.startsWith("origem:") ? chosen.files[kind]!.name : !id && upload ? upload.name : null;
+      const origin = name ? `arquivo:${name.slice(0, 200)}` : id;
+      if (origin) origins[`ativo_${kind}`] = origin;
+    }
     let video: Video;
     try {
-      video = await this.studio.create({ structure, values, image: chosen.imagem ?? file("imagem"), video: chosen.video ?? file("video"), audio: chosen.audio ?? file("audio"), sample: file("amostra"), avatarId: picks.avatar || null, user });
+      video = await this.studio.create({ structure, values, image: chosen.files.imagem ?? file("imagem"), video: chosen.files.video ?? file("video"), audio: chosen.files.audio ?? file("audio"), sample: file("amostra"), avatarId: picks.avatar || null, origins, user });
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (!(err instanceof InputError)) throw err;
@@ -1193,10 +1210,11 @@ ${error ? snackbar(error) : ""}`;
    * ou imagem que ela gerou ou dos arquivos de um vídeo dela (Refazer); um por tipo e só dos
    * tipos que o modelo aceita. null: a escolha não vale.
    */
-  private async pickedFiles(picks: AssetPicks, user: User, kinds: AssetKind[]): Promise<Partial<Record<AssetKind, File>> | null> {
+  private async pickedFiles(picks: AssetPicks, user: User, kinds: AssetKind[]): Promise<{ files: Partial<Record<AssetKind, File>>; ids: Partial<Record<AssetKind, string>> } | null> {
     const avatar = picks.avatar ? await this.db.avatarById(picks.avatar) : null;
     if (picks.avatar && avatar?.user_id !== user.id) return null;
     const files: Partial<Record<AssetKind, File>> = {};
+    const ids: Partial<Record<AssetKind, string>> = {};
     for (const id of picks.assets) {
       const asset = id.includes(":") ? await this.pickFile(id, user) : avatar ? await this.db.asset(avatar.id, id) : null;
       if (!asset || !kinds.includes(asset.kind) || files[asset.kind]) return null;
@@ -1204,8 +1222,9 @@ ${error ? snackbar(error) : ""}`;
       if (!object) return null;
       const type = "type" in asset ? asset.type : (object.httpMetadata?.contentType ?? "");
       files[asset.kind] = new File([await object.arrayBuffer()], asset.name, { type });
+      ids[asset.kind] = id;
     }
-    return files;
+    return { files, ids };
   }
 
   /** Uma página dos vídeos ou imagens prontos da pessoa, de todos os modelos, como quadros do "Adicionar ativo". */
@@ -1239,7 +1258,10 @@ ${error ? snackbar(error) : ""}`;
     try { settings = JSON.parse(video.settings ?? "{}"); } catch {}
     const key = kind === "imagem" ? video.image_key : kind === "video" ? settings.source_key : settings.audio_key;
     if (!key || !(await this.media.head(key))) return null;
-    return { id, kind, key, name: ASSET_LABELS[kind], src: `/videos/${video.id}/referencia/${kind}`, hint: "Do vídeo original" };
+    // Enviado solto: volta com o nome e como envio. De um ativo ou vídeo que já não existe (ou de antes
+    // de o vídeo guardar a origem), a cópia que o vídeo guarda.
+    const sent = settings[`ativo_${kind}`]?.startsWith("arquivo:") ? settings[`ativo_${kind}`]!.slice("arquivo:".length) : null;
+    return { id, kind, key, name: sent || ASSET_LABELS[kind], src: `/videos/${video.id}/referencia/${kind}`, hint: sent ? "Arquivo enviado" : "Do vídeo original" };
   }
 
   private async login(request: Request): Promise<Response> {

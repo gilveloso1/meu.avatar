@@ -176,8 +176,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   extras) em bloco próprio e Detalhes no card de linhas (ícone, rótulo, valor);
   abaixo de "Salvar no avatar", "Usar para gerar" (só quando a página foi aberta de um modelo,
   `?de=/modelo/<id>`, que aceita o tipo; volta a ele com o arquivo no painel, `?usar=gerado:<id>`);
-  embaixo, Refazer (volta ao modelo com tudo preenchido, inclusive o avatar e os arquivos usados,
-  das cópias que o vídeo guarda, `?refazer=<id>`) e
+  embaixo, Refazer (volta ao modelo exatamente como foi gerado, `?refazer=<id>`: o avatar e cada
+  arquivo pelo caminho em que entrou, guardado em `settings.ativo_<tipo>`: o mesmo ativo do avatar,
+  o mesmo vídeo ou imagem gerado ou o arquivo enviado com o nome dele; se o ativo foi apagado, ou o
+  vídeo é de antes disso, a cópia que o vídeo guarda) e
   Baixar (menu quando há mais de uma versão: Original, Editado e, se o áudio foi
   tratado, "Sem tratamento de áudio"). Na Edição rápida, o card
   "Resultado da edição", Pausas, Câmera, "Gerar prévia" e, presos embaixo,
