@@ -5,6 +5,7 @@
   "dependencies": {
     "gsap": "3.15.0",
     "hyperframes": "0.8.228",
-    "puppeteer-core": "25.16.0"
+    "puppeteer-core": "25.16.0",
+    "three": "0.184.0"
   }
 }

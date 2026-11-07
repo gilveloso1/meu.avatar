@@ -8,7 +8,9 @@ O que falta fazer, em ordem: [docs/backlog.md](docs/backlog.md). Ao concluir um 
 backlog no mesmo PR, antes do merge: tire o que ficou feito e corrija o que ficou desatualizado. API e MCP para agentes
 editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agente mostrou:
 [docs/agente-avaliacoes.md](docs/agente-avaliacoes.md). Como o prompt
-é montado e as medições de áudio: [docs/prompt.md](docs/prompt.md).
+é montado e as medições de áudio: [docs/prompt.md](docs/prompt.md). Maquete 3D (referência de
+enquadramento e, depois, animação 3D): [docs/maquete.md](docs/maquete.md); as poses se ajustam no
+visualizador com painel (`npm run maquete`), que é do projeto e se mantém junto com o código.
 
 ## Direção (29/10/2026)
 

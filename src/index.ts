@@ -37,7 +37,8 @@ export interface Deps {
 export function createExports(env: Env, deps: Deps = {}): Exports {
   const api = deps.exporter !== undefined ? deps.exporter : env.EXPORTAR ? new ContainerExport(env.EXPORTAR) : null;
   const transcriber = deps.transcriber !== undefined ? deps.transcriber : env.AI ? new WorkersAiTranscriber(env.AI) : null;
-  const renderer = deps.renderer !== undefined ? deps.renderer : env.RENDER ? new ContainerRender(env.RENDER) : null;
+  // No computador, RENDER_URL aponta para o servidor do contêiner rodando fora dele (sem Docker).
+  const renderer = deps.renderer !== undefined ? deps.renderer : env.RENDER_URL && env.AMBIENTE === "local" ? new ContainerRender(null, env.RENDER_URL) : env.RENDER ? new ContainerRender(env.RENDER) : null;
   return new Exports(new Db(env.DB), env.MIDIA, api, transcriber, renderer);
 }
 

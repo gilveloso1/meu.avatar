@@ -13,3 +13,10 @@ container/render/fontes/
 
 # Local do Claude: tokens, conta de teste, worktrees e páginas de trabalho
 .claude/
+
+# Material de referência local (não versionar)
+temp/
+.DS_Store
+
+# Ajustes salvos pelo painel do visualizador da maquete (o Claude lê e passa para as poses)
+tools/maquete/ajustes.json

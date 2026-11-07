@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspecionar } from "./inspecionar.mjs";
+import { maquete } from "./maquete.mjs";
 
 const APP = dirname(fileURLToPath(import.meta.url));
 const FONTES = join(APP, "fontes");
@@ -109,6 +110,42 @@ const numero = (v, min, max) => {
   return Number.isFinite(n) && n >= min && n <= max ? n : null;
 };
 
+/**
+ * POST /maquete: a cena em JSON vira PNG. 200 com {png (base64), relatorio}; 422 com {erros} quando
+ * a cena não vale; 500 com o motivo quando a página quebra.
+ */
+async function fotografar(req, res, largura, altura, responde) {
+  if (!largura || !altura) return responde(400, "tamanho invalido");
+  const partes = [];
+  let total = 0;
+  for await (const parte of req) {
+    total += parte.length;
+    if (total > MAX_HTML) return responde(413, "cena grande demais");
+    partes.push(parte);
+  }
+  let cena;
+  try {
+    cena = JSON.parse(Buffer.concat(partes).toString("utf8"));
+  } catch {
+    return json(res, 422, { erros: ["a cena não é um JSON válido"] });
+  }
+  const vez = fila.then(() => maquete({ hyperframes: HYPERFRAMES, cena, largura, altura }));
+  fila = vez.catch(() => {});
+  try {
+    const r = await vez;
+    if (r.erros) return json(res, 422, { erros: r.erros });
+    return json(res, 200, { png: r.png.toString("base64"), relatorio: r.relatorio });
+  } catch (err) {
+    return responde(500, String(err.message ?? err).slice(-2000));
+  }
+}
+
+function json(res, status, corpo) {
+  const texto = JSON.stringify(corpo);
+  res.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(texto) });
+  res.end(texto);
+}
+
 // Um render por vez: o Chrome já usa a máquina inteira.
 let fila = Promise.resolve();
 
@@ -118,9 +155,10 @@ const servidor = createServer(async (req, res) => {
     res.end(corpo);
   };
   if (req.method === "GET" && req.url === "/saude") return responde(200, "ok");
-  if (req.method !== "POST" || (req.url !== "/render" && req.url !== "/inspecionar")) return responde(404, "nao encontrado");
+  if (req.method !== "POST" || (req.url !== "/render" && req.url !== "/inspecionar" && req.url !== "/maquete")) return responde(404, "nao encontrado");
   const largura = numero(req.headers["x-largura"], 16, MAX_LADO);
   const altura = numero(req.headers["x-altura"], 16, MAX_LADO);
+  if (req.url === "/maquete") return fotografar(req, res, largura, altura, responde);
   const duracao = numero(req.headers["x-duracao"], 0.1, MAX_DURACAO);
   if (!largura || !altura || !duracao || largura % 2 || altura % 2) return responde(400, "tamanho ou duracao invalidos");
   const partes = [];

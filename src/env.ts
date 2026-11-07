@@ -35,6 +35,8 @@ export interface Env {
   SITE_URL: string;
   /** "local" no computador (vem do .dev.vars, que só o wrangler dev lê); no ar fica vazio. */
   AMBIENTE?: string;
+  /** Só no computador: o servidor do contêiner de render rodando fora do Docker (container/render). */
+  RENDER_URL?: string;
   /** Padrões do formulário do Wan (o modelo de cada estrutura fica em src/structures/). */
   VIDEO_DURATION: string;
   VIDEO_RESOLUTION: string;

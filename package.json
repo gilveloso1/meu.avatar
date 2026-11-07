@@ -17,7 +17,9 @@
     "exemplos:painel": "python3 tools/exemplos-painel.py",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "teste:canvas": "node --test src/canvas/testes.js"
+    "teste:canvas": "node --test src/canvas/testes.js",
+    "teste:maquete": "node --test container/render/cena3d/testes.mjs",
+    "maquete": "node tools/maquete/servidor.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.0",

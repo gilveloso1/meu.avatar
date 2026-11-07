@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { type InspecaoDaAnimacao, type RenderApi, RenderError } from "../src/render";
+import { CenaInvalidaError, type InspecaoDaAnimacao, type RenderApi, RenderError } from "../src/render";
 import type { Transcriber, Transcricao } from "../src/transcricao";
 import { handle } from "../src/index";
 import type { AudioApi, ContainerPlan, Face } from "../src/audio";
@@ -263,6 +263,17 @@ export class FakeRenderApi implements RenderApi {
     if (this.log) throw new RenderError(this.log);
     if (this.fail) throw new Error(this.fail);
     return new Response("webm", { headers: { "content-length": "4", "content-type": "video/webm" } });
+  }
+
+  maquetes: { cena: unknown; largura: number; altura: number }[] = [];
+  /** Erros de validação que a próxima maquete devolve (como o validarCena do contêiner). */
+  errosDaCena: string[] | null = null;
+  async maquete(cena: unknown, largura: number, altura: number) {
+    this.maquetes.push({ cena, largura, altura });
+    if (this.errosDaCena) throw new CenaInvalidaError(this.errosDaCena);
+    if (this.log) throw new RenderError(this.log);
+    if (this.fail) throw new Error(this.fail);
+    return { png: new TextEncoder().encode("png"), relatorio: { lente: 26, campo_vertical: 72, itens: [{ id: "ana", tipo: "pessoa", quadro: { esquerda: 40, topo: 30, direita: 70, base: 100 }, rosto: "de frente" }] } };
   }
 
   inspections: { html: string; largura: number; altura: number; duracao: number; instantes: number[]; quadros: boolean }[] = [];

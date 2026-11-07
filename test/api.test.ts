@@ -784,6 +784,74 @@ describe("vídeo do HTML", () => {
   });
 });
 
+describe("maquete 3D", () => {
+  const maquete = (id: string, body: unknown, r: FakeRenderApi | null) => api(`/api/v1/projetos/${id}/maquete`, admin, body, null, null, r);
+  const CENA = { pessoas: [{ id: "ana", pose: "em_pe" }], camera: { posicao: [0, 1.5, 3], alvo: "ana", lente: 26 } };
+  const arquivos = async (id: string) => (await (await api(`/api/v1/projetos/${id}?incluir=arquivos`, admin)).json<{ arquivos: { tipo: string }[] }>()).arquivos;
+
+  it("vira um PNG no projeto, do tamanho do Final, com o relatório; serve de referência ao gerar_imagem", async () => {
+    const { id, revisao } = await novo();
+    expect((await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4 }, { tipo: "final", id: "final", resolucao: "1080p", formato: "9:16" }])).status).toBe(200);
+    const r = new FakeRenderApi();
+    const res = await maquete(id, { cena: CENA, nome: "cozinha.png" }, r);
+    expect(res.status).toBe(201);
+    const corpo = await res.json<{ arquivo: { id: string; nome: string; tipo: string; src: string }; largura: number; altura: number; relatorio: { itens: { id: string }[] }; previa?: string }>();
+    expect([corpo.largura, corpo.altura]).toEqual([1080, 1920]);
+    expect(corpo.arquivo).toMatchObject({ nome: "cozinha.png", tipo: "image/png", src: `/projetos/${id}/arquivos/${corpo.arquivo.id}` });
+    expect(corpo.relatorio.itens[0]!.id).toBe("ana");
+    expect(corpo.previa).toBeUndefined();
+    expect(r.maquetes).toEqual([{ cena: CENA, largura: 1080, altura: 1920 }]);
+    expect(await (await env.MIDIA.get(`projetos/${id}/${corpo.arquivo.id}`))!.text()).toBe("png");
+  });
+
+  it("formato troca o tamanho (em 720p sem Final); previa traz a imagem em base64", async () => {
+    const { id } = await novo();
+    const r = new FakeRenderApi();
+    const res = await maquete(id, { cena: CENA, formato: "1:1", previa: true }, r);
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ largura: 720, altura: 720, previa: btoa("png"), previaTipo: "image/png" });
+    expect(await (await maquete(id, { cena: CENA, formato: "2:7" }, r)).json()).toEqual({ erro: "formato_invalido" });
+    expect(await (await maquete(id, { cena: CENA, final: "outro" }, r)).json()).toEqual({ erro: "final_inexistente" });
+  });
+
+  it("cena que não vale volta com a lista do que corrigir, sem guardar arquivo", async () => {
+    const { id } = await novo();
+    const r = new FakeRenderApi();
+    expect(await (await maquete(id, {}, r)).json()).toEqual({ erro: "cena_obrigatoria" });
+    expect(await (await maquete(id, { cena: [1] }, r)).json()).toEqual({ erro: "cena_obrigatoria" });
+    r.errosDaCena = ["camera: obrigatória"];
+    const res = await maquete(id, { cena: { pessoas: [] } }, r);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ erro: "cena_invalida", erros: ["camera: obrigatória"] });
+    expect(await arquivos(id)).toEqual([]);
+  });
+
+  it("sem contêiner avisa; página que quebra devolve o motivo; contêiner caído é erro com código", async () => {
+    const { id } = await novo();
+    expect(await (await maquete(id, { cena: CENA }, null)).json()).toEqual({ erro: "render_indisponivel" });
+    const r = new FakeRenderApi();
+    r.log = "TypeError: x is undefined";
+    const quebrou = await maquete(id, { cena: CENA }, r);
+    expect(quebrou.status).toBe(422);
+    expect(await quebrou.json()).toEqual({ erro: "render_falhou", detalhe: "TypeError: x is undefined" });
+    r.log = null;
+    r.fail = "Container port connection closed";
+    expect((await maquete(id, { cena: CENA }, r)).status).toBe(503);
+    expect(await arquivos(id)).toEqual([]);
+  });
+
+  it("projeto de outra conta não existe; GET não é aceito", async () => {
+    const { id } = await novo();
+    await memberCookie();
+    const { email } = (await env.DB.prepare("SELECT email FROM users WHERE role = 'member'").first<{ email: string }>())!;
+    const membro = await token(email, "ma_membro");
+    const r = new FakeRenderApi();
+    expect((await api(`/api/v1/projetos/${id}/maquete`, membro, { cena: CENA }, null, null, r)).status).toBe(404);
+    expect((await api(`/api/v1/projetos/${id}/maquete`, admin, undefined, null, null, r)).status).toBe(405);
+    expect(r.maquetes).toHaveLength(0);
+  });
+});
+
 describe("legenda do grupo", () => {
   type Simulado = { duracao: number; palavras: { palavra: string; inicio: number; fim: number; bloco?: string }[]; trechos: { texto: string; inicio: number; fim: number }[] };
   const legenda = (id: string, body: unknown, t: FakeTranscriber | null = new FakeTranscriber(), r: FakeRenderApi | null = new FakeRenderApi()) => api(`/api/v1/projetos/${id}/legenda`, admin, body, new FakeExportApi(), t, r);

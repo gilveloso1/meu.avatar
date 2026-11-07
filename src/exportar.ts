@@ -20,7 +20,7 @@ import { CABECALHO_BYTES, temSom } from "./som";
 import { MAX_VIDEO_BYTES } from "./studio";
 import { codeHtml, missingParams, output } from "./canvas/modelo.js";
 import type { CanvasProject } from "./canvas/modelo.js";
-import { type InspecaoDaAnimacao, MAX_HTML_BYTES, MAX_RENDER_SECONDS, type RenderApi } from "./render";
+import { type InspecaoDaAnimacao, MAX_CENA_BYTES, MAX_HTML_BYTES, MAX_RENDER_SECONDS, type RelatorioDaMaquete, type RenderApi } from "./render";
 import { AudioLongoError, type Transcriber, type Transcricao } from "./transcricao";
 
 /** Passado o prazo dos arquivos, a linha fica mais um pouco: a tela mostra que expirou. */
@@ -172,6 +172,28 @@ export class Exports {
     }
     const file = await this.saveFile(project.id, c.nome, "video/webm", await res.arrayBuffer());
     return { file, largura: width, altura: height };
+  }
+
+  /**
+   * A maquete 3D em JSON vira a foto (PNG) que entra no projeto, para servir de referência ao
+   * gerar_imagem. O tamanho é o do Final (ou o do formato pedido, em 720p). Null sem o contêiner;
+   * CenaInvalidaError e RenderError (src/render.ts) quando a cena não vale ou não abre.
+   */
+  async maquete(project: Project, c: { nome: string; cena: unknown; final?: string; formato?: string }): Promise<{ file: ProjectFile; largura: number; altura: number; relatorio: RelatorioDaMaquete } | "cena_obrigatoria" | "cena_grande_demais" | "final_inexistente" | "formato_invalido" | null> {
+    if (!c.cena || typeof c.cena !== "object" || Array.isArray(c.cena)) return "cena_obrigatoria";
+    if (new TextEncoder().encode(JSON.stringify(c.cena)).byteLength > MAX_CENA_BYTES) return "cena_grande_demais";
+    const finals = (JSON.parse(project.data) as CanvasProject).finals;
+    const final = c.final === undefined ? finals[0] : finals.find((f) => f.id === c.final);
+    if (c.final !== undefined && !final) return "final_inexistente";
+    let tamanho = output(final!);
+    if (c.formato !== undefined) {
+      tamanho = output({ ...(final ?? {}), format: c.formato } as never);
+      if (tamanho.format !== c.formato) return "formato_invalido";
+    }
+    if (!this.renderer) return null;
+    const { png, relatorio } = await this.renderer.maquete(c.cena, tamanho.width, tamanho.height);
+    const file = await this.saveFile(project.id, c.nome, "image/png", png.slice().buffer);
+    return { file, largura: tamanho.width, altura: tamanho.height, relatorio };
   }
 
   /**

@@ -43,8 +43,28 @@ export interface InspecaoDaAnimacao {
   quadros?: string;
 }
 
+/** A cena da maquete não vale: cada erro diz o campo e o que usar (cena3d/cena.js, validarCena). */
+export class CenaInvalidaError extends Error {
+  constructor(readonly erros: string[]) {
+    super(erros.join("\n"));
+  }
+}
+
+/** Onde cada pessoa e objeto caiu no quadro, em % (container/render/cena3d/cena.js). */
+export interface RelatorioDaMaquete {
+  lente: number;
+  campo_vertical: number;
+  itens: Record<string, unknown>[];
+  avisos?: string[];
+}
+
+/** O tamanho máximo do JSON de uma cena (o mesmo limite do HTML no contêiner). */
+export const MAX_CENA_BYTES = 1024 * 1024;
+
 /** O que o site usa do contêiner; os testes trocam por um falso. */
 export interface RenderApi {
+  /** A foto (PNG) da maquete 3D; lança CenaInvalidaError ou RenderError. */
+  maquete(cena: unknown, largura: number, altura: number): Promise<{ png: Uint8Array; relatorio: RelatorioDaMaquete }>;
   /** Devolve o WebM (corpo com content-length) ou lança RenderError. */
   render(html: string, largura: number, altura: number, duracao: number): Promise<Response>;
   /** Abre o HTML no Chrome sem fazer vídeo e mede cada instante; lança RenderError se a página não abre. */
@@ -52,7 +72,37 @@ export interface RenderApi {
 }
 
 export class ContainerRender implements RenderApi {
-  constructor(private readonly ns: DurableObjectNamespace<Renderer>) {}
+  /** url: no computador (RENDER_URL), o servidor do contêiner rodando fora dele, sem Docker. */
+  constructor(
+    private readonly ns: DurableObjectNamespace<Renderer> | null,
+    private readonly url: string | null = null,
+  ) {}
+
+  private async conectar(): Promise<{ fetch(req: Request): Promise<Response> }> {
+    if (this.url) {
+      const base = this.url.replace(/\/$/, "");
+      return { fetch: (req: Request) => fetch(new Request(base + new URL(req.url).pathname, req)) };
+    }
+    return ligado(this.ns!, "render", START_TIMEOUT_MS);
+  }
+
+  maquete(cena: unknown, largura: number, altura: number): Promise<{ png: Uint8Array; relatorio: RelatorioDaMaquete }> {
+    return tentando(
+      "Maquete",
+      async () => {
+        const container = await this.conectar();
+        const res = await container.fetch(
+          new Request("http://render/maquete", { method: "POST", body: JSON.stringify(cena), headers: { "content-type": "application/json", "x-largura": String(largura), "x-altura": String(altura) } }),
+        );
+        if (res.status === 422) throw new CenaInvalidaError((await res.json<{ erros: string[] }>()).erros);
+        if (res.status === 500) throw new RenderError((await res.text()).slice(-2000));
+        if (!res.ok) throw new Error(`Maquete falhou (HTTP ${res.status}): ${(await res.text()).slice(-500)}`);
+        const r = await res.json<{ png: string; relatorio: RelatorioDaMaquete }>();
+        return { png: Uint8Array.from(atob(r.png), (c) => c.charCodeAt(0)), relatorio: r.relatorio };
+      },
+      (err) => err instanceof RenderError || err instanceof CenaInvalidaError,
+    );
+  }
 
   /** O HTML vai inteiro em cada tentativa: a conexão que cai no meio é refeita do começo. */
   render(html: string, largura: number, altura: number, duracao: number): Promise<Response> {
@@ -63,7 +113,7 @@ export class ContainerRender implements RenderApi {
     return tentando(
       "Inspeção da animação",
       async () => {
-        const container = await ligado(this.ns, "render", START_TIMEOUT_MS);
+        const container = await this.conectar();
         const res = await container.fetch(
           new Request("http://render/inspecionar", {
             method: "POST",
@@ -80,7 +130,7 @@ export class ContainerRender implements RenderApi {
   }
 
   private async once(html: string, largura: number, altura: number, duracao: number): Promise<Response> {
-    const container = await ligado(this.ns, "render", START_TIMEOUT_MS);
+    const container = await this.conectar();
     const res = await container.fetch(
       new Request("http://render/render", { method: "POST", body: html, headers: { "content-type": "text/html; charset=utf-8", "x-largura": String(largura), "x-altura": String(altura), "x-duracao": String(duracao) } }),
     );

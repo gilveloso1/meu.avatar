@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Maquete ao vivo</title>
+<style>
+html,body{margin:0;height:100%;background:#2a2a2a;font:13px/1.4 system-ui,sans-serif;color:#eee;overflow:hidden}
+#palco{position:absolute;inset:0 340px 0 0;display:flex;align-items:center;justify-content:center}
+canvas{display:block;height:100vh;width:auto;max-width:100%;object-fit:contain}
+#barra{position:absolute;top:8px;left:8px;display:flex;gap:6px;align-items:center;background:rgba(0,0,0,.55);padding:6px 8px;border-radius:8px;z-index:2}
+button{font:inherit;padding:4px 10px;border-radius:6px;border:0;background:#eee;color:#111;cursor:pointer}
+button.fraco{background:#555;color:#eee}
+#erro{position:absolute;bottom:8px;left:8px;right:348px;white-space:pre-wrap;background:#7a1f1f;padding:8px;border-radius:8px;display:none}
+#painel{position:absolute;top:0;right:0;bottom:0;width:340px;overflow:auto;background:#1e1e1e;border-left:1px solid #333;padding:10px 12px;box-sizing:border-box}
+#painel h3{margin:14px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#aaa}
+.linha{display:flex;align-items:center;gap:8px;margin:4px 0}
+.linha label{width:78px;color:#ccc;flex:none}
+.linha input[type=range]{flex:1}
+.linha select{flex:1;background:#2c2c2c;color:#eee;border:1px solid #444;border-radius:4px;padding:3px}
+.valor{width:40px;text-align:right;font-variant-numeric:tabular-nums;color:#ddd}
+.editado label,.editado .valor{color:#ffd166}
+details{border-top:1px solid #2e2e2e;padding:2px 0}
+summary{cursor:pointer;padding:3px 0;color:#ddd}
+summary .marca{color:#ffd166}
+#avisos{color:#ffb4a8;white-space:pre-wrap;font-size:12px}
+#salvo{color:#9be39b;font-size:12px}
+</style>
+<script type="importmap">{"imports":{"three":"/three/three.module.js","three/addons/":"/three/addons/"}}</script>
+</head><body>
+<div id="palco"></div>
+<div id="barra"><button id="desfazerTopo" title="Desfaz o último ajuste (Cmd+Z)">↶ Voltar</button><button id="voltar">Câmera da cena</button><span>setas ↑↓ andam, ←→ vão para o lado (Shift: mais rápido); arraste para girar, roda para aproximar</span></div>
+<div id="erro"></div>
+<div id="painel"></div>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { montarCena, validarCena } from "/cena3d/cena.js";
+import { JUNTAS, LIMITES, CORPOS, maoEm, tipoDaJunta } from "/cena3d/corpo.js";
+import { POSES, MAOS, comporPoses } from "/cena3d/poses.js";
+
+const W = 720, H = 1280;
+const elErro = document.getElementById("erro");
+const erro = (t) => { elErro.textContent = t; elErro.style.display = t ? "block" : "none"; };
+const guardar = (k, v) => { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const ler = (k, padrao) => { try { return JSON.parse(sessionStorage.getItem(k) || "null") ?? padrao; } catch { return padrao; } };
+
+const base = await (await fetch("/cena.json")).json();
+// Ajustes feitos no painel, por pessoa: {pose, porte, altura, maos, juntas}. Sobrevivem às recargas
+// enquanto a cena tiver as mesmas pessoas e a mesma pose de base.
+const chaveBase = JSON.stringify(base.pessoas.map((p) => [p.id, p.pose]));
+let edicoes = ler("edicoesBase", null) === chaveBase ? ler("edicoes", {}) : {};
+guardar("edicoesBase", chaveBase);
+
+function cenaAtual() {
+  const c = structuredClone(base);
+  c.pessoas = c.pessoas.map((p) => {
+    const e = edicoes[p.id];
+    if (!e) return p;
+    const q = { ...p };
+    if (e.pose) q.pose = e.pose;
+    if (e.porte !== undefined) q.porte = e.porte;
+    if (e.altura !== undefined) q.altura = e.altura;
+    if (e.maos && Object.keys(e.maos).length) q.maos = { ...(p.maos ?? {}), ...e.maos };
+    if (e.juntas && Object.keys(e.juntas).length) q.juntas = { ...(p.juntas ?? {}), ...e.juntas };
+    return q;
+  });
+  return c;
+}
+
+// ---------- palco ----------
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setPixelRatio(Math.min(2, devicePixelRatio));
+r.setSize(W, H, false);
+r.shadowMap.enabled = true;
+r.shadowMap.type = THREE.PCFSoftShadowMap;
+r.toneMapping = THREE.NeutralToneMapping;
+document.getElementById("palco").appendChild(r.domElement);
+let scene = new THREE.Scene();
+let camera = null, ctl = null, inicial = null, alvoInicial = null, relatorio = null;
+
+function construir() {
+  const cena = cenaAtual();
+  const erros = validarCena(cena);
+  if (erros.length) return erro(erros.join("\n"));
+  let m;
+  try { m = montarCena(cena, { largura: W, altura: H }); } catch (e) { return erro(String(e.stack || e)); }
+  scene.traverse((o) => o.geometry?.dispose());
+  scene = m.scene;
+  relatorio = m.relatorio;
+  if (!camera) {
+    camera = m.camera;
+    inicial = { p: camera.position.clone(), q: camera.quaternion.clone() };
+    alvoInicial = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).multiplyScalar(2).add(camera.position);
+    ctl = new OrbitControls(camera, r.domElement);
+    ctl.target.copy(alvoInicial);
+    const salvo = ler("camera", null);
+    if (salvo && salvo.cena === JSON.stringify(base.camera)) { camera.position.fromArray(salvo.p); ctl.target.fromArray(salvo.t); }
+    ctl.update();
+    ctl.addEventListener("change", salvarCamera);
+  }
+  erro("");
+}
+const salvarCamera = () => guardar("camera", { cena: JSON.stringify(base.camera), p: camera.position.toArray(), t: ctl.target.toArray() });
+document.getElementById("voltar").onclick = () => { camera.position.copy(inicial.p); camera.quaternion.copy(inicial.q); ctl.target.copy(alvoInicial); ctl.update(); try { sessionStorage.removeItem("camera"); } catch {} };
+
+// ---------- painel ----------
+const painel = document.getElementById("painel");
+const pessoas = base.pessoas.map((p, i) => p.id ?? `pessoa${i + 1}`);
+let atual = ler("pessoaAtual", pessoas[0]);
+if (!pessoas.includes(atual)) atual = pessoas[0];
+const corpos = Object.keys(POSES).filter((n) => POSES[n].tipo === "corpo");
+const bracos = Object.keys(POSES).filter((n) => POSES[n].tipo === "bracos");
+const NOMES = { avanca: "avança" };
+
+function poseDe(id) {
+  const p = cenaAtual().pessoas.find((q, i) => (q.id ?? `pessoa${i + 1}`) === id);
+  const nomes = p.pose === undefined ? [] : Array.isArray(p.pose) ? p.pose : [p.pose];
+  return { p, nomes };
+}
+// Histórico para o "Voltar": guarda o estado antes de cada ajuste (um arrasto conta como um passo).
+let historico = ler("historico", []);
+let ultimoPasso = 0;
+function marcarPasso() {
+  const agora = performance.now();
+  if (agora - ultimoPasso > 600) {
+    historico.push(JSON.stringify(edicoes));
+    if (historico.length > 100) historico.shift();
+    guardar("historico", historico);
+  }
+  ultimoPasso = agora;
+}
+function voltar() {
+  if (!historico.length) return;
+  edicoes = JSON.parse(historico.pop());
+  guardar("historico", historico);
+  guardar("edicoes", edicoes);
+  agendar(true);
+}
+const ed = () => { marcarPasso(); return (edicoes[atual] ??= {}); };
+// Mexer num controle refaz a cena; o painel só é redesenhado quando muda a estrutura (para não
+// perder o controle que está sendo arrastado).
+const mudou = (redesenhar = false) => { guardar("edicoes", edicoes); agendar(redesenhar); };
+let pedido = null;
+function agendar(redesenhar) {
+  if (pedido) { pedido.redesenhar ||= redesenhar; return; }
+  pedido = { redesenhar };
+  requestAnimationFrame(() => { const { redesenhar: rd } = pedido; pedido = null; construir(); if (rd) desenharPainel(); else atualizarAvisos(); });
+}
+function atualizarAvisos() { const a = document.getElementById("avisos"); if (a) a.textContent = (relatorio?.avisos ?? []).join("\n") || "nenhum"; }
+
+function linhaRange(rotulo, valor, min, max, passo, editado, aoMudar) {
+  const d = document.createElement("div");
+  d.className = "linha" + (editado ? " editado" : "");
+  d.innerHTML = `<label>${rotulo}</label><input type="range" min="${min}" max="${max}" step="${passo}" value="${valor}"><span class="valor">${valor}</span>`;
+  const i = d.querySelector("input");
+  const v = d.querySelector(".valor");
+  i.addEventListener("input", () => { v.textContent = i.value; d.classList.add("editado"); aoMudar(Number(i.value)); });
+  return d;
+}
+function linhaSelect(rotulo, opcoes, valor, aoMudar) {
+  const d = document.createElement("div");
+  d.className = "linha";
+  d.innerHTML = `<label>${rotulo}</label><select>${opcoes.map(([v, t]) => `<option value="${v}"${v === valor ? " selected" : ""}>${t}</option>`).join("")}</select>`;
+  d.querySelector("select").addEventListener("change", (e) => aoMudar(e.target.value));
+  return d;
+}
+
+const abertas = new Set(ler("abertas", []));
+function desenharPainel() {
+  const rolagem = painel.scrollTop;
+  painel.innerHTML = "";
+  const h = (t) => { const e = document.createElement("h3"); e.textContent = t; painel.appendChild(e); };
+  h("Pessoa");
+  painel.appendChild(linhaSelect("Quem", pessoas.map((p) => [p, p]), atual, (v) => { atual = v; guardar("pessoaAtual", v); desenharPainel(); }));
+  const { p, nomes } = poseDe(atual);
+  const corpoAtual = nomes.find((n) => POSES[n]?.tipo === "corpo") ?? "em_pe";
+  const bracoAtual = nomes.find((n) => POSES[n]?.tipo === "bracos") ?? "";
+  painel.appendChild(linhaSelect("Corpo", corpos.map((n) => [n, n]), corpoAtual, (v) => { ed().pose = [v, ...(bracoAtual ? [bracoAtual] : [])]; mudou(true); }));
+  painel.appendChild(linhaSelect("Braços", [["", "(padrão da pose)"], ...bracos.map((n) => [n, n])], bracoAtual, (v) => { ed().pose = [corpoAtual, ...(v ? [v] : [])]; mudou(true); }));
+  painel.appendChild(linhaRange("Porte", p.porte ?? 1, 0.7, 1.5, 0.01, edicoes[atual]?.porte !== undefined, (v) => { ed().porte = v; mudou(); }));
+  painel.appendChild(linhaRange("Altura", p.altura ?? CORPOS[p.corpo ?? "mulher"], 0.8, 2.2, 0.01, edicoes[atual]?.altura !== undefined, (v) => { ed().altura = v; mudou(); }));
+  for (const lado of ["E", "D"]) {
+    const atualMao = typeof p.maos?.[lado] === "string" ? p.maos[lado] : "";
+    painel.appendChild(linhaSelect(`Mão ${lado}`, [["", "(padrão da pose)"], ...Object.keys(MAOS).map((n) => [n, n])], atualMao, (v) => { ed().maos = { ...(ed().maos ?? {}) }; if (v) ed().maos[lado] = v; else delete ed().maos[lado]; mudou(true); }));
+  }
+
+  h("Juntas");
+  // Copia os ajustes de um lado para o outro (os ângulos já são do corpo: o mesmo número espelha).
+  const espelhos = document.createElement("div");
+  espelhos.className = "linha";
+  espelhos.innerHTML = `<button class="fraco" id="eParaD">Esquerdo → direito</button><button class="fraco" id="dParaE">Direito → esquerdo</button>`;
+  painel.appendChild(espelhos);
+  const espelhar = (de, para) => {
+    const e = ed();
+    const j = (e.juntas ??= {});
+    for (const n of ["ombro", "braco", "cotovelo", "punho", "coxa", "joelho", "tornozelo", "ponta"]) {
+      if (j[n + de]) j[n + para] = { ...j[n + de] };
+      else delete j[n + para];
+    }
+    if (e.maos?.[de]) e.maos[para] = e.maos[de];
+    mudou(true);
+  };
+  espelhos.querySelector("#eParaD").onclick = () => espelhar("E", "D");
+  const copiar = document.createElement("div");
+  copiar.className = "linha";
+  copiar.innerHTML = `<button class="fraco" id="copiarOutras" title="Leva o ajuste dos braços desta pessoa para as outras, no mesmo lugar proporcional ao corpo de cada uma">Copiar braços para as outras (proporcional)</button>`;
+  painel.appendChild(copiar);
+  copiar.querySelector("#copiarOutras").onclick = () => copiarParaOutras(atual);
+  espelhos.querySelector("#dParaE").onclick = () => espelhar("D", "E");
+  const nota = document.createElement("div");
+  nota.style.cssText = "color:#999;font-size:12px;margin-bottom:4px";
+  nota.textContent = "E = esquerda dela, D = direita. Mexer no braço ou no cotovelo desliga o ponto da mão da pose naquele lado. Amarelo: ajustado aqui.";
+  painel.appendChild(nota);
+  const pose = comporPoses(nomes, p.porte ?? 1);
+  for (const junta of JUNTAS) {
+    if (junta.startsWith("mao")) continue;
+    const lim = LIMITES[tipoDaJunta(junta)];
+    const editada = edicoes[atual]?.juntas?.[junta];
+    const det = document.createElement("details");
+    if (abertas.has(junta)) det.open = true;
+    det.addEventListener("toggle", () => { det.open ? abertas.add(junta) : abertas.delete(junta); guardar("abertas", [...abertas]); });
+    det.innerHTML = `<summary>${junta}${editada ? ' <span class="marca">●</span>' : ""}</summary>`;
+    const de = (x) => edicoes[atual]?.juntas?.[junta]?.[x] ?? p.juntas?.[junta]?.[x] ?? pose.juntas[junta]?.[x] ?? 0;
+    for (const [k, [min, max]] of Object.entries(lim)) {
+      det.appendChild(linhaRange(NOMES[k] ?? k, de(k), min, max, 1, editada?.[k] !== undefined, (v) => {
+        const j = (ed().juntas ??= {});
+        // A junta entra inteira: os outros valores dela ficam como estavam.
+        j[junta] = { ...Object.fromEntries(Object.keys(lim).map((x) => [x, de(x)])), [k]: v };
+        mudou();
+      }));
+    }
+    if (editada) {
+      const b = document.createElement("button");
+      b.className = "fraco";
+      b.textContent = "Voltar esta junta";
+      b.style.margin = "4px 0 6px";
+      b.onclick = () => { marcarPasso(); delete edicoes[atual].juntas[junta]; mudou(true); };
+      det.appendChild(b);
+    }
+    painel.appendChild(det);
+  }
+
+  h("Guardar");
+  const acoes = document.createElement("div");
+  acoes.className = "linha";
+  acoes.innerHTML = `<button id="salvar">Salvar ajustes</button><button class="fraco" id="voltarPasso">Voltar</button><button class="fraco" id="desfazer">Desfazer pessoa</button>`;
+  painel.appendChild(acoes);
+  const salvo = document.createElement("div");
+  salvo.id = "salvo";
+  painel.appendChild(salvo);
+  acoes.querySelector("#salvar").onclick = async () => {
+    const res = await fetch("/ajustes", { method: "POST", body: JSON.stringify({ salvo_em: new Date().toISOString(), edicoes, cena: cenaAtual() }, null, 1) });
+    salvo.textContent = res.ok ? "Salvo. Me avise no chat que eu leio e passo para a pose." : "Não salvou.";
+  };
+  acoes.querySelector("#desfazer").onclick = () => { marcarPasso(); delete edicoes[atual]; mudou(true); };
+  const bv = acoes.querySelector("#voltarPasso");
+  bv.disabled = !historico.length;
+  bv.title = "Desfaz o último ajuste (Cmd+Z)";
+  bv.onclick = voltar;
+  h("Avisos do rig");
+  const av = document.createElement("div");
+  av.id = "avisos";
+  painel.appendChild(av);
+  atualizarAvisos();
+  painel.scrollTop = rolagem;
+}
+
+// ---------- copiar os braços de uma pessoa para as outras, pelas proporções ----------
+// A mão de quem foi ajustado é medida no espaço do peito, sem a largura e a profundidade do corpo;
+// nas outras, a mão vai ao mesmo lugar proporcional (cinemática inversa) e o resultado vira ângulo.
+// O giro do antebraço, o punho e o formato da mão são copiados como estão.
+function copiarParaOutras(fonte) {
+  const e = edicoes[fonte];
+  if (!e?.juntas) return;
+  const lados = ["E", "D"].filter((l) => e.juntas[`braco${l}`] || e.juntas[`cotovelo${l}`]);
+  if (!lados.length) return;
+  const m = montarCena(cenaAtual(), { largura: W, altura: H });
+  const g = m.corpos[fonte];
+  const norma = (c, v) => { v.x /= c.medidas.largo; v.z /= c.medidas.largo ** 1.5; return v; };
+  const volta = (c, v) => { v.x *= c.medidas.largo; v.z *= c.medidas.largo ** 1.5; return v; };
+  const palma = (c, l) => c.juntas[`mao${l}`].localToWorld(new THREE.Vector3(0, -c.medidas.palma * 0.55, 0));
+  marcarPasso();
+  ultimoPasso = 0;
+  for (const id of pessoas.filter((id) => id !== fonte)) {
+    const alvo = m.corpos[id];
+    const j = ((edicoes[id] ??= {}).juntas ??= {});
+    for (const l of lados) {
+      const s = l === "D" ? -1 : 1;
+      const local = norma(g, g.juntas.peito.worldToLocal(palma(g, l)));
+      maoEm(alvo, l, alvo.juntas.peito.localToWorld(volta(alvo, local)).toArray());
+      const b = alvo.juntas[`braco${l}`].rotation;
+      const c = alvo.juntas[`cotovelo${l}`].rotation;
+      const G = 180 / Math.PI;
+      j[`braco${l}`] = { dobra: Math.round(-b.x * G), abre: Math.round(s * b.z * G), gira: Math.round(s * b.y * G) };
+      j[`cotovelo${l}`] = { dobra: Math.round(-c.x * G), gira: e.juntas[`cotovelo${l}`]?.gira ?? 0 };
+      if (e.juntas[`punho${l}`]) j[`punho${l}`] = { ...e.juntas[`punho${l}`] };
+      if (e.maos?.[l]) (edicoes[id].maos ??= {})[l] = e.maos[l];
+    }
+  }
+  mudou(true);
+}
+
+// ---------- teclado: anda pela cena (fora dos controles do painel) ----------
+const apertadas = new Set();
+let shift = false;
+const vel = new THREE.Vector2();
+const noPainel = (e) => e.target instanceof HTMLElement && e.target.closest("#painel");
+addEventListener("keydown", (e) => {
+  shift = e.shiftKey;
+  if (!e.key.startsWith("Arrow") || noPainel(e)) return;
+  e.preventDefault();
+  if (e.repeat) return;
+  apertadas.add(e.key);
+  const v = (shift ? 3.5 : 1.2) * 0.6;
+  if (e.key === "ArrowUp") vel.y = Math.max(vel.y, v);
+  if (e.key === "ArrowDown") vel.y = Math.min(vel.y, -v);
+  if (e.key === "ArrowRight") vel.x = Math.max(vel.x, v);
+  if (e.key === "ArrowLeft") vel.x = Math.min(vel.x, -v);
+});
+addEventListener("keyup", (e) => { shift = e.shiftKey; apertadas.delete(e.key); });
+addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z") { e.preventDefault(); voltar(); } });
+document.getElementById("desfazerTopo").onclick = voltar;
+addEventListener("blur", () => apertadas.clear());
+let antes = performance.now();
+let mexeu = false;
+construir();
+desenharPainel();
+r.setAnimationLoop((agora) => {
+  const dt = Math.min(0.05, (agora - antes) / 1000);
+  antes = agora;
+  if (!camera) return;
+  const max = shift ? 3.5 : 1.2;
+  const quer = new THREE.Vector2(((apertadas.has("ArrowRight") ? 1 : 0) - (apertadas.has("ArrowLeft") ? 1 : 0)) * max, ((apertadas.has("ArrowUp") ? 1 : 0) - (apertadas.has("ArrowDown") ? 1 : 0)) * max);
+  vel.lerp(quer, 1 - Math.exp(-dt / (quer.lengthSq() ? 0.12 : 0.09)));
+  if (vel.lengthSq() > 1e-6) {
+    const frente = ctl.target.clone().sub(camera.position);
+    frente.y = 0;
+    if (frente.lengthSq() < 1e-6) frente.set(0, 0, -1);
+    frente.normalize();
+    const lado = new THREE.Vector3().crossVectors(frente, new THREE.Vector3(0, 1, 0));
+    const d = frente.multiplyScalar(vel.y * dt).add(lado.multiplyScalar(vel.x * dt));
+    camera.position.add(d);
+    ctl.target.add(d);
+    ctl.update();
+    mexeu = true;
+  } else if (mexeu) { vel.set(0, 0); salvarCamera(); mexeu = false; }
+  r.render(scene, camera);
+});
+
+// Recarrega quando a cena ou a biblioteca mudam no disco (os ajustes do painel ficam).
+const versao = await (await fetch("/versao")).text();
+setInterval(async () => {
+  try { const v = await (await fetch("/versao")).text(); if (v !== versao) location.reload(); } catch {}
+}, 700);
+</script>
+</body></html>

@@ -1,0 +1,6 @@
+{
+  "ambiente": { "tipo": "sala" },
+  "objetos": [{ "id": "sofa", "tipo": "sofa", "posicao": [-0.5, -1.9] }, { "id": "serum", "tipo": "frasco_conta_gotas", "na_mao": { "pessoa": "ana", "lado": "D" } }],
+  "pessoas": [{ "id": "ana", "corpo": "mulher", "posicao": [0.3, 0], "pose": ["em_pe_apoio", "mostrando_produto"], "olhar": "camera" }],
+  "camera": { "posicao": [0, 1.45, 2.6], "alvo": [0.1, 1.2, 0], "lente": 26 }
+}
