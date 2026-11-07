@@ -1,0 +1,136 @@
+{
+ "salvo_em": "2026-11-07T00:16:54.813Z",
+ "edicoes": {
+  "gorda": {
+   "juntas": {
+    "cotoveloE": {
+     "dobra": 95,
+     "gira": 37
+    },
+    "bracoE": {
+     "dobra": 21,
+     "abre": -3,
+     "gira": -58
+    }
+   }
+  },
+  "atual": {
+   "juntas": {
+    "bracoE": {
+     "dobra": 16,
+     "abre": 1,
+     "gira": -50
+    },
+    "cotoveloE": {
+     "dobra": 102,
+     "gira": 37
+    }
+   }
+  },
+  "magra": {
+   "juntas": {
+    "bracoE": {
+     "dobra": 10,
+     "abre": -11,
+     "gira": -38
+    },
+    "cotoveloE": {
+     "dobra": 98,
+     "gira": 26
+    }
+   }
+  }
+ },
+ "cena": {
+  "ambiente": {
+   "tipo": "estudio"
+  },
+  "pessoas": [
+   {
+    "id": "gorda",
+    "corpo": "mulher",
+    "porte": 1.35,
+    "pose": [
+     "em_pe",
+     "pensando"
+    ],
+    "posicao": [
+     -0.8,
+     0
+    ],
+    "juntas": {
+     "cotoveloE": {
+      "dobra": 95,
+      "gira": 37
+     },
+     "bracoE": {
+      "dobra": 21,
+      "abre": -3,
+      "gira": -58
+     }
+    }
+   },
+   {
+    "id": "atual",
+    "corpo": "mulher",
+    "porte": 1,
+    "pose": [
+     "em_pe",
+     "pensando"
+    ],
+    "posicao": [
+     0,
+     0
+    ],
+    "juntas": {
+     "bracoE": {
+      "dobra": 16,
+      "abre": 1,
+      "gira": -50
+     },
+     "cotoveloE": {
+      "dobra": 102,
+      "gira": 37
+     }
+    }
+   },
+   {
+    "id": "magra",
+    "corpo": "mulher",
+    "porte": 0.75,
+    "pose": [
+     "em_pe",
+     "pensando"
+    ],
+    "posicao": [
+     0.75,
+     0
+    ],
+    "juntas": {
+     "bracoE": {
+      "dobra": 10,
+      "abre": -11,
+      "gira": -38
+     },
+     "cotoveloE": {
+      "dobra": 98,
+      "gira": 26
+     }
+    }
+   }
+  ],
+  "camera": {
+   "posicao": [
+    0,
+    1.1,
+    4.4
+   ],
+   "alvo": [
+    0,
+    0.95,
+    0
+   ],
+   "lente": 35
+  }
+ }
+}

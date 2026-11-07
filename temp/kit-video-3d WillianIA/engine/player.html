@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Player do vídeo</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./player.css">
+</head>
+<body>
+<div id="palco">
+  <canvas id="tela"></canvas>
+  <div id="camadas">
+    <div id="elementos"></div>
+    <div id="textos"></div>
+    <div id="legenda"></div>
+    <div id="fx"></div>
+  </div>
+</div>
+<div id="controles" hidden>
+  <button id="tocar">Tocar</button>
+  <input id="linha" type="range" min="0" max="1000" value="0">
+  <span id="tempo">0.0s</span>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "/node_modules/three/build/three.module.js",
+  "three/addons/": "/node_modules/three/examples/jsm/"
+} }
+</script>
+<script type="module" src="./player.js"></script>
+</body>
+</html>

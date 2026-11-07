@@ -1,0 +1,11 @@
+{
+  "provedor": "kokoro",
+  "audio": "narracao.wav",
+  "duracao": 120.59,
+  "palavras": 364,
+  "frases": 35,
+  "voz": "pf_dora",
+  "coberturaTempos": 0.973,
+  "tempoSintese": 29.29,
+  "geradoEm": "2026-11-03T20:51:15.391Z"
+}

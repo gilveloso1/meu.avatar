@@ -1,0 +1,15 @@
+html, body { margin: 0; height: 100%; background: #9fd3f2; font-family: system-ui, "Segoe UI", sans-serif; overflow: hidden; }
+canvas { display: block; }
+#ui { position: fixed; top: 10px; left: 10px; background: rgba(20, 24, 30, .86); color: #fff; padding: 10px 12px;
+      border-radius: 12px; font-size: 13px; display: grid; gap: 8px; width: 268px; max-height: calc(100vh - 40px); overflow: auto; }
+#ui label { display: grid; gap: 3px; }
+#ui label.check { display: flex; align-items: center; gap: 7px; }
+#ui select, #ui input[type=range], #ui button { width: 100%; }
+#ui .row { display: flex; gap: 6px; }
+#info { color: #cfd6df; font-size: 12px; line-height: 1.4; }
+#info b { color: #fff; }
+nav { display: flex; gap: 6px; }
+nav a { flex: 1; text-align: center; padding: 6px 4px; border-radius: 8px; background: #2f3a47; color: #cfd6df; text-decoration: none; font-weight: 600; }
+nav a.on { background: #3d8bfd; color: #fff; }
+.tag { position: fixed; transform: translate(-50%, 0); background: rgba(20, 24, 30, .78); color: #fff; padding: 3px 8px;
+       border-radius: 8px; font-size: 12px; white-space: nowrap; pointer-events: none; }

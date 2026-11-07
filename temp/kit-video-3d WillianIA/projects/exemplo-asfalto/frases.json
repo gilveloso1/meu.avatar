@@ -1,0 +1,212 @@
+[
+ {
+  "n": 1,
+  "texto": "A rua onde você mora é só a casca.",
+  "inicio": 0,
+  "fim": 1.92
+ },
+ {
+  "n": 2,
+  "texto": "O asfalto que você pisa tem poucos centímetros, e mesmo assim aguenta caminhão carregado.",
+  "inicio": 2.28,
+  "fim": 7.22
+ },
+ {
+  "n": 3,
+  "texto": "Como isso é possível?",
+  "inicio": 7.58,
+  "fim": 8.62
+ },
+ {
+  "n": 4,
+  "texto": "Para descobrir, você vai construir uma rua.",
+  "inicio": 9.2,
+  "fim": 11.38
+ },
+ {
+  "n": 5,
+  "texto": "Primeiro você precisa de um chão firme.",
+  "inicio": 11.78,
+  "fim": 14.08
+ },
+ {
+  "n": 6,
+  "texto": "Então você nivela a terra e passa um rolo pesado por cima, bem devagar.",
+  "inicio": 14.46,
+  "fim": 18.38
+ },
+ {
+  "n": 7,
+  "texto": "Se essa terra ficar fofa, a rua afunda em poucos meses.",
+  "inicio": 18.84,
+  "fim": 21.8
+ },
+ {
+  "n": 8,
+  "texto": "Essa camada se chama subleito.",
+  "inicio": 22.38,
+  "fim": 24.08
+ },
+ {
+  "n": 9,
+  "texto": "Mas terra sozinha vira lama quando chove.",
+  "inicio": 24.46,
+  "fim": 26.86
+ },
+ {
+  "n": 10,
+  "texto": "Então você espalha pedra britada por cima e compacta de novo.",
+  "inicio": 26.86,
+  "fim": 30.74
+ },
+ {
+  "n": 11,
+  "texto": "Essa é a sub-base, que não deixa a água estragar o que vem embaixo.",
+  "inicio": 31.06,
+  "fim": 34.86
+ },
+ {
+  "n": 12,
+  "texto": "Depois vem a base, feita de pedra mais bem selecionada.",
+  "inicio": 34.86,
+  "fim": 38.18
+ },
+ {
+  "n": 13,
+  "texto": "Ela espalha o peso das rodas, para o caminhão não furar a rua num ponto só.",
+  "inicio": 38.56,
+  "fim": 42.34
+ },
+ {
+  "n": 14,
+  "texto": "Agora aparece um problema.",
+  "inicio": 42.7,
+  "fim": 44.1
+ },
+ {
+  "n": 15,
+  "texto": "O asfalto não gruda direito na pedra seca.",
+  "inicio": 44.68,
+  "fim": 47.1
+ },
+ {
+  "n": 16,
+  "texto": "Então um caminhão passa espirrando um líquido preto, o ligante asfáltico, que entra na base e cola tudo.",
+  "inicio": 47.46,
+  "fim": 53.04
+ },
+ {
+  "n": 17,
+  "texto": "Isso é a imprimação.",
+  "inicio": 53.48,
+  "fim": 54.62
+ },
+ {
+  "n": 18,
+  "texto": "Só que o asfalto de verdade ainda nem existe.",
+  "inicio": 55.06,
+  "fim": 57.44
+ },
+ {
+  "n": 19,
+  "texto": "Ele é feito numa usina, misturando pedra, areia e o ligante que vem do petróleo.",
+  "inicio": 57.94,
+  "fim": 62.28
+ },
+ {
+  "n": 20,
+  "texto": "Tudo é aquecido muito acima de cem graus, para ficar mole e fácil de espalhar.",
+  "inicio": 62.66,
+  "fim": 66.96
+ },
+ {
+  "n": 21,
+  "texto": "Mas essa massa esfria rápido.",
+  "inicio": 67.34,
+  "fim": 69
+ },
+ {
+  "n": 22,
+  "texto": "Então ela viaja na caçamba de um caminhão, coberta com lona, para chegar ainda quente na obra.",
+  "inicio": 69.46,
+  "fim": 74.46
+ },
+ {
+  "n": 23,
+  "texto": "Na rua, entra uma máquina chamada vibroacabadora.",
+  "inicio": 74.86,
+  "fim": 77.62
+ },
+ {
+  "n": 24,
+  "texto": "Ela recebe a massa na frente e vai andando devagar, deixando uma camada lisa e uniforme atrás dela.",
+  "inicio": 78.04,
+  "fim": 83.62
+ },
+ {
+  "n": 25,
+  "texto": "Mas ainda está fofo.",
+  "inicio": 84.02,
+  "fim": 85.28
+ },
+ {
+  "n": 26,
+  "texto": "Então vêm os rolos compactadores, que passam por cima enquanto o asfalto está quente.",
+  "inicio": 85.66,
+  "fim": 90.22
+ },
+ {
+  "n": 27,
+  "texto": "É aqui que ele ganha a dureza que aguenta o trânsito.",
+  "inicio": 90.6,
+  "fim": 93.12
+ },
+ {
+  "n": 28,
+  "texto": "Algumas horas depois, ele esfria e a rua já pode abrir.",
+  "inicio": 93.54,
+  "fim": 96.48
+ },
+ {
+  "n": 29,
+  "texto": "E tem um detalhe que quase ninguém repara.",
+  "inicio": 96.98,
+  "fim": 99.24
+ },
+ {
+  "n": 30,
+  "texto": "A rua é um pouco mais alta no meio.",
+  "inicio": 99.66,
+  "fim": 101.46
+ },
+ {
+  "n": 31,
+  "texto": "Esse formato empurra a água da chuva para os lados, até o meio-fio e os bueiros.",
+  "inicio": 101.9,
+  "fim": 106.52
+ },
+ {
+  "n": 32,
+  "texto": "Sem isso, a água ficaria parada.",
+  "inicio": 106.52,
+  "fim": 108.44
+ },
+ {
+  "n": 33,
+  "texto": "Então, da próxima vez que você pisar na rua, lembra: embaixo dela tem terra, pedra e muito trabalho.",
+  "inicio": 108.82,
+  "fim": 114.2
+ },
+ {
+  "n": 34,
+  "texto": "Agora me diz: você achava que a rua era só asfalto, ou já sabia das camadas?",
+  "inicio": 114.66,
+  "fim": 118.78
+ },
+ {
+  "n": 35,
+  "texto": "Comenta aqui.",
+  "inicio": 119.32,
+  "fim": 120.08
+ }
+]

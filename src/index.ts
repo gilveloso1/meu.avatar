@@ -2,6 +2,7 @@ import { type AudioApi, type AudioFixer, ContainerAudio } from "./audio";
 import { Accounts } from "./auth";
 import { type CustosApi, CustosReais, lerHeyGen, lerOpenRouter } from "./custos";
 import { Db } from "./db";
+import { DurableImages, type ImageRunner } from "./imagens";
 import { type MaquinasApi, MaquinasReais } from "./maquinas";
 import { ContainerExport, type ExportApi, type Exporter, Exports } from "./exportar";
 import { HeyGenClient, type HeyGenApi } from "./heygen";
@@ -16,6 +17,7 @@ import { Painel, type Vigiado, vigiar } from "./vigia";
 export { AudioFixer } from "./audio";
 export { Exporter } from "./exportar";
 export { Renderer } from "./render";
+export { ImageMaker } from "./imagens";
 
 export interface Deps {
   api?: VideoApi | null;
@@ -28,6 +30,8 @@ export interface Deps {
   costs?: CustosApi | null;
   /** O estado das máquinas, na aba Atividade do painel (src/maquinas.ts). */
   machines?: MaquinasApi | null;
+  /** Quem faz a imagem fora do pedido (src/imagens.ts). */
+  images?: ImageRunner | null;
 }
 
 export function createExports(env: Env, deps: Deps = {}): Exports {
@@ -41,7 +45,9 @@ export function createStudio(env: Env, deps: Deps = {}): Studio {
   const api = deps.api !== undefined ? deps.api : env.OPENROUTER_API_KEY ? new OpenRouterVideo(env.OPENROUTER_API_KEY) : null;
   const audio = deps.audio !== undefined ? deps.audio : env.AUDIO ? new ContainerAudio(env.AUDIO) : null;
   const heygen = deps.heygen !== undefined ? deps.heygen : env.HEYGEN_API_KEY ? new HeyGenClient(env.HEYGEN_API_KEY) : null;
-  return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL }, audio, heygen);
+  // O Durable Object gera com a chave do env: com outra API (os testes), a imagem sai no pedido.
+  const images = deps.images !== undefined ? deps.images : deps.api === undefined && env.IMAGENS ? new DurableImages(env.IMAGENS) : null;
+  return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL }, audio, heygen, images);
 }
 
 export function createAccounts(env: Env): Accounts {

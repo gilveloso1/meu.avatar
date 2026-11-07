@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preview dos personagens</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div id="ui">
+  <nav><a class="on" href="/preview/index.html">Personagens</a><a href="/preview/cenario.html">Cenário</a></nav>
+  <label>Vista
+    <select id="view">
+      <option value="lineup">Todos os personagens</option>
+      <option value="single">Um personagem</option>
+    </select>
+  </label>
+  <label>Personagem <select id="char"></select></label>
+  <label>Animação <select id="clip"></select></label>
+  <label>Expressão <select id="expr"></select></label>
+  <label>Velocidade <input id="speed" type="range" min="0" max="2" step="0.05" value="1"></label>
+  <div class="row"><button id="play">Pausar</button><button id="cam">Câmera</button></div>
+  <div id="info"></div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "/node_modules/three/build/three.module.js",
+  "three/addons/": "/node_modules/three/examples/jsm/"
+} }
+</script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

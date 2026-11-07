@@ -1,0 +1,22 @@
+{
+  "name": "kit-video-3d-simples",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pack para criar vídeos 3D explicativos (estilo low-poly) com IA: personagens, cenário, motor de render, voz grátis ou paga e o prompt universal AGENTE.md.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "preview": "node tools/serve.mjs",
+    "catalog": "node tools/build-catalog.mjs",
+    "check": "node tools/check.mjs",
+    "voz": "node tools/voz.mjs",
+    "novo": "node tools/novo-projeto.mjs",
+    "validar": "node tools/validar.mjs",
+    "render": "node tools/render.mjs",
+    "empacotar": "node tools/empacotar.mjs"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.16.0",
+    "three": "^0.187.0"
+  }
+}

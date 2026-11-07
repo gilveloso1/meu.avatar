@@ -1,0 +1,2497 @@
+{
+  "generatedFrom": "assets/",
+  "conventions": {
+    "units": "metros",
+    "facing": "+Z",
+    "leftOfCharacter": "+X",
+    "adultHeightM": 1.72,
+    "childScale": 0.64,
+    "angles": "graus nas animações; radianos no Three.js"
+  },
+  "joints": [
+    "hips",
+    "spine",
+    "chest",
+    "neck",
+    "head",
+    "armL",
+    "forearmL",
+    "handL",
+    "armR",
+    "forearmR",
+    "handR",
+    "legL",
+    "shinL",
+    "footL",
+    "legR",
+    "shinR",
+    "footR"
+  ],
+  "maskGroups": {
+    "torso": [
+      "hips",
+      "spine",
+      "chest",
+      "hipsPos"
+    ],
+    "head": [
+      "neck",
+      "head"
+    ],
+    "face": [
+      "face"
+    ],
+    "armL": [
+      "armL",
+      "forearmL",
+      "handL"
+    ],
+    "armR": [
+      "armR",
+      "forearmR",
+      "handR"
+    ],
+    "arms": [
+      "armL",
+      "forearmL",
+      "handL",
+      "armR",
+      "forearmR",
+      "handR"
+    ],
+    "legs": [
+      "legL",
+      "shinL",
+      "footL",
+      "legR",
+      "shinR",
+      "footR"
+    ],
+    "legL": [
+      "legL",
+      "shinL",
+      "footL"
+    ],
+    "legR": [
+      "legR",
+      "shinR",
+      "footR"
+    ]
+  },
+  "characters": [
+    {
+      "id": "construtor",
+      "role": "Protagonista / narrador. Mestre de obras: explica o passo a passo da construção.",
+      "approxHeightM": 1.72,
+      "hat": "hardhat",
+      "hair": "short",
+      "top": "#f28c28",
+      "sleeves": "short",
+      "bottom": "pants",
+      "held": {},
+      "stoop": 0
+    },
+    {
+      "id": "engenheiro",
+      "role": "Especialista técnico. Entra para explicar cálculo, projeto e normas. Já vem com prancheta na mão esquerda.",
+      "approxHeightM": 1.75,
+      "hat": "hardhat",
+      "hair": "short",
+      "top": "#7fb3d5",
+      "sleeves": "long",
+      "bottom": "pants",
+      "held": {
+        "L": "clipboard"
+      },
+      "stoop": 0
+    },
+    {
+      "id": "engenheira",
+      "role": "Especialista técnica / supervisora de obra. Voz de autoridade amigável.",
+      "approxHeightM": 1.65,
+      "hat": "hardhat",
+      "hair": "ponytail",
+      "top": "#ff8a3d",
+      "sleeves": "long",
+      "bottom": "pants",
+      "held": {},
+      "stoop": 0
+    },
+    {
+      "id": "servente",
+      "role": "Ajudante de obra. Faz o trabalho braçal (cava, carrega, empurra). Já vem com pá na mão direita.",
+      "approxHeightM": 1.72,
+      "hat": "hardhat",
+      "hair": "short",
+      "top": "#9aa0a6",
+      "sleeves": "short",
+      "bottom": "shorts",
+      "held": {
+        "R": "shovel"
+      },
+      "stoop": 0
+    },
+    {
+      "id": "homem",
+      "role": "Morador / pessoa comum (dono da casa, passante, curioso fazendo a pergunta do vídeo).",
+      "approxHeightM": 1.72,
+      "hat": null,
+      "hair": "fringe",
+      "top": "#5fae6b",
+      "sleeves": "short",
+      "bottom": "pants",
+      "held": {},
+      "stoop": 0
+    },
+    {
+      "id": "mulher",
+      "role": "Moradora / pessoa comum (vizinha, mãe, passageira).",
+      "approxHeightM": 1.63,
+      "hat": null,
+      "hair": "long",
+      "top": "#d96c8c",
+      "sleeves": "short",
+      "bottom": "skirt",
+      "held": {},
+      "stoop": 0
+    },
+    {
+      "id": "velhinho",
+      "role": "Idoso curioso ou sábio. Bom para perguntas (\"como isso se sustenta?\") e humor.",
+      "approxHeightM": 1.62,
+      "hat": null,
+      "hair": "sides",
+      "top": "#8a6d4b",
+      "sleeves": "long",
+      "bottom": "pants",
+      "held": {},
+      "stoop": 12
+    },
+    {
+      "id": "velhinha",
+      "role": "Idosa curiosa ou sábia. Boa para reações e comentários simpáticos.",
+      "approxHeightM": 1.55,
+      "hat": null,
+      "hair": "bun",
+      "top": "#b08fd0",
+      "sleeves": "long",
+      "bottom": "skirt",
+      "held": {},
+      "stoop": 10
+    },
+    {
+      "id": "crianca",
+      "role": "Criança curiosa (menino). Faz as perguntas ingênuas que puxam a explicação.",
+      "approxHeightM": 1.1,
+      "hat": "cap",
+      "hair": "short",
+      "top": "#f2d13a",
+      "sleeves": "short",
+      "bottom": "shorts",
+      "held": {},
+      "stoop": 0
+    },
+    {
+      "id": "menina",
+      "role": "Criança curiosa (menina). Faz perguntas e reage com surpresa.",
+      "approxHeightM": 1.07,
+      "hat": null,
+      "hair": "ponytail",
+      "top": "#e8586a",
+      "sleeves": "short",
+      "bottom": "skirt",
+      "held": {},
+      "stoop": 0
+    },
+    {
+      "id": "motorista",
+      "role": "Motorista (carro, ônibus, caminhão, metrô). Use com a animação sit (params: { arms: \"wheel\" }).",
+      "approxHeightM": 1.72,
+      "hat": "cap",
+      "hair": "short",
+      "top": "#34495e",
+      "sleeves": "short",
+      "bottom": "pants",
+      "held": {},
+      "stoop": 0
+    }
+  ],
+  "clips": [
+    {
+      "id": "idle",
+      "description": "Em pé parado, respirando e balançando de leve. Pose padrão quando nada está acontecendo.",
+      "loop": true,
+      "durationS": 4,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "legs"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "walk",
+      "description": "Andar em linha reta. Mova o personagem à frente na velocidade certa (use walkSpeed) para os pés não \"patinarem\".",
+      "loop": true,
+      "durationS": 1,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "legs"
+      ],
+      "grounded": true,
+      "metersPerSecond": 0.943,
+      "params": {}
+    },
+    {
+      "id": "run",
+      "description": "Correr. Mais rápido, braços dobrados, tronco inclinado e pequenos saltos.",
+      "loop": true,
+      "durationS": 0.6,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "legs"
+      ],
+      "grounded": true,
+      "metersPerSecond": 2.781,
+      "params": {}
+    },
+    {
+      "id": "wave",
+      "description": "Acenar com a mão (cumprimento). Bom para apresentar o personagem ou se despedir.",
+      "loop": true,
+      "durationS": 1.2,
+      "affects": [
+        "armR",
+        "head",
+        "face"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {
+        "side": {
+          "default": "R",
+          "description": "'R' acena com o braço direito, 'L' com o esquerdo"
+        }
+      }
+    },
+    {
+      "id": "point",
+      "description": "Apontar com o braço para mostrar algo. Pose de uma vez só: o braço sobe e fica apontando.",
+      "loop": false,
+      "durationS": 0.5,
+      "affects": [
+        "armR",
+        "head"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {
+        "side": {
+          "default": "R",
+          "description": "'R' ou 'L': qual braço aponta"
+        },
+        "dir": {
+          "default": "forward",
+          "description": "forward | forwardUp | up | side (para fora do corpo) | down"
+        }
+      }
+    },
+    {
+      "id": "talk",
+      "description": "Falar gesticulando: mão direita e esquerda acompanham a fala, cabeça mexe, boca abre e fecha. Use enquanto toca a narração.",
+      "loop": true,
+      "durationS": 2.4,
+      "affects": [
+        "armR",
+        "armL",
+        "head",
+        "face",
+        "torso"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {
+        "mouthOpen": {
+          "default": null,
+          "description": "Opcional 0..1: abertura da boca vinda do áudio (lip-sync). Se omitido, usa fala simulada."
+        },
+        "energy": {
+          "default": 1,
+          "description": "Intensidade dos gestos (0.5 calmo ... 1.5 empolgado)"
+        }
+      }
+    },
+    {
+      "id": "hammer",
+      "description": "Martelar (bater prego, construir). Funciona melhor com o item \"hammer\" na mão direita.",
+      "loop": true,
+      "durationS": 0.9,
+      "affects": [
+        "armR",
+        "armL",
+        "torso",
+        "head",
+        "legs"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {
+        "side": {
+          "default": "R",
+          "description": "'R' ou 'L': qual braço bate"
+        }
+      }
+    },
+    {
+      "id": "carry",
+      "description": "Carregar uma caixa/saco com os dois braços à frente. Use walking=1 para andar carregando, 0 para ficar parado.",
+      "loop": true,
+      "durationS": 1,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "legs"
+      ],
+      "grounded": true,
+      "metersPerSecond": 0.943,
+      "params": {
+        "walking": {
+          "default": 1,
+          "description": "0 = parado carregando, 1 = andando carregando"
+        }
+      }
+    },
+    {
+      "id": "push",
+      "description": "Empurrar algo pesado à frente (carrinho de mão, parede, porta), inclinado e com passos curtos.",
+      "loop": true,
+      "durationS": 1.2,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "legs"
+      ],
+      "grounded": true,
+      "metersPerSecond": 0.597,
+      "params": {}
+    },
+    {
+      "id": "dig",
+      "description": "Cavar com a pá (use o item \"shovel\"). Abaixa, enfia, levanta.",
+      "loop": true,
+      "durationS": 1.6,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "legs"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "cheer",
+      "description": "Comemorar pulando com os braços para cima (sucesso, \"funcionou!\", final do vídeo).",
+      "loop": true,
+      "durationS": 0.8,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "legs",
+        "face"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "surprised",
+      "description": "Susto/surpresa: recua o corpo, abre os braços, olhos e boca arregalados. Pose de uma vez só.",
+      "loop": false,
+      "durationS": 0.35,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "face"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "think",
+      "description": "Pensar: mão no queixo, cabeça inclinada, olhando para cima. Bom antes de uma explicação ou pergunta.",
+      "loop": true,
+      "durationS": 3,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "face"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "look_around",
+      "description": "Olhar ao redor, virando a cabeça e o corpo devagar para os lados.",
+      "loop": true,
+      "durationS": 4,
+      "affects": [
+        "head",
+        "torso",
+        "face"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "nod",
+      "description": "Balançar a cabeça dizendo \"sim\".",
+      "loop": false,
+      "durationS": 0.9,
+      "affects": [
+        "head",
+        "face"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "shake_head",
+      "description": "Balançar a cabeça dizendo \"não\".",
+      "loop": false,
+      "durationS": 0.9,
+      "affects": [
+        "head",
+        "face"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "shrug",
+      "description": "Dar de ombros (\"não sei\" / \"talvez\"): braços abertos e cabeça inclinada. Pose de uma vez só.",
+      "loop": false,
+      "durationS": 0.45,
+      "affects": [
+        "arms",
+        "head",
+        "torso",
+        "face"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "crouch",
+      "description": "Agachar para olhar/mexer em algo no chão (inspecionar fundação, fiação, encanamento).",
+      "loop": false,
+      "durationS": 0.6,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "legs"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    },
+    {
+      "id": "sit",
+      "description": "Sentar (cadeira, banco, banco do carro). Ajuste seatHeight à altura do assento e arms ao uso.",
+      "loop": false,
+      "durationS": 0.5,
+      "affects": [
+        "torso",
+        "head",
+        "arms",
+        "legs"
+      ],
+      "grounded": false,
+      "metersPerSecond": null,
+      "params": {
+        "seatHeight": {
+          "default": 0.34,
+          "description": "Altura do assento em metros (unidades do personagem, antes da escala). 0.34 = pés tocam o chão."
+        },
+        "arms": {
+          "default": "lap",
+          "description": "'lap' (mãos no colo), 'wheel' (mãos no volante, para dirigir) ou 'table' (braços sobre a mesa)"
+        }
+      }
+    },
+    {
+      "id": "read_clipboard",
+      "description": "Ler/anotar na prancheta (use com engenheiro, que já tem prancheta na mão esquerda).",
+      "loop": true,
+      "durationS": 3,
+      "affects": [
+        "arms",
+        "head",
+        "torso",
+        "face"
+      ],
+      "grounded": true,
+      "metersPerSecond": null,
+      "params": {}
+    }
+  ],
+  "scenery": [
+    {
+      "id": "casa_simples",
+      "category": "casas",
+      "label": "Casa simples",
+      "description": "Casa térrea de telhado de duas águas, porta central, duas janelas na frente e chaminé. 6 × 7 m.",
+      "sizeM": {
+        "x": 6.8,
+        "y": 5.2,
+        "z": 8.3
+      },
+      "meshes": 40,
+      "params": {
+        "wall": {
+          "default": "#f2e2bf",
+          "description": "cor da parede"
+        },
+        "roof": {
+          "default": "#d2693a",
+          "description": "cor das telhas"
+        },
+        "door": {
+          "default": "#7a4a2b",
+          "description": "cor da porta"
+        },
+        "trim": {
+          "default": "#ffffff",
+          "description": "cor de portas e janelas (molduras)"
+        },
+        "chimney": {
+          "default": true,
+          "description": "mostrar chaminé"
+        }
+      },
+      "variants": [
+        "verde",
+        "azul",
+        "amarela"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "casa_colonial",
+      "category": "casas",
+      "label": "Casa colonial",
+      "description": "Casa grande de telhado de quatro águas com varanda de colunas, portas duplas e janelas com venezianas. 9 × 7 m (+2 m de varanda).",
+      "sizeM": {
+        "x": 10,
+        "y": 5.3,
+        "z": 9.8
+      },
+      "meshes": 59,
+      "params": {
+        "wall": {
+          "default": "#f6edd2",
+          "description": "cor da parede"
+        },
+        "roof": {
+          "default": "#c8593a",
+          "description": "cor das telhas"
+        },
+        "shutter": {
+          "default": "#3f7f5a",
+          "description": "cor das venezianas"
+        },
+        "trim": {
+          "default": "#ffffff",
+          "description": "cor das colunas e molduras"
+        }
+      },
+      "variants": [
+        "rosa",
+        "azul"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "sobrado",
+      "category": "casas",
+      "label": "Sobrado",
+      "description": "Casa de dois andares com garagem, porta de entrada, sacada sobre a garagem e telhado de duas águas. 6,5 × 8 m, 5,6 m de parede.",
+      "sizeM": {
+        "x": 7.3,
+        "y": 7.8,
+        "z": 9.5
+      },
+      "meshes": 61,
+      "params": {
+        "wall": {
+          "default": "#e6dcc8",
+          "description": "cor da parede"
+        },
+        "roof": {
+          "default": "#a8402c",
+          "description": "cor das telhas"
+        },
+        "garage": {
+          "default": "#9aa3ad",
+          "description": "cor do portão da garagem"
+        },
+        "trim": {
+          "default": "#ffffff",
+          "description": "cor das molduras"
+        }
+      },
+      "variants": [
+        "cinza",
+        "salmao"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "casa_moderna",
+      "category": "casas",
+      "label": "Casa moderna",
+      "description": "Casa de linhas retas: dois volumes, laje plana, janelas grandes e garagem. 9 × 7 m, 6 m de altura.",
+      "sizeM": {
+        "x": 9.5,
+        "y": 6.3,
+        "z": 7.7
+      },
+      "meshes": 29,
+      "params": {
+        "wall": {
+          "default": "#f1f1ee",
+          "description": "cor do volume de baixo"
+        },
+        "accent": {
+          "default": "#8f9aa5",
+          "description": "cor do volume de cima"
+        },
+        "wood": {
+          "default": "#a9743f",
+          "description": "cor do portão e detalhes de madeira"
+        }
+      },
+      "variants": [
+        "escura",
+        "quente"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "predio_apartamentos",
+      "category": "predios",
+      "label": "Prédio de apartamentos",
+      "description": "Prédio residencial com térreo de entrada, janelas e sacadas em cada andar, platibanda e caixa d'água. 14 × 10 m; cada andar 3 m.",
+      "sizeM": {
+        "x": 14.3,
+        "y": 20.4,
+        "z": 11.4
+      },
+      "meshes": 188,
+      "params": {
+        "floors": {
+          "default": 6,
+          "description": "número de andares (incluindo o térreo)"
+        },
+        "wall": {
+          "default": "#e9d8b4",
+          "description": "cor da parede"
+        },
+        "accent": {
+          "default": "#b9855a",
+          "description": "cor do térreo, sacadas e detalhes"
+        },
+        "balconies": {
+          "default": true,
+          "description": "sacadas na frente"
+        }
+      },
+      "variants": [
+        "azul",
+        "rosa",
+        "alto"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "arranha_ceu",
+      "category": "predios",
+      "label": "Arranha-céu",
+      "description": "Torre de escritórios com fachada de vidro, faixas de laje a cada andar, base (pódio), coroa e antena. 16 × 16 m; cada andar 4 m.",
+      "sizeM": {
+        "x": 22.1,
+        "y": 71.8,
+        "z": 22.2
+      },
+      "meshes": 35,
+      "params": {
+        "floors": {
+          "default": 14,
+          "description": "número de andares (cada um tem 4 m)"
+        },
+        "glass": {
+          "default": "#5b8fb9",
+          "description": "cor do vidro"
+        },
+        "band": {
+          "default": "#dfe7ee",
+          "description": "cor das faixas de laje"
+        }
+      },
+      "variants": [
+        "verde",
+        "escuro",
+        "alto"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "loja",
+      "category": "predios",
+      "label": "Loja",
+      "description": "Loja de rua com vitrine grande, porta de vidro, toldo listrado e letreiro. 8 × 8 m, 4 m de altura.",
+      "sizeM": {
+        "x": 8.4,
+        "y": 4.3,
+        "z": 9.6
+      },
+      "meshes": 26,
+      "params": {
+        "wall": {
+          "default": "#f0e6d2",
+          "description": "cor da parede"
+        },
+        "awning": {
+          "default": "#d9473a",
+          "description": "cor do toldo (alterna com branco)"
+        },
+        "sign": {
+          "default": "#3d6fb6",
+          "description": "cor do letreiro"
+        }
+      },
+      "variants": [
+        "padaria",
+        "mercado"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "galpao",
+      "category": "predios",
+      "label": "Galpão / fábrica",
+      "description": "Galpão industrial de telhado metálico, portão de enrolar, janelas altas e chaminé. 24 × 14 m, 6 m de parede.",
+      "sizeM": {
+        "x": 25,
+        "y": 15.5,
+        "z": 15
+      },
+      "meshes": 30,
+      "params": {
+        "wall": {
+          "default": "#c9cdd2",
+          "description": "cor das paredes"
+        },
+        "roof": {
+          "default": "#6d7783",
+          "description": "cor do telhado"
+        },
+        "door": {
+          "default": "#d9473a",
+          "description": "cor do portão"
+        }
+      },
+      "variants": [
+        "azul",
+        "verde"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "ponte_viga",
+      "category": "predios",
+      "label": "Ponte de vigas",
+      "description": "Ponte de concreto sobre um rio: tabuleiro com pista, guarda-corpo, dois pilares com travessa e encontros nas pontas. Vão de 24 m ao longo de X, 8 m de largura.",
+      "sizeM": {
+        "x": 40.5,
+        "y": 5.6,
+        "z": 14
+      },
+      "meshes": 74,
+      "params": {
+        "length": {
+          "default": 24,
+          "description": "comprimento do vão em metros (ao longo de X)"
+        },
+        "height": {
+          "default": 4.5,
+          "description": "altura do tabuleiro acima da água"
+        },
+        "river": {
+          "default": true,
+          "description": "mostrar o rio embaixo"
+        }
+      },
+      "variants": [
+        "longa",
+        "baixa"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "arvore_redonda",
+      "category": "arvores",
+      "label": "Árvore de copa redonda",
+      "description": "Árvore clássica de tronco marrom e copa arredondada de várias bolas. Altura padrão 5 m.",
+      "sizeM": {
+        "x": 3.8,
+        "y": 4.4,
+        "z": 3.2
+      },
+      "meshes": 6,
+      "params": {
+        "height": {
+          "default": 5,
+          "description": "altura total em metros"
+        },
+        "leaf": {
+          "default": "#5fae4e",
+          "description": "cor da copa"
+        },
+        "trunk": {
+          "default": "#8a5a34",
+          "description": "cor do tronco"
+        },
+        "seed": {
+          "default": 1,
+          "description": "número que varia o formato da copa"
+        }
+      },
+      "variants": [
+        "clara",
+        "escura",
+        "grande",
+        "outono"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "arvore_frutifera",
+      "category": "arvores",
+      "label": "Árvore frutífera",
+      "description": "Árvore de copa redonda com frutas (bolinhas coloridas), tipo laranjeira ou macieira. 4 m.",
+      "sizeM": {
+        "x": 3.7,
+        "y": 4.1,
+        "z": 2.8
+      },
+      "meshes": 14,
+      "params": {
+        "fruit": {
+          "default": "#e8452c",
+          "description": "cor das frutas"
+        },
+        "leaf": {
+          "default": "#4f9d4a",
+          "description": "cor da copa"
+        },
+        "seed": {
+          "default": 2,
+          "description": "varia o formato"
+        }
+      },
+      "variants": [
+        "laranja",
+        "limao"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "arvore_pinheiro",
+      "category": "arvores",
+      "label": "Pinheiro",
+      "description": "Árvore em forma de cone, feita de camadas empilhadas. Altura padrão 6 m.",
+      "sizeM": {
+        "x": 3,
+        "y": 6.2,
+        "z": 3
+      },
+      "meshes": 5,
+      "params": {
+        "height": {
+          "default": 6,
+          "description": "altura total"
+        },
+        "leaf": {
+          "default": "#2f7d4a",
+          "description": "cor da folhagem"
+        },
+        "layers": {
+          "default": 4,
+          "description": "número de camadas (3 a 6)"
+        }
+      },
+      "variants": [
+        "clara",
+        "alta",
+        "nevada"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "palmeira",
+      "category": "arvores",
+      "label": "Palmeira",
+      "description": "Palmeira de tronco levemente curvo em gomos e folhas compridas. 7 m.",
+      "sizeM": {
+        "x": 4.5,
+        "y": 7.8,
+        "z": 4.5
+      },
+      "meshes": 15,
+      "params": {
+        "height": {
+          "default": 7,
+          "description": "altura total"
+        },
+        "leaf": {
+          "default": "#4faa52",
+          "description": "cor das folhas"
+        },
+        "seed": {
+          "default": 1,
+          "description": "varia a curvatura"
+        }
+      },
+      "variants": [
+        "baixa",
+        "alta"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "arbusto",
+      "category": "arvores",
+      "label": "Arbusto",
+      "description": "Moita baixa de bolas verdes, para cercas vivas e jardins. 1,2 m.",
+      "sizeM": {
+        "x": 1.8,
+        "y": 1.5,
+        "z": 1.6
+      },
+      "meshes": 4,
+      "params": {
+        "leaf": {
+          "default": "#4f9d4a",
+          "description": "cor"
+        },
+        "flowers": {
+          "default": false,
+          "description": "com florzinhas"
+        },
+        "seed": {
+          "default": 1,
+          "description": "varia o formato"
+        }
+      },
+      "variants": [
+        "florido",
+        "claro"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "rua_reta",
+      "category": "ruas",
+      "label": "Rua reta",
+      "description": "Trecho de rua com asfalto, faixa central, meio-fio e calçadas dos dois lados. Corre ao longo de Z.",
+      "sizeM": {
+        "x": 11.7,
+        "y": 0.2,
+        "z": 20
+      },
+      "meshes": 12,
+      "params": {
+        "length": {
+          "default": 20,
+          "description": "comprimento em metros (ao longo de Z)"
+        },
+        "lanes": {
+          "default": 2,
+          "description": "número de faixas (2 ou 4)"
+        },
+        "laneWidth": {
+          "default": 3.4,
+          "description": "largura de cada faixa"
+        },
+        "sidewalk": {
+          "default": 2.2,
+          "description": "largura da calçada (0 = sem calçada)"
+        },
+        "crosswalk": {
+          "default": false,
+          "description": "faixa de pedestre no meio"
+        }
+      },
+      "variants": [
+        "larga",
+        "sem_calcada",
+        "com_faixa"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "cruzamento",
+      "category": "ruas",
+      "label": "Cruzamento",
+      "description": "Encontro de duas ruas em cruz, com faixas de pedestre nas quatro pontas e quarteirões de calçada nos cantos. 7 m de pista, braços de 8 m.",
+      "sizeM": {
+        "x": 27,
+        "y": 0.2,
+        "z": 27
+      },
+      "meshes": 50,
+      "params": {
+        "arm": {
+          "default": 8,
+          "description": "comprimento de cada braço a partir do centro do cruzamento"
+        },
+        "lanes": {
+          "default": 2,
+          "description": "faixas por rua"
+        }
+      },
+      "variants": [
+        "longo"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "chao",
+      "category": "ruas",
+      "label": "Chão (terreno)",
+      "description": "Placa de chão quadrada com manchas de cor: grama, terra, areia, concreto ou asfalto.",
+      "sizeM": {
+        "x": 20,
+        "y": 0.3,
+        "z": 20
+      },
+      "meshes": 17,
+      "params": {
+        "type": {
+          "default": "grama",
+          "description": "'grama' | 'terra' | 'areia' | 'concreto' | 'asfalto'"
+        },
+        "size": {
+          "default": 20,
+          "description": "lado da placa em metros"
+        },
+        "seed": {
+          "default": 1,
+          "description": "varia as manchas"
+        }
+      },
+      "variants": [
+        "terra",
+        "areia",
+        "concreto",
+        "asfalto"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "campo_futebol",
+      "category": "ruas",
+      "label": "Campo de futebol",
+      "description": "Gramado listrado com linhas brancas (área, círculo central) e duas traves. 40 × 26 m (reduzido).",
+      "sizeM": {
+        "x": 30,
+        "y": 2.8,
+        "z": 44
+      },
+      "meshes": 29,
+      "params": {
+        "length": {
+          "default": 40,
+          "description": "comprimento (ao longo de Z)"
+        },
+        "width": {
+          "default": 26,
+          "description": "largura (ao longo de X)"
+        }
+      },
+      "variants": [
+        "pequeno"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "carro_sedan",
+      "category": "veiculos",
+      "label": "Carro sedã",
+      "description": "Carro de passeio com porta-malas. 1,8 × 4,4 m. Rodas giram com rollWheels().",
+      "sizeM": {
+        "x": 2.1,
+        "y": 1.5,
+        "z": 4.5
+      },
+      "meshes": 23,
+      "params": {
+        "color": {
+          "default": "#d9473a",
+          "description": "cor da carroceria"
+        },
+        "taxi": {
+          "default": false,
+          "description": "luminoso de táxi no teto"
+        }
+      },
+      "variants": [
+        "azul",
+        "branco",
+        "taxi",
+        "verde"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": true,
+      "stages": null
+    },
+    {
+      "id": "carro_hatch",
+      "category": "veiculos",
+      "label": "Carro hatch",
+      "description": "Carro compacto de traseira alta. 1,8 × 3,8 m.",
+      "sizeM": {
+        "x": 2.1,
+        "y": 1.5,
+        "z": 3.9
+      },
+      "meshes": 23,
+      "params": {
+        "color": {
+          "default": "#3d6fb6",
+          "description": "cor da carroceria"
+        }
+      },
+      "variants": [
+        "vermelho",
+        "amarelo",
+        "preto"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": true,
+      "stages": null
+    },
+    {
+      "id": "onibus",
+      "category": "veiculos",
+      "label": "Ônibus",
+      "description": "Ônibus urbano com janelões, letreiro e portas. 2,5 × 10 m, 3,1 m de altura.",
+      "sizeM": {
+        "x": 2.6,
+        "y": 3.3,
+        "z": 10.1
+      },
+      "meshes": 36,
+      "params": {
+        "color": {
+          "default": "#f2c94c",
+          "description": "cor da carroceria"
+        },
+        "stripe": {
+          "default": "#3d6fb6",
+          "description": "cor da faixa"
+        }
+      },
+      "variants": [
+        "vermelho",
+        "azul",
+        "verde"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": true,
+      "stages": null
+    },
+    {
+      "id": "caminhao_cacamba",
+      "category": "veiculos",
+      "label": "Caminhão caçamba",
+      "description": "Caminhão basculante para terra e entulho. setProgress(0..1) levanta a caçamba. 2,5 × 10 m.",
+      "sizeM": {
+        "x": 2.6,
+        "y": 2.9,
+        "z": 9.1
+      },
+      "meshes": 31,
+      "params": {
+        "cab": {
+          "default": "#f28c28",
+          "description": "cor da cabine"
+        },
+        "bed": {
+          "default": "#7b8794",
+          "description": "cor da caçamba"
+        },
+        "tilt": {
+          "default": 0,
+          "description": "inclinação inicial da caçamba 0..1"
+        }
+      },
+      "variants": [
+        "amarelo",
+        "azul",
+        "levantada"
+      ],
+      "setProgress": true,
+      "update": false,
+      "wheels": true,
+      "stages": null
+    },
+    {
+      "id": "betoneira",
+      "category": "veiculos",
+      "label": "Caminhão betoneira",
+      "description": "Caminhão de concreto com tambor listrado que gira (updateScenery(obj, t)). 2,5 × 9 m.",
+      "sizeM": {
+        "x": 2.6,
+        "y": 4.4,
+        "z": 9.5
+      },
+      "meshes": 34,
+      "params": {
+        "cab": {
+          "default": "#f2f2f2",
+          "description": "cor da cabine"
+        },
+        "drum": {
+          "default": "#f28c28",
+          "description": "cor do tambor"
+        }
+      },
+      "variants": [
+        "verde",
+        "azul"
+      ],
+      "setProgress": false,
+      "update": true,
+      "wheels": true,
+      "stages": null
+    },
+    {
+      "id": "rolo_compressor",
+      "category": "veiculos",
+      "label": "Rolo compressor",
+      "description": "Máquina de compactar asfalto e solo, com dois tambores de aço e cabine aberta. 1,9 × 3,6 m. Os tambores giram com rollWheels().",
+      "sizeM": {
+        "x": 1.7,
+        "y": 3.1,
+        "z": 4.4
+      },
+      "meshes": 15,
+      "params": {
+        "color": {
+          "default": "#f2c94c",
+          "description": "cor do corpo"
+        }
+      },
+      "variants": [
+        "laranja",
+        "azul"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": true,
+      "stages": null
+    },
+    {
+      "id": "vibroacabadora",
+      "category": "veiculos",
+      "label": "Vibroacabadora",
+      "description": "Máquina que espalha o asfalto quente em camada uniforme: caçamba na frente (recebe a massa do caminhão), esteiras e a régua alisadora atrás. 2,9 × 6 m.",
+      "sizeM": {
+        "x": 3.4,
+        "y": 3.2,
+        "z": 6
+      },
+      "meshes": 26,
+      "params": {
+        "color": {
+          "default": "#f2c94c",
+          "description": "cor do corpo"
+        }
+      },
+      "variants": [
+        "laranja",
+        "azul"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "espargidor",
+      "category": "veiculos",
+      "label": "Caminhão espargidor",
+      "description": "Caminhão-tanque que espalha o ligante asfáltico líquido (imprimação e pintura de ligação). setProgress(1) liga o jato e deixa a faixa escura atrás. 2,6 × 10 m.",
+      "sizeM": {
+        "x": 2.9,
+        "y": 3.3,
+        "z": 17.3
+      },
+      "meshes": 41,
+      "params": {
+        "cab": {
+          "default": "#f2f2f2",
+          "description": "cor da cabine"
+        },
+        "tank": {
+          "default": "#2f3338",
+          "description": "cor do tanque"
+        },
+        "spraying": {
+          "default": false,
+          "description": "jato ligado"
+        }
+      },
+      "variants": [
+        "jorrando",
+        "vermelho"
+      ],
+      "setProgress": true,
+      "update": false,
+      "wheels": true,
+      "stages": null
+    },
+    {
+      "id": "cone",
+      "category": "objetos",
+      "label": "Cone de trânsito",
+      "description": "Cone laranja com faixa branca e base quadrada. 0,6 m.",
+      "sizeM": {
+        "x": 0.4,
+        "y": 0.7,
+        "z": 0.4
+      },
+      "meshes": 3,
+      "params": {
+        "color": {
+          "default": "#f28c28",
+          "description": "cor do cone"
+        }
+      },
+      "variants": [
+        "amarelo"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "barreira",
+      "category": "objetos",
+      "label": "Barreira de obra",
+      "description": "Cavalete com tábuas listradas vermelho/branco para isolar uma área. 2 × 1 m.",
+      "sizeM": {
+        "x": 2,
+        "y": 1.1,
+        "z": 0.7
+      },
+      "meshes": 19,
+      "params": {
+        "length": {
+          "default": 2,
+          "description": "comprimento"
+        }
+      },
+      "variants": [
+        "longa"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "pilha_tijolos",
+      "category": "objetos",
+      "label": "Pilha de tijolos",
+      "description": "Pilha de tijolos sobre um pallet de madeira. 1,2 × 0,8 m, 0,8 m de altura.",
+      "sizeM": {
+        "x": 1.2,
+        "y": 0.8,
+        "z": 0.9
+      },
+      "meshes": 73,
+      "params": {
+        "brick": {
+          "default": "#b8573b",
+          "description": "cor dos tijolos"
+        },
+        "rows": {
+          "default": 6,
+          "description": "fileiras de altura"
+        }
+      },
+      "variants": [
+        "baixa",
+        "clara"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "saco_cimento",
+      "category": "objetos",
+      "label": "Sacos de cimento",
+      "description": "Pilha de sacos de cimento com etiqueta azul. 0,6 m de lado.",
+      "sizeM": {
+        "x": 1.3,
+        "y": 0.4,
+        "z": 0.4
+      },
+      "meshes": 12,
+      "params": {
+        "count": {
+          "default": 6,
+          "description": "quantidade de sacos (1 a 12)"
+        }
+      },
+      "variants": [
+        "um",
+        "muitos"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "carrinho_mao",
+      "category": "objetos",
+      "label": "Carrinho de mão",
+      "description": "Carrinho de obra com caçamba, uma roda e dois cabos. 0,7 × 1,5 m. A roda gira com rollWheels().",
+      "sizeM": {
+        "x": 0.7,
+        "y": 0.7,
+        "z": 2.1
+      },
+      "meshes": 8,
+      "params": {
+        "color": {
+          "default": "#f2c94c",
+          "description": "cor da caçamba"
+        }
+      },
+      "variants": [
+        "azul",
+        "vermelho"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": true,
+      "stages": null
+    },
+    {
+      "id": "escada",
+      "category": "objetos",
+      "label": "Escada de mão",
+      "description": "Escada de madeira inclinada (encostada). 2,4 m.",
+      "sizeM": {
+        "x": 0.6,
+        "y": 2.4,
+        "z": 0.7
+      },
+      "meshes": 8,
+      "params": {
+        "height": {
+          "default": 2.4,
+          "description": "altura"
+        }
+      },
+      "variants": [
+        "alta"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "poste_luz",
+      "category": "objetos",
+      "label": "Poste de luz",
+      "description": "Poste de rua com braço e lâmpada acesa. 6 m.",
+      "sizeM": {
+        "x": 0.3,
+        "y": 6,
+        "z": 1.5
+      },
+      "meshes": 4,
+      "params": {
+        "height": {
+          "default": 6,
+          "description": "altura"
+        },
+        "color": {
+          "default": "#7b8794",
+          "description": "cor do poste"
+        }
+      },
+      "variants": [
+        "baixo"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "semaforo",
+      "category": "objetos",
+      "label": "Semáforo",
+      "description": "Semáforo de poste com três luzes; escolha qual está acesa.",
+      "sizeM": {
+        "x": 0.4,
+        "y": 3.9,
+        "z": 0.5
+      },
+      "meshes": 5,
+      "params": {
+        "state": {
+          "default": "vermelho",
+          "description": "'vermelho' | 'amarelo' | 'verde'"
+        }
+      },
+      "variants": [
+        "amarelo",
+        "verde"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "placa_pare",
+      "category": "objetos",
+      "label": "Placa PARE",
+      "description": "Placa octogonal vermelha em poste. 2,4 m.",
+      "sizeM": {
+        "x": 1.2,
+        "y": 2.9,
+        "z": 0.1
+      },
+      "meshes": 3,
+      "params": {},
+      "variants": [],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "banco",
+      "category": "objetos",
+      "label": "Banco de praça",
+      "description": "Banco de madeira com pés de ferro. 1,6 × 0,6 m.",
+      "sizeM": {
+        "x": 1.6,
+        "y": 1,
+        "z": 0.6
+      },
+      "meshes": 9,
+      "params": {
+        "color": {
+          "default": "#a9743f",
+          "description": "cor da madeira"
+        }
+      },
+      "variants": [
+        "verde"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "cerca",
+      "category": "objetos",
+      "label": "Cerca de madeira",
+      "description": "Trecho de cerca de madeira com mourões e duas travas. 4 m (ajustável).",
+      "sizeM": {
+        "x": 4.1,
+        "y": 1,
+        "z": 0.1
+      },
+      "meshes": 11,
+      "params": {
+        "length": {
+          "default": 4,
+          "description": "comprimento"
+        },
+        "color": {
+          "default": "#a9743f",
+          "description": "cor"
+        }
+      },
+      "variants": [
+        "branca"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "muro",
+      "category": "objetos",
+      "label": "Muro",
+      "description": "Trecho de muro de alvenaria com capeamento. 4 m de comprimento, 2,2 m de altura.",
+      "sizeM": {
+        "x": 4.1,
+        "y": 2.3,
+        "z": 0.3
+      },
+      "meshes": 3,
+      "params": {
+        "length": {
+          "default": 4,
+          "description": "comprimento"
+        },
+        "height": {
+          "default": 2.2,
+          "description": "altura"
+        },
+        "color": {
+          "default": "#e8dcc4",
+          "description": "cor do reboco"
+        }
+      },
+      "variants": [
+        "tijolo",
+        "cinza"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "hidrante",
+      "category": "objetos",
+      "label": "Hidrante",
+      "description": "Hidrante vermelho de calçada. 0,7 m.",
+      "sizeM": {
+        "x": 0.4,
+        "y": 0.8,
+        "z": 0.3
+      },
+      "meshes": 5,
+      "params": {},
+      "variants": [],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "lixeira",
+      "category": "objetos",
+      "label": "Lixeira",
+      "description": "Lixeira de rua com tampa. 0,9 m.",
+      "sizeM": {
+        "x": 0.6,
+        "y": 0.9,
+        "z": 0.7
+      },
+      "meshes": 2,
+      "params": {
+        "color": {
+          "default": "#4f9d5a",
+          "description": "cor"
+        }
+      },
+      "variants": [
+        "azul",
+        "amarela"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "caixa_madeira",
+      "category": "objetos",
+      "label": "Caixote de madeira",
+      "description": "Caixote de madeira com travessas em X. 0,8 m.",
+      "sizeM": {
+        "x": 0.9,
+        "y": 0.8,
+        "z": 0.9
+      },
+      "meshes": 7,
+      "params": {
+        "size": {
+          "default": 0.8,
+          "description": "lado"
+        }
+      },
+      "variants": [
+        "grande"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "bueiro",
+      "category": "objetos",
+      "label": "Bueiro (boca de lobo)",
+      "description": "Grade de escoamento de água da chuva, ao nível do asfalto junto ao meio-fio. 0,9 × 0,5 m.",
+      "sizeM": {
+        "x": 0.9,
+        "y": 0.1,
+        "z": 0.6
+      },
+      "meshes": 9,
+      "params": {},
+      "variants": [],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "casa_obra",
+      "category": "obra",
+      "label": "Casa em obra",
+      "description": "Casa sendo construída: setProgress(p) mostra fundação (0–0.12), pilares (–0.25), paredes de tijolo (–0.55), laje (–0.65), madeiramento (–0.82) e telhas (–1). 6 × 7 m.",
+      "sizeM": {
+        "x": 6.8,
+        "y": 5,
+        "z": 7.9
+      },
+      "meshes": 61,
+      "params": {
+        "progress": {
+          "default": 1,
+          "description": "etapa inicial 0..1 (depois use setProgress)"
+        },
+        "brick": {
+          "default": "#b8573b",
+          "description": "cor dos tijolos"
+        },
+        "tile": {
+          "default": "#d2693a",
+          "description": "cor das telhas"
+        }
+      },
+      "variants": [
+        "fundacao",
+        "paredes",
+        "madeiramento"
+      ],
+      "setProgress": true,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "predio_estrutura",
+      "category": "obra",
+      "label": "Estrutura de prédio",
+      "description": "Esqueleto de concreto (pilares e lajes) subindo andar por andar: setProgress(p) constrói de 0 a todos os andares. 15 × 10 m, andares de 3,2 m.",
+      "sizeM": {
+        "x": 16.2,
+        "y": 26.4,
+        "z": 11.2
+      },
+      "meshes": 105,
+      "params": {
+        "floors": {
+          "default": 8,
+          "description": "número de andares"
+        },
+        "progress": {
+          "default": 1,
+          "description": "etapa inicial 0..1"
+        },
+        "concrete": {
+          "default": "#b9b9b4",
+          "description": "cor do concreto"
+        }
+      },
+      "variants": [
+        "baixo",
+        "meio"
+      ],
+      "setProgress": true,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "rua_camadas",
+      "category": "obra",
+      "label": "Corte da pavimentação",
+      "description": "Bloco em corte mostrando as camadas de uma rua: solo compactado, sub-base de brita, base, asfalto base e capa de rolamento (+ faixa). setProgress(p) empilha as camadas. 8 × 8 m, 1,35 m de altura.",
+      "sizeM": {
+        "x": 8,
+        "y": 1.4,
+        "z": 8
+      },
+      "meshes": 6,
+      "params": {
+        "progress": {
+          "default": 1,
+          "description": "etapa inicial 0..1"
+        }
+      },
+      "variants": [
+        "subleito",
+        "quase"
+      ],
+      "setProgress": true,
+      "update": false,
+      "wheels": false,
+      "stages": [
+        "solo compactado (subleito)",
+        "sub-base de brita",
+        "base de brita graduada",
+        "asfalto base (binder)",
+        "capa de rolamento (asfalto)"
+      ]
+    },
+    {
+      "id": "corte_terreno",
+      "category": "obra",
+      "label": "Corte do terreno",
+      "description": "Bloco de solo em corte com grama, terra, argila e rocha — para explicar fundações e muros de arrimo. setProgress(p) revela as camadas de baixo para cima. 8 × 6 m, 2,4 m de altura.",
+      "sizeM": {
+        "x": 8,
+        "y": 2.4,
+        "z": 6
+      },
+      "meshes": 4,
+      "params": {
+        "progress": {
+          "default": 1,
+          "description": "etapa inicial 0..1"
+        }
+      },
+      "variants": [
+        "so_rocha"
+      ],
+      "setProgress": true,
+      "update": false,
+      "wheels": false,
+      "stages": [
+        "rocha",
+        "argila",
+        "terra",
+        "grama"
+      ]
+    },
+    {
+      "id": "guindaste",
+      "category": "obra",
+      "label": "Guindaste de obra",
+      "description": "Guindaste de torre com lança, contrapeso, cabo e gancho. setProgress(p) gira a lança uma volta. Torre de 22 m.",
+      "sizeM": {
+        "x": 21,
+        "y": 26.9,
+        "z": 4
+      },
+      "meshes": 65,
+      "params": {
+        "height": {
+          "default": 22,
+          "description": "altura da torre"
+        },
+        "jib": {
+          "default": 16,
+          "description": "comprimento da lança"
+        },
+        "angle": {
+          "default": 0,
+          "description": "giro inicial da lança (radianos)"
+        }
+      },
+      "variants": [
+        "baixo"
+      ],
+      "setProgress": true,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "forma",
+      "category": "formas",
+      "label": "Forma livre",
+      "description": "Peça básica para montar qualquer coisa (tanque, bloco, pilar, bola, lâmpada, quadro...). Empilhe várias para criar máquinas, diagramas e cenários novos. Combine com \"anim\", \"opacidade\" e \"fluxos\".",
+      "sizeM": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "meshes": 1,
+      "params": {
+        "tipo": {
+          "default": "caixa",
+          "description": "'caixa' | 'cilindro' | 'esfera' | 'cone' | 'toro' | 'capsula'"
+        },
+        "tamanho": {
+          "default": [
+            1,
+            1,
+            1
+          ],
+          "description": "[largura, altura, profundidade] em metros"
+        },
+        "cor": {
+          "default": "#8a95a3",
+          "description": "cor"
+        },
+        "brilho": {
+          "default": false,
+          "description": "superfície metálica/brilhante"
+        },
+        "emissivo": {
+          "default": false,
+          "description": "brilha sozinha (lâmpada, brasa, tela)"
+        },
+        "apoiada": {
+          "default": true,
+          "description": "true: a base fica no chão (y=0); false: centrada em y=0"
+        }
+      },
+      "variants": [
+        "tanque",
+        "bola",
+        "lampada"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "tubo",
+      "category": "formas",
+      "label": "Tubo / cano",
+      "description": "Tubulação por pontos [x,y,z] (cano, fio, mangueira, veia). Use junto de um fluxo com \"caminho\" igual aos pontos para mostrar o que passa dentro, e \"opacidade\" 0.35 para enxergar o fluxo.",
+      "sizeM": {
+        "x": 3.3,
+        "y": 2.3,
+        "z": 0.3
+      },
+      "meshes": 5,
+      "params": {
+        "pontos": {
+          "default": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              2,
+              0
+            ],
+            [
+              3,
+              2,
+              0
+            ]
+          ],
+          "description": "lista de pontos [x,y,z] (relativos ao objeto)"
+        },
+        "raio": {
+          "default": 0.15,
+          "description": "raio do tubo"
+        },
+        "cor": {
+          "default": "#9aa7b5",
+          "description": "cor"
+        }
+      },
+      "variants": [
+        "vermelho",
+        "azul",
+        "cobre"
+      ],
+      "setProgress": false,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "engrenagem",
+      "category": "maquinas",
+      "label": "Engrenagem",
+      "description": "Engrenagem que gira sozinha (eixo para a câmera, +Z). Use duas lado a lado com velocidades opostas e \"fase\" diferente para mostrar transmissão. update(t).",
+      "sizeM": {
+        "x": 2.4,
+        "y": 2.4,
+        "z": 0.4
+      },
+      "meshes": 14,
+      "params": {
+        "dentes": {
+          "default": 12,
+          "description": "número de dentes"
+        },
+        "raio": {
+          "default": 1,
+          "description": "raio"
+        },
+        "cor": {
+          "default": "#c9a227",
+          "description": "cor"
+        },
+        "velocidade": {
+          "default": 60,
+          "description": "graus por segundo (negativo = outro sentido)"
+        },
+        "fase": {
+          "default": 0,
+          "description": "ângulo inicial em graus"
+        }
+      },
+      "variants": [
+        "prata",
+        "vermelha"
+      ],
+      "setProgress": false,
+      "update": true,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "helice",
+      "category": "maquinas",
+      "label": "Hélice / ventilador",
+      "description": "Hélice, pá de ventilador ou turbina que gira sozinha (eixo +Z). update(t).",
+      "sizeM": {
+        "x": 2.5,
+        "y": 2.4,
+        "z": 0.4
+      },
+      "meshes": 5,
+      "params": {
+        "pas": {
+          "default": 4,
+          "description": "número de pás"
+        },
+        "raio": {
+          "default": 1.2,
+          "description": "raio"
+        },
+        "cor": {
+          "default": "#e8eef5",
+          "description": "cor das pás"
+        },
+        "velocidade": {
+          "default": 360,
+          "description": "graus por segundo"
+        }
+      },
+      "variants": [
+        "turbina",
+        "ventilador"
+      ],
+      "setProgress": false,
+      "update": true,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "esteira",
+      "category": "maquinas",
+      "label": "Esteira transportadora",
+      "description": "Esteira com material andando sobre ela (pedra, areia, grão, carvão...). Pode ser inclinada. update(t).",
+      "sizeM": {
+        "x": 6.4,
+        "y": 1.1,
+        "z": 1.1
+      },
+      "meshes": 9,
+      "params": {
+        "comprimento": {
+          "default": 6,
+          "description": "comprimento em metros"
+        },
+        "largura": {
+          "default": 0.9,
+          "description": "largura"
+        },
+        "inclinacao": {
+          "default": 0,
+          "description": "graus de subida"
+        },
+        "material": {
+          "default": "pedra",
+          "description": "'pedra' | 'brita' | 'areia' | 'terra' | 'concreto' | 'grao' | 'carvao'"
+        },
+        "velocidade": {
+          "default": 1,
+          "description": "velocidade (1 = normal)"
+        }
+      },
+      "variants": [
+        "subindo",
+        "graos",
+        "areia"
+      ],
+      "setProgress": false,
+      "update": true,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "monte",
+      "category": "maquinas",
+      "label": "Monte de material",
+      "description": "Pilha de pedra, areia, terra, grão, carvão ou asfalto. setProgress(0..1) faz o monte CRESCER (combine com um fluxo caindo em cima).",
+      "sizeM": {
+        "x": 3.2,
+        "y": 1,
+        "z": 3.1
+      },
+      "meshes": 10,
+      "params": {
+        "material": {
+          "default": "pedra",
+          "description": "'pedra' | 'brita' | 'areia' | 'terra' | 'concreto' | 'grao' | 'carvao' | 'asfalto'"
+        },
+        "raio": {
+          "default": 1.6,
+          "description": "raio da base"
+        },
+        "progress": {
+          "default": 1,
+          "description": "tamanho inicial 0..1"
+        }
+      },
+      "variants": [
+        "areia",
+        "terra",
+        "grao",
+        "pequeno"
+      ],
+      "setProgress": true,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "tanque",
+      "category": "maquinas",
+      "label": "Tanque / silo transparente",
+      "description": "Reservatório (água, leite, grão, combustível) com casca transparente e o conteúdo visível. setProgress(0..1) muda o NÍVEL (encher/esvaziar).",
+      "sizeM": {
+        "x": 2.6,
+        "y": 3.1,
+        "z": 2.6
+      },
+      "meshes": 4,
+      "params": {
+        "raio": {
+          "default": 1.2,
+          "description": "raio"
+        },
+        "altura": {
+          "default": 3,
+          "description": "altura"
+        },
+        "liquido": {
+          "default": "#3fa5e0",
+          "description": "cor do conteúdo"
+        },
+        "casca": {
+          "default": "#cfd8e3",
+          "description": "cor da casca"
+        },
+        "nivel": {
+          "default": 0.6,
+          "description": "nível inicial 0..1"
+        }
+      },
+      "variants": [
+        "agua",
+        "leite",
+        "oleo",
+        "grao"
+      ],
+      "setProgress": true,
+      "update": false,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "misturador",
+      "category": "maquinas",
+      "label": "Misturador / tambor",
+      "description": "Tanque aberto com pás girando e o conteúdo sendo misturado (massa, tinta, concreto, comida). Visto de cima fica bonito. update(t).",
+      "sizeM": {
+        "x": 2.8,
+        "y": 2.3,
+        "z": 2.8
+      },
+      "meshes": 16,
+      "params": {
+        "raio": {
+          "default": 1.4,
+          "description": "raio"
+        },
+        "conteudo": {
+          "default": "#9a8f7a",
+          "description": "cor da mistura"
+        },
+        "pas": {
+          "default": "#f2c94c",
+          "description": "cor das pás"
+        },
+        "velocidade": {
+          "default": 90,
+          "description": "graus por segundo"
+        }
+      },
+      "variants": [
+        "tinta",
+        "concreto",
+        "massa"
+      ],
+      "setProgress": false,
+      "update": true,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "escavadeira",
+      "category": "maquinas",
+      "label": "Escavadeira",
+      "description": "Escavadeira que cava, gira e despeja em ciclo (update). Para mostrar terraplenagem, mineração, obra. Cava na frente (+Z) e despeja à esquerda (-X, uns 5 m); ponha um \"monte\" lá. Use \"fase\" = -(início da cena) para o ciclo começar com a cena.",
+      "sizeM": {
+        "x": 3.6,
+        "y": 3.9,
+        "z": 10.2
+      },
+      "meshes": 30,
+      "params": {
+        "cor": {
+          "default": "#f2c94c",
+          "description": "cor do corpo"
+        },
+        "ciclo": {
+          "default": 6,
+          "description": "segundos por ciclo de escavação"
+        },
+        "fase": {
+          "default": 0,
+          "description": "segundos de deslocamento do ciclo (use -início da cena)"
+        }
+      },
+      "variants": [
+        "laranja",
+        "rapida"
+      ],
+      "setProgress": false,
+      "update": true,
+      "wheels": false,
+      "stages": null
+    },
+    {
+      "id": "fabrica_processo",
+      "category": "maquinas",
+      "label": "Fábrica de processamento",
+      "description": "Linha de processamento animada: 3 silos de matéria-prima, esteira subindo até um tambor rotativo aquecido (com chama), chaminé soltando fumaça e torre com bica de descarga. Serve para usinas, fábricas de cimento, de ração, de plástico etc. update(t). 22 × 14 m. Caminhão no ponto [9.5, 0, 3.6] (giro 0) recebe a carga.",
+      "sizeM": {
+        "x": 25.2,
+        "y": 22,
+        "z": 15
+      },
+      "meshes": 81,
+      "params": {
+        "material": {
+          "default": "pedra",
+          "description": "material nas esteiras: 'pedra' | 'areia' | 'grao' | 'carvao'"
+        },
+        "carregando": {
+          "default": true,
+          "description": "bica despejando material para o caminhão"
+        },
+        "velocidade": {
+          "default": 1,
+          "description": "velocidade da linha"
+        }
+      },
+      "variants": [
+        "graos",
+        "areia"
+      ],
+      "setProgress": false,
+      "update": true,
+      "wheels": false,
+      "stages": null
+    }
+  ],
+  "expressions": [
+    "neutral",
+    "happy",
+    "laugh",
+    "sad",
+    "angry",
+    "surprised",
+    "worried",
+    "thinking",
+    "sleepy"
+  ],
+  "options": {
+    "hairStyles": [
+      "bald",
+      "short",
+      "fringe",
+      "long",
+      "ponytail",
+      "bun",
+      "curly",
+      "sides"
+    ],
+    "hatTypes": [
+      "none",
+      "hardhat",
+      "cap"
+    ],
+    "heldItems": [
+      "none",
+      "hammer",
+      "clipboard",
+      "shovel"
+    ],
+    "defaultConfig": {
+      "name": "pessoa",
+      "role": "",
+      "skin": "#e8b58a",
+      "height": 1,
+      "build": 1,
+      "headScale": 1,
+      "top": {
+        "color": "#4a90d9",
+        "stripe": null,
+        "sleeves": "short"
+      },
+      "bottom": {
+        "color": "#3b4a6b",
+        "type": "pants"
+      },
+      "shoes": "#4a3728",
+      "hair": {
+        "style": "short",
+        "color": "#3b2a1e"
+      },
+      "hat": {
+        "type": "none",
+        "color": "#f5c518"
+      },
+      "face": {
+        "brow": "#2b1d14",
+        "mustache": false,
+        "beard": false,
+        "glasses": false,
+        "facialHairColor": "#2b1d14"
+      },
+      "held": {
+        "R": "none",
+        "L": "none"
+      },
+      "stoop": 0
+    }
+  }
+}

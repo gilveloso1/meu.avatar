@@ -1,0 +1,834 @@
+{
+  "versao": 1,
+  "titulo": "Como uma casa fica de pé",
+  "formato": {
+    "largura": 1080,
+    "altura": 1920,
+    "fps": 30
+  },
+  "duracao": 32.5,
+  "audio": "narracao.wav",
+  "palavras": "palavras.json",
+  "legendas": {
+    "ativo": true
+  },
+  "ambiente": {
+    "horario": "dia",
+    "chao": "grama"
+  },
+  "cenas": [
+    {
+      "inicio": 0,
+      "fim": 5.6,
+      "objetos": [
+        {
+          "id": "casa",
+          "asset": "casa_simples",
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "arv1",
+          "asset": "arvore_redonda",
+          "pos": [
+            -8,
+            0,
+            -4
+          ],
+          "params": {
+            "seed": 2
+          }
+        },
+        {
+          "id": "arv2",
+          "asset": "arvore_redonda",
+          "pos": [
+            8.5,
+            0,
+            -2
+          ],
+          "params": {
+            "seed": 5
+          }
+        }
+      ],
+      "personagens": [
+        {
+          "id": "guia",
+          "preset": "construtor",
+          "pos": [
+            3.5,
+            0,
+            6.5
+          ],
+          "giro": 200,
+          "viraPara": [
+            {
+              "em": 0,
+              "alvo": "camera"
+            }
+          ],
+          "acoes": [
+            {
+              "clip": "talk",
+              "de": 0,
+              "ate": 5.6,
+              "fala": true,
+              "expressao": "surprised"
+            }
+          ]
+        }
+      ],
+      "camera": {
+        "tipo": "enquadrar",
+        "alvo": "casa",
+        "plano": "geral",
+        "angulo": 25,
+        "elevacao": 14,
+        "deriva": -18
+      },
+      "textos": [
+        {
+          "texto": "POR QUE ELA NÃO AFUNDA?",
+          "de": 0.2,
+          "ate": 5.3,
+          "estilo": "titulo"
+        }
+      ]
+    },
+    {
+      "inicio": 5.6,
+      "fim": 8.3,
+      "transicao": "flash",
+      "objetos": [
+        {
+          "id": "pilha",
+          "asset": "pilha_tijolos",
+          "pos": [
+            -3.2,
+            0,
+            1.5
+          ],
+          "giro": 20,
+          "aparece": 5.9
+        },
+        {
+          "id": "sacos",
+          "asset": "saco_cimento",
+          "pos": [
+            3.2,
+            0,
+            1.2
+          ],
+          "giro": -30,
+          "aparece": 6.2
+        },
+        {
+          "id": "cone1",
+          "asset": "cone",
+          "pos": [
+            -1.5,
+            0,
+            3.2
+          ],
+          "aparece": 6.5
+        },
+        {
+          "id": "arv1",
+          "asset": "arvore_redonda",
+          "pos": [
+            -8,
+            0,
+            -4
+          ],
+          "params": {
+            "seed": 2
+          }
+        }
+      ],
+      "personagens": [
+        {
+          "id": "guia",
+          "preset": "construtor",
+          "pos": [
+            0,
+            0,
+            2
+          ],
+          "giro": 0,
+          "viraPara": [
+            {
+              "em": 5.6,
+              "alvo": "camera"
+            }
+          ],
+          "acoes": [
+            {
+              "clip": "point",
+              "de": 6.3,
+              "ate": 8.3,
+              "params": {
+                "dir": "down"
+              }
+            },
+            {
+              "clip": "talk",
+              "de": 5.6,
+              "ate": 8.3,
+              "fala": true,
+              "camada": 1,
+              "mascara": [
+                "head",
+                "face",
+                "armL"
+              ]
+            }
+          ]
+        }
+      ],
+      "camera": {
+        "tipo": "enquadrar",
+        "alvo": "guia",
+        "plano": "medio",
+        "angulo": 12,
+        "elevacao": 8,
+        "aproxima": 0.8
+      }
+    },
+    {
+      "inicio": 8.3,
+      "fim": 13,
+      "transicao": "flash",
+      "objetos": [
+        {
+          "id": "casa",
+          "asset": "casa_obra",
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "etapa": [
+            [
+              8.3,
+              0
+            ],
+            [
+              13,
+              0.1
+            ]
+          ]
+        },
+        {
+          "id": "arv1",
+          "asset": "arvore_redonda",
+          "pos": [
+            -8,
+            0,
+            -4
+          ],
+          "params": {
+            "seed": 2
+          }
+        },
+        {
+          "id": "pilha",
+          "asset": "pilha_tijolos",
+          "pos": [
+            -5,
+            0,
+            5
+          ],
+          "giro": 30
+        },
+        {
+          "id": "cone1",
+          "asset": "cone",
+          "pos": [
+            4.5,
+            0,
+            5.5
+          ]
+        },
+        {
+          "id": "bet",
+          "asset": "betoneira",
+          "pos": [
+            7.5,
+            0,
+            0.5
+          ],
+          "giro": -90
+        }
+      ],
+      "personagens": [
+        {
+          "id": "eng",
+          "preset": "engenheira",
+          "pos": [
+            -3.5,
+            0,
+            6
+          ],
+          "giro": 160,
+          "viraPara": [
+            {
+              "em": 8.3,
+              "alvo": "camera"
+            }
+          ],
+          "acoes": [
+            {
+              "clip": "point",
+              "de": 8.7,
+              "ate": 13,
+              "params": {
+                "dir": "down"
+              }
+            },
+            {
+              "clip": "talk",
+              "de": 8.3,
+              "ate": 13,
+              "fala": true,
+              "camada": 1,
+              "mascara": [
+                "head",
+                "face",
+                "armL"
+              ]
+            }
+          ]
+        }
+      ],
+      "camera": {
+        "tipo": "enquadrar",
+        "alvo": "casa",
+        "plano": "geral",
+        "angulo": -35,
+        "elevacao": 40,
+        "deriva": 25
+      },
+      "elementos": [
+        {
+          "tipo": "seta",
+          "direcao": "baixo",
+          "ancora": "casa",
+          "alturaRel": 0.55,
+          "de": 8.8,
+          "ate": 12.6,
+          "tamanho": 0.2,
+          "pulsa": true
+        }
+      ],
+      "fluxos": [
+        {
+          "material": "concreto",
+          "origem": {
+            "ancora": "bet",
+            "desloca": [
+              0,
+              2.3,
+              -4.9
+            ]
+          },
+          "destino": [
+            1.2,
+            0.5,
+            0.2
+          ],
+          "taxa": 40,
+          "de": 9,
+          "ate": 12.8,
+          "dispersao": 0.15,
+          "espalha": 1.4
+        }
+      ]
+    },
+    {
+      "inicio": 13,
+      "fim": 17,
+      "transicao": "flash",
+      "objetos": [
+        {
+          "id": "casa",
+          "asset": "casa_obra",
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "etapa": [
+            [
+              13,
+              0.1
+            ],
+            [
+              17,
+              0.27
+            ]
+          ]
+        },
+        {
+          "id": "arv1",
+          "asset": "arvore_redonda",
+          "pos": [
+            -8,
+            0,
+            -4
+          ],
+          "params": {
+            "seed": 2
+          }
+        },
+        {
+          "id": "bet",
+          "asset": "betoneira",
+          "pos": [
+            9,
+            0,
+            2
+          ],
+          "giro": -110
+        }
+      ],
+      "personagens": [
+        {
+          "id": "serv",
+          "preset": "servente",
+          "pos": [
+            -4.5,
+            0,
+            5
+          ],
+          "giro": 150,
+          "viraPara": [
+            {
+              "em": 13,
+              "alvo": "casa"
+            }
+          ],
+          "acoes": [
+            {
+              "clip": "dig",
+              "de": 13,
+              "ate": 17
+            }
+          ]
+        }
+      ],
+      "camera": {
+        "tipo": "enquadrar",
+        "alvo": "casa",
+        "plano": "medio",
+        "angulo": 40,
+        "elevacao": 12,
+        "aproxima": 0.8
+      },
+      "elementos": [
+        {
+          "tipo": "icone",
+          "icone": "v",
+          "ancora": "casa",
+          "alturaRel": 0.45,
+          "dx": 0.18,
+          "de": 14.4,
+          "ate": 16.8,
+          "tamanho": 0.2
+        }
+      ],
+      "fluxos": [
+        {
+          "material": "concreto",
+          "origem": {
+            "ancora": "bet",
+            "desloca": [
+              0,
+              2.3,
+              -4.9
+            ]
+          },
+          "destino": [
+            2.4,
+            1.6,
+            0
+          ],
+          "taxa": 30,
+          "de": 13.5,
+          "ate": 16.5,
+          "espalha": 0.5
+        }
+      ]
+    },
+    {
+      "inicio": 17,
+      "fim": 22.2,
+      "transicao": "flash",
+      "objetos": [
+        {
+          "id": "casa",
+          "asset": "casa_obra",
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "etapa": [
+            [
+              17,
+              0.27
+            ],
+            [
+              22.2,
+              0.56
+            ]
+          ]
+        },
+        {
+          "id": "arv1",
+          "asset": "arvore_redonda",
+          "pos": [
+            -8,
+            0,
+            -4
+          ],
+          "params": {
+            "seed": 2
+          }
+        },
+        {
+          "id": "carrinho",
+          "asset": "carrinho_mao",
+          "pos": [
+            -5,
+            0,
+            4
+          ],
+          "giro": 60
+        }
+      ],
+      "personagens": [
+        {
+          "id": "guia",
+          "preset": "construtor",
+          "pos": [
+            -3.5,
+            0,
+            5.5
+          ],
+          "giro": 160,
+          "viraPara": [
+            {
+              "em": 17,
+              "alvo": "camera"
+            }
+          ],
+          "acoes": [
+            {
+              "clip": "hammer",
+              "de": 17,
+              "ate": 22.2
+            }
+          ]
+        }
+      ],
+      "camera": {
+        "tipo": "enquadrar",
+        "alvo": "casa",
+        "plano": "geral",
+        "angulo": 30,
+        "elevacao": 18,
+        "deriva": -30
+      },
+      "textos": [
+        {
+          "texto": "ELAS SÓ DIVIDEM",
+          "de": 19.8,
+          "ate": 22,
+          "estilo": "destaque"
+        }
+      ],
+      "elementos": [
+        {
+          "tipo": "icone",
+          "icone": "x",
+          "ancora": "casa",
+          "alturaRel": 0.4,
+          "de": 19.9,
+          "ate": 22,
+          "tamanho": 0.24
+        }
+      ],
+      "efeitos": [
+        {
+          "tipo": "pretoebranco",
+          "de": 19.8,
+          "ate": 22.2,
+          "zoom": 1.1
+        }
+      ],
+      "fluxos": [
+        {
+          "material": "poeira",
+          "origem": [
+            -1,
+            1.2,
+            3.4
+          ],
+          "taxa": 8,
+          "de": 17,
+          "ate": 22
+        }
+      ]
+    },
+    {
+      "inicio": 22.2,
+      "fim": 25.3,
+      "transicao": "flash",
+      "objetos": [
+        {
+          "id": "casa",
+          "asset": "casa_obra",
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "etapa": [
+            [
+              22.2,
+              0.56
+            ],
+            [
+              25.3,
+              1
+            ]
+          ]
+        },
+        {
+          "id": "arv1",
+          "asset": "arvore_redonda",
+          "pos": [
+            -8,
+            0,
+            -4
+          ],
+          "params": {
+            "seed": 2
+          }
+        },
+        {
+          "id": "arv2",
+          "asset": "arvore_redonda",
+          "pos": [
+            8.5,
+            0,
+            -2
+          ],
+          "params": {
+            "seed": 5
+          }
+        }
+      ],
+      "personagens": [
+        {
+          "id": "eng",
+          "preset": "engenheira",
+          "pos": [
+            4,
+            0,
+            6.5
+          ],
+          "giro": 210,
+          "viraPara": [
+            {
+              "em": 22.2,
+              "alvo": "camera"
+            }
+          ],
+          "acoes": [
+            {
+              "clip": "point",
+              "de": 22.5,
+              "ate": 25.3,
+              "params": {
+                "dir": "up"
+              }
+            }
+          ]
+        }
+      ],
+      "camera": {
+        "tipo": "enquadrar",
+        "alvo": "casa",
+        "plano": "geral",
+        "angulo": -20,
+        "elevacao": 22,
+        "deriva": 40
+      },
+      "fluxos": [
+        {
+          "material": "poeira",
+          "origem": [
+            0,
+            3.2,
+            0
+          ],
+          "taxa": 8,
+          "de": 22.4,
+          "ate": 25.2,
+          "dispersao": 2.2
+        }
+      ]
+    },
+    {
+      "inicio": 25.3,
+      "fim": 29.1,
+      "transicao": "flash",
+      "objetos": [
+        {
+          "id": "casa",
+          "asset": "casa_simples",
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "arv1",
+          "asset": "arvore_redonda",
+          "pos": [
+            -8,
+            0,
+            -4
+          ],
+          "params": {
+            "seed": 2
+          }
+        }
+      ],
+      "personagens": [
+        {
+          "id": "morador",
+          "preset": "velhinho",
+          "pos": [
+            3.5,
+            0,
+            6.5
+          ],
+          "giro": 0,
+          "viraPara": [
+            {
+              "em": 25.3,
+              "alvo": "camera"
+            }
+          ],
+          "acoes": [
+            {
+              "clip": "think",
+              "de": 25.3,
+              "ate": 29.1
+            }
+          ]
+        }
+      ],
+      "camera": {
+        "tipo": "enquadrar",
+        "alvo": "morador",
+        "plano": "medio",
+        "angulo": 10,
+        "elevacao": 6,
+        "aproxima": 0.85
+      },
+      "fluxos": [
+        {
+          "material": "fumaca",
+          "origem": {
+            "ancora": "casa",
+            "desloca": [
+              1.8,
+              5.2,
+              -1.75
+            ]
+          },
+          "taxa": 6
+        }
+      ]
+    },
+    {
+      "inicio": 29.1,
+      "fim": 32.5,
+      "transicao": "flash",
+      "objetos": [
+        {
+          "id": "casa",
+          "asset": "casa_simples",
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "arv1",
+          "asset": "arvore_redonda",
+          "pos": [
+            -8,
+            0,
+            -4
+          ],
+          "params": {
+            "seed": 2
+          }
+        }
+      ],
+      "personagens": [
+        {
+          "id": "guia",
+          "preset": "construtor",
+          "pos": [
+            0,
+            0,
+            7
+          ],
+          "giro": 0,
+          "viraPara": [
+            {
+              "em": 29.1,
+              "alvo": "camera"
+            }
+          ],
+          "acoes": [
+            {
+              "clip": "talk",
+              "de": 29.1,
+              "ate": 32.5,
+              "fala": true,
+              "expressao": "happy"
+            }
+          ]
+        }
+      ],
+      "camera": {
+        "tipo": "enquadrar",
+        "alvo": "guia",
+        "plano": "medio",
+        "angulo": 0,
+        "elevacao": 6,
+        "aproxima": 0.85
+      },
+      "textos": [
+        {
+          "texto": "O QUE VOCÊ PENSAVA? COMENTA!",
+          "de": 29.3,
+          "ate": 32.5,
+          "estilo": "pergunta"
+        }
+      ]
+    }
+  ]
+}

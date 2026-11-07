@@ -1,0 +1,1822 @@
+[
+ {
+  "palavra": "A",
+  "inicio": 0.0,
+  "fim": 0.14
+ },
+ {
+  "palavra": "rua",
+  "inicio": 0.14,
+  "fim": 0.28
+ },
+ {
+  "palavra": "onde",
+  "inicio": 0.28,
+  "fim": 0.48
+ },
+ {
+  "palavra": "você",
+  "inicio": 0.48,
+  "fim": 0.76
+ },
+ {
+  "palavra": "mora",
+  "inicio": 0.76,
+  "fim": 1.22
+ },
+ {
+  "palavra": "é",
+  "inicio": 1.22,
+  "fim": 1.32
+ },
+ {
+  "palavra": "só",
+  "inicio": 1.32,
+  "fim": 1.413
+ },
+ {
+  "palavra": "a",
+  "inicio": 1.413,
+  "fim": 1.46
+ },
+ {
+  "palavra": "casca.",
+  "inicio": 1.46,
+  "fim": 1.92
+ },
+ {
+  "palavra": "O",
+  "inicio": 2.28,
+  "fim": 2.4
+ },
+ {
+  "palavra": "asfalto",
+  "inicio": 2.4,
+  "fim": 2.82
+ },
+ {
+  "palavra": "que",
+  "inicio": 2.82,
+  "fim": 2.96
+ },
+ {
+  "palavra": "você",
+  "inicio": 2.96,
+  "fim": 3.16
+ },
+ {
+  "palavra": "pisa",
+  "inicio": 3.16,
+  "fim": 3.5
+ },
+ {
+  "palavra": "tem",
+  "inicio": 3.5,
+  "fim": 3.68
+ },
+ {
+  "palavra": "poucos",
+  "inicio": 3.68,
+  "fim": 4.1
+ },
+ {
+  "palavra": "centímetros,",
+  "inicio": 4.1,
+  "fim": 4.78
+ },
+ {
+  "palavra": "e",
+  "inicio": 4.78,
+  "fim": 5.28
+ },
+ {
+  "palavra": "mesmo",
+  "inicio": 5.28,
+  "fim": 5.5
+ },
+ {
+  "palavra": "assim",
+  "inicio": 5.5,
+  "fim": 5.82
+ },
+ {
+  "palavra": "aguenta",
+  "inicio": 5.82,
+  "fim": 6.2
+ },
+ {
+  "palavra": "caminhão",
+  "inicio": 6.2,
+  "fim": 6.66
+ },
+ {
+  "palavra": "carregado.",
+  "inicio": 6.66,
+  "fim": 7.22
+ },
+ {
+  "palavra": "Como",
+  "inicio": 7.58,
+  "fim": 7.8
+ },
+ {
+  "palavra": "isso",
+  "inicio": 7.8,
+  "fim": 8.1
+ },
+ {
+  "palavra": "é",
+  "inicio": 8.1,
+  "fim": 8.22
+ },
+ {
+  "palavra": "possível?",
+  "inicio": 8.22,
+  "fim": 8.62
+ },
+ {
+  "palavra": "Para",
+  "inicio": 9.2,
+  "fim": 9.28
+ },
+ {
+  "palavra": "descobrir,",
+  "inicio": 9.28,
+  "fim": 9.74
+ },
+ {
+  "palavra": "você",
+  "inicio": 10.1,
+  "fim": 10.26
+ },
+ {
+  "palavra": "vai",
+  "inicio": 10.26,
+  "fim": 10.42
+ },
+ {
+  "palavra": "construir",
+  "inicio": 10.42,
+  "fim": 10.8
+ },
+ {
+  "palavra": "uma",
+  "inicio": 10.8,
+  "fim": 11.06
+ },
+ {
+  "palavra": "rua.",
+  "inicio": 11.06,
+  "fim": 11.38
+ },
+ {
+  "palavra": "Primeiro",
+  "inicio": 11.78,
+  "fim": 12.22
+ },
+ {
+  "palavra": "você",
+  "inicio": 12.22,
+  "fim": 12.48
+ },
+ {
+  "palavra": "precisa",
+  "inicio": 12.48,
+  "fim": 13.06
+ },
+ {
+  "palavra": "de",
+  "inicio": 13.06,
+  "fim": 13.36
+ },
+ {
+  "palavra": "um",
+  "inicio": 13.36,
+  "fim": 13.48
+ },
+ {
+  "palavra": "chão",
+  "inicio": 13.48,
+  "fim": 13.66
+ },
+ {
+  "palavra": "firme.",
+  "inicio": 13.66,
+  "fim": 14.08
+ },
+ {
+  "palavra": "Então",
+  "inicio": 14.46,
+  "fim": 14.74
+ },
+ {
+  "palavra": "você",
+  "inicio": 14.74,
+  "fim": 15.04
+ },
+ {
+  "palavra": "nivela",
+  "inicio": 15.04,
+  "fim": 15.38
+ },
+ {
+  "palavra": "a",
+  "inicio": 15.38,
+  "fim": 15.52
+ },
+ {
+  "palavra": "terra",
+  "inicio": 15.52,
+  "fim": 15.78
+ },
+ {
+  "palavra": "e",
+  "inicio": 15.78,
+  "fim": 16.04
+ },
+ {
+  "palavra": "passa",
+  "inicio": 16.04,
+  "fim": 16.28
+ },
+ {
+  "palavra": "um",
+  "inicio": 16.28,
+  "fim": 16.44
+ },
+ {
+  "palavra": "rolo",
+  "inicio": 16.44,
+  "fim": 16.68
+ },
+ {
+  "palavra": "pesado",
+  "inicio": 16.68,
+  "fim": 17.08
+ },
+ {
+  "palavra": "por",
+  "inicio": 17.08,
+  "fim": 17.26
+ },
+ {
+  "palavra": "cima,",
+  "inicio": 17.26,
+  "fim": 17.58
+ },
+ {
+  "palavra": "bem",
+  "inicio": 17.58,
+  "fim": 17.9
+ },
+ {
+  "palavra": "devagar.",
+  "inicio": 17.9,
+  "fim": 18.38
+ },
+ {
+  "palavra": "Se",
+  "inicio": 18.84,
+  "fim": 18.98
+ },
+ {
+  "palavra": "essa",
+  "inicio": 18.98,
+  "fim": 19.18
+ },
+ {
+  "palavra": "terra",
+  "inicio": 19.18,
+  "fim": 19.42
+ },
+ {
+  "palavra": "ficar",
+  "inicio": 19.42,
+  "fim": 19.66
+ },
+ {
+  "palavra": "fofa,",
+  "inicio": 19.66,
+  "fim": 20.2
+ },
+ {
+  "palavra": "a",
+  "inicio": 20.56,
+  "fim": 20.59
+ },
+ {
+  "palavra": "rua",
+  "inicio": 20.56,
+  "fim": 20.7
+ },
+ {
+  "palavra": "afunda",
+  "inicio": 20.7,
+  "fim": 21.02
+ },
+ {
+  "palavra": "em",
+  "inicio": 21.02,
+  "fim": 21.2
+ },
+ {
+  "palavra": "poucos",
+  "inicio": 21.2,
+  "fim": 21.46
+ },
+ {
+  "palavra": "meses.",
+  "inicio": 21.46,
+  "fim": 21.8
+ },
+ {
+  "palavra": "Essa",
+  "inicio": 22.38,
+  "fim": 22.62
+ },
+ {
+  "palavra": "camada",
+  "inicio": 22.62,
+  "fim": 23.04
+ },
+ {
+  "palavra": "se",
+  "inicio": 23.04,
+  "fim": 23.24
+ },
+ {
+  "palavra": "chama",
+  "inicio": 23.24,
+  "fim": 23.52
+ },
+ {
+  "palavra": "subleito.",
+  "inicio": 23.52,
+  "fim": 24.08
+ },
+ {
+  "palavra": "Mas",
+  "inicio": 24.46,
+  "fim": 24.68
+ },
+ {
+  "palavra": "terra",
+  "inicio": 24.68,
+  "fim": 25.04
+ },
+ {
+  "palavra": "sozinha",
+  "inicio": 25.04,
+  "fim": 25.5
+ },
+ {
+  "palavra": "vira",
+  "inicio": 25.5,
+  "fim": 25.86
+ },
+ {
+  "palavra": "lama",
+  "inicio": 25.86,
+  "fim": 26.12
+ },
+ {
+  "palavra": "quando",
+  "inicio": 26.12,
+  "fim": 26.38
+ },
+ {
+  "palavra": "chove.",
+  "inicio": 26.38,
+  "fim": 26.86
+ },
+ {
+  "palavra": "Então",
+  "inicio": 26.86,
+  "fim": 27.5
+ },
+ {
+  "palavra": "você",
+  "inicio": 27.5,
+  "fim": 27.86
+ },
+ {
+  "palavra": "espalha",
+  "inicio": 27.86,
+  "fim": 28.32
+ },
+ {
+  "palavra": "pedra",
+  "inicio": 28.5,
+  "fim": 28.68
+ },
+ {
+  "palavra": "britada",
+  "inicio": 28.68,
+  "fim": 29.1
+ },
+ {
+  "palavra": "por",
+  "inicio": 29.1,
+  "fim": 29.34
+ },
+ {
+  "palavra": "cima",
+  "inicio": 29.34,
+  "fim": 29.7
+ },
+ {
+  "palavra": "e",
+  "inicio": 29.7,
+  "fim": 29.88
+ },
+ {
+  "palavra": "compacta",
+  "inicio": 29.88,
+  "fim": 30.36
+ },
+ {
+  "palavra": "de",
+  "inicio": 30.36,
+  "fim": 30.46
+ },
+ {
+  "palavra": "novo.",
+  "inicio": 30.46,
+  "fim": 30.74
+ },
+ {
+  "palavra": "Essa",
+  "inicio": 31.06,
+  "fim": 31.4
+ },
+ {
+  "palavra": "é",
+  "inicio": 31.4,
+  "fim": 31.54
+ },
+ {
+  "palavra": "a",
+  "inicio": 31.54,
+  "fim": 31.62
+ },
+ {
+  "palavra": "sub-base,",
+  "inicio": 31.62,
+  "fim": 32.16
+ },
+ {
+  "palavra": "que",
+  "inicio": 32.16,
+  "fim": 32.46
+ },
+ {
+  "palavra": "não",
+  "inicio": 32.46,
+  "fim": 32.58
+ },
+ {
+  "palavra": "deixa",
+  "inicio": 32.58,
+  "fim": 32.88
+ },
+ {
+  "palavra": "a",
+  "inicio": 32.88,
+  "fim": 33.02
+ },
+ {
+  "palavra": "água",
+  "inicio": 33.02,
+  "fim": 33.18
+ },
+ {
+  "palavra": "estragar",
+  "inicio": 33.18,
+  "fim": 33.58
+ },
+ {
+  "palavra": "o",
+  "inicio": 33.58,
+  "fim": 33.7
+ },
+ {
+  "palavra": "que",
+  "inicio": 33.7,
+  "fim": 33.8
+ },
+ {
+  "palavra": "vem",
+  "inicio": 33.8,
+  "fim": 33.96
+ },
+ {
+  "palavra": "embaixo.",
+  "inicio": 33.96,
+  "fim": 34.86
+ },
+ {
+  "palavra": "Depois",
+  "inicio": 34.86,
+  "fim": 35.22
+ },
+ {
+  "palavra": "vem",
+  "inicio": 35.22,
+  "fim": 35.48
+ },
+ {
+  "palavra": "a",
+  "inicio": 35.48,
+  "fim": 35.62
+ },
+ {
+  "palavra": "base,",
+  "inicio": 35.62,
+  "fim": 35.98
+ },
+ {
+  "palavra": "feita",
+  "inicio": 35.98,
+  "fim": 36.46
+ },
+ {
+  "palavra": "de",
+  "inicio": 36.46,
+  "fim": 36.6
+ },
+ {
+  "palavra": "pedra",
+  "inicio": 36.6,
+  "fim": 36.88
+ },
+ {
+  "palavra": "mais",
+  "inicio": 36.88,
+  "fim": 37.16
+ },
+ {
+  "palavra": "bem",
+  "inicio": 37.16,
+  "fim": 37.38
+ },
+ {
+  "palavra": "selecionada.",
+  "inicio": 37.38,
+  "fim": 38.18
+ },
+ {
+  "palavra": "Ela",
+  "inicio": 38.56,
+  "fim": 38.72
+ },
+ {
+  "palavra": "espalha",
+  "inicio": 38.72,
+  "fim": 39.12
+ },
+ {
+  "palavra": "o",
+  "inicio": 39.12,
+  "fim": 39.22
+ },
+ {
+  "palavra": "peso",
+  "inicio": 39.22,
+  "fim": 39.42
+ },
+ {
+  "palavra": "das",
+  "inicio": 39.42,
+  "fim": 39.6
+ },
+ {
+  "palavra": "rodas,",
+  "inicio": 39.6,
+  "fim": 40.1
+ },
+ {
+  "palavra": "para",
+  "inicio": 40.1,
+  "fim": 40.38
+ },
+ {
+  "palavra": "o",
+  "inicio": 40.38,
+  "fim": 40.48
+ },
+ {
+  "palavra": "caminhão",
+  "inicio": 40.48,
+  "fim": 40.82
+ },
+ {
+  "palavra": "não",
+  "inicio": 40.82,
+  "fim": 41.02
+ },
+ {
+  "palavra": "furar",
+  "inicio": 41.02,
+  "fim": 41.36
+ },
+ {
+  "palavra": "a",
+  "inicio": 41.36,
+  "fim": 41.48
+ },
+ {
+  "palavra": "rua",
+  "inicio": 41.48,
+  "fim": 41.64
+ },
+ {
+  "palavra": "num",
+  "inicio": 41.64,
+  "fim": 41.76
+ },
+ {
+  "palavra": "ponto",
+  "inicio": 41.76,
+  "fim": 42.04
+ },
+ {
+  "palavra": "só.",
+  "inicio": 42.04,
+  "fim": 42.34
+ },
+ {
+  "palavra": "Agora",
+  "inicio": 42.7,
+  "fim": 43.04
+ },
+ {
+  "palavra": "aparece",
+  "inicio": 43.04,
+  "fim": 43.44
+ },
+ {
+  "palavra": "um",
+  "inicio": 43.44,
+  "fim": 43.72
+ },
+ {
+  "palavra": "problema.",
+  "inicio": 43.72,
+  "fim": 44.1
+ },
+ {
+  "palavra": "O",
+  "inicio": 44.68,
+  "fim": 44.78
+ },
+ {
+  "palavra": "asfalto",
+  "inicio": 44.78,
+  "fim": 45.24
+ },
+ {
+  "palavra": "não",
+  "inicio": 45.24,
+  "fim": 45.42
+ },
+ {
+  "palavra": "gruda",
+  "inicio": 45.42,
+  "fim": 45.76
+ },
+ {
+  "palavra": "direito",
+  "inicio": 45.76,
+  "fim": 46.18
+ },
+ {
+  "palavra": "na",
+  "inicio": 46.18,
+  "fim": 46.42
+ },
+ {
+  "palavra": "pedra",
+  "inicio": 46.42,
+  "fim": 46.7
+ },
+ {
+  "palavra": "seca.",
+  "inicio": 46.7,
+  "fim": 47.1
+ },
+ {
+  "palavra": "Então",
+  "inicio": 47.46,
+  "fim": 47.8
+ },
+ {
+  "palavra": "um",
+  "inicio": 47.8,
+  "fim": 48.02
+ },
+ {
+  "palavra": "caminhão",
+  "inicio": 48.02,
+  "fim": 48.34
+ },
+ {
+  "palavra": "passa",
+  "inicio": 48.34,
+  "fim": 48.58
+ },
+ {
+  "palavra": "espirrando",
+  "inicio": 48.58,
+  "fim": 49.14
+ },
+ {
+  "palavra": "um",
+  "inicio": 49.14,
+  "fim": 49.3
+ },
+ {
+  "palavra": "líquido",
+  "inicio": 49.3,
+  "fim": 49.54
+ },
+ {
+  "palavra": "preto,",
+  "inicio": 49.54,
+  "fim": 50.2
+ },
+ {
+  "palavra": "o",
+  "inicio": 50.26,
+  "fim": 50.4
+ },
+ {
+  "palavra": "ligante",
+  "inicio": 50.4,
+  "fim": 50.7
+ },
+ {
+  "palavra": "asfáltico,",
+  "inicio": 50.7,
+  "fim": 51.44
+ },
+ {
+  "palavra": "que",
+  "inicio": 51.58,
+  "fim": 51.74
+ },
+ {
+  "palavra": "entra",
+  "inicio": 51.74,
+  "fim": 51.98
+ },
+ {
+  "palavra": "na",
+  "inicio": 51.98,
+  "fim": 52.14
+ },
+ {
+  "palavra": "base",
+  "inicio": 52.14,
+  "fim": 52.46
+ },
+ {
+  "palavra": "e",
+  "inicio": 52.46,
+  "fim": 52.56
+ },
+ {
+  "palavra": "cola",
+  "inicio": 52.56,
+  "fim": 52.74
+ },
+ {
+  "palavra": "tudo.",
+  "inicio": 52.74,
+  "fim": 53.04
+ },
+ {
+  "palavra": "Isso",
+  "inicio": 53.48,
+  "fim": 53.72
+ },
+ {
+  "palavra": "é",
+  "inicio": 53.72,
+  "fim": 53.96
+ },
+ {
+  "palavra": "a",
+  "inicio": 53.96,
+  "fim": 54.06
+ },
+ {
+  "palavra": "imprimação.",
+  "inicio": 54.06,
+  "fim": 54.62
+ },
+ {
+  "palavra": "Só",
+  "inicio": 55.06,
+  "fim": 55.26
+ },
+ {
+  "palavra": "que",
+  "inicio": 55.26,
+  "fim": 55.4
+ },
+ {
+  "palavra": "o",
+  "inicio": 55.4,
+  "fim": 55.48
+ },
+ {
+  "palavra": "asfalto",
+  "inicio": 55.48,
+  "fim": 55.9
+ },
+ {
+  "palavra": "de",
+  "inicio": 55.9,
+  "fim": 56.02
+ },
+ {
+  "palavra": "verdade",
+  "inicio": 56.02,
+  "fim": 56.44
+ },
+ {
+  "palavra": "ainda",
+  "inicio": 56.44,
+  "fim": 56.8
+ },
+ {
+  "palavra": "nem",
+  "inicio": 56.8,
+  "fim": 57.0
+ },
+ {
+  "palavra": "existe.",
+  "inicio": 57.0,
+  "fim": 57.44
+ },
+ {
+  "palavra": "Ele",
+  "inicio": 57.94,
+  "fim": 58.1
+ },
+ {
+  "palavra": "é",
+  "inicio": 58.1,
+  "fim": 58.18
+ },
+ {
+  "palavra": "feito",
+  "inicio": 58.18,
+  "fim": 58.4
+ },
+ {
+  "palavra": "numa",
+  "inicio": 58.4,
+  "fim": 58.64
+ },
+ {
+  "palavra": "usina,",
+  "inicio": 58.64,
+  "fim": 59.08
+ },
+ {
+  "palavra": "misturando",
+  "inicio": 59.08,
+  "fim": 59.78
+ },
+ {
+  "palavra": "pedra,",
+  "inicio": 59.78,
+  "fim": 60.26
+ },
+ {
+  "palavra": "areia",
+  "inicio": 60.38,
+  "fim": 60.72
+ },
+ {
+  "palavra": "e",
+  "inicio": 60.72,
+  "fim": 60.9
+ },
+ {
+  "palavra": "o",
+  "inicio": 60.9,
+  "fim": 60.96
+ },
+ {
+  "palavra": "ligante",
+  "inicio": 60.96,
+  "fim": 61.28
+ },
+ {
+  "palavra": "que",
+  "inicio": 61.28,
+  "fim": 61.52
+ },
+ {
+  "palavra": "vem",
+  "inicio": 61.52,
+  "fim": 61.7
+ },
+ {
+  "palavra": "do",
+  "inicio": 61.7,
+  "fim": 61.82
+ },
+ {
+  "palavra": "petróleo.",
+  "inicio": 61.82,
+  "fim": 62.28
+ },
+ {
+  "palavra": "Tudo",
+  "inicio": 62.66,
+  "fim": 62.86
+ },
+ {
+  "palavra": "é",
+  "inicio": 62.86,
+  "fim": 62.98
+ },
+ {
+  "palavra": "aquecido",
+  "inicio": 62.98,
+  "fim": 63.42
+ },
+ {
+  "palavra": "muito",
+  "inicio": 63.42,
+  "fim": 63.74
+ },
+ {
+  "palavra": "acima",
+  "inicio": 63.74,
+  "fim": 64.12
+ },
+ {
+  "palavra": "de",
+  "inicio": 64.12,
+  "fim": 64.26
+ },
+ {
+  "palavra": "cem",
+  "inicio": 64.26,
+  "fim": 64.48
+ },
+ {
+  "palavra": "graus,",
+  "inicio": 64.48,
+  "fim": 65.04
+ },
+ {
+  "palavra": "para",
+  "inicio": 65.04,
+  "fim": 65.28
+ },
+ {
+  "palavra": "ficar",
+  "inicio": 65.28,
+  "fim": 65.5
+ },
+ {
+  "palavra": "mole",
+  "inicio": 65.5,
+  "fim": 65.9
+ },
+ {
+  "palavra": "e",
+  "inicio": 65.9,
+  "fim": 66.1
+ },
+ {
+  "palavra": "fácil",
+  "inicio": 66.1,
+  "fim": 66.36
+ },
+ {
+  "palavra": "de",
+  "inicio": 66.36,
+  "fim": 66.54
+ },
+ {
+  "palavra": "espalhar.",
+  "inicio": 66.54,
+  "fim": 66.96
+ },
+ {
+  "palavra": "Mas",
+  "inicio": 67.34,
+  "fim": 67.56
+ },
+ {
+  "palavra": "essa",
+  "inicio": 67.56,
+  "fim": 67.82
+ },
+ {
+  "palavra": "massa",
+  "inicio": 67.82,
+  "fim": 68.12
+ },
+ {
+  "palavra": "esfria",
+  "inicio": 68.12,
+  "fim": 68.54
+ },
+ {
+  "palavra": "rápido.",
+  "inicio": 68.54,
+  "fim": 69.0
+ },
+ {
+  "palavra": "Então",
+  "inicio": 69.46,
+  "fim": 69.8
+ },
+ {
+  "palavra": "ela",
+  "inicio": 69.8,
+  "fim": 70.02
+ },
+ {
+  "palavra": "viaja",
+  "inicio": 70.02,
+  "fim": 70.42
+ },
+ {
+  "palavra": "na",
+  "inicio": 70.42,
+  "fim": 70.54
+ },
+ {
+  "palavra": "caçamba",
+  "inicio": 70.54,
+  "fim": 70.96
+ },
+ {
+  "palavra": "de",
+  "inicio": 70.96,
+  "fim": 71.14
+ },
+ {
+  "palavra": "um",
+  "inicio": 71.14,
+  "fim": 71.22
+ },
+ {
+  "palavra": "caminhão,",
+  "inicio": 71.22,
+  "fim": 71.68
+ },
+ {
+  "palavra": "coberta",
+  "inicio": 71.68,
+  "fim": 72.36
+ },
+ {
+  "palavra": "com",
+  "inicio": 72.36,
+  "fim": 72.54
+ },
+ {
+  "palavra": "lona,",
+  "inicio": 72.54,
+  "fim": 72.86
+ },
+ {
+  "palavra": "para",
+  "inicio": 72.86,
+  "fim": 73.14
+ },
+ {
+  "palavra": "chegar",
+  "inicio": 73.14,
+  "fim": 73.4
+ },
+ {
+  "palavra": "ainda",
+  "inicio": 73.4,
+  "fim": 73.68
+ },
+ {
+  "palavra": "quente",
+  "inicio": 73.68,
+  "fim": 73.98
+ },
+ {
+  "palavra": "na",
+  "inicio": 73.98,
+  "fim": 74.18
+ },
+ {
+  "palavra": "obra.",
+  "inicio": 74.18,
+  "fim": 74.46
+ },
+ {
+  "palavra": "Na",
+  "inicio": 74.86,
+  "fim": 75.0
+ },
+ {
+  "palavra": "rua,",
+  "inicio": 75.0,
+  "fim": 75.24
+ },
+ {
+  "palavra": "entra",
+  "inicio": 75.24,
+  "fim": 75.7
+ },
+ {
+  "palavra": "uma",
+  "inicio": 75.7,
+  "fim": 75.9
+ },
+ {
+  "palavra": "máquina",
+  "inicio": 75.9,
+  "fim": 76.26
+ },
+ {
+  "palavra": "chamada",
+  "inicio": 76.26,
+  "fim": 76.78
+ },
+ {
+  "palavra": "vibroacabadora.",
+  "inicio": 76.78,
+  "fim": 77.62
+ },
+ {
+  "palavra": "Ela",
+  "inicio": 78.04,
+  "fim": 78.26
+ },
+ {
+  "palavra": "recebe",
+  "inicio": 78.26,
+  "fim": 78.7
+ },
+ {
+  "palavra": "a",
+  "inicio": 78.7,
+  "fim": 78.8
+ },
+ {
+  "palavra": "massa",
+  "inicio": 78.8,
+  "fim": 79.04
+ },
+ {
+  "palavra": "na",
+  "inicio": 79.04,
+  "fim": 79.2
+ },
+ {
+  "palavra": "frente",
+  "inicio": 79.2,
+  "fim": 79.52
+ },
+ {
+  "palavra": "e",
+  "inicio": 79.52,
+  "fim": 79.88
+ },
+ {
+  "palavra": "vai",
+  "inicio": 79.88,
+  "fim": 79.96
+ },
+ {
+  "palavra": "andando",
+  "inicio": 79.96,
+  "fim": 80.3
+ },
+ {
+  "palavra": "devagar,",
+  "inicio": 80.3,
+  "fim": 80.76
+ },
+ {
+  "palavra": "deixando",
+  "inicio": 81.14,
+  "fim": 81.58
+ },
+ {
+  "palavra": "uma",
+  "inicio": 81.58,
+  "fim": 81.74
+ },
+ {
+  "palavra": "camada",
+  "inicio": 81.74,
+  "fim": 82.06
+ },
+ {
+  "palavra": "lisa",
+  "inicio": 82.06,
+  "fim": 82.46
+ },
+ {
+  "palavra": "e",
+  "inicio": 82.46,
+  "fim": 82.62
+ },
+ {
+  "palavra": "uniforme",
+  "inicio": 82.62,
+  "fim": 83.04
+ },
+ {
+  "palavra": "atrás",
+  "inicio": 83.04,
+  "fim": 83.26
+ },
+ {
+  "palavra": "dela.",
+  "inicio": 83.26,
+  "fim": 83.62
+ },
+ {
+  "palavra": "Mas",
+  "inicio": 84.02,
+  "fim": 84.24
+ },
+ {
+  "palavra": "ainda",
+  "inicio": 84.24,
+  "fim": 84.58
+ },
+ {
+  "palavra": "está",
+  "inicio": 84.58,
+  "fim": 84.84
+ },
+ {
+  "palavra": "fofo.",
+  "inicio": 84.84,
+  "fim": 85.28
+ },
+ {
+  "palavra": "Então",
+  "inicio": 85.66,
+  "fim": 86.02
+ },
+ {
+  "palavra": "vêm",
+  "inicio": 86.02,
+  "fim": 86.24
+ },
+ {
+  "palavra": "os",
+  "inicio": 86.24,
+  "fim": 86.44
+ },
+ {
+  "palavra": "rolos",
+  "inicio": 86.44,
+  "fim": 86.68
+ },
+ {
+  "palavra": "compactadores,",
+  "inicio": 86.68,
+  "fim": 87.48
+ },
+ {
+  "palavra": "que",
+  "inicio": 87.48,
+  "fim": 87.9
+ },
+ {
+  "palavra": "passam",
+  "inicio": 87.9,
+  "fim": 88.24
+ },
+ {
+  "palavra": "por",
+  "inicio": 88.24,
+  "fim": 88.42
+ },
+ {
+  "palavra": "cima",
+  "inicio": 88.42,
+  "fim": 88.72
+ },
+ {
+  "palavra": "enquanto",
+  "inicio": 88.72,
+  "fim": 89.04
+ },
+ {
+  "palavra": "o",
+  "inicio": 89.04,
+  "fim": 89.22
+ },
+ {
+  "palavra": "asfalto",
+  "inicio": 89.22,
+  "fim": 89.6
+ },
+ {
+  "palavra": "está",
+  "inicio": 89.6,
+  "fim": 89.76
+ },
+ {
+  "palavra": "quente.",
+  "inicio": 89.76,
+  "fim": 90.22
+ },
+ {
+  "palavra": "É",
+  "inicio": 90.6,
+  "fim": 90.74
+ },
+ {
+  "palavra": "aqui",
+  "inicio": 90.74,
+  "fim": 90.96
+ },
+ {
+  "palavra": "que",
+  "inicio": 90.96,
+  "fim": 91.14
+ },
+ {
+  "palavra": "ele",
+  "inicio": 91.14,
+  "fim": 91.24
+ },
+ {
+  "palavra": "ganha",
+  "inicio": 91.24,
+  "fim": 91.56
+ },
+ {
+  "palavra": "a",
+  "inicio": 91.56,
+  "fim": 91.7
+ },
+ {
+  "palavra": "dureza",
+  "inicio": 91.7,
+  "fim": 92.04
+ },
+ {
+  "palavra": "que",
+  "inicio": 92.04,
+  "fim": 92.22
+ },
+ {
+  "palavra": "aguenta",
+  "inicio": 92.22,
+  "fim": 92.54
+ },
+ {
+  "palavra": "o",
+  "inicio": 92.54,
+  "fim": 92.64
+ },
+ {
+  "palavra": "trânsito.",
+  "inicio": 92.64,
+  "fim": 93.12
+ },
+ {
+  "palavra": "Algumas",
+  "inicio": 93.54,
+  "fim": 93.94
+ },
+ {
+  "palavra": "horas",
+  "inicio": 93.94,
+  "fim": 94.1
+ },
+ {
+  "palavra": "depois,",
+  "inicio": 94.1,
+  "fim": 94.48
+ },
+ {
+  "palavra": "ele",
+  "inicio": 94.8,
+  "fim": 94.98
+ },
+ {
+  "palavra": "esfria",
+  "inicio": 94.98,
+  "fim": 95.32
+ },
+ {
+  "palavra": "e",
+  "inicio": 95.32,
+  "fim": 95.52
+ },
+ {
+  "palavra": "a",
+  "inicio": 95.52,
+  "fim": 95.62
+ },
+ {
+  "palavra": "rua",
+  "inicio": 95.62,
+  "fim": 95.76
+ },
+ {
+  "palavra": "já",
+  "inicio": 95.76,
+  "fim": 95.96
+ },
+ {
+  "palavra": "pode",
+  "inicio": 95.96,
+  "fim": 96.14
+ },
+ {
+  "palavra": "abrir.",
+  "inicio": 96.14,
+  "fim": 96.48
+ },
+ {
+  "palavra": "E",
+  "inicio": 96.98,
+  "fim": 97.1
+ },
+ {
+  "palavra": "tem",
+  "inicio": 97.1,
+  "fim": 97.26
+ },
+ {
+  "palavra": "um",
+  "inicio": 97.26,
+  "fim": 97.4
+ },
+ {
+  "palavra": "detalhe",
+  "inicio": 97.4,
+  "fim": 97.84
+ },
+ {
+  "palavra": "que",
+  "inicio": 97.84,
+  "fim": 98.02
+ },
+ {
+  "palavra": "quase",
+  "inicio": 98.02,
+  "fim": 98.34
+ },
+ {
+  "palavra": "ninguém",
+  "inicio": 98.34,
+  "fim": 98.66
+ },
+ {
+  "palavra": "repara.",
+  "inicio": 98.66,
+  "fim": 99.24
+ },
+ {
+  "palavra": "A",
+  "inicio": 99.66,
+  "fim": 99.8
+ },
+ {
+  "palavra": "rua",
+  "inicio": 99.8,
+  "fim": 100.02
+ },
+ {
+  "palavra": "é",
+  "inicio": 100.02,
+  "fim": 100.16
+ },
+ {
+  "palavra": "um",
+  "inicio": 100.16,
+  "fim": 100.26
+ },
+ {
+  "palavra": "pouco",
+  "inicio": 100.26,
+  "fim": 100.46
+ },
+ {
+  "palavra": "mais",
+  "inicio": 100.46,
+  "fim": 100.78
+ },
+ {
+  "palavra": "alta",
+  "inicio": 100.78,
+  "fim": 101.02
+ },
+ {
+  "palavra": "no",
+  "inicio": 101.02,
+  "fim": 101.2
+ },
+ {
+  "palavra": "meio.",
+  "inicio": 101.2,
+  "fim": 101.46
+ },
+ {
+  "palavra": "Esse",
+  "inicio": 101.9,
+  "fim": 102.04
+ },
+ {
+  "palavra": "formato",
+  "inicio": 102.04,
+  "fim": 102.48
+ },
+ {
+  "palavra": "empurra",
+  "inicio": 102.48,
+  "fim": 102.96
+ },
+ {
+  "palavra": "a",
+  "inicio": 102.96,
+  "fim": 103.1
+ },
+ {
+  "palavra": "água",
+  "inicio": 103.1,
+  "fim": 103.3
+ },
+ {
+  "palavra": "da",
+  "inicio": 103.3,
+  "fim": 103.44
+ },
+ {
+  "palavra": "chuva",
+  "inicio": 103.44,
+  "fim": 103.74
+ },
+ {
+  "palavra": "para",
+  "inicio": 103.74,
+  "fim": 103.9
+ },
+ {
+  "palavra": "os",
+  "inicio": 103.9,
+  "fim": 104.0
+ },
+ {
+  "palavra": "lados,",
+  "inicio": 104.0,
+  "fim": 104.32
+ },
+ {
+  "palavra": "até",
+  "inicio": 104.32,
+  "fim": 104.82
+ },
+ {
+  "palavra": "o",
+  "inicio": 104.82,
+  "fim": 104.96
+ },
+ {
+  "palavra": "meio-fio",
+  "inicio": 104.96,
+  "fim": 105.46
+ },
+ {
+  "palavra": "e",
+  "inicio": 105.46,
+  "fim": 105.58
+ },
+ {
+  "palavra": "os",
+  "inicio": 105.58,
+  "fim": 105.68
+ },
+ {
+  "palavra": "bueiros.",
+  "inicio": 105.68,
+  "fim": 106.52
+ },
+ {
+  "palavra": "Sem",
+  "inicio": 106.52,
+  "fim": 106.76
+ },
+ {
+  "palavra": "isso,",
+  "inicio": 106.76,
+  "fim": 107.1
+ },
+ {
+  "palavra": "a",
+  "inicio": 107.34,
+  "fim": 107.38
+ },
+ {
+  "palavra": "água",
+  "inicio": 107.38,
+  "fim": 107.54
+ },
+ {
+  "palavra": "ficaria",
+  "inicio": 107.54,
+  "fim": 108.0
+ },
+ {
+  "palavra": "parada.",
+  "inicio": 108.0,
+  "fim": 108.44
+ },
+ {
+  "palavra": "Então,",
+  "inicio": 108.82,
+  "fim": 109.16
+ },
+ {
+  "palavra": "da",
+  "inicio": 109.16,
+  "fim": 109.36
+ },
+ {
+  "palavra": "próxima",
+  "inicio": 109.36,
+  "fim": 109.66
+ },
+ {
+  "palavra": "vez",
+  "inicio": 109.66,
+  "fim": 109.94
+ },
+ {
+  "palavra": "que",
+  "inicio": 109.94,
+  "fim": 110.08
+ },
+ {
+  "palavra": "você",
+  "inicio": 110.08,
+  "fim": 110.26
+ },
+ {
+  "palavra": "pisar",
+  "inicio": 110.26,
+  "fim": 110.64
+ },
+ {
+  "palavra": "na",
+  "inicio": 110.64,
+  "fim": 110.72
+ },
+ {
+  "palavra": "rua,",
+  "inicio": 110.72,
+  "fim": 110.96
+ },
+ {
+  "palavra": "lembra:",
+  "inicio": 111.1,
+  "fim": 111.44
+ },
+ {
+  "palavra": "embaixo",
+  "inicio": 111.78,
+  "fim": 112.22
+ },
+ {
+  "palavra": "dela",
+  "inicio": 112.22,
+  "fim": 112.38
+ },
+ {
+  "palavra": "tem",
+  "inicio": 112.38,
+  "fim": 112.58
+ },
+ {
+  "palavra": "terra,",
+  "inicio": 112.58,
+  "fim": 112.96
+ },
+ {
+  "palavra": "pedra",
+  "inicio": 113.12,
+  "fim": 113.5
+ },
+ {
+  "palavra": "e",
+  "inicio": 113.5,
+  "fim": 113.6
+ },
+ {
+  "palavra": "muito",
+  "inicio": 113.6,
+  "fim": 113.8
+ },
+ {
+  "palavra": "trabalho.",
+  "inicio": 113.8,
+  "fim": 114.2
+ },
+ {
+  "palavra": "Agora",
+  "inicio": 114.66,
+  "fim": 114.9
+ },
+ {
+  "palavra": "me",
+  "inicio": 114.9,
+  "fim": 115.1
+ },
+ {
+  "palavra": "diz:",
+  "inicio": 115.1,
+  "fim": 115.36
+ },
+ {
+  "palavra": "você",
+  "inicio": 115.66,
+  "fim": 115.84
+ },
+ {
+  "palavra": "achava",
+  "inicio": 115.84,
+  "fim": 116.26
+ },
+ {
+  "palavra": "que",
+  "inicio": 116.26,
+  "fim": 116.42
+ },
+ {
+  "palavra": "a",
+  "inicio": 116.42,
+  "fim": 116.5
+ },
+ {
+  "palavra": "rua",
+  "inicio": 116.5,
+  "fim": 116.62
+ },
+ {
+  "palavra": "era",
+  "inicio": 116.62,
+  "fim": 116.78
+ },
+ {
+  "palavra": "só",
+  "inicio": 116.78,
+  "fim": 116.98
+ },
+ {
+  "palavra": "asfalto,",
+  "inicio": 116.98,
+  "fim": 117.5
+ },
+ {
+  "palavra": "ou",
+  "inicio": 117.5,
+  "fim": 117.7
+ },
+ {
+  "palavra": "já",
+  "inicio": 117.7,
+  "fim": 117.88
+ },
+ {
+  "palavra": "sabia",
+  "inicio": 117.88,
+  "fim": 118.18
+ },
+ {
+  "palavra": "das",
+  "inicio": 118.18,
+  "fim": 118.34
+ },
+ {
+  "palavra": "camadas?",
+  "inicio": 118.34,
+  "fim": 118.78
+ },
+ {
+  "palavra": "Comenta",
+  "inicio": 119.32,
+  "fim": 119.8
+ },
+ {
+  "palavra": "aqui.",
+  "inicio": 119.8,
+  "fim": 120.08
+ }
+]

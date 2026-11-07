@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
+import { runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { Db } from "../src/db";
+import { Db, type User } from "../src/db";
 import { ERROS } from "../src/erros";
 import { createStudio } from "../src/index";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
@@ -727,6 +728,44 @@ describe("Nano Banana 2.1 (imagem)", () => {
     const pagina = await (await get(`/video/${image!.id}`, undefined, api)).text();
     expect(pagina).toContain(ERROS.imagemFalhou);
     expect(pagina).not.toContain("HTTP 500");
+  });
+
+  it("com o Durable Object, o pedido só registra; a imagem sai fora dele, uma vez só", async () => {
+    const api = new FakeVideoApi();
+    const started: string[] = [];
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api, images: { start: async (id) => void started.push(id) } });
+    await cookie();
+    const user = (await env.DB.prepare("SELECT id, email, name, role, created_at AS createdAt FROM users WHERE role = 'admin'").first<User>())!;
+    const values = (n: string) => ({ descricao: CENA, resolucao: "1K", formato: "9:16" })[n] ?? "";
+    const video = await studio.create({ structure: NANO_BANANA, values, image: foto(), user });
+    // Sair da página agora não deixa nada preso: o pedido já voltou.
+    expect(video).toMatchObject({ status: "in_progress", video_key: null });
+    expect(started).toEqual([video.id]);
+    expect(api.images).toHaveLength(0);
+
+    const done = await studio.finishImage(video.id);
+    expect(done).toMatchObject({ status: "completed", cost: 0.039, video_key: `imagens/${video.id}.png` });
+    expect(api.images[0]).toMatchObject({ prompt: `${CENA} ${IMAGE_GUIDE} ${IMAGE_REFERENCE_GUIDE}`, resolution: "1K", aspect_ratio: "9:16" });
+    expect(api.images[0]!.input_references![0]).toMatchObject({ type: "image_url", image_url: { url: `${SITE}/midia/${video.image_key}` } });
+    // O alarme repetido não paga a imagem de novo.
+    await studio.finishImage(video.id);
+    expect(api.images).toHaveLength(1);
+    // Quem espera (o gerar_imagem do MCP) vê a imagem pronta.
+    expect(await studio.waitImage(video, 1000, 10)).toMatchObject({ status: "completed" });
+  });
+
+  it("o Durable Object guarda o id e gera pelo alarme", async () => {
+    const db = new Db(env.DB);
+    const id = "00000000-0000-4000-8000-000000000002";
+    await db.insertVideo({ id, prompt: CENA, model: NANO_BANANA.model, duration: 0, resolution: "1K", aspect_ratio: "9:16", image_key: null, user_id: null, request_prompt: CENA, style: null, language: null, extra: null, structure: "nano-banana", settings: null, avatar_id: null });
+    await db.updateVideo(id, { status: "in_progress" });
+    const stub = env.IMAGENS!.get(env.IMAGENS!.idFromName(id));
+    await stub.start(id);
+    // O alarme dispara logo: a linha sai de "Gerando" sem pedido nenhum aberto.
+    for (const end = Date.now() + 3000; (await db.videoById(id))!.status === "in_progress" && Date.now() < end; ) await new Promise((ok) => setTimeout(ok, 50));
+    // Nos testes não há chave do OpenRouter: o alarme chegou à geração e a linha virou falha, sem ficar presa.
+    expect(await db.videoById(id)).toMatchObject({ status: "failed" });
+    expect(await runInDurableObject(stub, (_, state) => state.storage.get("video"))).toBeUndefined();
   });
 
   it("imagem presa em Gerando vira falha depois de 5 minutos", async () => {

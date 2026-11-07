@@ -1,0 +1,37 @@
+{
+  "versao": 1,
+  "titulo": "TÍTULO DO VÍDEO",
+  "formato": { "largura": 1080, "altura": 1920, "fps": 30 },
+  "duracao": 10,
+  "audio": "narracao.wav",
+  "palavras": "palavras.json",
+  "legendas": { "ativo": true, "palavrasPorBloco": 3 },
+  "ambiente": { "horario": "dia", "chao": "grama" },
+  "cenas": [
+    {
+      "inicio": 0, "fim": 5,
+      "objetos": [
+        { "id": "casa", "asset": "casa_simples", "pos": [0, 0, 0] },
+        { "id": "arvore", "asset": "arvore_redonda", "pos": [-8, 0, -3] }
+      ],
+      "personagens": [
+        { "id": "guia", "preset": "construtor", "pos": [3.5, 0, 6.5],
+          "viraPara": [{ "em": 0, "alvo": "camera" }],
+          "acoes": [{ "clip": "talk", "de": 0, "ate": 5, "fala": true }] }
+      ],
+      "camera": { "tipo": "enquadrar", "alvo": "casa", "plano": "geral", "angulo": 25, "elevacao": 14, "deriva": -18 },
+      "textos": [{ "texto": "A PERGUNTA DO GANCHO?", "de": 0.2, "ate": 4.8, "estilo": "titulo" }]
+    },
+    {
+      "inicio": 5, "fim": 10, "transicao": "flash",
+      "objetos": [{ "id": "casa", "asset": "casa_simples", "pos": [0, 0, 0] }],
+      "personagens": [
+        { "id": "guia", "preset": "construtor", "pos": [0, 0, 7], "giro": 0,
+          "viraPara": [{ "em": 5, "alvo": "camera" }],
+          "acoes": [{ "clip": "talk", "de": 5, "ate": 10, "fala": true, "expressao": "happy" }] }
+      ],
+      "camera": { "tipo": "enquadrar", "alvo": "guia", "plano": "medio", "angulo": 0, "elevacao": 6, "aproxima": 0.85 },
+      "textos": [{ "texto": "E VOCÊ, O QUE ACHA? COMENTA!", "de": 5.3, "ate": 10, "estilo": "pergunta" }]
+    }
+  ]
+}

@@ -1,0 +1,467 @@
+[
+ {
+  "palavra": "Uma",
+  "inicio": 0.0,
+  "fim": 0.18
+ },
+ {
+  "palavra": "casa",
+  "inicio": 0.18,
+  "fim": 0.44
+ },
+ {
+  "palavra": "pequena",
+  "inicio": 0.44,
+  "fim": 0.96
+ },
+ {
+  "palavra": "pode",
+  "inicio": 0.96,
+  "fim": 1.3
+ },
+ {
+  "palavra": "pesar",
+  "inicio": 1.3,
+  "fim": 1.72
+ },
+ {
+  "palavra": "dezenas",
+  "inicio": 1.72,
+  "fim": 2.2
+ },
+ {
+  "palavra": "de",
+  "inicio": 2.2,
+  "fim": 2.32
+ },
+ {
+  "palavra": "toneladas.",
+  "inicio": 2.32,
+  "fim": 2.9
+ },
+ {
+  "palavra": "Então",
+  "inicio": 3.4,
+  "fim": 3.78
+ },
+ {
+  "palavra": "por",
+  "inicio": 3.78,
+  "fim": 3.99
+ },
+ {
+  "palavra": "que",
+  "inicio": 3.99,
+  "fim": 4.2
+ },
+ {
+  "palavra": "ela",
+  "inicio": 4.2,
+  "fim": 4.46
+ },
+ {
+  "palavra": "não",
+  "inicio": 4.46,
+  "fim": 4.64
+ },
+ {
+  "palavra": "afunda",
+  "inicio": 4.64,
+  "fim": 4.98
+ },
+ {
+  "palavra": "no",
+  "inicio": 4.98,
+  "fim": 5.2
+ },
+ {
+  "palavra": "chão?",
+  "inicio": 5.2,
+  "fim": 5.46
+ },
+ {
+  "palavra": "Para",
+  "inicio": 5.88,
+  "fim": 6.02
+ },
+ {
+  "palavra": "descobrir,",
+  "inicio": 6.02,
+  "fim": 6.42
+ },
+ {
+  "palavra": "você",
+  "inicio": 6.82,
+  "fim": 7.02
+ },
+ {
+  "palavra": "vai",
+  "inicio": 7.02,
+  "fim": 7.22
+ },
+ {
+  "palavra": "construir",
+  "inicio": 7.22,
+  "fim": 7.66
+ },
+ {
+  "palavra": "uma.",
+  "inicio": 7.66,
+  "fim": 7.98
+ },
+ {
+  "palavra": "Primeiro",
+  "inicio": 8.4,
+  "fim": 8.86
+ },
+ {
+  "palavra": "você",
+  "inicio": 8.86,
+  "fim": 9.14
+ },
+ {
+  "palavra": "cava",
+  "inicio": 9.14,
+  "fim": 9.6
+ },
+ {
+  "palavra": "e",
+  "inicio": 9.6,
+  "fim": 9.76
+ },
+ {
+  "palavra": "faz",
+  "inicio": 9.76,
+  "fim": 9.92
+ },
+ {
+  "palavra": "a",
+  "inicio": 9.92,
+  "fim": 10.0
+ },
+ {
+  "palavra": "fundação,",
+  "inicio": 10.0,
+  "fim": 10.48
+ },
+ {
+  "palavra": "que",
+  "inicio": 10.48,
+  "fim": 10.9
+ },
+ {
+  "palavra": "espalha",
+  "inicio": 10.9,
+  "fim": 11.28
+ },
+ {
+  "palavra": "todo",
+  "inicio": 11.28,
+  "fim": 11.52
+ },
+ {
+  "palavra": "esse",
+  "inicio": 11.52,
+  "fim": 11.74
+ },
+ {
+  "palavra": "peso",
+  "inicio": 11.74,
+  "fim": 12.0
+ },
+ {
+  "palavra": "pelo",
+  "inicio": 12.0,
+  "fim": 12.22
+ },
+ {
+  "palavra": "terreno.",
+  "inicio": 12.22,
+  "fim": 12.74
+ },
+ {
+  "palavra": "Depois",
+  "inicio": 13.12,
+  "fim": 13.38
+ },
+ {
+  "palavra": "sobem",
+  "inicio": 13.38,
+  "fim": 13.94
+ },
+ {
+  "palavra": "os",
+  "inicio": 13.94,
+  "fim": 14.08
+ },
+ {
+  "palavra": "pilares",
+  "inicio": 14.08,
+  "fim": 14.46
+ },
+ {
+  "palavra": "de",
+  "inicio": 14.46,
+  "fim": 14.64
+ },
+ {
+  "palavra": "concreto,",
+  "inicio": 14.64,
+  "fim": 15.1
+ },
+ {
+  "palavra": "que",
+  "inicio": 15.1,
+  "fim": 15.46
+ },
+ {
+  "palavra": "seguram",
+  "inicio": 15.46,
+  "fim": 15.84
+ },
+ {
+  "palavra": "a",
+  "inicio": 15.84,
+  "fim": 15.96
+ },
+ {
+  "palavra": "casa",
+  "inicio": 15.96,
+  "fim": 16.18
+ },
+ {
+  "palavra": "de",
+  "inicio": 16.18,
+  "fim": 16.36
+ },
+ {
+  "palavra": "pé.",
+  "inicio": 16.36,
+  "fim": 16.62
+ },
+ {
+  "palavra": "Aí",
+  "inicio": 17.0,
+  "fim": 17.16
+ },
+ {
+  "palavra": "vêm",
+  "inicio": 17.16,
+  "fim": 17.4
+ },
+ {
+  "palavra": "as",
+  "inicio": 17.4,
+  "fim": 17.6
+ },
+ {
+  "palavra": "paredes",
+  "inicio": 17.6,
+  "fim": 18.1
+ },
+ {
+  "palavra": "de",
+  "inicio": 18.1,
+  "fim": 18.22
+ },
+ {
+  "palavra": "tijolo,",
+  "inicio": 18.22,
+  "fim": 18.68
+ },
+ {
+  "palavra": "e",
+  "inicio": 18.68,
+  "fim": 19.1
+ },
+ {
+  "palavra": "na",
+  "inicio": 19.1,
+  "fim": 19.2
+ },
+ {
+  "palavra": "maioria",
+  "inicio": 19.2,
+  "fim": 19.48
+ },
+ {
+  "palavra": "das",
+  "inicio": 19.48,
+  "fim": 19.76
+ },
+ {
+  "palavra": "casas",
+  "inicio": 19.76,
+  "fim": 20.24
+ },
+ {
+  "palavra": "elas",
+  "inicio": 20.24,
+  "fim": 20.5
+ },
+ {
+  "palavra": "só",
+  "inicio": 20.5,
+  "fim": 20.74
+ },
+ {
+  "palavra": "dividem",
+  "inicio": 20.74,
+  "fim": 21.14
+ },
+ {
+  "palavra": "os",
+  "inicio": 21.14,
+  "fim": 21.32
+ },
+ {
+  "palavra": "cômodos.",
+  "inicio": 21.32,
+  "fim": 21.92
+ },
+ {
+  "palavra": "Por",
+  "inicio": 22.32,
+  "fim": 22.5
+ },
+ {
+  "palavra": "cima",
+  "inicio": 22.5,
+  "fim": 22.76
+ },
+ {
+  "palavra": "vão",
+  "inicio": 22.76,
+  "fim": 22.96
+ },
+ {
+  "palavra": "a",
+  "inicio": 22.96,
+  "fim": 23.08
+ },
+ {
+  "palavra": "laje,",
+  "inicio": 23.08,
+  "fim": 23.66
+ },
+ {
+  "palavra": "o",
+  "inicio": 23.66,
+  "fim": 23.72
+ },
+ {
+  "palavra": "madeiramento",
+  "inicio": 23.72,
+  "fim": 24.26
+ },
+ {
+  "palavra": "e",
+  "inicio": 24.26,
+  "fim": 24.52
+ },
+ {
+  "palavra": "as",
+  "inicio": 24.52,
+  "fim": 24.66
+ },
+ {
+  "palavra": "telhas.",
+  "inicio": 24.66,
+  "fim": 25.02
+ },
+ {
+  "palavra": "Agora",
+  "inicio": 25.5,
+  "fim": 25.78
+ },
+ {
+  "palavra": "me",
+  "inicio": 25.78,
+  "fim": 26.0
+ },
+ {
+  "palavra": "diz:",
+  "inicio": 26.0,
+  "fim": 26.26
+ },
+ {
+  "palavra": "você",
+  "inicio": 26.58,
+  "fim": 26.74
+ },
+ {
+  "palavra": "achava",
+  "inicio": 26.74,
+  "fim": 27.18
+ },
+ {
+  "palavra": "que",
+  "inicio": 27.18,
+  "fim": 27.36
+ },
+ {
+  "palavra": "eram",
+  "inicio": 27.36,
+  "fim": 27.5
+ },
+ {
+  "palavra": "as",
+  "inicio": 27.5,
+  "fim": 27.66
+ },
+ {
+  "palavra": "paredes",
+  "inicio": 27.66,
+  "fim": 28.2
+ },
+ {
+  "palavra": "que",
+  "inicio": 28.2,
+  "fim": 28.34
+ },
+ {
+  "palavra": "seguravam",
+  "inicio": 28.34,
+  "fim": 28.78
+ },
+ {
+  "palavra": "a",
+  "inicio": 28.78,
+  "fim": 28.96
+ },
+ {
+  "palavra": "casa?",
+  "inicio": 28.96,
+  "fim": 29.22
+ },
+ {
+  "palavra": "Comenta",
+  "inicio": 29.22,
+  "fim": 30.2
+ },
+ {
+  "palavra": "aqui",
+  "inicio": 30.2,
+  "fim": 30.5
+ },
+ {
+  "palavra": "o",
+  "inicio": 30.5,
+  "fim": 30.74
+ },
+ {
+  "palavra": "que",
+  "inicio": 30.74,
+  "fim": 30.84
+ },
+ {
+  "palavra": "você",
+  "inicio": 30.84,
+  "fim": 31.1
+ },
+ {
+  "palavra": "pensava.",
+  "inicio": 31.1,
+  "fim": 31.74
+ }
+]

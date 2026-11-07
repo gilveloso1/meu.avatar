@@ -4,6 +4,7 @@ import { ERROS } from "./erros";
 import { mp4Duration, mp4Size } from "./mp4";
 import { type ImageRequest, type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
+import type { ImageRunner } from "./imagens";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
 import { canUse, InputError, type Lists, makesImage, onPlatform, STRUCTURES, structureById, type Structure, type Values, videoPlatform } from "./structures";
 import { HEYGEN_AVATAR } from "./structures/heygen";
@@ -95,6 +96,8 @@ export class Studio {
     private readonly audio: AudioApi | null = null,
     /** API direta da HeyGen (HEYGEN_API_KEY); sem ela, o HeyGen segue pelo OpenRouter. */
     private readonly heygen: HeyGenApi | null = null,
+    /** Faz a imagem fora do pedido (src/imagens.ts); sem ele, no próprio pedido. */
+    private readonly images: ImageRunner | null = null,
   ) {}
 
   get canGenerate(): boolean {
@@ -250,8 +253,18 @@ export class Studio {
       settings: settings || sourceKey ? JSON.stringify({ ...settings, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
     });
 
-    // A imagem sai na hora: a resposta já traz o arquivo.
-    if (makesImage(structure)) return this.generateImage(video, { model: structure.model, prompt: request.prompt, resolution: request.resolution, aspect_ratio: request.aspect_ratio, input_references: request.input_references });
+    // A imagem sai fora do pedido (src/imagens.ts): a página fica "Gerando" e atualiza sozinha.
+    if (makesImage(structure)) {
+      const started = (await this.db.updateVideo(id, { status: "in_progress" }))!;
+      if (!this.images) return (await this.finishImage(id)) ?? started;
+      try {
+        await this.images.start(id);
+      } catch (err) {
+        console.error("Falha ao começar a imagem", id, err);
+        return (await this.db.updateVideo(id, { status: "failed", error: errorMessage(err) }))!;
+      }
+      return started;
+    }
 
     // O pedido sai depois, da fila de preparo (prepareNext).
     if (built.prepare) return (await this.db.updateVideo(id, { prep_status: "pending" }))!;
@@ -264,10 +277,23 @@ export class Studio {
     }
   }
 
-  /** Gera a imagem dentro do pedido (uns 20 s) e guarda no R2; o botão mostra a espera. */
-  private async generateImage(video: Video, request: ImageRequest): Promise<Video> {
-    await this.db.updateVideo(video.id, { status: "in_progress" });
+  /**
+   * Faz a imagem registrada por create (uns 30 s a 1,5 min) e guarda no R2. O pedido sai da
+   * própria linha (modelo, prompt, resolução, formato e a foto de referência). Só uma vez: a
+   * linha que não está mais "Gerando" (ou já tem arquivo) fica como está.
+   */
+  async finishImage(id: string): Promise<Video | null> {
+    const video = await this.db.videoById(id);
+    if (!video || video.status !== "in_progress" || video.video_key) return video;
     try {
+      let input_references: InputReference[] | undefined;
+      if (video.image_key) {
+        const photo = await this.media.get(video.image_key);
+        if (!photo) throw new Error(`Foto de referência sumiu do R2: ${video.image_key}`);
+        const url = await this.imageUrl(video.image_key, photo.httpMetadata?.contentType ?? "image/png", await photo.arrayBuffer());
+        input_references = [{ type: "image_url", image_url: { url } }];
+      }
+      const request: ImageRequest = { model: video.model, prompt: video.request_prompt ?? video.prompt, resolution: video.resolution, aspect_ratio: video.aspect_ratio, input_references };
       const result = await this.requireApi().image(request);
       const key = `imagens/${video.id}.${IMAGE_TYPES[result.type] ?? "png"}`;
       await this.media.put(key, result.bytes, { httpMetadata: { contentType: result.type } });
@@ -276,6 +302,19 @@ export class Studio {
       console.error("Falha ao gerar a imagem", video.id, err);
       return (await this.db.updateVideo(video.id, { status: "failed", error: errorMessage(err) }))!;
     }
+  }
+
+  /**
+   * Espera a imagem feita fora do pedido (o gerar_imagem do MCP devolve a imagem pronta).
+   * Se quem pediu desistir, ela termina do mesmo jeito e aparece na lista do modelo.
+   */
+  async waitImage(video: Video, timeoutMs = IMAGE_TIMEOUT_MS, everyMs = 2000): Promise<Video> {
+    const until = Date.now() + timeoutMs;
+    while (video.status === "in_progress" && Date.now() < until) {
+      await new Promise((ok) => setTimeout(ok, everyMs));
+      video = (await this.db.videoById(video.id)) ?? video;
+    }
+    return video;
   }
 
   /** Confere o job no OpenRouter e, se terminou, guarda o MP4 no R2. */

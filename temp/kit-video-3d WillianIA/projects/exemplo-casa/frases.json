@@ -1,0 +1,56 @@
+[
+ {
+  "n": 1,
+  "texto": "Uma casa pequena pode pesar dezenas de toneladas.",
+  "inicio": 0,
+  "fim": 2.9
+ },
+ {
+  "n": 2,
+  "texto": "Então por que ela não afunda no chão?",
+  "inicio": 3.4,
+  "fim": 5.46
+ },
+ {
+  "n": 3,
+  "texto": "Para descobrir, você vai construir uma.",
+  "inicio": 5.88,
+  "fim": 7.98
+ },
+ {
+  "n": 4,
+  "texto": "Primeiro você cava e faz a fundação, que espalha todo esse peso pelo terreno.",
+  "inicio": 8.4,
+  "fim": 12.74
+ },
+ {
+  "n": 5,
+  "texto": "Depois sobem os pilares de concreto, que seguram a casa de pé.",
+  "inicio": 13.12,
+  "fim": 16.62
+ },
+ {
+  "n": 6,
+  "texto": "Aí vêm as paredes de tijolo, e na maioria das casas elas só dividem os cômodos.",
+  "inicio": 17,
+  "fim": 21.92
+ },
+ {
+  "n": 7,
+  "texto": "Por cima vão a laje, o madeiramento e as telhas.",
+  "inicio": 22.32,
+  "fim": 25.02
+ },
+ {
+  "n": 8,
+  "texto": "Agora me diz: você achava que eram as paredes que seguravam a casa?",
+  "inicio": 25.5,
+  "fim": 29.22
+ },
+ {
+  "n": 9,
+  "texto": "Comenta aqui o que você pensava.",
+  "inicio": 29.22,
+  "fim": 31.74
+ }
+]
