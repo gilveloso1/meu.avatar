@@ -147,6 +147,21 @@ photo", e a fala vai como "The person on camera says softly…: "…"" seguida d
 speech is in Brazilian Portuguese and says exactly the quoted words." (no curto: "The person
 speaks in Brazilian Portuguese, with lip sync, and says exactly: "…"").
 
+**Frase da fala (17:46, 360p, 4 s):**
+
+| Teste | Pedido | Resultado |
+|---|---|---|
+| C | O antigo, com a frase da fala nova | Pronto, US$ 0,093 (`gen-vid-1794073568-LNk6JSH555b8XbsovYeu`) |
+| D | Curto ("Woman in a studio…"), com a frase da fala antiga | Pronto, US$ 0,093 (`gen-vid-1794073569-YsUwDbf4NVlvUjAavmdR`) |
+| E | Curto, frase nova, começando por "The person in the photo is…" | Falhou |
+
+**O pedido curto funciona com a fala no formato antigo**: `The person on camera says …:
+"<fala>"` e, numa linha à parte, `Lip sync. The speech is in <idioma> and says exactly the
+quoted words.` Com a frase nova (`The person speaks in <idioma>, with lip sync, and says
+exactly: "<fala>"`) o curto falha sempre (A, E e todos do site); no pedido longo, passa (C).
+Citar a foto não ajuda (E). Falta testar a fala antiga sem "softly, in a calm, low voice"
+(estilo de voz, que deve vir das instruções) e o sem fala sem notícias.
+
 ## Próximo passo
 
 Gerar um vídeo com fala e instruções (sem a orientação de voz do Wan) e um sem fala; medir o
