@@ -156,6 +156,12 @@ export class Site {
     if (!post && old) return redirect(`/modelo/${old[1]}`);
 
     if (!post && path === "/vozes/lista") return this.voiceList(user, url);
+    // "Mostrar mais" do "Adicionar ativo": a página seguinte do que a pessoa gerou.
+    if (!post && path === "/gerados") {
+      const kind = url.searchParams.get("tipo");
+      if (kind !== "imagem" && kind !== "video") return new Response("não encontrado", { status: 404 });
+      return html(await this.generatedFrames(user, kind, Math.max(0, Number(url.searchParams.get("de")) || 0)));
+    }
     const preview = /^\/vozes\/previa\/([\w-]+)$/.exec(path);
     if (!post && preview) return this.voicePreview(user, preview[1]!);
 
@@ -166,9 +172,11 @@ export class Site {
       if (!found || !canUse(found, user.role)) return new Response("não encontrado", { status: 404 });
       // O HeyGen pode estar na API direta (config do banco): o formulário mostra só o que ela aceita.
       const structure = await this.studio.resolve(found);
-      return post
-        ? this.createVideo(request, user, structure)
-        : this.modelPage(user, structure, await this.redoValues(structure, url.searchParams.get("refazer")));
+      if (post) return this.createVideo(request, user, structure);
+      // "Refazer" volta com os ajustes, o avatar e os arquivos do vídeo; "Usar para gerar" traz um resultado pronto.
+      const redo = await this.redo(structure, url.searchParams.get("refazer"), user);
+      const use = url.searchParams.get("usar");
+      return this.modelPage(user, structure, redo?.values, undefined, redo?.picks ?? (use ? { avatar: "", assets: [use] } : undefined));
     }
 
     // A página do vídeo: o player ocupa a tela, com as informações numa folha lateral.
@@ -187,6 +195,12 @@ export class Site {
     if (post && quickEdit) return this.quickEdit(request, user, quickEdit[1]!);
     const face = /^\/videos\/([0-9a-f-]{36})\/rosto$/.exec(path);
     if (!post && face) return this.face(user, face[1]!);
+    // Os arquivos que a pessoa usou para gerar o vídeo (a prévia do Refazer): só quem gerou vê.
+    const reference = /^\/videos\/([0-9a-f-]{36})\/referencia\/(imagem|video|audio)$/.exec(path);
+    if (!post && reference) {
+      const found = await this.pickFile(`origem:${reference[1]}:${reference[2]}`, user);
+      return found ? this.object(request, found.key, "private, max-age=86400") : new Response("não encontrado", { status: 404 });
+    }
 
     // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo;
     // /videos/<id>.editado.mp4: a edição rápida.
@@ -843,6 +857,17 @@ ${CANVAS_BODY}
     const family = familyOf(structure).filter((s) => canUse(s, user.role));
     const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.lastExtraByAvatar(user.id, family.map((s) => s.id)) : undefined;
     const assets = kinds.length ? (await this.db.assetsByUser(user.id)).filter((a) => kinds.includes(a.kind)) : [];
+    // "Adicionar ativo": a primeira página do que a pessoa já gerou, de todos os modelos, por tipo.
+    const generated = Object.fromEntries(await Promise.all(kinds.map(async (k) => [k, await this.generatedFrames(user, k, 0)] as const)));
+    // As escolhas que não são ativo do avatar (Refazer, "Usar para gerar", geração com erro): só as que valem.
+    if (picks) {
+      const items: PickItem[] = [];
+      for (const id of picks.assets.filter((a) => a.includes(":"))) {
+        const found = await this.pickFile(id, user);
+        if (found && kinds.includes(found.kind) && !items.some((i) => i.kind === found.kind)) items.push({ id, kind: found.kind, name: found.name, src: found.src, hint: found.hint });
+      }
+      picks = { avatar: picks.avatar, assets: picks.assets.filter((a) => !a.includes(":") || items.some((i) => i.id === a)), items };
+    }
     const leads = sections.filter((s) => s.lead);
     const rest = sections.filter((s) => !s.lead).map((s) => ({ ...s, fields: s.fields.filter((f) => !isFile(f)) })).filter((s) => s.fields.length);
 
@@ -859,7 +884,7 @@ ${CANVAS_BODY}
       </div>
       ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)), image)}
     </section>
-    ${kinds.length ? assetPanel(avatars, assets, kinds, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined, lastText) : ""}
+    ${kinds.length ? assetPanel(avatars, assets, kinds, generated, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined, lastText) : ""}
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
       ${videoLibrary(videos, {
@@ -878,6 +903,7 @@ ${CANVAS_BODY}
               : "Escolha a foto e os ajustes, descreva o movimento e toque em Gerar vídeo.",
         ),
         structureOf: () => structure,
+        mine: kinds.length ? user.id : undefined,
         image,
       })}
     </div>
@@ -946,12 +972,19 @@ ${error ? snackbar(error) : ""}`;
   }
 
   /**
-   * "Refazer": os valores do formulário tirados de um vídeo já feito (texto e ajustes).
-   * Só os campos que existem na estrutura usam esses valores; o resto fica no padrão.
+   * "Refazer": os valores do formulário tirados de um vídeo já feito (texto e ajustes) e, para quem
+   * o gerou, o avatar e os arquivos usados (as cópias que o vídeo guarda). Só os campos que existem
+   * na estrutura usam esses valores; o resto fica no padrão.
    */
-  private async redoValues(structure: Structure, id: string | null): Promise<Values | undefined> {
+  private async redo(structure: Structure, id: string | null, user: User): Promise<{ values: Values; picks?: AssetPicks } | undefined> {
     const v = id ? await this.db.videoById(id) : null;
     if (!v || v.structure !== structure.id) return undefined;
+    const picks: AssetPicks = { avatar: "", assets: [] };
+    if (v.user_id === user.id) {
+      const avatar = v.avatar_id ? await this.db.avatarById(v.avatar_id) : null;
+      if (avatar?.user_id === user.id) picks.avatar = avatar.id;
+      for (const kind of ASSET_ORDER) if (await this.pickFile(`origem:${v.id}:${kind}`, user)) picks.assets.push(`origem:${v.id}:${kind}`);
+    }
     const { model } = await this.tryModel(structure);
     const base = defaultValues(structure.sections(model, this.config.defaults, v.user_id ? await this.studio.lists(structure, v.user_id) : {}));
     let settings: Record<string, string> = {};
@@ -962,7 +995,7 @@ ${error ? snackbar(error) : ""}`;
       voz: settings.voice_id, expressividade: settings.expressiveness, roupa: settings.outfit, uso: settings.use,
       fonte: settings.source, clone: settings.voice_row,
     };
-    return (name) => from[name] || base(name);
+    return { values: (name) => from[name] || base(name), picks: picks.avatar || picks.assets.length ? picks : undefined };
   }
 
   /** A página do vídeo: o vídeo centralizado sobre ele mesmo desfocado e, ao lado, a folha com as informações. */
@@ -1025,6 +1058,9 @@ ${error ? snackbar(error) : ""}`;
     const used = avatars.find((a) => a.id === v.avatar_id);
     const ordered = used ? [used, ...avatars.filter((a) => a !== used)] : avatars;
     const saveButton = v.video_key ? `<button class="button button--outlined interactive viewer__save" type="button" data-dialog-open="salvar-avatar"><span class="icon">bookmark_add</span>Salvar no avatar</button>` : "";
+    // "Usar para gerar": só quando a página foi aberta de um modelo que aceita este tipo; volta para ele com o arquivo no painel.
+    const useIn = await this.useTarget(v, from, user);
+    const useButton = useIn ? `<a class="button button--outlined interactive viewer__save" href="/modelo/${useIn}?usar=gerado:${v.id}"><span class="icon">auto_awesome</span>Usar para gerar</a>` : "";
     const saveDialog = v.video_key
       ? avatarDialog({
           id: "salvar-avatar",
@@ -1049,6 +1085,7 @@ ${error ? snackbar(error) : ""}`;
             .join("")}
           ${detailsCard("Detalhes", details.map((d) => ({ icon: DETAIL_ICONS[d.term] ?? "info", term: d.term, value: d.description })))}
           ${saveButton}
+          ${useButton}
         </div>`;
     const body = `
 <main class="viewer" id="conteudo">
@@ -1098,6 +1135,16 @@ ${error ? snackbar(error) : ""}`;
     return html(page(`${image ? "Imagem" : "Vídeo"} · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
   }
 
+  /** O modelo de onde a página do vídeo foi aberta, se ele aceita o vídeo (ou imagem) pronto da pessoa como referência. */
+  private async useTarget(v: Video, back: string, user: User): Promise<string | null> {
+    const id = /^\/modelo\/([a-z0-9-]+)(?:[?#]|$)/.exec(back)?.[1];
+    const found = id ? structureById(id) : undefined;
+    if (!found || !canUse(found, user.role) || v.user_id !== user.id || v.status !== "completed" || !v.video_key) return null;
+    const structure = await this.studio.resolve(found);
+    const kind: AssetKind = makesImage(videoStructure(v)) ? "imagem" : "video";
+    return acceptedKinds(structure.sections(null, this.config.defaults, {}).flatMap((s) => s.fields)).includes(kind) ? structure.id : null;
+  }
+
   private async tryModel(structure: Structure): Promise<{ model: VideoModel | null; error: string | null }> {
     // A API direta da HeyGen não tem lista de modelos: o que ela aceita fica na estrutura.
     if (structure.platform === "heygen") return { model: HEYGEN_MODEL, error: null };
@@ -1123,10 +1170,8 @@ ${error ? snackbar(error) : ""}`;
     const sections = structure.sections(model, this.config.defaults, await this.studio.lists(structure, user.id));
     const values = formValues(form, sections);
     const fields = sections.flatMap((s) => s.fields);
-    const file = (name: string) => {
-      const f = form.get(name);
-      return f instanceof File ? f : null;
-    };
+    // O mesmo tipo pode ser enviado no menu do avatar ou no "Adicionar ativo": vale o que tiver arquivo.
+    const file = (name: string) => form.getAll(name).find((f): f is File => f instanceof File && f.size > 0) ?? null;
     // Cada tipo vem de um arquivo solto ou de um ativo do avatar escolhido.
     const picks: AssetPicks = { avatar: String(form.get("avatar") ?? ""), assets: form.getAll("ativo").map(String) };
     const chosen = await this.pickedFiles(picks, user, acceptedKinds(fields));
@@ -1143,22 +1188,57 @@ ${error ? snackbar(error) : ""}`;
   }
 
   /**
-   * Os ativos escolhidos, como arquivos para o modelo: só do avatar da própria pessoa, um por
-   * tipo e só dos tipos que o modelo aceita. null: a escolha não vale.
+   * Os ativos escolhidos, como arquivos para o modelo: do avatar da própria pessoa, de um vídeo
+   * ou imagem que ela gerou ou dos arquivos de um vídeo dela (Refazer); um por tipo e só dos
+   * tipos que o modelo aceita. null: a escolha não vale.
    */
   private async pickedFiles(picks: AssetPicks, user: User, kinds: AssetKind[]): Promise<Partial<Record<AssetKind, File>> | null> {
-    if (!picks.avatar) return picks.assets.length ? null : {};
-    const avatar = await this.db.avatarById(picks.avatar);
-    if (avatar?.user_id !== user.id) return null;
+    const avatar = picks.avatar ? await this.db.avatarById(picks.avatar) : null;
+    if (picks.avatar && avatar?.user_id !== user.id) return null;
     const files: Partial<Record<AssetKind, File>> = {};
     for (const id of picks.assets) {
-      const asset = await this.db.asset(avatar.id, id);
+      const asset = id.includes(":") ? await this.pickFile(id, user) : avatar ? await this.db.asset(avatar.id, id) : null;
       if (!asset || !kinds.includes(asset.kind) || files[asset.kind]) return null;
       const object = await this.media.get(asset.key);
       if (!object) return null;
-      files[asset.kind] = new File([await object.arrayBuffer()], asset.name, { type: asset.type });
+      const type = "type" in asset ? asset.type : (object.httpMetadata?.contentType ?? "");
+      files[asset.kind] = new File([await object.arrayBuffer()], asset.name, { type });
     }
     return files;
+  }
+
+  /** Uma página dos vídeos ou imagens prontos da pessoa, de todos os modelos, como quadros do "Adicionar ativo". */
+  private async generatedFrames(user: User, kind: AssetKind, from: number): Promise<string> {
+    if (kind === "audio") return "";
+    const structures = STRUCTURES.filter((s) => (makesImage(s) ? "imagem" : "video") === kind).map((s) => s.id);
+    const videos = await this.db.readyByUser(user.id, structures, from, GENERATED_PAGE + 1);
+    const frames = videos.slice(0, GENERATED_PAGE).map((v) => {
+      const structure = videoStructure(v)!;
+      return pickFrame({ ...generatedPick(v, structure), thumb: outputThumb(v, structure) });
+    });
+    const more = videos.length > GENERATED_PAGE ? `<div class="voice-more asset-grid__more"><button class="button button--text interactive" type="button" data-generated-more="${from + GENERATED_PAGE}" data-generated-kind="${kind}">Mostrar mais</button></div>` : "";
+    return frames.join("") + more;
+  }
+
+  /**
+   * Uma escolha que não é ativo de avatar, só de vídeo da própria pessoa: `gerado:<id>` é o
+   * resultado pronto (a versão que vale); `origem:<id>:<tipo>` é o arquivo que ela usou para gerá-lo.
+   */
+  private async pickFile(id: string, user: User): Promise<PickedFile | null> {
+    const m = /^(?:gerado:([0-9a-f-]{36})|origem:([0-9a-f-]{36}):(imagem|video|audio))$/.exec(id);
+    const video = m ? await this.db.videoById(m[1] ?? m[2]!) : null;
+    if (!m || !video || video.user_id !== user.id) return null;
+    if (m[1]) {
+      const ready = await this.savableVideo(video.id, user);
+      if (!ready || video.status !== "completed") return null;
+      return { ...generatedPick(video, ready.structure), key: ready.key };
+    }
+    const kind = m[3] as AssetKind;
+    let settings: Record<string, string> = {};
+    try { settings = JSON.parse(video.settings ?? "{}"); } catch {}
+    const key = kind === "imagem" ? video.image_key : kind === "video" ? settings.source_key : settings.audio_key;
+    if (!key || !(await this.media.head(key))) return null;
+    return { id, kind, key, name: ASSET_LABELS[kind], src: `/videos/${video.id}/referencia/${kind}`, hint: "Do vídeo original" };
   }
 
   private async login(request: Request): Promise<Response> {
@@ -1484,6 +1564,8 @@ interface LibraryOptions {
   /** O que mostrar sem vídeos. */
   empty: string;
   structureOf: (v: Video) => Structure;
+  /** Quem vê a lista: os vídeos prontos dela podem ser arrastados para o painel do modelo. */
+  mine?: number;
   /** Lista de imagens (o modelo de imagem): Descrição no lugar do Texto e Resolução no da Duração. */
   image?: boolean;
 }
@@ -1536,16 +1618,18 @@ function avatarDialog(o: { id: string; title: string; avatars: Avatar[]; item: (
 
 /**
  * O que o painel do modelo guarda: o avatar e, abaixo dele, os ativos escolhidos um a um. O script
- * da página monta as linhas; `picks` devolve a escolha quando a geração volta com erro.
+ * da página monta as linhas; `picks` devolve a escolha (geração com erro, Refazer, "Usar para gerar").
+ * "Adicionar ativo" vale com ou sem avatar: envio e o que a pessoa já gerou (os ativos do avatar
+ * ficam no caminho do avatar).
  */
 function assetList(picks?: AssetPicks): string {
-  const pick = picks?.avatar ? ` data-picks="${esc(JSON.stringify(picks))}"` : "";
+  const pick = picks?.avatar || picks?.assets.length ? ` data-picks="${esc(JSON.stringify(picks))}"` : "";
   return `<section class="form-section form-section--assets"${pick} aria-labelledby="ativos-titulo">
         <h2 class="form-section__title" id="ativos-titulo">Avatar</h2>
         <input type="hidden" name="avatar" value="" data-avatar-input>
         <ul class="file-list" data-asset-list>
           <li><button class="file-picker interactive" type="button" data-panel-open="avatares" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty" data-avatar-preview><span class="icon">face</span></span><span class="file-picker__text"><span class="file-picker__name" data-avatar-name>Adicionar avatar</span></span></button></li>
-          <li data-asset-add hidden><button class="file-picker interactive" type="button" data-panel-open="ativos" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty"><span class="icon">add</span></span><span class="file-picker__text"><span class="file-picker__name">Adicionar ativo</span></span></button></li>
+          <li data-asset-add><button class="file-picker interactive" type="button" data-panel-open="referencias" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty"><span class="icon">add</span></span><span class="file-picker__text"><span class="file-picker__name">Adicionar ativo</span></span></button></li>
         </ul>
         <template data-asset-row><li data-asset-row><div class="file-picker"><span class="file-picker__preview" data-row-preview></span><span class="file-picker__text"><span class="file-picker__name" data-row-name></span><span class="file-picker__hint" data-row-hint></span></span><button class="icon-button interactive" type="button" data-row-remove aria-label="Remover"><span class="icon">close</span></button></div></li></template>
       </section>`;
@@ -1562,9 +1646,22 @@ const ASSET_UPLOAD: Record<AssetKind, { name: string; accept: string; plural: st
  * O menu que se desdobra ao lado do painel: primeiro o avatar, depois os ativos dele, só dos
  * tipos que o modelo aceita. Fica dentro do formulário: enviar um arquivo aqui vai junto.
  */
-function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[], voice?: { voices: VoiceOption[]; value: string }, lastText?: Map<string, string>): string {
+function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[], generated: Partial<Record<AssetKind, string>>, voice?: { voices: VoiceOption[]; value: string }, lastText?: Map<string, string>): string {
   const src = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
-  const frame = (a: AvatarAsset) => `<button class="frame interactive" type="button" data-asset="${a.id}" data-asset-of="${a.avatar_id}" data-asset-type="${a.kind}" data-asset-src="${src(a)}" data-asset-name="${esc(a.name)}" aria-label="${esc(a.name)}" title="${esc(a.name)}" aria-pressed="false" hidden><span class="frame__media">${assetThumb(a, src(a))}</span><span class="frame__check" aria-hidden="true"><span class="icon">check</span></span></button>`;
+  const frame = (a: AvatarAsset) => pickFrame({ id: a.id, of: a.avatar_id, kind: a.kind, src: src(a), name: a.name, thumb: assetThumb(a, src(a)) });
+  // Os dois menus de ativos (o do avatar e o "Adicionar ativo") têm os mesmos chips por tipo e o mesmo envio.
+  const byKind = (content: (k: AssetKind) => string) => `${kinds.length > 1 ? `<div class="chip-set" role="group" aria-label="Tipo de ativo">${kinds.map((k, i) => `<button class="chip interactive" type="button" data-kind="${k}" aria-pressed="${i === 0}"><span class="icon chip__check">check</span>${ASSET_UPLOAD[k].plural}</button>`).join("")}</div>` : ""}
+        ${kinds
+          .map(
+            (k, i) => `<div class="side-panel__kind" data-kind-view="${k}"${i ? " hidden" : ""}>
+          <p class="side-panel__help">Este modelo aceita ${ASSET_UPLOAD[k].one}.</p>
+          <div class="asset-grid">
+            <label class="asset-upload interactive"><input class="visually-hidden" type="file" name="${ASSET_UPLOAD[k].name}" accept="${ASSET_UPLOAD[k].accept}" aria-label="Enviar arquivo" data-asset-upload="${k}"><span class="icon">upload</span>Enviar arquivo</label>
+            ${content(k)}
+          </div>
+        </div>`,
+          )
+          .join("")}`;
   return `<aside class="side-panel" data-side-panel aria-labelledby="painel-titulo" hidden>
       <div class="side-panel__head">
         <button class="icon-button interactive" type="button" data-panel-back aria-label="Trocar avatar" hidden><span class="icon">arrow_back</span></button>
@@ -1579,21 +1676,21 @@ function assetPanel(avatars: Avatar[], assets: AvatarAsset[], kinds: AssetKind[]
         <a class="button button--text interactive side-panel__new" href="/avatares/novo"><span class="icon">add</span>Novo avatar</a>
       </div>
       <div class="side-panel__body" data-panel-view="ativos" hidden>
-        ${kinds.length > 1 ? `<div class="chip-set" role="group" aria-label="Tipo de ativo">${kinds.map((k, i) => `<button class="chip interactive" type="button" data-kind="${k}" aria-pressed="${i === 0}"><span class="icon chip__check">check</span>${ASSET_UPLOAD[k].plural}</button>`).join("")}</div>` : ""}
-        ${kinds
-          .map(
-            (k, i) => `<div class="side-panel__kind" data-kind-view="${k}"${i ? " hidden" : ""}>
-          <p class="side-panel__help">Este modelo aceita ${ASSET_UPLOAD[k].one}.</p>
-          <div class="asset-grid">
-            <label class="asset-upload interactive"><input class="visually-hidden" type="file" name="${ASSET_UPLOAD[k].name}" accept="${ASSET_UPLOAD[k].accept}" aria-label="Enviar arquivo" data-asset-upload="${k}"><span class="icon">upload</span>Enviar arquivo</label>
-            ${assets.filter((a) => a.kind === k).map(frame).join("")}
-          </div>
-        </div>`,
-          )
-          .join("")}
+        ${byKind((k) => assets.filter((a) => a.kind === k).map(frame).join(""))}
+      </div>
+      <div class="side-panel__body" data-panel-view="referencias" hidden>
+        ${byKind((k) => generated[k] ?? "")}
       </div>
       ${voice ? voicePanel(voice.voices, chosenVoice(voice.voices, voice.value)) : ""}
     </aside>`;
+}
+
+/** Quantos vídeos ou imagens prontos cada página do "Adicionar ativo" traz. */
+const GENERATED_PAGE = 12;
+
+/** Um quadro dos menus de ativos: tocar escolhe (ou tira) o arquivo. `of`: o avatar dono, que só aparece com ele. */
+function pickFrame(o: { id: string; kind: AssetKind; src: string; name: string; hint?: string; of?: string; thumb: string }): string {
+  return `<button class="frame interactive" type="button" data-asset="${esc(o.id)}"${o.of ? ` data-asset-of="${o.of}"` : ""} data-asset-type="${o.kind}" data-asset-src="${esc(o.src)}" data-asset-name="${esc(o.name)}"${o.hint ? ` data-asset-hint="${esc(o.hint)}"` : ""} aria-label="${esc(o.name)}" title="${esc(o.name)}" aria-pressed="false"${o.of ? " hidden" : ""}><span class="frame__media">${o.thumb}</span><span class="frame__check" aria-hidden="true"><span class="icon">check</span></span></button>`;
 }
 
 const GENDERS: Record<string, string> = { female: "Feminina", male: "Masculina" };
@@ -1713,16 +1810,21 @@ function library<T>(o: {
     </div>`;
 }
 
+/** A miniatura de um vídeo ou imagem pronto (o vídeo só baixa quando aparece na tela), enquadrando o rosto. */
+function outputThumb(v: Video, structure: Structure): string {
+  return makesImage(structure)
+    ? faceImage(mediaSrc(v), v.face)
+    : `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>`;
+}
+
 function videoLibrary(videos: Video[], o: LibraryOptions): string {
   const h = o.heading ?? "h2";
   const head = (count: string) => {
     const title = `<${h} class="${o.intro ? "page__headline" : "library__title"}">${esc(o.title)} <span class="pane__count"${count === "" ? "" : " data-library-count"}>${count || 0}</span></${h}>`;
     return o.intro ? `<div>${title}<p class="page__intro">${esc(o.intro)}</p></div>` : title;
   };
-  const thumb = (v: Video, status: ReturnType<typeof cardStatus>) =>
-    v.video_key && makesImage(o.structureOf(v))
-      ? faceImage(mediaSrc(v), v.face)
-      : v.video_key ? `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>` : `<span class="frame__placeholder">${statusTile(status, true)}</span>`;
+  const dragRef = (v: Video, structure: Structure) => (o.mine !== undefined && v.user_id === o.mine && v.status === "completed" && v.video_key ? ` data-ref="${esc(JSON.stringify(generatedPick(v, structure)))}"` : "");
+  const thumb = (v: Video, status: ReturnType<typeof cardStatus>) => (v.video_key ? outputThumb(v, o.structureOf(v)) : `<span class="frame__placeholder">${statusTile(status, true)}</span>`);
   return library({
     key: o.key,
     head,
@@ -1737,11 +1839,11 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
       const status = cardStatus(v);
       const structure = o.structureOf(v);
       const label = esc([v.prompt, status.kind === "done" ? null : status.label, formatDate(v.created_at), structure.name, durationLabel(v, structure)].filter(Boolean).join(" · "));
-      return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}" aria-label="${label}" title="${label}"><span class="frame__media">${thumb(v, status)}</span></a>`;
+      return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}"${dragRef(v, structure)} aria-label="${label}" title="${label}"><span class="frame__media">${thumb(v, status)}</span></a>`;
     },
     row: (v) => {
       const status = cardStatus(v), structure = o.structureOf(v);
-      return `<a class="vrow interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" role="row" data-video="${v.id}" data-kind="${status.kind}">
+      return `<a class="vrow interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" role="row" data-video="${v.id}" data-kind="${status.kind}"${dragRef(v, structure)}>
           <span class="vrow__thumb" role="cell">${thumb(v, status)}</span>
           <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(v.prompt)}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
           <span class="vrow__status vrow__status--${status.kind}" role="cell"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label.replace(/ · .*/, ""))}</span>
@@ -1782,10 +1884,31 @@ function fieldAsset(f: Field): AssetKind | null {
 }
 const acceptedKinds = (fields: Field[]) => [...new Set(fields.flatMap((f) => fieldAsset(f) ?? []))].sort((a, b) => ASSET_ORDER.indexOf(a) - ASSET_ORDER.indexOf(b));
 const ASSET_ORDER: AssetKind[] = ["imagem", "video", "audio"];
-/** O avatar e os ativos escolhidos no painel do modelo. */
+/**
+ * O avatar e os ativos escolhidos no painel do modelo. Um ativo é o id de um ativo do avatar ou
+ * uma escolha de vídeo (`gerado:` ou `origem:`, ver pickFile); `items` diz como mostrar estas.
+ */
 interface AssetPicks {
   avatar: string;
   assets: string[];
+  items?: PickItem[];
+}
+/** Uma escolha do painel como a linha dele mostra. */
+interface PickItem {
+  id: string;
+  kind: AssetKind;
+  name: string;
+  src: string;
+  hint: string;
+}
+/** Uma escolha de vídeo e onde está o arquivo dela no R2. */
+interface PickedFile extends PickItem {
+  key: string;
+}
+/** Um vídeo ou imagem pronto como referência para outro modelo (painel, lista e "Usar para gerar"). */
+function generatedPick(v: Video, structure: Structure): PickItem {
+  const kind: AssetKind = makesImage(structure) ? "imagem" : "video";
+  return { id: `gerado:${v.id}`, kind, name: v.prompt.slice(0, 80) || structure.name, src: mediaSrc(v), hint: kind === "imagem" ? "Imagem gerada" : "Vídeo gerado" };
 }
 const ASSET_ICONS: Record<AssetKind, string> = { imagem: "image", video: "movie", audio: "mic" };
 const ASSET_ACCEPT = Object.keys(MEDIA_KINDS).join(",");
@@ -2673,7 +2796,8 @@ const SCRIPT = `(() => {
   }
 
   // Ativos cortados no rosto: os olhos a 40% da altura e no meio da largura, como em thumbPosition.
-  for (const el of document.querySelectorAll("[data-face]")) {
+  // window.mdThumbs(root) faz o mesmo (e a miniatura que só baixa quando aparece) no que chegou depois.
+  const placeFaces = (root) => { for (const el of root.querySelectorAll("[data-face]")) {
     const place = () => {
       const [fx, fy] = el.dataset.face.split(",").map(Number);
       const pct = (r, f, target) => (r > 1 ? Math.min(100, Math.max(0, ((r * f - target) / (r - 1)) * 100)) : 50);
@@ -2682,11 +2806,11 @@ const SCRIPT = `(() => {
     };
     if (el.naturalWidth || el.videoWidth) place();
     else el.addEventListener(el.tagName === "VIDEO" ? "loadedmetadata" : "load", place, { once: true });
-  }
+  } };
+  placeFaces(document);
 
   // Miniaturas: o vídeo só baixa quando aparece na tela (a vista escondida não baixa nada).
-  const thumbs = document.querySelectorAll("video[data-src]");
-  if (thumbs.length) {
+  {
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) if (e.isIntersecting) {
         const v = e.target;
@@ -2696,7 +2820,9 @@ const SCRIPT = `(() => {
         v.src = v.dataset.src + "#t=0.5"; v.removeAttribute("data-src"); io.unobserve(v);
       }
     }, { rootMargin: "200px" });
-    thumbs.forEach((t) => io.observe(t));
+    const watch = (root) => root.querySelectorAll("video[data-src]").forEach((t) => io.observe(t));
+    watch(document);
+    window.mdThumbs = (root) => { placeFaces(root); watch(root); };
   }
 
   // Lista de vídeos do modelo: filtro por status, ordem (grupos e itens) e vista (cards ou detalhes).
@@ -2956,7 +3082,8 @@ const SCRIPT = `(() => {
     if (panel) {
       const section = f.querySelector(".form-section--assets"), list = f.querySelector("[data-asset-list]"), add = list.querySelector("[data-asset-add]");
       const rowTemplate = section.querySelector("template"), avatarInput = f.querySelector("[data-avatar-input]");
-      const frames = [...panel.querySelectorAll("[data-asset]")], uploads = [...panel.querySelectorAll("[data-asset-upload]")];
+      // Os quadros mudam ("Mostrar mais" traz mais): sempre lidos de novo.
+      const frames = () => [...panel.querySelectorAll("[data-asset]")], uploads = [...panel.querySelectorAll("[data-asset-upload]")];
       const opens = [...f.querySelectorAll("[data-panel-open]")], views = [...panel.querySelectorAll("[data-panel-view]")];
       const chips = [...panel.querySelectorAll("[data-kind]")], kindViews = [...panel.querySelectorAll("[data-kind-view]")];
       const title = panel.querySelector("[data-panel-title]"), back = panel.querySelector("[data-panel-back]");
@@ -2974,10 +3101,11 @@ const SCRIPT = `(() => {
         if (next !== "vozes") stopVoice();
         view = next;
         panel.hidden = !next;
-        for (const b of opens) b.setAttribute("aria-expanded", String(b.dataset.panelOpen === next));
+        // A linha do avatar abre a lista de avatares e, com um escolhido, os ativos dele.
+        for (const b of opens) b.setAttribute("aria-expanded", String(b.dataset.panelOpen === next || (b.dataset.panelOpen === "avatares" && next === "ativos")));
         for (const v of views) v.hidden = v.dataset.panelView !== next;
         back.hidden = next !== "ativos";
-        title.textContent = next === "ativos" ? avatarName : next === "vozes" ? "Escolha a voz" : "Escolha o avatar";
+        title.textContent = next === "ativos" ? avatarName : next === "vozes" ? "Escolha a voz" : next === "referencias" ? "Adicionar ativo" : "Escolha o avatar";
         if (next === "vozes") openVoices();
       };
       const showKind = (kind) => {
@@ -3005,7 +3133,7 @@ const SCRIPT = `(() => {
       const clear = (kind, keepUpload) => {
         const row = rowOf(kind);
         if (row) row.remove();
-        for (const b of frames) if (b.dataset.assetType === kind) b.setAttribute("aria-pressed", "false");
+        for (const b of frames()) if (b.dataset.assetType === kind) b.setAttribute("aria-pressed", "false");
         if (!keepUpload) for (const u of uploads) if (u.dataset.assetUpload === kind) u.value = "";
         if (kind === "video") sourceSeconds = 0;
         if (kind === "audio") audioSeconds = 0;
@@ -3024,6 +3152,7 @@ const SCRIPT = `(() => {
           media.src = kind === "video" ? item.src + "#t=0.5" : item.src;
           box.append(media);
         }
+        if (item.avatar) row.dataset.rowAvatar = "";
         if (item.id) {
           const input = document.createElement("input");
           input.type = "hidden"; input.name = "ativo"; input.value = item.id;
@@ -3042,21 +3171,42 @@ const SCRIPT = `(() => {
         measure(kind, item.src);
         update();
       };
-      const pickFrame = (b) => set(b.dataset.assetType, { id: b.dataset.asset, name: b.dataset.assetName, src: b.dataset.assetSrc, hint: b.dataset.asset === cover ? "Foto principal" : LABELS[b.dataset.assetType] });
-      for (const b of frames) b.addEventListener("click", () => {
+      const pickFrame = (b) => set(b.dataset.assetType, { id: b.dataset.asset, avatar: Boolean(b.dataset.assetOf), name: b.dataset.assetName, src: b.dataset.assetSrc, hint: b.dataset.assetHint || (b.dataset.asset === cover ? "Foto principal" : LABELS[b.dataset.assetType]) });
+      // Escolher marca o quadro em todos os menus em que ele aparece.
+      const markPicked = (id) => { for (const a of frames()) if (a.dataset.asset === id) a.setAttribute("aria-pressed", "true"); };
+      panel.addEventListener("click", async (e) => {
+        const more = e.target.closest("[data-generated-more]");
+        if (more) {
+          more.disabled = true;
+          try {
+            const res = await fetch("/gerados?" + new URLSearchParams({ tipo: more.dataset.generatedKind, de: more.dataset.generatedMore }));
+            if (!res.ok) throw new Error();
+            const grid = more.closest(".asset-grid"), chosen = list.querySelector('[data-row-kind="' + more.dataset.generatedKind + '"] input[name="ativo"]');
+            more.parentElement.remove();
+            grid.insertAdjacentHTML("beforeend", await res.text());
+            window.mdThumbs(grid);
+            if (chosen) markPicked(chosen.value);
+          } catch { more.disabled = false; }
+          return;
+        }
+        const b = e.target.closest("[data-asset]");
+        if (!b) return;
         if (b.getAttribute("aria-pressed") === "true") { clear(b.dataset.assetType); if (b.dataset.assetType === "audio") setFonte(voiceBefore); update(); return; }
         pickFrame(b);
-        b.setAttribute("aria-pressed", "true");
+        markPicked(b.dataset.asset);
       });
       for (const u of uploads) u.addEventListener("change", () => {
         const file = u.files[0];
+        // O mesmo tipo pode ser enviado nos dois menus: vale o último.
+        for (const o of uploads) if (o !== u && o.dataset.assetUpload === u.dataset.assetUpload) o.value = "";
         if (file) set(u.dataset.assetUpload, { name: file.name, src: URL.createObjectURL(file), hint: "Arquivo enviado" });
       });
       // O campo com o último texto do avatar: só troca se estiver vazio ou ainda com o texto de outro avatar.
       const perAvatar = f.querySelector("[data-per-avatar]");
       let autoText = "";
       const pickAvatar = (b) => {
-        for (const kind of Object.keys(LABELS)) clear(kind);
+        // Sai o que veio do avatar anterior; o que foi enviado ou gerado fica (a foto principal ainda troca a imagem).
+        for (const r of list.querySelectorAll("[data-row-avatar]")) clear(r.dataset.rowKind);
         if (perAvatar && (!perAvatar.value.trim() || perAvatar.value === autoText)) {
           perAvatar.value = autoText = b.dataset.avatarText || "";
           perAvatar.dispatchEvent(new Event("input", { bubbles: true }));
@@ -3071,10 +3221,9 @@ const SCRIPT = `(() => {
           const img = new Image(); img.alt = ""; img.src = "/avatares/" + avatarInput.value + "/arquivos/" + cover;
           preview.replaceChildren(img);
         }
-        for (const a of frames) a.hidden = a.dataset.assetOf !== avatarInput.value;
-        add.hidden = false;
-        const main = frames.find((a) => a.dataset.asset === cover);
-        if (main) { pickFrame(main); main.setAttribute("aria-pressed", "true"); }
+        for (const a of frames()) if (a.dataset.assetOf) a.hidden = a.dataset.assetOf !== avatarInput.value;
+        const main = frames().find((a) => a.dataset.asset === cover);
+        if (main) { pickFrame(main); markPicked(main.dataset.asset); }
         // Avatar com voz: já deixa a voz dele escolhida, onde a voz clonada existe.
         const clone = f.elements.clone, voice = b.dataset.avatarVoice;
         if (clone && voice && [...clone.options].some((o) => o.value === voice)) {
@@ -3086,7 +3235,10 @@ const SCRIPT = `(() => {
         show("ativos");
       };
       for (const b of panel.querySelectorAll("[data-avatar-pick]")) b.addEventListener("click", () => pickAvatar(b));
-      for (const b of opens) b.addEventListener("click", () => show(view === b.dataset.panelOpen ? null : b.dataset.panelOpen));
+      for (const b of opens) b.addEventListener("click", () => {
+        if (b.getAttribute("aria-expanded") === "true") return show(null);
+        show(b.dataset.panelOpen === "avatares" && avatarInput.value ? "ativos" : b.dataset.panelOpen);
+      });
       for (const c of chips) c.addEventListener("click", () => showKind(c.dataset.kind));
       back.addEventListener("click", () => show("avatares"));
       panel.querySelector("[data-panel-close]").addEventListener("click", () => show(null));
@@ -3162,15 +3314,44 @@ const SCRIPT = `(() => {
         else if (!rowOf("audio")) { showKind("audio"); show(avatarInput.value ? "ativos" : "avatares"); }
       });
       // Geração que voltou com erro: a escolha continua como estava.
+      // Arrastar um vídeo ou imagem pronto da lista para o painel: entra no tipo dele, se o modelo aceitar.
+      const pane = f.querySelector(".pane--config"), PREFIX = "application/x-meu-avatar-";
+      const dragged = (e) => [...e.dataTransfer.types].find((t) => t.startsWith(PREFIX) && kindViews.some((v) => v.dataset.kindView === t.slice(PREFIX.length)));
+      const dropOff = () => list.classList.remove("file-list--drop");
+      f.addEventListener("dragstart", (e) => {
+        const card = e.target.closest && e.target.closest("[data-ref]");
+        if (!card) return;
+        e.dataTransfer.setData(PREFIX + JSON.parse(card.dataset.ref).kind, card.dataset.ref);
+        e.dataTransfer.effectAllowed = "copy";
+      });
+      f.addEventListener("dragend", dropOff);
+      pane.addEventListener("dragover", (e) => {
+        if (!dragged(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        list.classList.add("file-list--drop");
+      });
+      pane.addEventListener("dragleave", (e) => { if (!pane.contains(e.relatedTarget)) dropOff(); });
+      pane.addEventListener("drop", (e) => {
+        const type = dragged(e);
+        dropOff();
+        if (!type) return;
+        e.preventDefault();
+        const item = JSON.parse(e.dataTransfer.getData(type));
+        set(item.kind, item);
+        markPicked(item.id);
+      });
+      // Geração com erro, Refazer ou "Usar para gerar": o avatar e os arquivos já vêm escolhidos.
       if (section.dataset.picks) {
         const picks = JSON.parse(section.dataset.picks);
-        const b = panel.querySelector('[data-avatar-pick="' + picks.avatar + '"]');
+        const b = picks.avatar && panel.querySelector('[data-avatar-pick="' + picks.avatar + '"]');
         if (b) {
           pickAvatar(b);
           show(null);
           for (const kind of Object.keys(LABELS)) clear(kind);
-          for (const a of frames) if (picks.assets.includes(a.dataset.asset)) { pickFrame(a); a.setAttribute("aria-pressed", "true"); }
         }
+        for (const a of frames()) if (picks.assets.includes(a.dataset.asset) && !rowOf(a.dataset.assetType) && (!a.dataset.assetOf || a.dataset.assetOf === avatarInput.value)) { pickFrame(a); markPicked(a.dataset.asset); }
+        for (const item of picks.items || []) if (!rowOf(item.kind)) { set(item.kind, item); markPicked(item.id); }
       }
     }
   }
