@@ -61,6 +61,16 @@ itens ainda vai ser revista com o dono.
 [maquete.md](maquete.md)). A base (Three.js no contêiner de render, o manequim, a cena em JSON e o
 `montar_maquete`) está no PR da maquete. Faltam:
 
+> **Onde paramos (06/11/2026, nota temporária).** O PR da maquete
+> ([gilveloso1/meu.avatar#109](https://github.com/gilveloso1/meu.avatar/pull/109), branch
+> `claude/maquete-3d`) está aberto e não publicado. A revisão das poses com o dono no visualizador
+> (`npm run maquete`) parou na `selfie`: faltam `segurando_na_frente`, `mostrando_produto`, `falando`,
+> `celular`, `bracos_para_cima`, `segurando_caixa` e `maos_no_bolso`. Em aberto: a pegada do celular
+> ainda passa dos limites do punho (35° e 20°) em algumas posições; decidir se ficam os da anatomia
+> (60° e 30°). Depois: aprovação, publicar pela sessão na nuvem (imagem do render versão 5) e merge.
+> **Agente que retomar: apague esta nota e a seção "Onde parou" de [maquete.md](maquete.md) no
+> mesmo PR em que concluir esses itens, para não ficarem no histórico.**
+
 1. **Biblioteca**: guardar, listar e reaproveitar personagens, objetos, cenários e poses que o
    agente criar, como as animações em código. O personagem do avatar fica no avatar; móveis,
    objetos e poses ficam na conta.

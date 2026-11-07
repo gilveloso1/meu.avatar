@@ -107,7 +107,9 @@ O contêiner não roda sem Docker, mas o servidor dele roda no Node com o Chrome
 
 ## Onde parou (06/11/2026)
 
-Trabalho em andamento no branch `claude/maquete-3d`, ainda sem PR e sem publicar.
+Nota temporária: o agente que retomar apaga esta seção (e a nota do backlog) no PR em que concluir
+os itens abaixo. Trabalho em andamento no branch `claude/maquete-3d`, no PR
+[gilveloso1/meu.avatar#109](https://github.com/gilveloso1/meu.avatar/pull/109), ainda sem publicar.
 
 - Poses do corpo revisadas uma a uma com o dono no visualizador, nas três versões de porte (0,75, 1 e
   1,35). Braços: revisadas até `selfie`; faltam `segurando_na_frente`, `mostrando_produto`,
