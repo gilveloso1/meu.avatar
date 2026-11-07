@@ -96,6 +96,15 @@ export interface User {
   createdAt: string;
 }
 
+/** Uma conta na aba Contas do painel. */
+export interface AccountRow extends User {
+  /** Já criou a senha (aceitou o convite). */
+  hasPassword: boolean;
+  /** Até quando vale o último link de convite (null: nenhum). */
+  inviteUntil: string | null;
+  videos: number;
+}
+
 /** A conta com o que só o login usa. */
 export interface UserLogin extends User {
   passwordHash: string | null;
@@ -824,6 +833,70 @@ export class Db {
     return row ? toUser(row) : null;
   }
 
+  async userById(id: number): Promise<User | null> {
+    const row = await this.d1.prepare("SELECT * FROM users WHERE id = ?").bind(id).first<UserRow>();
+    return row ? toUser(row) : null;
+  }
+
+  /** Cria a conta comum convidada (sem senha até ela aceitar o convite); null se o e-mail já tem conta. */
+  async addMember(email: string, name: string, nowIso: string): Promise<User | null> {
+    const row = await this.d1
+      .prepare("INSERT INTO users (email, name, role, created_at) VALUES (?, ?, 'member', ?) ON CONFLICT DO NOTHING RETURNING *")
+      .bind(email, name, nowIso)
+      .first<UserRow>();
+    return row ? toUser(row) : null;
+  }
+
+  /** As contas para a aba Contas do painel: o administrador primeiro, com o estado da senha e do convite. */
+  async accounts(): Promise<AccountRow[]> {
+    const rows = (
+      await this.d1
+        .prepare(
+          `SELECT u.*, (SELECT MAX(i.expires_at) FROM invites i WHERE i.user_id = u.id) AS invite_until,
+             (SELECT COUNT(*) FROM videos v WHERE v.user_id = u.id) AS videos
+           FROM users u ORDER BY u.role = 'admin' DESC, u.created_at, u.id`,
+        )
+        .all<UserRow & { invite_until: string | null; videos: number }>()
+    ).results;
+    return rows.map((r) => ({ ...toUser(r), hasPassword: r.password_hash !== null, inviteUntil: r.invite_until, videos: r.videos }));
+  }
+
+  /** Grava os ajustes de permissão da conta (src/permissoes.ts). */
+  async setPermissoes(userId: number, permissoes: string[]): Promise<void> {
+    await this.d1.prepare("UPDATE users SET permissoes = ? WHERE id = ?").bind(JSON.stringify(permissoes), userId).run();
+  }
+
+  /** Encerra as sessões abertas da conta. */
+  async endSessions(userId: number): Promise<void> {
+    await this.d1.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
+  }
+
+  /** Um link novo para a conta criar a senha: o anterior (e os vencidos) deixam de valer. */
+  async addInvite(tokenHash: string, userId: number, nowIso: string, expiresIso: string): Promise<void> {
+    await this.d1.batch([
+      this.d1.prepare("DELETE FROM invites WHERE user_id = ? OR expires_at <= ?").bind(userId, nowIso),
+      this.d1.prepare("INSERT INTO invites (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)").bind(tokenHash, userId, nowIso, expiresIso),
+    ]);
+  }
+
+  /** A conta do link, se ele ainda vale. */
+  async inviteUser(tokenHash: string, nowIso: string): Promise<UserLogin | null> {
+    const row = await this.d1
+      .prepare("SELECT u.* FROM invites i JOIN users u ON u.id = i.user_id WHERE i.token_hash = ? AND i.expires_at > ?")
+      .bind(tokenHash, nowIso)
+      .first<UserRow>();
+    return row ? toUserLogin(row) : null;
+  }
+
+  /** Grava a senha nova, zera as tentativas erradas e derruba as sessões e os convites da conta. */
+  async setPassword(userId: number, passwordHash: string): Promise<void> {
+    await this.d1.batch([
+      this.d1.prepare("UPDATE users SET password_hash = ?, failed_logins = 0, locked_until = NULL WHERE id = ?").bind(passwordHash, userId),
+      this.d1.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
+      this.d1.prepare("DELETE FROM invites WHERE user_id = ?").bind(userId),
+    ]);
+  }
+
   async getUserByEmail(email: string): Promise<UserLogin | null> {
     const row = await this.d1.prepare("SELECT * FROM users WHERE email = ?").bind(email).first<UserRow>();
     return row ? toUserLogin(row) : null;
@@ -885,6 +958,7 @@ export class Db {
       this.d1.prepare("UPDATE config SET value = 'openrouter' WHERE key = 'plataforma.heygen'"),
       this.d1.prepare("DELETE FROM config WHERE key = 'alarme.conteiner'"),
       this.d1.prepare("DELETE FROM sessions"),
+      this.d1.prepare("DELETE FROM invites"),
       this.d1.prepare("DELETE FROM api_tokens"),
       this.d1.prepare("DELETE FROM users"),
     ]);
