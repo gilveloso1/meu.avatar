@@ -488,7 +488,8 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 /* A lista de contas: lista expressiva segmentada (a mesma dos Detalhes), com itens de três linhas
    (M3: 88 px), o avatar com a inicial (40 px) à esquerda e o menu de ações à direita. */
 .vrows--accounts { margin: 0; padding: 0; list-style: none; }
-.vrow.vrow--account { grid-template-columns: 40px minmax(0, 1fr) 48px; min-height: 88px; padding: 12px 4px 12px 16px; color: var(--md-sys-color-on-surface-variant); }
+/* Fundo um tom abaixo do branco (surface-container-low), ainda claro sobre o card (highest). */
+.vrow.vrow--account { grid-template-columns: 40px minmax(0, 1fr) 48px; min-height: 88px; padding: 12px 4px 12px 16px; color: var(--md-sys-color-on-surface-variant); background: var(--md-sys-color-surface-container-low); }
 .vrow--account .vrow__support { display: block; }
 .vrow--account .vrow__support--alert { color: var(--md-sys-color-error); }
 .avatar.avatar--list { width: 40px; height: 40px; border: 0; font: var(--md-sys-typescale-title-medium); }
