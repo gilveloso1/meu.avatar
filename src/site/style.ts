@@ -989,6 +989,11 @@ button.asset-upload { background: none; }
 .dash__list--failures { --cols: 24px minmax(0, 3fr) 104px minmax(0, 96px) minmax(0, 2fr) 88px; }
 .dash__list--tokens { --cols: 24px minmax(0, 1fr) minmax(0, 160px) 160px 136px; }
 .dash__list--machines { --cols: 24px minmax(0, 200px) minmax(0, 1fr) 160px; }
+.dash__list--accounts { --cols: 24px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.5fr) 72px 40px; }
+/* Campo de texto dentro de um card do painel: o rótulo flutuante corta a borda com a cor do card. */
+.dash .viewer__card { --field-surface: var(--md-sys-color-surface-container-highest); }
+.dash__form { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.dash__form .text-field { align-self: stretch; }
 /* A máquina ligada sem trabalho há muito tempo (a que gasta à toa): ícone e estado na cor de erro. */
 .dash__list .dash__alert .avatar-option > .icon, .dash__list .dash__alert .dash__cell { color: var(--md-sys-color-error); }
 .dash__list .avatar-option > .icon { color: var(--md-sys-color-on-surface-variant); }
@@ -1007,6 +1012,10 @@ button.asset-upload { background: none; }
   .dash__cell:last-child { flex: 1 1 auto; }
   .dash__cell + .dash__cell::before { content: "·"; padding: 0 6px; }
   .dash__list .avatar-option__end { grid-column: 3; grid-row: 1; }
+  /* Com menu de ações: uma coluna a mais, à direita, nas duas linhas. */
+  .dash__list--accounts .avatar-option { grid-template-columns: 24px minmax(0, 1fr) auto 40px; }
+  .dash__list--accounts .dash__meta { grid-column: 2 / 4; }
+  .dash__list--accounts .dash__menu { grid-column: 4; grid-row: 1 / span 2; }
 }
 
 /* Avatares: a capa do card tem o tamanho do ícone dos cards de Modelos. */
@@ -1050,6 +1059,7 @@ button.asset-upload { background: none; }
 .login__head .top-app-bar__logo { width: 56px; height: 56px; border-radius: var(--md-sys-shape-corner-large); }
 .login__title { font: var(--md-sys-typescale-headline-small); }
 .login__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
+.login > .login__text { text-align: center; }
 .login .button { align-self: stretch; }
 .login { --field-surface: var(--md-sys-color-surface); }
 

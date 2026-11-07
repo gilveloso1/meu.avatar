@@ -54,6 +54,9 @@ export const ERROS = {
   email: campo("Escreva um e-mail válido."),
   senha: (min: number, max: number) => campo(`Use uma senha de ${min} a ${max} caracteres.`),
   senhasDiferentes: campo("Repita a mesma senha."),
+  // O link de convite ou de troca de senha que venceu, já foi usado ou não existe.
+  conviteInvalido: erro("Este link não vale mais.", "Peça um link novo ao administrador."),
+  emailEmUso: campo("Use outro e-mail: este já tem conta."),
 
   // Aviso só do administrador, na página Modelos (src/vigia.ts)
   servicoLigado: erro("Um serviço ficou ligado sem uso e foi parado.", "Confira os logs do site."),

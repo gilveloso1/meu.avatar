@@ -30,6 +30,8 @@ export const PERMISSOES = [
   "usar:api",
   // O painel do administrador: números, custos, atividade e o alarme de contêiner.
   "ver:painel",
+  // A aba Contas do painel: convidar, gerar link de senha, suspender e ajustar permissões.
+  "gerenciar:contas",
   // Marca: a conta não entra (login, sessão e token).
   "suspensa",
 ] as const;
