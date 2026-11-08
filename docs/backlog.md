@@ -34,6 +34,9 @@ Já feito (tudo no ar e conferido em 02/11/2026, ver [api.md](api.md)):
 - Rascunho no lugar de um vídeo que ainda não existe e `trocar` pelo vídeo pronto (PR 52), com a
   fala editável nos Ajustes do canvas.
 
+Feito em 08/11/2026 (falta publicar): o agente **gera vídeo** com o HeyGen Avatar (`gerar_video`,
+`acompanhar_video` e `listar_vozes`, ver [api.md](api.md)).
+
 Também no ar (04/11/2026), a **animação como código** (PRs 69 a 83; ver [canvas.md](canvas.md) e
 [api.md](api.md)): o projeto guarda o HTML da animação, não o WebM, e só renderiza na exportação.
 

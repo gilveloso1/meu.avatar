@@ -35,8 +35,8 @@ export interface Vigiado {
   classe: string;
   /** Há trabalho dele em andamento no banco (áudio, edição rápida, exportação). */
   trabalhoNoBanco(): Promise<boolean>;
-  /** Pergunta ao Durable Object; se nenhum pedido chegou há `limiteMs`, para o contêiner. */
-  pararSeOcioso(limiteMs: number): Promise<"trabalhando" | "parado">;
+  /** Pergunta ao Durable Object; se nenhum pedido chegou há `limiteMs`, para o contêiner. Já desligado (o painel atrasou), nada a fazer. */
+  pararSeOcioso(limiteMs: number): Promise<"trabalhando" | "parado" | "desligado">;
 }
 
 /** O que fica guardado para o banner do administrador. */
@@ -45,6 +45,8 @@ export interface Alarme {
   ligados: { classe: string; desde: string; em: string }[];
   /** O painel não respondeu (sem token, sem permissão): o alarme não está vigiando. */
   semPainel?: boolean;
+  /** Quando o administrador dispensou o banner (ISO): ele só volta com uma parada mais nova. */
+  dispensado?: string;
 }
 
 export const CHAVE = "alarme.conteiner";
@@ -211,7 +213,7 @@ export async function vigiar(painel: Painel | null, vigiados: Vigiado[], db: Db,
     const desde = ligadoDesde(uso.minutos.get(id) ?? [], uso.workerAte);
     if (desde === null || uso.workerAte - desde < LIMITE_MS) continue;
     if (await v.trabalhoNoBanco()) continue;
-    if ((await v.pararSeOcioso(LIMITE_MS)) === "trabalhando") continue;
+    if ((await v.pararSeOcioso(LIMITE_MS)) !== "parado") continue;
     const min = Math.round((uso.workerAte - desde) / 60_000);
     console.error(`Contêiner ${v.classe} com memória alocada há ${min} min sem trabalho: parado à força. Confira o painel e os logs.`);
     ligados.push({ classe: v.classe, desde: new Date(desde).toISOString(), em: agora.toISOString() });
@@ -223,7 +225,19 @@ export async function vigiar(painel: Painel | null, vigiados: Vigiado[], db: Db,
 async function guardar(db: Db, novo: Alarme, agora: Date): Promise<Alarme> {
   const antes = await db.alarm<Alarme>(CHAVE);
   const ainda = (antes?.ligados ?? []).filter((a) => !novo.ligados.some((n) => n.classe === a.classe) && agora.getTime() - Date.parse(a.em) < AVISO_MS);
-  const alarme: Alarme = { ligados: [...novo.ligados, ...ainda], ...(novo.semPainel ? { semPainel: true } : {}) };
+  const ligados = [...novo.ligados, ...ainda];
+  const alarme: Alarme = { ligados, ...(novo.semPainel ? { semPainel: true } : {}), ...(ligados.length && antes?.dispensado ? { dispensado: antes.dispensado } : {}) };
   await db.setAlarm(CHAVE, alarme.ligados.length || alarme.semPainel ? alarme : null);
   return alarme;
+}
+
+/** O banner da página Modelos mostra uma parada que o administrador ainda não dispensou? */
+export function avisoNovo(alarme: Alarme | null): boolean {
+  return !!alarme?.ligados.some((l) => !alarme.dispensado || l.em > alarme.dispensado);
+}
+
+/** "Dispensar", no banner: some até a próxima parada; o Painel > Atividade segue mostrando o registro. */
+export async function dispensar(db: Db, agora = new Date()): Promise<void> {
+  const alarme = await db.alarm<Alarme>(CHAVE);
+  if (alarme?.ligados.length) await db.setAlarm(CHAVE, { ...alarme, dispensado: agora.toISOString() });
 }

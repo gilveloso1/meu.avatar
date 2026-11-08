@@ -15,7 +15,7 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.10.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.11.0" };
 /**
  * A lista de ferramentas não depende de quem pede. Curto: com 1 h, uma sessão aberta antes de
  * publicar seguiu com a descrição velha (sem rascunho e trocar) no teste de 02/11/2026.
@@ -24,7 +24,7 @@ export const CACHE = { ttlMs: 5 * 60_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Depois de editar, olhe os avisos novos em mudou: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Gerar vídeo não é feito por aqui; exportar usa o contêiner, sem créditos de modelo. Imagem sim: gerar_imagem gasta créditos (uns US$ 0,04 em 1K) e devolve a imagem para você olhar antes de usar; se não ficou boa, refaça com outra descrição ou com ela mesma como referencia. Ela entra no projeto com adicionar {imagem}.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Depois de editar, olhe os avisos novos em mudou: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Exportar usa o contêiner, sem créditos de modelo. Gerar vídeo e imagem gastam créditos. Vídeo: gerar_video faz o avatar falar com o HeyGen Avatar (uns US$ 0,04 por segundo de fala); antes, mostre à pessoa o texto, a voz (de listar_vozes) e o custo, e só gere com o sim dela. O vídeo leva minutos: acompanhe com acompanhar_video e, pronto, ponha no projeto com adicionar {video}. Imagem: gerar_imagem gasta créditos (uns US$ 0,04 em 1K) e devolve a imagem para você olhar antes de usar; se não ficou boa, refaça com outra descrição ou com ela mesma como referencia. Ela entra no projeto com adicionar {imagem}.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro e diz em comando a posição do que falhou, a partir de 0. Cada um tem "tipo":
 adicionar {video|arquivo|ativo|imagem, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos} (imagem: o id de gerar_imagem; a imagem fica na tela de inicio a fim, 3 s sem fim)
@@ -80,6 +80,16 @@ const FERRAMENTAS = [
     }),
   },
   { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}. De cada ativo: arquivo (o nome com a extensão), mime, tamanho em bytes e baixar (o endereço, com o mesmo token).", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
+  {
+    name: "listar_vozes",
+    description: "Vozes do HeyGen Avatar para o gerar_video: as prontas (o catálogo da HeyGen, português primeiro) e as clonadas da conta, com a voz de cada avatar que tem uma. O id de uma delas vai em voz. Uma clonada com clonarNoPrimeiroUso ainda será clonada: o gerar_video pede consentimento: true.",
+    inputSchema: objeto({
+      busca: texto("Parte do nome da voz."),
+      idioma: texto('Parte do idioma, como "Português" ou "Multilíngue".'),
+      genero: texto('"feminina" ou "masculina".'),
+      limite: { type: "integer", description: "Quantas prontas, de 1 a 100; sem isso, 30." },
+    }),
+  },
   {
     name: "listar_animacoes",
     description: "Animações em código já feitas nos projetos da conta, para reusar com adicionar {animacao: {projeto, bloco}}: do mesmo projeto, dos projetos que usam um avatar ou pela busca. Cada uma traz o projeto, o bloco, o nome, a duração, o texto na tela e os parametros, sem o código (leia com ver_projeto incluir: codigo).",
@@ -158,6 +168,32 @@ const FERRAMENTAS = [
       },
       ["projeto", "descricao"],
     ),
+  },
+  {
+    name: "gerar_video",
+    description:
+      "Gera um vídeo do avatar falando com o HeyGen Avatar, o mesmo do site (gasta créditos: uns US$ 0,04 por segundo de fala; a resposta traz o custo estimado). Confirme antes com a pessoa o texto, a voz e o custo. A foto anima e a voz lê a fala; ou, com audio, o áudio é a fala. Leva alguns minutos: a resposta traz o id para o acompanhar_video. Fica também na lista do modelo no site.",
+    inputSchema: objeto(
+      {
+        projeto,
+        foto: texto('src da foto do avatar (jpeg, png ou webp): a foto de um ativo de listar_avatares, um arquivo do projeto ou uma imagem gerada ("/videos/<id>.png").'),
+        fala: texto("O texto que a voz lê, até 1.500 caracteres. A duração do vídeo segue a fala."),
+        voz: texto("Id de uma voz de listar_vozes (pronta ou clonada). Obrigatória com fala."),
+        audio: texto("src de um áudio (mp3 ou wav) que é a fala, no lugar de fala e voz."),
+        consentimento: { type: "boolean", description: "true quando a pessoa confirmou que a voz é dela ou que tem autorização: pedido para clonar a voz de um avatar no primeiro uso." },
+        expressividade: texto('"low" (padrão), "medium" ou "high": a energia da cabeça e do rosto.'),
+        movimento: texto("Gestos que o avatar faz enquanto fala, até 500 caracteres. Opcional."),
+        resolucao: texto('"720p" (padrão) ou "1080p".'),
+        formato: texto('Como "9:16" ou "16:9"; sem isso, o do Final.'),
+        final: texto("Id do Final cujo formato vale; sem isso, o primeiro."),
+      },
+      ["projeto", "foto"],
+    ),
+  },
+  {
+    name: "acompanhar_video",
+    description: "O andamento de um vídeo do gerar_video: gerando, pronto ou falhou. Pronto, traz o src (serve em ver_quadros e ver_transcricao), a duração e usar (vai no adicionar). Chame de novo em uns 30 s enquanto estiver gerando.",
+    inputSchema: objeto({ video: texto("Id do vídeo.") }, ["video"]),
   },
   {
     name: "renderizar_html",
@@ -305,6 +341,12 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("GET", `${p}/silencios?src=${seguro(a.src)}`);
     case "gerar_imagem":
       return chama("POST", `${p}/imagem`, json({ descricao: a.descricao, referencia: a.referencia, resolucao: a.resolucao, formato: a.formato, final: a.final, previa: true }));
+    case "listar_vozes":
+      return chama("GET", `/api/v1/vozes?${new URLSearchParams(Object.entries({ q: a.busca, idioma: a.idioma, genero: a.genero, limite: a.limite }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
+    case "gerar_video":
+      return chama("POST", `${p}/video`, json({ foto: a.foto, fala: a.fala, voz: a.voz, audio: a.audio, consentimento: a.consentimento, expressividade: a.expressividade, movimento: a.movimento, resolucao: a.resolucao, formato: a.formato, final: a.final }));
+    case "acompanhar_video":
+      return chama("GET", `/api/v1/videos/${seguro(a.video)}`);
     case "renderizar_html":
       return chama("POST", `${p}/html`, json({ nome: a.nome, html: a.html, duracao: a.duracao, final: a.final }));
     case "legendar":

@@ -14,6 +14,8 @@ import { Container, getContainer } from "@cloudflare/containers";
 
 /** Quantas vezes tentar ligar ou falar com o contêiner antes de desistir. */
 const TENTATIVAS = 3;
+/** Onde o Durable Object guarda a hora do último pedido: a memória some quando ele é despejado. */
+const ULTIMO_PEDIDO = "ultimoPedido";
 const ESPERA_MS = 2000;
 
 /**
@@ -62,7 +64,15 @@ export abstract class SleepyContainer extends Container {
 
   override containerFetch(...args: Parameters<Container["containerFetch"]>): Promise<Response> {
     this.lastRequestAt = Date.now();
+    // Também no armazenamento: o Durable Object pode ser despejado entre um pedido e outro, e o
+    // alarme (pararSeOcioso) leria zero, como se nunca tivesse havido pedido.
+    void this.ctx.storage.put(ULTIMO_PEDIDO, this.lastRequestAt);
     return super.containerFetch(...args);
+  }
+
+  /** A hora do último pedido: a da memória ou, depois de um despejo, a guardada. */
+  private async ultimoPedido(): Promise<number> {
+    return this.lastRequestAt || ((await this.ctx.storage.get<number>(ULTIMO_PEDIDO)) ?? 0);
   }
 
   /**
@@ -83,19 +93,25 @@ export abstract class SleepyContainer extends Container {
    * O alarme (src/vigia.ts) achou o contêiner com memória alocada há mais de `limiteMs` sem
    * trabalho no banco. Se aqui também não houve pedido nesse tempo, para à força (SIGKILL): o
    * SIGTERM do alarme da biblioteca já não bastou.
+   *
+   * Já desligado, responde "desligado": o painel chega com minutos de atraso e mostra como ligado
+   * o contêiner que dormiu sozinho depois de um trabalho longo (a busca de rosto, um por minuto).
+   * Em 06 e 07/11/2026 isso virou três avisos falsos de "parado à força".
    */
-  async pararSeOcioso(limiteMs: number): Promise<"trabalhando" | "parado"> {
+  async pararSeOcioso(limiteMs: number): Promise<"trabalhando" | "parado" | "desligado"> {
+    if (!this.ctx.container?.running) return "desligado";
     const self = this as unknown as Internals;
     const now = Date.now();
-    if (now - this.lastRequestAt < limiteMs || (self.inflightRequests > 0 && !abandoned(self.inflightRequests, this.lastRequestAt, now, this.maxRequestMs))) return "trabalhando";
-    if (this.ctx.container?.running) await this.destroy();
+    const ultimo = await this.ultimoPedido();
+    if (now - ultimo < limiteMs || (self.inflightRequests > 0 && !abandoned(self.inflightRequests, ultimo, now, this.maxRequestMs))) return "trabalhando";
+    await this.destroy();
     return "parado";
   }
 
   /** Como a máquina está agora, para o painel (src/maquinas.ts). Só lê: não liga o contêiner. */
   async estado(): Promise<{ ligada: boolean; emAndamento: number; ultimoPedido: number | null }> {
     const self = this as unknown as Internals;
-    return { ligada: !!this.ctx.container?.running, emAndamento: self.inflightRequests ?? 0, ultimoPedido: this.lastRequestAt || null };
+    return { ligada: !!this.ctx.container?.running, emAndamento: self.inflightRequests ?? 0, ultimoPedido: (await this.ultimoPedido()) || null };
   }
 
   /** Prazo vencido: SIGTERM; se na volta seguinte ainda estiver ligado, SIGKILL. */
