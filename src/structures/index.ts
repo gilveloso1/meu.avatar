@@ -9,12 +9,13 @@ import { OMNI, OMNI_11 } from "./omni";
 import { HEYGEN_DIRECT } from "./heygen-direta";
 import { SEEDANCE } from "./seedance";
 import type { CostRule, Structure, Values } from "./types";
+import { ELEVENLABS } from "./voz";
 import { WAN } from "./wan";
 
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, OMNI, OMNI_11, SEEDANCE, ALEPH, NANO_BANANA];
+export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, OMNI, OMNI_11, SEEDANCE, ALEPH, NANO_BANANA, ELEVENLABS];
 
 /** As versões do mesmo modelo (a principal primeiro); sem versões, só ela. */
 export function familyOf(structure: Structure): Structure[] {
@@ -24,6 +25,12 @@ export function familyOf(structure: Structure): Structure[] {
 
 /** A estrutura gera imagem (não vídeo)? */
 export const makesImage = (structure: Structure | undefined): boolean => structure?.output === "image";
+/** A estrutura gera áudio (a fala, não vídeo)? */
+export const makesAudio = (structure: Structure | undefined): boolean => structure?.output === "audio";
+/** O resultado sai na hora, fora da fila de vídeos (src/imagens.ts): a imagem e o áudio. */
+export const madeAtOnce = (structure: Structure | undefined): boolean => makesImage(structure) || makesAudio(structure);
+/** O tipo de arquivo que a estrutura gera, nos nomes dos ativos. */
+export const outputKind = (structure: Structure | undefined): "imagem" | "video" | "audio" => (makesImage(structure) ? "imagem" : makesAudio(structure) ? "audio" : "video");
 
 export function structureById(id: string | null | undefined): Structure | undefined {
   return STRUCTURES.find((s) => s.id === id);
@@ -70,6 +77,11 @@ export function prices(structure: Structure, model: VideoModel): Record<string, 
 export function estimate(structure: Structure, model: VideoModel, values: Values): number | undefined {
   const rule: CostRule = structure.cost;
   const price = Number(prices(structure, model)[rule.sku.replace(/\{(\w+)\}/g, (_, name: string) => values(name))]);
+  // Fala: o preço é por caractere do texto, sem nada fixo.
+  if ("characters" in rule.seconds) {
+    const characters = values(rule.seconds.characters).replace(/\s+/g, " ").trim().length;
+    return price && characters ? price * characters : undefined;
+  }
   const seconds =
     "speech" in rule.seconds && rule.seconds.audio && values("fonte") === "audio"
       ? 0

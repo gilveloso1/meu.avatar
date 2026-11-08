@@ -336,6 +336,27 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
   font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem;
   color: var(--md-sys-color-on-surface-variant);
 }
+/* O Texto dos modelos de fala: o mesmo campo, com as emoções em destaque no meio do texto. O
+   destaque segue o chip de entrada do M3 em tamanho de linha (24 px, cantos de 8 px,
+   secondary-container), com o x de 16 px para tirar; a lista do # é o menu do M3. */
+.speech-editor { white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+.speech-editor:focus:empty::before { content: attr(data-placeholder); color: var(--md-sys-color-on-surface-variant); pointer-events: none; }
+.speech-editor[data-filled] + .text-field__label { transform: translateY(-24px) scale(0.75); max-width: calc((100% - 24px) / 0.75); }
+.speech-tag {
+  display: inline-flex; align-items: center; gap: 2px; height: 24px; margin: 0 2px; padding: 0 8px;
+  vertical-align: 1px; border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container);
+  font: var(--md-sys-typescale-label-large); letter-spacing: 0.006rem; white-space: nowrap; user-select: none;
+}
+.speech-tag:has(.speech-tag__remove) { padding-right: 4px; }
+.speech-tag__remove {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--md-sys-shape-corner-full);
+  background: none; color: inherit; cursor: pointer;
+}
+.speech-tag__remove .icon { font-size: 16px; }
+.tag-menu { max-height: 288px; overflow-y: auto; min-width: 200px; }
+.tag-menu .menu__item[aria-selected="true"] { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 /* Campo de seleção (exposed dropdown menu): a seta é o ícone à direita. */
 .text-field--select .text-field__input { padding-right: 48px; cursor: pointer; }
 .text-field--select .text-field__input:focus { padding-right: 47px; }

@@ -1,5 +1,6 @@
 /**
- * A imagem do Nano Banana (src/structures/imagem.ts) é feita fora do pedido de quem a pediu.
+ * A imagem do Nano Banana (src/structures/imagem.ts) e a fala dos modelos de voz
+ * (src/structures/voz.ts) são feitas fora do pedido de quem as pediu.
  * O OpenRouter leva de 30 s a 1,5 min para responder, e o Worker para junto quando o navegador
  * sai da página ou reenvia: a imagem ficava "Gerando" até o agendamento dar falha (5 min). Aqui
  * cada imagem tem um Durable Object, que guarda o id e roda pelo alarme (até 15 min, sem
@@ -25,7 +26,7 @@ export class ImageMaker extends DurableObject<Env> {
     // Apaga antes de pedir: se o alarme cair no meio e for repetido, não se paga a imagem duas
     // vezes; a linha vira falha pelo agendamento (failStaleImages).
     await this.ctx.storage.deleteAll();
-    if (id) await createStudio(this.env).finishImage(id);
+    if (id) await createStudio(this.env).finishOutput(id);
   }
 }
 

@@ -17,6 +17,8 @@ export interface VideoModel {
   supported_frame_images: FrameType[] | null;
   generate_audio: boolean | null;
   pricing_skus: Record<string, string> | null;
+  /** As vozes que o modelo de fala aceita (GET /models, `supported_voices`); null quando ele não lista. */
+  supported_voices?: string[] | null;
 }
 
 export interface VideoRequest {
@@ -60,6 +62,18 @@ export interface ImageResult {
   cost: number;
 }
 
+/** Pedido à API de fala (POST /audio/speech): a resposta é o próprio áudio. */
+export interface SpeechRequest {
+  model: string;
+  input: string;
+  voice: string;
+}
+
+export interface SpeechResult {
+  bytes: ArrayBuffer;
+  type: string;
+}
+
 export type JobStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled" | "expired";
 
 export interface VideoJob {
@@ -101,11 +115,15 @@ export interface VideoApi {
   /** Um modelo de imagem, no formato dos de vídeo (resoluções, formatos e preços). */
   getImageModel(id: string): Promise<VideoModel>;
   image(body: ImageRequest): Promise<ImageResult>;
+  /** Um modelo de fala, no formato dos de vídeo: o preço por caractere e as vozes. */
+  getSpeechModel(id: string): Promise<VideoModel>;
+  speech(body: SpeechRequest): Promise<SpeechResult>;
 }
 
 export class OpenRouterVideo implements VideoApi {
   private models?: Promise<VideoModel[]>;
   private imageModels?: Promise<VideoModel[]>;
+  private speechModels?: Promise<VideoModel[]>;
 
   constructor(
     private readonly apiKey: string,
@@ -176,6 +194,43 @@ export class OpenRouterVideo implements VideoApi {
     return { bytes, type, cost: data.usage?.cost ?? 0 };
   }
 
+  /**
+   * Lista pública dos modelos de fala (GET /models?output_modalities=speech), no formato dos de
+   * vídeo: o preço por caractere do texto (`pricing.prompt`) vira o SKU "character", e as vozes vêm
+   * de `supported_voices` (o Fish não lista: as vozes dele ficam na estrutura).
+   */
+  static async listSpeechModels(base = OPENROUTER_API): Promise<VideoModel[]> {
+    const res = await fetch(`${base}/models?output_modalities=speech`);
+    if (!res.ok) throw new Error(`Falha ao listar modelos de fala: HTTP ${res.status} ${await res.text()}`);
+    return ((await res.json()) as { data: SpeechModelInfo[] }).data.map((m) => ({
+      id: m.id,
+      name: m.name,
+      supported_durations: null,
+      supported_resolutions: null,
+      supported_aspect_ratios: null,
+      supported_frame_images: null,
+      generate_audio: null,
+      pricing_skus: m.pricing?.prompt ? { character: m.pricing.prompt } : null,
+      supported_voices: m.supported_voices ?? null,
+    }));
+  }
+
+  async getSpeechModel(id: string): Promise<VideoModel> {
+    this.speechModels ??= OpenRouterVideo.listSpeechModels(this.base);
+    const model = (await this.speechModels).find((m) => m.id === id);
+    if (!model) throw new Error(`Modelo ${id} não encontrado em ${this.base}/models?output_modalities=speech`);
+    return model;
+  }
+
+  /** A fala em MP3. A resposta não traz o custo: ele sai do preço por caractere (src/structures/voz.ts). */
+  async speech(body: SpeechRequest): Promise<SpeechResult> {
+    const res = await this.request(`${this.base}/audio/speech`, { method: "POST", body: JSON.stringify({ ...body, response_format: "mp3" }) });
+    const type = (res.headers.get("content-type") ?? "").split(";")[0]!.trim();
+    // Erro vem em JSON: só áudio vira arquivo.
+    if (!type.startsWith("audio/")) throw new Error(`O modelo de fala não devolveu áudio (${type || "sem tipo"}): ${(await res.text()).slice(0, 300)}`);
+    return { bytes: await res.arrayBuffer(), type: "audio/mpeg" };
+  }
+
   async getModel(id: string): Promise<VideoModel> {
     // Uma consulta à lista por instância (uma por pedido no Worker), mesmo com vários modelos na página.
     this.models ??= OpenRouterVideo.listModels(this.base);
@@ -225,6 +280,14 @@ interface ImageModelInfo {
   id: string;
   name: string;
   supported_parameters?: { resolution?: { values: string[] }; aspect_ratio?: { values: string[] } };
+}
+
+/** Um modelo como GET /models descreve (só o que o projeto usa dos de fala). */
+interface SpeechModelInfo {
+  id: string;
+  name: string;
+  pricing?: { prompt?: string };
+  supported_voices?: string[] | null;
 }
 
 /** Confere duração, resolução, formato e quadros contra o que o modelo aceita. */

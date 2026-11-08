@@ -54,6 +54,11 @@ export type Field = (
       speech?: boolean;
       /** Ao escolher o avatar, volta com o último texto usado com ele neste modelo (as instruções do Omni). */
       perAvatar?: boolean;
+      /**
+       * Emoções da fala (os modelos de voz): digitar # no campo abre a lista; a escolhida fica em
+       * destaque no texto, com um x para tirar, e vai para o formulário como `[value]`.
+       */
+      tags?: Option[];
     }
   | { kind: "text"; name: string; label: string; maxLength: number; placeholder: string; supporting: string }
   | { kind: "select"; name: string; label: string; options: Option[]; value: string; supporting?: string }
@@ -87,12 +92,13 @@ export interface Defaults {
 /**
  * Custo estimado: o preço por segundo (o SKU pode citar campos, como
  * "duration_seconds_{resolucao}") vezes os segundos, que vêm de um campo, da
- * quantidade de palavras da fala ou da duração do vídeo enviado.
+ * quantidade de palavras da fala ou da duração do vídeo enviado. Nos modelos de
+ * fala (`characters`), o preço é por caractere do texto, e é ele que conta.
  */
 export interface CostRule {
   sku: string;
   /** `audio`: com esse áudio enviado (e visível), os segundos são os dele, não os da fala. */
-  seconds: { field: string } | { speech: string; audio?: string } | { video: string } | { fixed: number };
+  seconds: { field: string } | { speech: string; audio?: string } | { video: string } | { fixed: number } | { characters: string };
   /** US$ fixos por vídeo, além do preço por segundo (as imagens dos quadros-chave do Aleph 2). */
   extra?: number;
   /** SKU de um preço fixo por vídeo, lido dos preços do modelo (a foto do Grok); soma ao `extra`. */
@@ -181,10 +187,11 @@ export interface Structure {
   /** Ícone do cartão (Material Symbols; precisa estar em ICONS, src/site/site.ts). */
   icon: string;
   /**
-   * "image": gera imagem, não vídeo (a API de imagens do OpenRouter, que responde na hora). Fica
-   * na mesma tabela e nas mesmas telas dos vídeos; sem isto, vídeo.
+   * "image": gera imagem, não vídeo (a API de imagens do OpenRouter, que responde na hora);
+   * "audio": gera a fala (a API de fala do OpenRouter, também na hora). Ficam na mesma tabela e
+   * nas mesmas telas dos vídeos; sem isto, vídeo.
    */
-  output?: "image";
+  output?: "image" | "audio";
   /**
    * Outra versão de um modelo: o id da estrutura principal. Fica fora da tela inicial e divide
    * a página (seletor Versão) e a lista de vídeos com ela.

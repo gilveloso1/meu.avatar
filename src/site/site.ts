@@ -28,8 +28,9 @@ import { pode } from "../permissoes";
 import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, familyOf, type Field, fixedCost, makesImage, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
+import { canUse, type Defaults, estimate, familyOf, type Field, fixedCost, madeAtOnce, makesAudio, makesImage, type Option, outputKind, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
+import { EMOTIONS, speechTags, speechText, spokenText } from "../structures/voz";
 import { temSom } from "../som";
 import { type Alarme, avisoNovo, CHAVE as ALARME, dispensar, LIMITE_MS } from "../vigia";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
@@ -197,11 +198,11 @@ export class Site {
     // "Mostrar mais" do "Adicionar ativo": a página seguinte do que a pessoa gerou.
     if (!post && path === "/gerados") {
       const kind = url.searchParams.get("tipo");
-      if (kind !== "imagem" && kind !== "video") return new Response("não encontrado", { status: 404 });
+      if (kind !== "imagem" && kind !== "video" && kind !== "audio") return new Response("não encontrado", { status: 404 });
       return html(await this.generatedFrames(user, kind, Math.max(0, Number(url.searchParams.get("de")) || 0)));
     }
     const preview = /^\/vozes\/previa\/([\w-]+)$/.exec(path);
-    if (!post && preview) return this.voicePreview(user, preview[1]!);
+    if (!post && preview) return this.voicePreview(user, preview[1]!, url);
 
     const model = /^\/modelo\/([a-z0-9-]+)$/.exec(path);
     if (model) {
@@ -244,7 +245,7 @@ export class Site {
 
     // /videos/<id>.mp4: o áudio tratado, se já houver; /videos/<id>.original.mp4: como veio do modelo;
     // /videos/<id>.editado.mp4: a edição rápida.
-    const file = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.(mp4|png|jpg|webp)$/.exec(path);
+    const file = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.(mp4|png|jpg|webp|mp3)$/.exec(path);
     if (request.method === "GET" && file) {
       // Só de quem gerou (e o administrador); de outra pessoa, o arquivo nem existe.
       const video = await this.visibleVideo(user, file[1]!);
@@ -660,10 +661,12 @@ ${error ? snackbar(error) : ""}`;
         tile: `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">${esc(s.icon)}</span></span>`,
         badge: s.access === "admin" ? { label: "Em teste", title: "Em teste: só quem testa vê" } : undefined,
         headline: s.name,
-        // O modelo de imagem não tem os vídeos na aba Vídeos: as imagens ficam na página dele.
-        supporting: makesImage(s) ? plural(n, "imagem", "imagens") : plural(n, "vídeo", "vídeos"),
+        // Os modelos de imagem e de fala não têm os vídeos na aba Vídeos: o que geram fica na página deles.
+        supporting: makesImage(s) ? plural(n, "imagem", "imagens") : makesAudio(s) ? plural(n, "áudio", "áudios") : plural(n, "vídeo", "vídeos"),
         menu: makesImage(s)
           ? [{ label: "Criar imagem", icon: "add", href: `/modelo/${s.id}` }]
+          : makesAudio(s)
+          ? [{ label: "Criar áudio", icon: "add", href: `/modelo/${s.id}` }]
           : [
               { label: "Criar vídeo", icon: "add", href: `/modelo/${s.id}` },
               { label: "Ver os vídeos", icon: "movie", href: `/videos?modelo=${s.id}` },
@@ -686,7 +689,7 @@ ${error ? snackbar(error) : ""}`;
         : `<p class="banner" role="status"><span class="icon">error</span>${esc(b.text)}</p>`,
     )
     .join("")}
-  ${pageHead("Modelos", cards.length, "Escolha um modelo para criar imagens ou vídeos.")}
+  ${pageHead("Modelos", cards.length, "Escolha um modelo para criar imagens, vídeos ou áudios.")}
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : emptyState("search", "Nenhum modelo encontrado", `Nada com “${q}” no nome.`)}
 </main>`;
     return html(page(SITE_NAME, body, { bar: { user, tab: "modelos", search: { action: "/", label: "Pesquisar modelos", q } } }));
@@ -922,7 +925,7 @@ ${CANVAS_BODY}
     const q = (url.searchParams.get("q") ?? "").trim();
     // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
     const only = url.searchParams.get("modelo") ?? "";
-    const usable = STRUCTURES.filter((s) => canUse(s, user) && !makesImage(s) && (!only || (s.family ?? s.id) === only));
+    const usable = STRUCTURES.filter((s) => canUse(s, user) && !madeAtOnce(s) && (!only || (s.family ?? s.id) === only));
     const videos = await this.db.conta(user.id).videos(usable.map((s) => s.id), q);
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // A mesma lista da página do modelo (filtro, ordem, vista e agrupamento no navegador); a busca pela fala fica no servidor.
@@ -968,9 +971,11 @@ ${CANVAS_BODY}
       rate: structure.wordsPerSecond,
       durations: model?.supported_durations ?? null,
       extra: model ? fixedCost(structure, model) : (structure.cost.extra ?? 0),
+      // O contador da fala diz quanto tempo ela dá: de vídeo ou, no modelo de fala, de áudio.
+      unit: makesAudio(structure) ? "áudio" : "vídeo",
     };
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
-    const image = makesImage(structure);
+    const image = makesImage(structure), audio = makesAudio(structure);
     // As versões do mesmo modelo dividem a lista.
     const videos = await this.db.conta(user.id).videos(familyOf(structure).filter((s) => canUse(s, user)).map((s) => s.id));
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
@@ -980,7 +985,9 @@ ${CANVAS_BODY}
     const kinds = acceptedKinds(fields);
     const isFile = (f: Field) => fieldAsset(f) !== null;
     const voiceField = fields.find((f) => f.kind === "voice");
-    const avatars = kinds.length ? await this.db.avatarsByUser(user.id) : [];
+    // O painel ao lado (avatar, ativos e vozes): nos modelos que aceitam arquivo e nos de fala, que têm só o avatar e a voz.
+    const withPanel = kinds.length > 0 || voiceField !== undefined;
+    const avatars = withPanel ? await this.db.avatarsByUser(user.id) : [];
     // Campo que volta com o último texto usado com o avatar (as instruções do Omni, guardadas em `extra`).
     const family = familyOf(structure).filter((s) => canUse(s, user));
     const lastText = kinds.length && fields.some((f) => f.kind === "textarea" && f.perAvatar) ? await this.db.conta(user.id).lastExtraByAvatar(family.map((s) => s.id)) : undefined;
@@ -1008,23 +1015,25 @@ ${CANVAS_BODY}
       <div class="pane__body" id="configuracao-corpo">
         ${family.length > 1 ? versionSwitch(family, structure) : ""}
         ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
-        ${kinds.length ? assetList(picks, kinds, recent) : ""}
+        ${withPanel ? assetList(picks, kinds, recent) : ""}
         ${rest.map((section) => formSection(section, value)).join("")}
       </div>
-      ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)), image)}
+      ${generateBar(seconds, cost, Boolean(model) && (canGenerate || Boolean(this.config.local)), image, audio)}
     </section>
-    ${kinds.length ? assetPanel(avatars, assets, kinds, generated, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined, lastText) : ""}
+    ${withPanel ? assetPanel(avatars, assets, kinds, generated, voiceField ? { voices: voiceField.voices, value: value(voiceField.name) } : undefined, lastText) : ""}
     <div class="workspace__main">
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
       ${videoLibrary(videos, {
         key: structure.id,
         from: `/modelo/${structure.id}`,
-        title: image ? "Imagens" : "Vídeos",
+        title: image ? "Imagens" : audio ? "Áudios" : "Vídeos",
         empty: emptyState(
-          image ? "image" : "videocam",
-          image ? "As imagens geradas aparecem aqui." : "Os vídeos gerados aparecem aqui.",
+          image ? "image" : audio ? "record_voice_over" : "videocam",
+          image ? "As imagens geradas aparecem aqui." : audio ? "Os áudios gerados aparecem aqui." : "Os vídeos gerados aparecem aqui.",
           image
             ? "Descreva a cena, escolha uma foto se quiser e toque em Gerar imagem."
+            : audio
+            ? "Escolha a voz, escreva o texto e toque em Gerar áudio."
             : fields.some((f) => f.kind === "video")
             ? "Escolha o vídeo, a foto e os ajustes e toque em Gerar vídeo."
             : fields.some((f) => f.kind === "textarea" && f.speech)
@@ -1034,6 +1043,7 @@ ${CANVAS_BODY}
         structureOf: () => structure,
         mine: kinds.length ? user.id : undefined,
         image,
+        audio,
       })}
     </div>
   </form>
@@ -1043,24 +1053,32 @@ ${error ? snackbar(error) : ""}`;
   }
 
   /** Uma página do menu de vozes, só com o que os filtros pedem. */
+  /** As vozes do modelo (`?modelo=`, o HeyGen sem ele) que passam nos filtros do menu de vozes. */
   private async voiceList(user: User, url: URL): Promise<Response> {
-    const found = structureById("heygen");
-    if (!found || !canUse(found, user)) return new Response("não encontrado", { status: 404 });
-    const structure = await this.studio.resolve(found);
-    const lists = await this.studio.lists(structure, user.id);
-    const voice = structure.sections(null, this.config.defaults, lists).flatMap((s) => s.fields).find((f) => f.kind === "voice");
+    const structure = await this.voiceStructure(user, url);
+    if (!structure) return new Response("não encontrado", { status: 404 });
+    // As vozes da HeyGen vêm das listas; as dos modelos de fala, do próprio modelo.
+    const model = makesAudio(structure) ? (await this.tryModel(structure)).model : null;
+    const voice = structure.sections(model, this.config.defaults, await this.studio.lists(structure, user.id)).flatMap((s) => s.fields).find((f) => f.kind === "voice");
     if (!voice) return new Response("não encontrado", { status: 404 });
     const q = url.searchParams, from = Math.max(0, Number(q.get("de")) || 0);
-    const rows = voiceRows(voice.voices, { language: q.get("idioma") ?? "", gender: q.get("genero") ?? "", search: q.get("busca")?.trim() ?? "", from });
+    const rows = voiceRows(voice.voices, { language: q.get("idioma") ?? "", gender: q.get("genero") ?? "", search: q.get("busca")?.trim() ?? "", from }, structure.id);
     return html(rows);
   }
 
-  /** A amostra de uma voz pronta, só para quem pode usar o modelo; a HeyGen não aparece no navegador. */
-  private async voicePreview(user: User, id: string): Promise<Response> {
-    const structure = structureById("heygen");
-    if (!structure || !canUse(structure, user)) return new Response("não encontrado", { status: 404 });
+  /** O modelo do menu de vozes, só se a pessoa pode usá-lo e ele tem voz. */
+  private async voiceStructure(user: User, url: URL): Promise<Structure | null> {
+    const found = structureById(url.searchParams.get("modelo") || "heygen");
+    if (!found || !canUse(found, user) || (found.id !== "heygen" && !makesAudio(found))) return null;
+    return this.studio.resolve(found);
+  }
+
+  /** A amostra de uma voz pronta, só para quem pode usar o modelo; o provedor não aparece no navegador. */
+  private async voicePreview(user: User, id: string, url: URL): Promise<Response> {
+    const structure = await this.voiceStructure(user, url);
+    if (!structure) return new Response("não encontrado", { status: 404 });
     try {
-      const audio = await this.studio.voicePreview(id);
+      const audio = await this.studio.voicePreview(structure, id);
       if (audio) return new Response(audio.bytes, { headers: { ...SECURITY_HEADERS, "content-type": audio.type, "cache-control": "private, max-age=86400" } });
     } catch (err) {
       console.error("Não deu para baixar a amostra da voz", err);
@@ -1148,7 +1166,7 @@ ${error ? snackbar(error) : ""}`;
     const { model } = await this.tryModel(structure);
     const base = defaultValues(structure.sections(model, this.config.defaults, await this.studio.lists(structure, user.id)));
     const from: Record<string, string | null | undefined> = {
-      fala: v.prompt, descricao: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
+      fala: v.prompt, texto: v.prompt, descricao: v.prompt, resolucao: v.resolution, formato: v.aspect_ratio, duracao: String(v.duration),
       estilo: v.style, idioma: v.language, instrucoes: v.extra, movimento: settings.motion_prompt ?? v.extra,
       voz: settings.voice_id, expressividade: settings.expressiveness, roupa: settings.outfit, uso: settings.use,
       fonte: settings.source, clone: settings.voice_row,
@@ -1174,17 +1192,19 @@ ${error ? snackbar(error) : ""}`;
     const edited = Boolean(v.edited_key) && !showOriginal;
     const src = edited ? editedSrc(v) : videoSrc(v);
     const ratio = esc(v.aspect_ratio.replace(":", " / "));
-    // O modelo de imagem usa a mesma página, com a imagem no lugar do player (como a de um ativo).
-    const image = makesImage(structure);
+    // Os modelos de imagem e de fala usam a mesma página, com a imagem ou o áudio no lugar do player (como a de um ativo).
+    const image = makesImage(structure), audio = makesAudio(structure), asset = image || audio;
     const media = v.video_key && image
       ? `<img class="viewer__video" src="${mediaSrc(v)}" alt="${esc(videoTitle(v))}">`
+      : v.video_key && audio
+      ? `<audio src="${mediaSrc(v)}" controls></audio>`
       : v.video_key
       ? `<div class="player viewer__player" style="--ratio:${ratio}"${quick ? " data-player" : ""}><div class="player__frame"><video autoplay preload="metadata" playsinline src="${src}"></video>${
           quick ? `<div class="player__controls" data-qe-controls hidden><button class="icon-button interactive" type="button" data-qe-play aria-label="Tocar a prévia" title="Tocar a prévia"><span class="icon">play_arrow</span></button><span class="player__time" data-qe-time></span></div>` : ""
         }</div></div>`
       : status.kind === "error"
-        ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p><p class="stage__text">${esc(image ? ERROS.imagemFalhou : ERROS.videoFalhou)}</p></div>`
-        : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">${image ? "Leva uns 20 segundos." : "Leva alguns minutos."} A página se atualiza sozinha.</p></div>`;
+        ? `<div class="stage stage--error"><span class="icon">error</span><p class="stage__title">${esc(status.label)}</p><p class="stage__text">${esc(image ? ERROS.imagemFalhou : audio ? ERROS.audioGeradoFalhou : ERROS.videoFalhou)}</p></div>`
+        : `<div class="stage"><span class="icon">${status.icon}</span><p class="stage__title">${esc(status.label)}</p><div class="linear-progress" role="progressbar" aria-label="${esc(status.label)}"></div><p class="stage__text">${image ? "Leva uns 20 segundos." : audio ? "Leva alguns segundos." : "Leva alguns minutos."} A página se atualiza sozinha.</p></div>`;
     // Campos de texto livre (movimento, instruções) ganham um bloco próprio, como o Texto; vazios não aparecem.
     const usedAvatar = v.avatar_id ? await this.db.avatarById(v.avatar_id) : null;
     const all = [{ term: "Modelo", description: structure.name }, ...(usedAvatar ? [{ term: "Avatar", description: usedAvatar.name }] : []), ...structure.details(v)];
@@ -1192,9 +1212,9 @@ ${error ? snackbar(error) : ""}`;
     const details = [
       ...all.filter((d) => !FREE_TEXT.has(d.term)),
       ...(image ? [] : [{ term: "Duração", description: durationLabel(v, structure) }]),
-      { term: "Resolução", description: v.resolution },
-      { term: "Formato", description: v.aspect_ratio },
-      { term: "Custo", description: v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—" },
+      // O áudio não tem resolução nem formato.
+      ...(audio ? [] : [{ term: "Resolução", description: v.resolution }, { term: "Formato", description: v.aspect_ratio }]),
+      { term: "Custo", description: v.cost !== null ? costText(v.cost) : "—" },
       { term: "Criado em", description: formatDate(v.created_at) },
     ];
     // Sem MP4, o motivo da falha já está no card do vídeo: na folha ficam só os do áudio e da edição.
@@ -1203,8 +1223,8 @@ ${error ? snackbar(error) : ""}`;
       v.audio_status === "failed" ? (v.audio_error === ERROS.audioDemorou ? ERROS.audioDemorou : ERROS.audioFalhou) : null,
       v.edit_status === "failed" ? (v.edit_error === ERROS.edicaoDemorou ? ERROS.edicaoDemorou : ERROS.edicaoFalhou) : null,
     ].filter((e): e is string => Boolean(e));
-    const downloads: MenuItem[] = v.video_key && image
-      ? [{ label: "Original", icon: "image", href: `${mediaSrc(v)}?baixar`, download: true }]
+    const downloads: MenuItem[] = v.video_key && asset
+      ? [{ label: "Original", icon: image ? "image" : "graphic_eq", href: `${mediaSrc(v)}?baixar`, download: true }]
       : v.video_key
       ? [
           // "Original" é o vídeo como aparece no player sem edição (com o áudio tratado, se houver);
@@ -1238,8 +1258,8 @@ ${error ? snackbar(error) : ""}`;
           ${errors.map((e) => `<p class="dialog__error">${esc(e)}</p>`).join("")}
           ${mine ? nameField(`/videos/${v.id}/nome`, v.name ?? "", { from }) : v.name ? `<section class="viewer__section"><h2 class="viewer__title">Nome</h2><div class="viewer__card"><p class="viewer__text">${esc(v.name)}</p></div></section>` : ""}
           <section class="viewer__section">
-            <div class="viewer__section-head"><h2 class="viewer__title">${image ? "Descrição" : "Texto"}</h2>${v.prompt ? `<button class="button button--text interactive" type="button" data-copy="${esc(v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button>` : ""}</div>
-            <div class="viewer__card">${avatar}${v.prompt ? `<p class="viewer__text">${esc(v.prompt)}</p>` : ""}</div>
+            <div class="viewer__section-head"><h2 class="viewer__title">${image ? "Descrição" : "Texto"}</h2>${v.prompt ? `<button class="button button--text interactive" type="button" data-copy="${esc(audio ? spokenText(v.prompt) : v.prompt)}"><span class="icon">content_copy</span><span>Copiar</span></button>` : ""}</div>
+            <div class="viewer__card">${avatar}${v.prompt ? `<p class="viewer__text">${audio ? speechHtml(v.prompt, false) : esc(v.prompt)}</p>` : ""}</div>
           </section>
           ${notes
             .map((d) => `<section class="viewer__section"><h2 class="viewer__title">${esc(d.term)}</h2><div class="viewer__card"><p class="viewer__text">${esc(d.description)}</p></div></section>`)
@@ -1250,11 +1270,11 @@ ${error ? snackbar(error) : ""}`;
         </div>`;
     const body = `
 <main class="viewer" id="conteudo">
-  <section class="viewer__stage${image ? " viewer__stage--asset" : ""}" aria-label="${image ? "Imagem" : "Vídeo"}" style="--ratio:${ratio}">
+  <section class="viewer__stage${asset ? " viewer__stage--asset" : ""}" aria-label="${image ? "Imagem" : audio ? "Áudio" : "Vídeo"}" style="--ratio:${ratio}">
     <a class="viewer__nav viewer__nav--prev icon-button interactive" data-nav="prev" hidden aria-label="Vídeo anterior" title="Vídeo anterior"><span class="icon">chevron_left</span></a>
     ${media}
     ${
-      v.video_key && !image
+      v.video_key && !asset
         ? `<div class="vbar" data-vbar role="group" aria-label="Controles do vídeo">
       <button class="vbar__play interactive" type="button" data-vbar-play aria-label="Tocar" title="Tocar"><span class="icon">play_arrow</span></button>
       <span class="vbar__time" data-vbar-time>0:00 / 0:00</span>
@@ -1266,7 +1286,7 @@ ${error ? snackbar(error) : ""}`;
     }
     <a class="viewer__nav viewer__nav--next icon-button interactive" data-nav="next" hidden aria-label="Próximo vídeo" title="Próximo vídeo"><span class="icon">chevron_right</span></a>
   </section>
-  <aside class="viewer__sheet" aria-label="${image ? "Informações da imagem" : "Informações do vídeo"}" data-viewer="${v.id}" data-back="${esc(back)}">
+  <aside class="viewer__sheet" aria-label="${image ? "Informações da imagem" : audio ? "Informações do áudio" : "Informações do vídeo"}" data-viewer="${v.id}" data-back="${esc(back)}">
     <div class="viewer__head">
       <p class="status-line status-line--${status.kind}"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label)}</p>
       <a class="icon-button interactive" href="${esc(back)}" aria-label="Fechar" title="Fechar"><span class="icon">close</span></a>
@@ -1293,7 +1313,7 @@ ${error ? snackbar(error) : ""}`;
 ${saveDialog}
 ${quick ? `<form id="edicao-rapida" method="post" action="/videos/${v.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
 ${error ? snackbar(error) : ""}`;
-    return html(page(`${v.name ? `${v.name} · ` : ""}${image ? "Imagem" : "Vídeo"} · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
+    return html(page(`${v.name ? `${v.name} · ` : ""}${image ? "Imagem" : audio ? "Áudio" : "Vídeo"} · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
   }
 
   /** O modelo de onde a página do vídeo foi aberta, se ele aceita o vídeo (ou imagem) pronto da pessoa como referência. */
@@ -1315,7 +1335,7 @@ ${error ? snackbar(error) : ""}`;
       // no ar, nada (o aviso diz que a criação está pausada). Assim os testes não vão à rede.
       if (!this.studio.canGenerate) {
         if (!this.config.local) return { model: null, error: null };
-        const list = makesImage(structure) ? await OpenRouterVideo.listImageModels() : await OpenRouterVideo.listModels();
+        const list = makesImage(structure) ? await OpenRouterVideo.listImageModels() : makesAudio(structure) ? await OpenRouterVideo.listSpeechModels() : await OpenRouterVideo.listModels();
         const model = list.find((m) => m.id === structure.model);
         return { model: model ?? null, error: null };
       }
@@ -1383,11 +1403,10 @@ ${error ? snackbar(error) : ""}`;
 
   /**
    * "Usar … recente": o mais recente daquele tipo que a pessoa gerou no próprio modelo, se ele gera
-   * esse tipo (e já gerou algum); senão, dos modelos que geram. Hoje os modelos geram imagem ou vídeo
-   * (áudio, nenhum).
+   * esse tipo (e já gerou algum); senão, dos modelos que geram.
    */
   private async recentGenerated(user: User, structure: Structure, kind: AssetKind): Promise<PickItem | null> {
-    const output = (s: Structure): AssetKind => (makesImage(s) ? "imagem" : "video");
+    const output = outputKind;
     const all = STRUCTURES.filter((s) => output(s) === kind).map((s) => s.id);
     // O próprio modelo primeiro; sem nada gerado nele ainda, os outros que geram o tipo.
     const own = output(structure) === kind ? (await this.db.conta(user.id).ready(familyOf(structure).map((s) => s.id), 0, 1))[0] : undefined;
@@ -1396,10 +1415,9 @@ ${error ? snackbar(error) : ""}`;
     return found ? { id: found.id, kind: found.kind, src: found.src, name: found.name, hint: found.hint } : null;
   }
 
-  /** Uma página dos vídeos ou imagens prontos da pessoa, de todos os modelos, como quadros do "Adicionar ativo". */
+  /** Uma página dos vídeos, imagens ou áudios prontos da pessoa, de todos os modelos, como quadros do "Adicionar ativo". */
   private async generatedFrames(user: User, kind: AssetKind, from: number): Promise<string> {
-    if (kind === "audio") return "";
-    const structures = STRUCTURES.filter((s) => (makesImage(s) ? "imagem" : "video") === kind).map((s) => s.id);
+    const structures = STRUCTURES.filter((s) => outputKind(s) === kind).map((s) => s.id);
     const videos = await this.db.conta(user.id).ready(structures, from, GENERATED_PAGE + 1);
     const frames = videos.slice(0, GENERATED_PAGE).map((v) => {
       const structure = videoStructure(v)!;
@@ -1783,6 +1801,8 @@ interface LibraryOptions {
   mine?: number;
   /** Lista de imagens (o modelo de imagem): Descrição no lugar do Texto e Resolução no da Duração. */
   image?: boolean;
+  /** Lista de áudios (os modelos de fala). */
+  audio?: boolean;
 }
 
 /** Título, contagem e texto de uma tela de lista; `action` é o botão principal (fab). */
@@ -1844,7 +1864,7 @@ function assetList(picks: AssetPicks | undefined, kinds: AssetKind[], recent: Pi
         <input type="hidden" name="avatar" value="" data-avatar-input>
         <ul class="file-list" data-asset-list>
           <li><button class="file-picker interactive" type="button" data-panel-open="avatares" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty" data-avatar-preview><span class="icon">face</span></span><span class="file-picker__text"><span class="file-picker__name" data-avatar-name>Adicionar avatar</span></span></button></li>
-          <li data-asset-add><button class="file-picker interactive" type="button" data-panel-open="referencias" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty"><span class="icon">add</span></span><span class="file-picker__text"><span class="file-picker__name">Adicionar ativo</span></span></button></li>
+          ${kinds.length ? `<li data-asset-add><button class="file-picker interactive" type="button" data-panel-open="referencias" aria-expanded="false"><span class="file-picker__preview file-picker__preview--empty"><span class="icon">add</span></span><span class="file-picker__text"><span class="file-picker__name">Adicionar ativo</span></span></button></li>` : ""}
         </ul>
         <div class="menu__list context-menu" popover role="menu" aria-label="Adicionar ativo" data-paste-menu>${kinds.includes("imagem") ? `<button class="menu__item interactive" type="button" role="menuitem" data-paste-item><span class="icon">content_paste</span>Colar imagem</button>` : ""}${recent
           .map((r) => `<button class="menu__item interactive" type="button" role="menuitem" data-recent-item="${esc(JSON.stringify(r))}"><span class="icon">history</span>Usar ${ASSET_LABELS[r.kind].toLowerCase()} recente</button>`)
@@ -1930,11 +1950,16 @@ function voicePanel(voices: VoiceOption[], chosen: VoiceOption): string {
     .join("");
   return `<div class="side-panel__body" data-panel-view="vozes" hidden>
         <div class="search-field"><span class="icon" aria-hidden="true">search</span><input class="search-field__input" type="search" placeholder="Pesquisar vozes" aria-label="Pesquisar vozes" data-voice-search></div>
-        <div class="text-field text-field--select">
+        ${
+          // Vozes de um idioma só (as multilíngues do ElevenLabs): o filtro não teria o que escolher.
+          counts.size > 1
+            ? `<div class="text-field text-field--select">
           <select class="text-field__input" id="voz-idioma" data-voice-language>${options}<option value="">Todos os idiomas (${number(voices.length)})</option></select>
           <label class="text-field__label" for="voz-idioma">Idioma</label>
           <span class="icon text-field__trailing" aria-hidden="true">arrow_drop_down</span>
-        </div>
+        </div>`
+            : `<input type="hidden" value="" data-voice-language>`
+        }
         <div class="chip-set" role="group" aria-label="Gênero da voz">${Object.entries(GENDERS).map(([k, label]) => `<button class="chip interactive" type="button" data-voice-filter="${k}" aria-pressed="false"><span class="icon chip__check">check</span>${label}</button>`).join("")}</div>
         <div class="linear-progress" role="progressbar" aria-label="Carregando as vozes" data-voice-progress hidden></div>
         <p class="library__empty" data-voice-error hidden>${esc(ERROS.vozesIndisponiveis)}</p>
@@ -1943,20 +1968,22 @@ function voicePanel(voices: VoiceOption[], chosen: VoiceOption): string {
 }
 
 /** Uma página do menu de vozes: só as que passam nos filtros, por idioma, e "Mostrar mais" se houver. */
-function voiceRows(voices: VoiceOption[], f: { language: string; gender: string; search: string; from: number }): string {
+function voiceRows(voices: VoiceOption[], f: { language: string; gender: string; search: string; from: number }, model: string): string {
   const q = f.search.toLowerCase();
   const found = voices.filter((v) => (!f.language || v.language === f.language) && (!f.gender || v.gender === f.gender) && (!q || v.name.toLowerCase().includes(q)));
   if (!found.length) return `<li class="library__empty">Nenhuma voz encontrada.</li>`;
   const row = (v: VoiceOption) => {
     const play = v.preview
-      ? `<button class="icon-button interactive" type="button" data-voice-play="/vozes/previa/${esc(v.value.split("|")[0]!)}" aria-label="Ouvir ${esc(v.name)}" title="Ouvir"><span class="icon">play_arrow</span></button>`
+      ? `<button class="icon-button interactive" type="button" data-voice-play="/vozes/previa/${esc(v.value.split("|")[0]!)}?modelo=${esc(model)}" aria-label="Ouvir ${esc(v.name)}" title="Ouvir"><span class="icon">play_arrow</span></button>`
       : `<button class="icon-button" type="button" disabled aria-label="Sem prévia" title="Sem prévia"><span class="icon">volume_off</span></button>`;
     return `<li class="voice-row">${play}<button class="avatar-option interactive" type="button" data-voice="${esc(v.value)}" data-name="${esc(v.name)}" data-hint="${esc(voiceHint(v))}" aria-pressed="false"><span class="avatar-option__text"><span class="vrow__headline">${esc(v.name)}</span><span class="vrow__support">${esc(voiceHint(v))}</span></span></button></li>`;
   };
   const end = f.from + VOICE_PAGE;
+  // Com um idioma só, sem o título do grupo (como sem o filtro de idioma).
+  const oneLanguage = new Set(voices.map((v) => v.language)).size === 1;
   const rows = found.slice(f.from, end).map((v, i, page) => {
     const before = page[i - 1] ?? found[f.from - 1];
-    return `${f.language || before?.language === v.language ? "" : `<li class="vgroup__title">${esc(v.language)}</li>`}${row(v)}`;
+    return `${f.language || oneLanguage || before?.language === v.language ? "" : `<li class="vgroup__title">${esc(v.language)}</li>`}${row(v)}`;
   });
   const total = found.length === 1 ? "1 voz" : `${found.length.toLocaleString("pt-BR")} vozes`;
   return `${f.from ? "" : `<li class="side-panel__help">${total}</li>`}${rows.join("")}${end < found.length ? `<li class="voice-more"><button class="button button--text interactive" type="button" data-voice-more="${end}">Mostrar mais</button></li>` : ""}`;
@@ -2029,16 +2056,18 @@ function library<T>(o: {
     </div>`;
 }
 
-/** A miniatura de um vídeo ou imagem pronto (o vídeo só baixa quando aparece na tela), enquadrando o rosto. */
+/** A miniatura de um vídeo, imagem ou áudio pronto (o vídeo só baixa quando aparece na tela), enquadrando o rosto. */
 function outputThumb(v: Video, structure: Structure): string {
   return makesImage(structure)
     ? faceImage(mediaSrc(v), v.face, "", `/videos/${v.id}/rosto`)
+    : makesAudio(structure)
+    ? AUDIO_THUMB
     : `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"${v.face == null ? ` data-face-find="/videos/${v.id}/rosto"` : ""}></video>`;
 }
 
-/** O nome de um vídeo (ou imagem) nas telas: o que a pessoa deu ou, sem nome, a fala. */
+/** O nome de um vídeo (ou imagem) nas telas: o que a pessoa deu ou, sem nome, a fala (sem as emoções). */
 function videoTitle(v: Pick<Video, "name" | "prompt">): string {
-  return v.name ?? v.prompt;
+  return v.name ?? spokenText(v.prompt);
 }
 
 /**
@@ -2080,7 +2109,7 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
     items: videos,
     date: (v) => v.created_at,
     filters: FILTERS,
-    noMatch: o.image ? "Nenhuma imagem com esse filtro." : "Nenhum vídeo com esse filtro.",
+    noMatch: o.image ? "Nenhuma imagem com esse filtro." : o.audio ? "Nenhum áudio com esse filtro." : "Nenhum vídeo com esse filtro.",
     columns: `<span></span><span>${o.image ? "Descrição" : "Texto"}</span><span>Status</span><span>${o.image ? "Resolução" : "Duração"}</span><span class="vrow__wide">Formato</span><span class="vrow__wide">Custo</span><span>Criado em</span>`,
     frame: (v) => {
       const status = cardStatus(v);
@@ -2095,8 +2124,8 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
           <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(videoTitle(v))}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
           <span class="vrow__status vrow__status--${status.kind}" role="cell"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label.replace(/ · .*/, ""))}</span>
           <span role="cell">${esc(o.image ? v.resolution : durationLabel(v, structure))}</span>
-          <span class="vrow__wide" role="cell">${esc(`${v.aspect_ratio} · ${v.resolution}`)}</span>
-          <span class="vrow__wide" role="cell">${v.cost !== null ? `US$ ${v.cost.toFixed(2)}` : "—"}</span>
+          <span class="vrow__wide" role="cell">${esc([v.aspect_ratio, v.resolution].filter(Boolean).join(" · ") || "—")}</span>
+          <span class="vrow__wide" role="cell">${v.cost !== null ? costText(v.cost) : "—"}</span>
           <span role="cell">${esc(formatDate(v.created_at))}</span>
         </a>`;
     },
@@ -2112,11 +2141,12 @@ interface SavableVideo {
 }
 
 function videoAssetName(s: SavableVideo): string {
-  return `${s.video.name ?? `${s.structure.name} ${s.video.id.slice(0, 8)}`}.${makesImage(s.structure) ? (s.key.split(".").pop() ?? "png") : "mp4"}`;
+  return `${s.video.name ?? `${s.structure.name} ${s.video.id.slice(0, 8)}`}.${madeAtOnce(s.structure) ? (s.key.split(".").pop() ?? "png") : "mp4"}`;
 }
 
 /** O tipo do ativo que um vídeo (ou imagem) gerado vira no avatar. */
 function savedKind(s: SavableVideo): { kind: AssetKind; type: string } {
+  if (makesAudio(s.structure)) return { kind: "audio", type: "audio/mpeg" };
   if (!makesImage(s.structure)) return { kind: "video", type: "video/mp4" };
   const ext = s.key.split(".").pop();
   return { kind: "imagem", type: ext === "jpg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png" };
@@ -2154,11 +2184,12 @@ interface PickItem {
 interface PickedFile extends PickItem {
   key: string;
 }
-/** Um vídeo ou imagem pronto como referência para outro modelo (painel, lista e "Usar para gerar"). */
+/** Um vídeo, imagem ou áudio pronto como referência para outro modelo (painel, lista e "Usar para gerar"). */
 function generatedPick(v: Video, structure: Structure): PickItem {
-  const kind: AssetKind = makesImage(structure) ? "imagem" : "video";
-  return { id: `gerado:${v.id}`, kind, name: videoTitle(v).slice(0, 80) || structure.name, src: mediaSrc(v), hint: kind === "imagem" ? "Imagem gerada" : "Vídeo gerado" };
+  const kind: AssetKind = outputKind(structure);
+  return { id: `gerado:${v.id}`, kind, name: videoTitle(v).slice(0, 80) || structure.name, src: mediaSrc(v), hint: GENERATED_HINTS[kind] };
 }
+const GENERATED_HINTS: Record<AssetKind, string> = { imagem: "Imagem gerada", video: "Vídeo gerado", audio: "Áudio gerado" };
 const ASSET_ICONS: Record<AssetKind, string> = { imagem: "image", video: "movie", audio: "mic" };
 const ASSET_ACCEPT = Object.keys(MEDIA_TYPES).join(",");
 
@@ -2175,8 +2206,10 @@ function assetThumb(a: AvatarAsset, src: string): string {
     ? faceImage(src, a.face, "", find)
     : a.kind === "video"
       ? `<video data-src="${src}" data-face="${facePoint(a.face).join(",")}" preload="metadata" muted playsinline tabindex="-1"${a.face == null && find ? ` data-face-find="${esc(find)}"` : ""}></video>`
-      : `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--tertiary" aria-hidden="true"><span class="icon">mic</span></span></span>`;
+      : AUDIO_THUMB;
 }
+/** A miniatura de um áudio (ativo ou gerado): não há imagem, só o ícone. */
+const AUDIO_THUMB = `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--tertiary" aria-hidden="true"><span class="icon">mic</span></span></span>`;
 
 function assetLibrary(assets: AvatarAsset[], o: { key: string; avatar?: Avatar; src?: (a: AvatarAsset) => string; href?: (a: AvatarAsset) => string }): string {
   const { avatar } = o;
@@ -2212,9 +2245,14 @@ function assetLibrary(assets: AvatarAsset[], o: { key: string; avatar?: Avatar; 
   });
 }
 
+/** O custo de um vídeo, imagem ou áudio; a fala curta custa menos de um centavo. */
+function costText(n: number): string {
+  return n > 0 && n < 0.005 ? "< US$ 0.01" : `US$ ${n.toFixed(2)}`;
+}
+
 /** Fim do painel de configuração: duração e custo estimados e o botão de gerar, na largura toda. */
-function generateBar(seconds: string, cost: number | undefined, enabled: boolean, image = false): string {
-  const costLabel = cost !== undefined ? `US$ ${cost.toFixed(2)}` : "—";
+function generateBar(seconds: string, cost: number | undefined, enabled: boolean, image = false, audio = false): string {
+  const costLabel = cost !== undefined ? costText(cost) : "—";
   // Imagem não tem duração: só o custo.
   return `
       <div class="pane__footer">
@@ -2222,7 +2260,7 @@ function generateBar(seconds: string, cost: number | undefined, enabled: boolean
           ${image ? "" : `<div class="estimate-list__item"><span class="icon">schedule</span><span class="estimate-list__label">Duração</span><span class="estimate-list__value" data-seconds>${esc(seconds)}</span></div>`}
           <div class="estimate-list__item"><span class="icon">payments</span><span class="estimate-list__label">Custo estimado</span><span class="estimate-list__value" data-cost>${costLabel}</span></div>
         </div>
-        <button class="button button--filled interactive" type="submit"${enabled ? "" : " disabled"}><span class="icon">send</span>${image ? "Gerar imagem" : "Gerar vídeo"}</button>
+        <button class="button button--filled interactive" type="submit"${enabled ? "" : " disabled"}><span class="icon">send</span>${image ? "Gerar imagem" : audio ? "Gerar áudio" : "Gerar vídeo"}</button>
       </div>`;
 }
 
@@ -2695,9 +2733,9 @@ function editedSrc(v: Video): string {
   return `/videos/${v.id}.editado.mp4?v=${encodeURIComponent(v.edited_at ?? v.updated_at)}`;
 }
 
-/** O arquivo pronto: a imagem do modelo de imagem ou o vídeo (com o áudio tratado, se houver). */
+/** O arquivo pronto: a imagem ou o áudio dos modelos que os geram, ou o vídeo (com o áudio tratado, se houver). */
 function mediaSrc(v: Video): string {
-  return makesImage(structureById(v.structure)) ? `/videos/${v.id}.${v.video_key?.split(".").pop() ?? "png"}` : videoSrc(v);
+  return madeAtOnce(structureById(v.structure)) ? `/videos/${v.id}.${v.video_key?.split(".").pop() ?? "png"}` : videoSrc(v);
 }
 
 function videoSrc(v: Video): string {
@@ -2707,8 +2745,8 @@ function videoSrc(v: Video): string {
 /** A duração do HeyGen segue a fala: até o vídeo ficar pronto, é uma estimativa. */
 function durationLabel(v: Video, structure: Structure): string {
   if (makesImage(structure)) return "—";
-  // Pela fala é estimativa; a HeyGen direta devolve a duração certa quando o vídeo fica pronto.
-  const exact = videoPlatform(v) === "heygen" && v.status === "completed";
+  // Pela fala é estimativa; a HeyGen direta e o modelo de fala dão a duração certa quando o arquivo fica pronto.
+  const exact = (videoPlatform(v) === "heygen" || makesAudio(structure)) && v.status === "completed";
   return "speech" in structure.cost.seconds && !exact ? `≈ ${v.duration} s` : `${v.duration} s`;
 }
 
@@ -2724,6 +2762,43 @@ function formSection(section: Section, value: Values): string {
  * O campo, dentro de um bloco que só aparece quando os campos citados em `showIf`
  * têm um dos valores (o script da página esconde e desliga o resto, para não ir no formulário).
  */
+/** Uma emoção da fala em destaque: o nome em português e, no editor, o x para tirar. */
+function speechTag(tag: Option, remove: boolean): string {
+  return `<span class="speech-tag" contenteditable="false" data-tag="${esc(tag.value)}"><span data-tag-label>${esc(tag.label)}</span>${
+    remove ? `<button class="speech-tag__remove interactive" type="button" tabindex="-1" aria-label="Tirar ${esc(tag.label)}" title="Tirar"><span class="icon">close</span></button>` : ""
+  }</span>`;
+}
+
+/** O texto da fala com as emoções da lista em destaque, uma por uma (as juntas também); o resto, como texto. */
+function speechHtml(text: string, remove: boolean): string {
+  const byValue = new Map(EMOTIONS.map((t) => [t.value, t]));
+  let out = "", last = 0;
+  for (const m of text.matchAll(/\[([^\][]{1,120})\]/g)) {
+    const tags = speechTags(m[1]!);
+    if (!tags) continue;
+    out += esc(text.slice(last, m.index)) + tags.map((t) => speechTag(byValue.get(t)!, remove)).join(" ");
+    last = m.index! + m[0].length;
+  }
+  return out + esc(text.slice(last));
+}
+
+/**
+ * O Texto dos modelos de fala: o mesmo campo contornado, mas que aceita as emoções em destaque no
+ * meio do texto. Digitar # abre a lista (menu do M3); a escolhida vira um destaque com x, que não se
+ * edita letra a letra. O formulário leva o texto com a marcação em inglês, no textarea escondido.
+ */
+function speechEditor(f: Extract<Field, { kind: "textarea" }>, raw: string): string {
+  const text = speechText(raw);
+  return `<div class="text-field">
+          <div class="text-field__input speech-editor" id="${f.name}" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="${f.name}-rotulo" aria-describedby="${f.name}-ajuda" data-placeholder="${esc(f.placeholder)}" data-speech-editor${text ? " data-filled" : ""}>${speechHtml(text, true)}</div>
+          <span class="text-field__label" id="${f.name}-rotulo">${esc(f.label)}</span>
+          <textarea name="${f.name}" hidden maxlength="${f.maxLength}"${f.speech ? " data-speech" : ""}>${esc(text)}</textarea>
+          <template data-speech-tag>${speechTag({ value: "", label: "" }, true)}</template>
+          <div class="menu__list context-menu tag-menu" popover="manual" role="listbox" aria-label="Emoções" data-tag-menu>${f.tags!.map((t) => `<button class="menu__item interactive" type="button" role="option" tabindex="-1" aria-selected="false" data-tag-option="${esc(t.value)}">${esc(t.label)}</button>`).join("")}</div>
+          <p class="text-field__supporting" id="${f.name}-ajuda"><span${f.speech ? ` data-words data-default="${esc(f.supporting)}"` : ""}>${esc(f.supporting)}</span><span data-count>${text.length}/${f.maxLength}</span></p>
+        </div>`;
+}
+
 function formField(f: Field, value: Values): string {
   const inner = fieldHtml(f, value);
   if (!f.showIf) return inner;
@@ -2757,6 +2832,7 @@ function filePicker(
 function fieldHtml(f: Field, value: Values): string {
   switch (f.kind) {
     case "textarea":
+      if (f.tags) return speechEditor(f, value(f.name));
       return `<div class="text-field">
           <textarea class="text-field__input" id="${f.name}" name="${f.name}" rows="1" required maxlength="${f.maxLength}" placeholder="${esc(f.placeholder)}" aria-describedby="${f.name}-ajuda"${f.speech ? " data-speech" : ""}${f.perAvatar ? " data-per-avatar" : ""}>${esc(value(f.name))}</textarea>
           <label class="text-field__label" for="${f.name}">${esc(f.label)}</label>
@@ -3174,6 +3250,118 @@ const SCRIPT = `(() => {
     fit();
   }
 
+  // O Texto dos modelos de fala (speechEditor): as emoções em destaque, a lista no # e o x para tirar.
+  for (const editor of document.querySelectorAll("[data-speech-editor]")) {
+    const box = editor.parentElement, field = box.querySelector("textarea"), menu = box.querySelector("[data-tag-menu]");
+    const chipTemplate = box.querySelector("[data-speech-tag]"), options = [...menu.querySelectorAll("[data-tag-option]")];
+    const plain = (s) => s.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
+    // O texto do formulário: cada emoção vira a marcação em inglês entre colchetes.
+    const serialize = (node) => {
+      let out = "";
+      for (const n of node.childNodes) {
+        if (n.nodeType === 3) out += n.data;
+        else if (n.dataset && n.dataset.tag !== undefined) out += "[" + n.dataset.tag + "]";
+        else if (n.nodeName === "BR") out += "\\n";
+        else out += (n.nodeName === "DIV" || n.nodeName === "P" ? "\\n" : "") + serialize(n);
+      }
+      return out;
+    };
+    const sync = () => {
+      field.value = serialize(editor);
+      editor.toggleAttribute("data-filled", field.value.trim() !== "");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    // O # antes do cursor e o que já foi digitado depois dele (o filtro da lista).
+    let hash = null, active = 0;
+    const find = () => {
+      const sel = getSelection();
+      if (!sel.rangeCount || !sel.isCollapsed) return null;
+      const node = sel.anchorNode, at = sel.anchorOffset;
+      if (!node || node.nodeType !== 3 || !editor.contains(node)) return null;
+      const m = /#([\\p{L}]{0,20})$/u.exec(node.data.slice(0, at));
+      return m ? { node, start: at - m[0].length, end: at, query: plain(m[1]) } : null;
+    };
+    const visible = () => options.filter((o) => !o.hidden);
+    // O item marcado pelas setas fica sempre à vista: a lista rola junto.
+    const mark = () => visible().forEach((o, i) => {
+      o.setAttribute("aria-selected", String(i === active));
+      if (i === active) o.scrollIntoView({ block: "nearest" });
+    });
+    const close = () => {
+      hash = null;
+      if (menu.matches(":popover-open")) menu.hidePopover();
+    };
+    const open = () => {
+      hash = find();
+      if (!hash) return close();
+      for (const o of options) o.hidden = !plain(o.textContent).startsWith(hash.query);
+      if (!visible().length) return close();
+      active = 0;
+      mark();
+      const r = document.createRange();
+      r.setStart(hash.node, hash.start);
+      r.setEnd(hash.node, hash.end);
+      const rect = r.getBoundingClientRect();
+      menu.style.left = rect.left + "px";
+      menu.style.top = rect.bottom + 4 + "px";
+      if (!menu.matches(":popover-open")) menu.showPopover();
+    };
+    const choose = (o) => {
+      if (!hash || !o) return;
+      const { node, start, end } = hash;
+      const chip = chipTemplate.content.firstElementChild.cloneNode(true);
+      chip.dataset.tag = o.dataset.tagOption;
+      chip.querySelector("[data-tag-label]").textContent = o.textContent;
+      chip.querySelector("button").setAttribute("aria-label", "Tirar " + o.textContent);
+      const after = node.splitText(end);
+      node.data = node.data.slice(0, start);
+      const space = document.createTextNode(" ");
+      after.parentNode.insertBefore(chip, after);
+      after.parentNode.insertBefore(space, after);
+      const sel = getSelection(), r = document.createRange();
+      r.setStart(space, 1);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+      close();
+      sync();
+    };
+    editor.addEventListener("input", () => { sync(); open(); });
+    editor.addEventListener("keydown", (e) => {
+      if (hash && menu.matches(":popover-open")) {
+        const list = visible();
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          active = (active + (e.key === "ArrowDown" ? 1 : list.length - 1)) % list.length;
+          mark();
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); choose(list[active]); return; }
+        if (e.key === "Escape") { e.preventDefault(); close(); return; }
+      }
+      // Quebra de linha como texto, sem os blocos que o navegador cria.
+      if (e.key === "Enter") { e.preventDefault(); document.execCommand("insertLineBreak"); }
+    });
+    editor.addEventListener("blur", close);
+    // Tocar na lista não tira o foco do texto.
+    menu.addEventListener("mousedown", (e) => e.preventDefault());
+    menu.addEventListener("click", (e) => choose(e.target.closest("[data-tag-option]")));
+    // O x tira a emoção inteira (e o espaço que veio com ela).
+    editor.addEventListener("mousedown", (e) => { if (e.target.closest(".speech-tag__remove")) e.preventDefault(); });
+    editor.addEventListener("click", (e) => {
+      const x = e.target.closest(".speech-tag__remove");
+      if (!x) return;
+      const chip = x.closest(".speech-tag"), next = chip.nextSibling;
+      if (next && next.nodeType === 3 && next.data.startsWith(" ")) next.data = next.data.slice(1);
+      chip.remove();
+      sync();
+    });
+    // Colar e arrastar entram só como texto.
+    editor.addEventListener("paste", (e) => { e.preventDefault(); document.execCommand("insertText", false, e.clipboardData.getData("text/plain")); });
+    editor.addEventListener("drop", (e) => e.preventDefault());
+    addEventListener("scroll", (e) => { if (!menu.contains(e.target)) close(); }, true);
+  }
+
   // Ativos cortados no rosto: os olhos a 40% da altura e no meio da largura, como em thumbPosition.
   // window.mdThumbs(root) faz o mesmo (e a miniatura que só baixa quando aparece) no que chegou depois.
   const placeFace = (el) => {
@@ -3477,12 +3665,16 @@ const SCRIPT = `(() => {
     const update = () => {
       applyShowIf();
       const useAudio = audioField && val("fonte") === "audio";
-      const n = speech && !speech.disabled ? speech.value.split(/\\s+/).filter(Boolean).length : 0;
+      // As emoções da fala ([excited]) não contam como palavras.
+      const n = speech && !speech.disabled ? speech.value.replace(/\\[[^\\]]*\\]/g, " ").split(/\\s+/).filter(Boolean).length : 0;
       const fixed = cfg.seconds.fixed ? cfg.seconds.fixed : cfg.seconds.field ? Number(val(cfg.seconds.field)) : cfg.seconds.video ? fromSource() : useAudio ? Math.round(audioSeconds) : 0;
       const s = fixed || (n ? Math.max(1, Math.round(n / mid)) : 0);
       const price = Number(cfg.prices[cfg.sku.replace(/\\{(\\w+)\\}/g, (_, k) => val(k))]);
       for (const e of f.querySelectorAll("[data-seconds]")) e.textContent = s ? (fixed ? "" : "≈ ") + s + " s" : "—";
-      for (const e of f.querySelectorAll("[data-cost]")) e.textContent = price && s ? "US$ " + (price * s + cfg.extra).toFixed(2) : "—";
+      // Fala: o preço é por caractere do texto; a de poucas palavras custa menos de um centavo.
+      const chars = cfg.seconds.characters ? val(cfg.seconds.characters).replace(/\\s+/g, " ").trim().length : 0;
+      const total = cfg.seconds.characters ? price * chars : price && s ? price * s + cfg.extra : 0;
+      for (const e of f.querySelectorAll("[data-cost]")) e.textContent = total > 0 ? (total < 0.005 ? "< US$ 0.01" : "US$ " + total.toFixed(2)) : "—";
       if (!speech || speech.disabled) {
         // Sem fala escrita (troca de avatar, ou o áudio enviado no lugar dela): nada de contador.
       } else if (fixed) {
@@ -3493,7 +3685,7 @@ const SCRIPT = `(() => {
           : "Para " + fixed + " s: umas " + min + " a " + max + " palavras.";
         words.parentElement.classList.toggle("text-field__supporting--error", n > max);
       } else {
-        words.textContent = n ? n + " palavras · ≈ " + s + " s de vídeo" : words.dataset.default;
+        words.textContent = n ? n + " palavras · ≈ " + s + " s de " + cfg.unit : words.dataset.default;
       }
       // Cada campo de texto conta os próprios caracteres (o Omni tem dois: instruções e fala).
       for (const t of f.querySelectorAll("textarea")) {
@@ -3682,13 +3874,15 @@ const SCRIPT = `(() => {
           clone.value = voice;
           clone.dispatchEvent(new Event("change", { bubbles: true }));
         }
+        // Sem tipos de arquivo (os modelos de fala), o avatar não tem ativos a mostrar.
+        if (!kindViews.length) return show(null);
         showKind(kindViews[0].dataset.kindView);
         show("ativos");
       };
       for (const b of panel.querySelectorAll("[data-avatar-pick]")) b.addEventListener("click", () => pickAvatar(b));
       for (const b of opens) b.addEventListener("click", () => {
         if (b.getAttribute("aria-expanded") === "true") return show(null);
-        show(b.dataset.panelOpen === "avatares" && avatarInput.value ? "ativos" : b.dataset.panelOpen);
+        show(b.dataset.panelOpen === "avatares" && avatarInput.value && kindViews.length ? "ativos" : b.dataset.panelOpen);
       });
       for (const c of chips) c.addEventListener("click", () => showKind(c.dataset.kind));
       back.addEventListener("click", () => show("avatares"));
@@ -3710,7 +3904,7 @@ const SCRIPT = `(() => {
           progress.hidden = false;
           failed.hidden = true;
           const gender = genders.find((c) => c.getAttribute("aria-pressed") === "true");
-          const query = new URLSearchParams({ idioma: language.value, genero: gender ? gender.dataset.voiceFilter : "", busca: search.value.trim(), de: from });
+          const query = new URLSearchParams({ modelo: f.getAttribute("action").split("/").pop(), idioma: language.value, genero: gender ? gender.dataset.voiceFilter : "", busca: search.value.trim(), de: from });
           try {
             const res = await fetch("/vozes/lista?" + query);
             if (!res.ok) throw new Error();
@@ -3817,7 +4011,7 @@ const SCRIPT = `(() => {
           usePasted(file);
         });
       }
-      add.querySelector("button").addEventListener("contextmenu", (e) => {
+      if (add) add.querySelector("button").addEventListener("contextmenu", (e) => {
         if (pasteItem) pasteItem.hidden = !canPaste();
         const first = quickMenu.querySelector(".menu__item:not([hidden])");
         // Nada a oferecer: fica o menu do navegador.

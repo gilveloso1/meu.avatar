@@ -79,7 +79,7 @@ describe("HeyGen: plataforma pelo banco", () => {
     expect(pt).toContain('data-name="Ana"');
     expect(pt).not.toContain('data-name="Lea"');
     const multi = await (await list(api, "idioma=Multil%C3%ADngue")).text();
-    expect(multi).toContain('data-voice-play="/vozes/previa/m1"');
+    expect(multi).toContain('data-voice-play="/vozes/previa/m1?modelo=heygen"');
     expect(multi).not.toContain('data-name="Ana"');
     expect(await (await list(api, "idioma=&busca=le")).text()).toContain('data-name="Lea"');
     expect(await (await list(api, "idioma=Portugu%C3%AAs&genero=male")).text()).toContain('data-name="Rui"');

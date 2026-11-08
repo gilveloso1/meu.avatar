@@ -11,7 +11,7 @@ import { filtro, itemAtivo, itemProjeto, listar } from "./acervo";
 import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
-import { canUse, estimate, InputError, makesImage, STRUCTURES, structureById } from "./structures";
+import { canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, STRUCTURES, structureById } from "./structures";
 import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
 import { NANO_BANANA } from "./structures/imagem";
@@ -487,7 +487,7 @@ export class Api {
   private async followVideo(user: User, id: string): Promise<Response> {
     const found = await this.db.conta(user.id).video(id);
     const structure = found && structureById(found.structure);
-    if (!found || !structure || makesImage(structure) || !canUse(structure, user)) return falha(404, "nao_encontrado");
+    if (!found || !structure || madeAtOnce(structure) || !canUse(structure, user)) return falha(404, "nao_encontrado");
     const v = this.studio ? await this.studio.sync(found) : found;
     const pronto = ready(v);
     // O áudio tratado no contêiner vem depois do vídeo pronto: até lá, o src é o original.
@@ -688,10 +688,17 @@ export class Api {
       if (!v || !v.video_key || v.status !== "completed" || !structure || !makesImage(structure) || !canUse(structure, user)) return null;
       return { src: `/videos/${v.id}.${v.video_key.split(".").pop()}`, kind: "image", dur: null, name: v.name ?? (v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Imagem") };
     }
+    // A fala de um modelo de voz: entra como bloco de som, com a duração do MP3.
+    if (typeof c.audio === "string") {
+      const v = await this.db.conta(user.id).video(c.audio);
+      const structure = v && structureById(v.structure);
+      if (!v || !v.video_key || v.status !== "completed" || !structure || !makesAudio(structure) || !canUse(structure, user)) return null;
+      return { src: `/videos/${v.id}.mp3`, kind: "audio", dur: v.duration, name: v.name ?? (v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Áudio") };
+    }
     if (typeof c.video === "string") {
       const v = await this.db.conta(user.id).video(c.video);
       const structure = v && structureById(v.structure);
-      if (!v || !ready(v) || !structure || makesImage(structure) || !canUse(structure, user)) return null;
+      if (!v || !ready(v) || !structure || madeAtOnce(structure) || !canUse(structure, user)) return null;
       return { src: `/videos/${v.id}.mp4`, kind: "video", dur: await this.duration(v), name: v.name ?? (v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo") };
     }
     if (typeof c.arquivo !== "string") return null;

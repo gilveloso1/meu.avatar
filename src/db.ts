@@ -499,7 +499,7 @@ export class Db {
     if (!structures.length) return 0;
     const result = await this.d1
       .prepare(
-        `UPDATE videos SET status = 'failed', error = 'A imagem não voltou a tempo.', updated_at = ?
+        `UPDATE videos SET status = 'failed', error = 'A imagem ou a fala não voltou a tempo.', updated_at = ?
          WHERE structure IN (${structures.map(() => "?").join(", ")}) AND status = 'in_progress' AND created_at < ?`,
       )
       .bind(nowIso, ...structures, beforeIso)
