@@ -37,9 +37,9 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `listar_vozes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `inspecionar_animacao` (texto; imagem só com
   `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `gerar_imagem` (devolve
-  a imagem para o agente olhar), `gerar_video` e `acompanhar_video`, `renderizar_html`, `legendar`, `limpar_arquivos`,
+  a imagem para o agente olhar), `gerar_video` e `acompanhar_video`, `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
   `exportar` e `acompanhar_exportacao`. Não apagam projeto. Só `gerar_imagem` (uns US$ 0,04 por
-  imagem em 1K) e `gerar_video` gastam créditos de modelo.
+  imagem em 1K), `gerar_video` e `gerar_audio` gastam créditos de modelo.
 - **Gerar vídeo** (desde 08/11/2026): `gerar_video` faz o avatar falar com o HeyGen Avatar, o
   mesmo modelo e a mesma plataforma do site (a config `plataforma.heygen`; no ar, a API direta, a
   US$ 0,0385 por segundo). Recebe a foto (src de imagem: ativo, arquivo do projeto ou imagem
@@ -50,6 +50,17 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   instruções do servidor pedem ao agente que mostre o texto, a voz e o custo à pessoa e só gere
   com o sim dela. Rotas: `POST /api/v1/projetos/<id>/video`, `GET /api/v1/videos/<id>` e
   `GET /api/v1/vozes`.
+- **Gerar áudio** (desde 08/11/2026): `gerar_audio` faz uma fala (MP3) com um modelo de fala, o
+  mesmo do site: `modelo` `fish` (padrão, uns US$ 0,002 por minuto) ou `elevenlabs`. Recebe o
+  `texto`, com as emoções em inglês entre colchetes (a lista vai na descrição da ferramenta), e a
+  `voz` de `listar_vozes` com o mesmo `modelo`: pronta ou, no Fish, clonada (as da pessoa e a de
+  cada avatar com gravação; a do avatar pede `consentimento: true` no primeiro uso). Clonar uma voz
+  nova com uma gravação ainda é só no site. Responde na hora, com o áudio pronto:
+  `{audio: {id, src, duracao, custo, modelo, voz, clonada?}, usar: {audio}}`; o `usar` vai no
+  `adicionar` e o `src` é o `audio` do `gerar_video`. Rotas: `POST /api/v1/audios` e
+  `GET /api/v1/vozes?modelo=`. Erros: `modelo_inexistente` (404, com os `modelos` da conta),
+  `texto_obrigatorio`, `voz_obrigatoria`, `pedido_invalido` (com `motivo`), `audio_falhou` (502) e
+  `criacao_pausada` (503).
 
 ```bash
 claude mcp add --transport http meu-avatar https://meuavatar.ia.br/mcp --header "Authorization: Bearer ma_..."

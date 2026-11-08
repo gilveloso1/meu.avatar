@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
 import { Db } from "../src/db";
-import { call, cookie, FakeExportApi, FakeHeyGenApi, FakeRenderApi, FakeVideoApi, memberCookie, SITE, webmBytes } from "./helpers";
+import { call, callFish, cookie, FakeExportApi, FakeFishApi, FakeHeyGenApi, FakeRenderApi, FakeVideoApi, memberCookie, postForm, SITE, webmBytes } from "./helpers";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
 
@@ -125,7 +125,7 @@ describe("protocolo", () => {
     const { result } = await legado("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
     expect(result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "meu-avatar" } });
     expect((await legado("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-11-25");
-    expect((await legado("tools/list")).result.tools).toHaveLength(21);
+    expect((await legado("tools/list")).result.tools).toHaveLength(22);
     expect((await legado("ping")).result).toEqual({});
   });
 
@@ -143,7 +143,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "gerar_video", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "gerar_video", "gerar_audio", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });
@@ -382,6 +382,88 @@ describe("gerar_video", () => {
     const r = await comHeyGen(null, "acompanhar_video", { video: alheio });
     expect(r.isError).toBe(true);
     expect(r.content[0]!.text).toContain("nao_encontrado");
+  });
+});
+
+describe("gerar_audio", () => {
+  /** A ferramenta com o OpenRouter, o Fish e a HeyGen falsos, para ver o pedido de fala. */
+  const comFish = async (api: FakeVideoApi, fish: FakeFishApi, name: string, args: unknown, heygen: FakeHeyGenApi | null = null) => {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
+    const res = await callFish(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: "Bearer ma_admin", ...CABECALHOS("tools/call", name) } }), api, fish, heygen);
+    return ((await res.json()) as { result: Result }).result;
+  };
+
+  it("lista as vozes do Fish, gera na hora com as emoções em inglês e o áudio entra no projeto e no gerar_video", async () => {
+    await new Db(env.DB).setPlatform("heygen");
+    const api = new FakeVideoApi(), fish = new FakeFishApi(), heygen = new FakeHeyGenApi();
+    const vozes = dados<{ prontas: { id: string; nome: string; idioma: string; genero: string }[] }>(await comFish(api, fish, "listar_vozes", { modelo: "fish", genero: "masculina", idioma: "Brasil" }));
+    expect(vozes.prontas).toEqual([{ id: "fish-caio", nome: "Caio", idioma: "Português (Brasil)", genero: "masculina" }]);
+
+    const r = await comFish(api, fish, "gerar_audio", { texto: "[risada] Olha que legal!", voz: "fish-caio" });
+    expect(r.isError).toBeFalsy();
+    const { audio, usar } = dados<{ audio: { id: string; src: string; modelo: string; voz: string; custo: number; duracao: number }; usar: { audio: string } }>(r);
+    expect(audio).toMatchObject({ src: `/videos/${audio.id}.mp3`, modelo: "fish", voz: "Caio" });
+    expect(audio.duracao).toBeGreaterThan(0);
+    expect(usar).toEqual({ audio: audio.id });
+    expect(api.speeches).toEqual([{ model: "fish-audio/drama-3", input: "[laughs] Olha que legal!", voice: "fish-caio" }]);
+
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Fala" }));
+    expect((await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", ...usar }] })).isError).toBe(false);
+    // A fala vira o áudio do avatar no gerar_video (Meu áudio, HeyGen direta).
+    const { imagem } = dados<{ imagem: { src: string } }>(await comFish(api, fish, "gerar_imagem", { projeto: id, descricao: "touro sorrindo" }));
+    const v = await comFish(api, fish, "gerar_video", { projeto: id, foto: imagem.src, audio: audio.src }, heygen);
+    expect(v.isError).toBeFalsy();
+    expect(heygen.assets.find((a) => a.type === "audio/mpeg")).toBeDefined();
+    expect(heygen.videos[0]!.audio_asset_id).toBeDefined();
+  });
+
+  it("a voz do avatar: aparece entre as clonadas, pede o consentimento na primeira vez e manda a gravação", async () => {
+    const api = new FakeVideoApi(), fish = new FakeFishApi();
+    const gravacao = new File([new TextEncoder().encode("voz-do-urso")], "voz.mp3", { type: "audio/mpeg" });
+    const res = await call(postForm("/avatares", { nome: "Urso", imagem: new File([new Uint8Array([137, 80, 78, 71])], "urso.png", { type: "image/png" }), voz: gravacao }, { cookie: await cookie() }));
+    const avatar = res.headers.get("location")!.split("/").pop()!;
+    const { clonadas } = dados<{ clonadas: { id: string; nome: string; clonarNoPrimeiroUso?: boolean }[] }>(await comFish(api, fish, "listar_vozes", { modelo: "fish" }));
+    expect(clonadas).toEqual([{ id: `avatar:${avatar}`, nome: "Voz de Urso", clonarNoPrimeiroUso: true }]);
+
+    const sem = await comFish(api, fish, "gerar_audio", { texto: "Bom dia, turma!", voz: `avatar:${avatar}` });
+    expect(sem.isError).toBe(true);
+    expect(sem.content[0]!.text).toContain("pedido_invalido");
+    const r = await comFish(api, fish, "gerar_audio", { texto: "Bom dia, turma!", voz: `avatar:${avatar}`, consentimento: true });
+    expect(dados<{ audio: { voz: string; clonada: boolean } }>(r).audio).toMatchObject({ voz: "Voz de Urso", clonada: true });
+    expect(api.speeches[0]!.voice).toBeUndefined();
+    expect(new TextDecoder().decode(api.speeches[0]!.reference!.bytes)).toBe("voz-do-urso");
+    // Da segunda vez, sem consentimento.
+    expect((await comFish(api, fish, "gerar_audio", { texto: "De novo.", voz: `avatar:${avatar}` })).isError).toBeFalsy();
+  });
+
+  it("ElevenLabs pelo modelo; recusa modelo que não fala, sem texto, sem voz e voz que o modelo não tem, sem gastar", async () => {
+    const api = new FakeVideoApi(), fish = new FakeFishApi();
+    const { prontas } = dados<{ prontas: { id: string }[] }>(await comFish(api, fish, "listar_vozes", { modelo: "elevenlabs", busca: "sarah" }));
+    expect(prontas.map((v) => v.id)).toEqual(["sarah"]);
+    const casos: [Record<string, unknown>, string][] = [
+      [{ modelo: "wan", texto: "Oi", voz: "sarah" }, "modelo_inexistente"],
+      [{ texto: " ", voz: "fish-caio" }, "texto_obrigatorio"],
+      [{ texto: "Oi" }, "voz_obrigatoria"],
+      [{ modelo: "elevenlabs", texto: "Oi", voz: "fish-caio" }, "pedido_invalido"],
+      [{ texto: "[risada]", voz: "fish-caio" }, "pedido_invalido"],
+    ];
+    for (const [args, erro] of casos) {
+      const r = await comFish(api, fish, "gerar_audio", args);
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain(erro);
+    }
+    expect((await comFish(api, fish, "listar_vozes", { modelo: "wan" })).content[0]!.text).toContain("modelo_inexistente");
+    expect(api.speeches).toHaveLength(0);
+    const r = await comFish(api, fish, "gerar_audio", { modelo: "elevenlabs", texto: "Oi, gente!", voz: "sarah" });
+    expect(dados<{ audio: { modelo: string } }>(r).audio.modelo).toBe("elevenlabs");
+    expect(api.speeches[0]).toMatchObject({ model: "elevenlabs/eleven-v4", voice: "sarah" });
+  });
+
+  it("conta comum sem os modelos de fala não lista nem gera", async () => {
+    await memberCookie();
+    const code = await token("membro@exemplo.com", "ma_membro");
+    const res = await call(new Request(`${SITE}/api/v1/audios`, { method: "POST", body: JSON.stringify({ texto: "Oi", voz: "fish-caio" }), headers: { authorization: `Bearer ${code}` } }));
+    expect(res.status).toBe(404);
   });
 });
 

@@ -130,10 +130,11 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    vídeo falado. Feito: o áudio como tipo de saída (`output: "audio"`, na lista do modelo, na
    página do áudio, no "Adicionar ativo" e no `listar_arquivos`, com `adicionar {audio}`) e o
    ElevenLabs v4 e o Fish Audio Drama 3, com as vozes oficiais do Fish (`voz.ts`, só para o
-   administrador; ver `docs/modelos/`), e o Texto com emoções (`#`). Falta, um PR por vez:
+   administrador; ver `docs/modelos/`), o Texto com emoções (`#`) e o `gerar_audio` do MCP. Falta, um PR por vez:
    - **Voz clonada no ElevenLabs**: só pela API direta dele (conta e chave próprias). A do Fish está
      feita (Voz clonada, como a da HeyGen; ver `docs/modelos/fish-audio-drama-3.md`).
-   - O agente gerar áudio pelo MCP (`gerar_audio`) e o "Usar para gerar" do áudio abrir o HeyGen.
+   - O "Usar para gerar" do áudio abrir o HeyGen (o agente já gera a fala com `gerar_audio` e a usa
+     no `gerar_video {audio}`).
    - **Prévia de voz rápida, em todos os modelos com voz** (HeyGen, ElevenLabs, Fish): hoje a primeira
      escuta de cada voz leva de 1 a 3 s (busca ou gera a amostra; depois fica no R2 e no navegador).
      Pré-carregar as amostras das vozes à vista quando o menu abre, começar a carregar ao passar o
