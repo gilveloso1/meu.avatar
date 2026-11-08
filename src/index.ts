@@ -1,3 +1,4 @@
+import { type FishApi, FishClient } from "./fish";
 import { type AudioApi, type AudioFixer, ContainerAudio } from "./audio";
 import { Accounts } from "./auth";
 import { type CustosApi, CustosReais, lerHeyGen, lerOpenRouter } from "./custos";
@@ -32,6 +33,8 @@ export interface Deps {
   machines?: MaquinasApi | null;
   /** Quem faz a imagem fora do pedido (src/imagens.ts). */
   images?: ImageRunner | null;
+  /** O catálogo das vozes oficiais do Fish (src/fish.ts). */
+  fish?: FishApi | null;
 }
 
 export function createExports(env: Env, deps: Deps = {}): Exports {
@@ -47,7 +50,9 @@ export function createStudio(env: Env, deps: Deps = {}): Studio {
   const heygen = deps.heygen !== undefined ? deps.heygen : env.HEYGEN_API_KEY ? new HeyGenClient(env.HEYGEN_API_KEY) : null;
   // O Durable Object gera com a chave do env: com outra API (os testes), a imagem sai no pedido.
   const images = deps.images !== undefined ? deps.images : deps.api === undefined && env.IMAGENS ? new DurableImages(env.IMAGENS) : null;
-  return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL }, audio, heygen, images);
+  // O Fish é lido sem chave: com outra API (os testes), só o catálogo que o teste passar.
+  const fish = deps.fish !== undefined ? deps.fish : deps.api === undefined ? new FishClient() : null;
+  return new Studio(new Db(env.DB), env.MIDIA, api, { siteUrl: env.SITE_URL }, audio, heygen, images, fish);
 }
 
 export function createAccounts(env: Env): Accounts {

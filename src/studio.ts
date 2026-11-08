@@ -7,10 +7,11 @@ import { mp4Duration, mp4Size } from "./mp4";
 import { type ImageRequest, type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import type { ImageRunner } from "./imagens";
+import type { FishApi, FishVoice } from "./fish";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
 import { canUse, InputError, type Lists, madeAtOnce, makesAudio, onPlatform, STRUCTURES, structureById, type Structure, type Values, videoPlatform } from "./structures";
 import { HEYGEN_AVATAR } from "./structures/heygen";
-import { PREVIEW_TEXT, speechCost } from "./structures/voz";
+import { FISH, fishVoices, PREVIEW_TEXT, speechCost } from "./structures/voz";
 import { AVATAR_VOICE, HEYGEN_MODEL, MAX_CLONE_NAME, NEW_CLONE, PRICE_PER_SECOND, voiceOptions } from "./structures/heygen-direta";
 import {
   aspectLabel,
@@ -81,8 +82,11 @@ export const VOICE_TIMEOUT_MS = 30 * 60_000;
 const VOICES_TTL_MS = 60 * 60_000;
 const VOICES_SAVED_TTL_MS = 24 * 60 * 60_000;
 let voicesCache: { at: number; voices: HeyGenVoice[] } | null = null;
+/** O catálogo das vozes oficiais do Fish, com o mesmo tempo do da HeyGen. */
+let fishCache: { at: number; voices: FishVoice[] } | null = null;
+const FISH_CATALOG = "vozes.fish.oficiais";
 /** Nos testes: a próxima leitura age como uma instância nova. */
-export const resetVoiceCache = () => { voicesCache = null; };
+export const resetVoiceCache = () => { voicesCache = null; fishCache = null; };
 
 /** A estrutura existe, mas quem pediu não tem acesso a ela. */
 export class ForbiddenError extends Error {}
@@ -106,6 +110,8 @@ export class Studio {
     private readonly heygen: HeyGenApi | null = null,
     /** Faz a imagem fora do pedido (src/imagens.ts); sem ele, no próprio pedido. */
     private readonly images: ImageRunner | null = null,
+    /** O catálogo das vozes oficiais do Fish (src/fish.ts); sem ele, o Fish fica sem vozes. */
+    private readonly fish: FishApi | null = null,
   ) {}
 
   get canGenerate(): boolean {
@@ -131,8 +137,9 @@ export class Studio {
     return onPlatform(structure, platform);
   }
 
-  /** As listas do formulário da HeyGen direta: as vozes prontas e as vozes clonadas da pessoa. */
+  /** As listas do formulário: as vozes oficiais do Fish; na HeyGen direta, as prontas e as clonadas da pessoa. */
   async lists(structure: Structure, userId: number): Promise<Lists> {
+    if (structure.id === FISH.id) return { voices: fishVoices(await this.fishCatalog()) };
     if (structure.platform !== "heygen" || !this.heygen) return {};
     const catalog = await this.voiceCatalog();
     const voices = await this.db.voicesByUser(userId);
@@ -147,6 +154,25 @@ export class Studio {
       clones.push({ value, label: voice ? label(voice, name) : name });
     }
     return { voices: voiceOptions(catalog), clones, newClones };
+  }
+
+  /** As vozes oficiais do Fish: da instância, do banco ou do Fish, nessa ordem; sem elas, o último guardado. */
+  private async fishCatalog(): Promise<FishVoice[]> {
+    if (!this.fish) return [];
+    if (fishCache && Date.now() - fishCache.at <= VOICES_TTL_MS) return fishCache.voices;
+    const saved = await this.db.voiceCatalog<FishVoice>(FISH_CATALOG);
+    if (saved && Date.now() - saved.at <= VOICES_SAVED_TTL_MS) {
+      fishCache = { at: Date.now(), voices: saved.voices };
+      return saved.voices;
+    }
+    try {
+      fishCache = { at: Date.now(), voices: await this.fish.voices() };
+      await this.db.setVoiceCatalog(fishCache, FISH_CATALOG);
+    } catch (err) {
+      console.error("Não deu para listar as vozes do Fish", err);
+      return fishCache?.voices ?? saved?.voices ?? [];
+    }
+    return fishCache.voices;
   }
 
   /** O catálogo de vozes prontas: da instância, do banco ou da HeyGen, nessa ordem. */
@@ -174,12 +200,17 @@ export class Studio {
    */
   async voicePreview(structure: Structure, voiceId: string): Promise<{ bytes: ArrayBuffer; type: string } | null> {
     if (makesAudio(structure)) {
-      const voices = structure.sections(await this.modelOf(structure), { duration: 0, resolution: "", aspectRatio: "" }).flatMap((s) => s.fields).find((f) => f.kind === "voice");
+      const lists = await this.lists(structure, 0);
+      // O Fish não precisa do modelo para listar as vozes (e a amostra vem dele, sem chave).
+      const model = structure.id === FISH.id ? null : await this.modelOf(structure);
+      const voices = structure.sections(model, { duration: 0, resolution: "", aspectRatio: "" }, lists).flatMap((s) => s.fields).find((f) => f.kind === "voice");
       if (!voices || voices.kind !== "voice" || !voices.voices.some((v) => v.value === voiceId)) return null;
       const key = `vozes/previas/${structure.id}/${voiceId}.mp3`;
       const saved = await this.media.get(key);
-      if (saved) return { bytes: await saved.arrayBuffer(), type: "audio/mpeg" };
-      const audio = await this.requireApi().speech({ model: structure.model, input: PREVIEW_TEXT, voice: voiceId });
+      if (saved) return { bytes: await saved.arrayBuffer(), type: saved.httpMetadata?.contentType ?? "audio/mpeg" };
+      // A do Fish é a amostra que ele já guarda (sem gastar); a do ElevenLabs, uma frase gerada uma vez.
+      const audio = structure.id === FISH.id ? await this.fish?.sample(voiceId) : await this.requireApi().speech({ model: structure.model, input: PREVIEW_TEXT, voice: voiceId });
+      if (!audio) return null;
       await this.media.put(key, audio.bytes, { httpMetadata: { contentType: audio.type } });
       return audio;
     }
@@ -227,7 +258,9 @@ export class Studio {
     if (videoBytes && seconds === null) throw new InputError(ERROS.videoLeitura);
 
     const model = await this.modelOf(structure);
-    const built = structure.build(input.values, image !== null, model, seconds !== null ? { seconds } : null);
+    // As vozes do Fish vêm das listas; as outras estruturas daqui não usam listas.
+    const lists = makesAudio(structure) ? await this.lists(structure, input.user.id) : {};
+    const built = structure.build(input.values, image !== null, model, seconds !== null ? { seconds } : null, lists);
     // O preparo (Aleph 2) roda no contêiner: sem ele, não dá para começar.
     if (built.prepare && !this.audio) throw new InputError(ERROS.trocaIndisponivel);
     const request: VideoRequest = { model: structure.model, ...built.request };

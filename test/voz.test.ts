@@ -2,10 +2,12 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
 import { ERROS } from "../src/erros";
+import { fishLanguage } from "../src/fish";
 import { mp3Duration } from "../src/mp3";
+import { resetVoiceCache } from "../src/studio";
 import { estimate } from "../src/structures";
-import { ELEVENLABS, elevenVoices, EMOTIONS, MAX_SPEECH, PREVIEW_TEXT, speechText, spokenText } from "../src/structures/voz";
-import { call, cookie, ELEVEN_MODEL, FakeHeyGenApi, FakeVideoApi, memberCookie, mp3, postForm, SITE } from "./helpers";
+import { ELEVENLABS, elevenVoices, EMOTIONS, FISH, fishVoices, MAX_SPEECH, PREVIEW_TEXT, speechText, spokenText } from "../src/structures/voz";
+import { call, callFish, cookie, ELEVEN_MODEL, FakeFishApi, FakeHeyGenApi, FISH_MODEL, FakeVideoApi, memberCookie, mp3, postForm, SITE } from "./helpers";
 
 const TEXTO = "[excited] Gente, eu preciso contar uma coisa! Olha a diferença na minha pele.";
 
@@ -190,5 +192,59 @@ describe("ElevenLabs v4 (fala)", () => {
     expect(res.status).toBe(303);
     expect(heygen.assets.find((a) => a.type === "audio/mpeg")).toBeDefined();
     expect(heygen.videos[0]!.audio_asset_id).toBeDefined();
+  });
+});
+
+describe("Fish Audio (fala)", () => {
+  const getFish = async (path: string, api: FakeVideoApi, fish: FakeFishApi) => callFish(new Request(`${SITE}${path}`, { headers: { cookie: await cookie() } }), api, fish);
+  const postFish = async (fields: Record<string, string>, api: FakeVideoApi, fish: FakeFishApi) => callFish(postForm("/modelo/fish", fields, { cookie: await cookie() }), api, fish);
+
+  it("as vozes oficiais do Fish, do Brasil primeiro; o idioma de cada uma", () => {
+    const voices = fishVoices(new FakeFishApi().catalog);
+    expect(voices.map((v) => v.name)).toEqual(["Beatriz", "Caio", "Tomás", "Sarah"]);
+    expect(voices[1]).toMatchObject({ value: "fish-caio", gender: "male", language: "Português (Brasil)", preview: true });
+    expect(fishLanguage("pt", { tags: ["male", "pt-br"] })).toBe("Português (Brasil)");
+    expect(fishLanguage("pt", { tags: [], description: "Uma voz clara para atendimento ao cliente." })).toBe("Português (Brasil)");
+    expect(fishLanguage("pt", { tags: [], description: "Uma voz clara para apoio ao cliente." })).toBe("Português (Portugal)");
+    expect(fishLanguage("pt", { tags: ["pt-pt"], description: "Brazilian" })).toBe("Português (Portugal)");
+    expect(fishLanguage("es", {})).toBe("Espanhol");
+    expect(estimate(FISH, FISH_MODEL, (n) => ({ texto: "dez letras", voz: "fish-caio" })[n] ?? "")).toBeCloseTo(0.000002 * 10);
+  });
+
+  it("gera com a voz do Fish e as emoções em inglês; o menu tem o filtro de idioma, no Brasil", async () => {
+    const api = new FakeVideoApi(), fish = new FakeFishApi();
+    const page = await (await getFish("/modelo/fish", api, fish)).text();
+    expect(page).toContain('name="voz" value="fish-beatriz" data-voice-input');
+    expect(page).toContain('id="voz-idioma"');
+    expect(page).toContain('<option value="Português (Brasil)" selected>Português (Brasil) (2)</option>');
+    const res = await postFish({ voz: "fish-caio", texto: "[risada] Olha que legal!" }, api, fish);
+    expect(res.status).toBe(303);
+    expect(api.speeches).toEqual([{ model: "fish-audio/drama-3", input: "[laughs] Olha que legal!", voice: "fish-caio" }]);
+    const audio = await ultimo();
+    expect(audio).toMatchObject({ structure: "fish", status: "completed", video_key: `audios/${audio.id}.mp3` });
+    expect(JSON.parse(audio.settings!)).toMatchObject({ voice_id: "fish-caio", voice: "Caio" });
+    const lista = await (await getFish(`/vozes/lista?modelo=fish&idioma=${encodeURIComponent("Português (Portugal)")}`, api, fish)).text();
+    expect(lista).toContain('data-voice="fish-tomas"');
+    expect(lista).not.toContain('data-voice="fish-caio"');
+    // O catálogo foi lido uma vez e ficou guardado (na instância e no banco).
+    expect(fish.listed).toBe(1);
+  });
+
+  it("só vozes do catálogo; a prévia é a amostra do Fish, baixada uma vez", async () => {
+    const api = new FakeVideoApi(), fish = new FakeFishApi();
+    expect(await (await postFish({ voz: "4b215a58407c4def88e0892def6421b2", texto: "Oi" }, api, fish)).text()).toContain(ERROS.voz);
+    expect((await getFish("/vozes/previa/4b215a58407c4def88e0892def6421b2?modelo=fish", api, fish)).status).toBe(404);
+    for (let i = 0; i < 2; i++) expect(await (await getFish("/vozes/previa/fish-caio?modelo=fish", api, fish)).text()).toBe("amostra-fish-caio");
+    expect(fish.samples).toEqual(["fish-caio"]);
+    expect(api.speeches).toHaveLength(0);
+  });
+
+  it("com o Fish fora do ar, vale o último catálogo guardado", async () => {
+    const api = new FakeVideoApi(), fish = new FakeFishApi();
+    await getFish("/modelo/fish", api, fish);
+    resetVoiceCache();
+    await env.DB.prepare("UPDATE config SET value = json_set(value, '$.at', 0) WHERE key = 'vozes.fish.oficiais'").run();
+    fish.failList = true;
+    expect(await (await getFish("/modelo/fish", api, fish)).text()).toContain('value="fish-beatriz" data-voice-input');
   });
 });

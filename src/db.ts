@@ -651,13 +651,14 @@ export class Db {
   }
 
   /** O catálogo de vozes prontas da HeyGen guardado (config 'vozes.heygen.listadas'): ler tudo da API leva várias chamadas. */
-  async voiceCatalog<T>(): Promise<{ at: number; voices: T[] } | null> {
-    const row = await this.d1.prepare("SELECT value FROM config WHERE key = 'vozes.heygen.listadas'").first<{ value: string }>();
+  /** Um catálogo de vozes guardado (o da HeyGen e o do Fish), com a hora em que foi lido. */
+  async voiceCatalog<T>(key = "vozes.heygen.listadas"): Promise<{ at: number; voices: T[] } | null> {
+    const row = await this.d1.prepare("SELECT value FROM config WHERE key = ?").bind(key).first<{ value: string }>();
     return row ? JSON.parse(row.value) : null;
   }
 
-  async setVoiceCatalog<T>(catalog: { at: number; voices: T[] }): Promise<void> {
-    await this.d1.prepare("INSERT INTO config (key, value) VALUES ('vozes.heygen.listadas', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(JSON.stringify(catalog)).run();
+  async setVoiceCatalog<T>(catalog: { at: number; voices: T[] }, key = "vozes.heygen.listadas"): Promise<void> {
+    await this.d1.prepare("INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(key, JSON.stringify(catalog)).run();
   }
 
   async insertVoice(v: Omit<Voice, "created_at" | "error" | "asset_id"> & { asset_id?: string | null }, now = new Date()): Promise<Voice> {

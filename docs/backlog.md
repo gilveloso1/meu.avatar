@@ -129,14 +129,16 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    que geram áudio; o áudio entra no HeyGen como "Meu áudio" (pelo "Adicionar ativo") e vira o
    vídeo falado. Feito: o áudio como tipo de saída (`output: "audio"`, na lista do modelo, na
    página do áudio, no "Adicionar ativo" e no `listar_arquivos`, com `adicionar {audio}`) e o
-   ElevenLabs v4 (`voz.ts`, 21 vozes, só para o administrador; ver
-   `docs/modelos/elevenlabs-v4.md`). Falta, um PR por vez:
-   - **Fish Audio Drama 3** com as 16 vozes aprovadas em 08/11/2026 (ids em
-     `temp/vozes/fish/aprovadas.json`, fora do git; cada voz ganha um nome nosso, aprovado antes).
+   ElevenLabs v4 e o Fish Audio Drama 3, com as vozes oficiais do Fish (`voz.ts`, só para o
+   administrador; ver `docs/modelos/`), e o Texto com emoções (`#`). Falta, um PR por vez:
    - **Voz clonada**: no Fish, no molde da "Voz clonada" do HeyGen ("Clonar uma voz nova" com a
      gravação, o nome e o consentimento, e a voz de cada avatar), sem espera: o Fish clona a cada
      pedido pela gravação. No ElevenLabs, só pela API direta (conta e chave próprias).
    - O agente gerar áudio pelo MCP (`gerar_audio`) e o "Usar para gerar" do áudio abrir o HeyGen.
+   - **Prévia de voz rápida, em todos os modelos com voz** (HeyGen, ElevenLabs, Fish): hoje a primeira
+     escuta de cada voz leva de 1 a 3 s (busca ou gera a amostra; depois fica no R2 e no navegador).
+     Pré-carregar as amostras das vozes à vista quando o menu abre, começar a carregar ao passar o
+     mouse no ▶ e mandar o áudio enquanto é lido (do R2, sem esperar o arquivo inteiro).
 5. **Depois: interface de produção de texto e copy.** Transcrever o áudio do
    vídeo de referência (só o áudio, nunca o vídeo) e ajustar a fala.
 6. **Configuração do administrador**: tela para trocar a plataforma do HeyGen
