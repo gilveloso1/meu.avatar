@@ -1429,24 +1429,19 @@ describe("edição rápida", () => {
     expect(page).toContain(`src="/videos/${video.id}.editado.mp4?v=`);
   });
 
-  it("o agendamento acha o rosto dos vídeos prontos, um por vez, e a miniatura das listas enquadra nele", async () => {
+  it("o rosto só é procurado quando pedido: guardado, a miniatura das listas enquadra nele; sem rosto, grava vazio", async () => {
     const { api, audio, studio, video } = await pronto("heygen");
-    // Antes de achar: o terço de cima do vídeo (9:16 num quadrado).
+    // Sem procurar: o terço de cima do vídeo (9:16 num quadrado), sem ligar o contêiner.
     let lista = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
     expect(lista).toContain('style="object-position:50.0% 28.6%"');
-    expect(await studio.findNextFace()).toMatchObject({ id: video.id, face: JSON.stringify({ x: 0.46, y: 0.44, altura: 0.25 }) });
-    expect(await studio.findNextFace()).toBeNull();
+    expect(audio!.faces).toBe(0);
+    expect(await studio.faceOnDemand({ video })).toBe(JSON.stringify({ x: 0.46, y: 0.44, altura: 0.25 }));
     expect(audio!.faces).toBe(1);
     // Os olhos (y = 0,44 do quadro) a 40% da altura do quadrado.
     lista = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, audio)).text();
     expect(lista).toContain('style="object-position:50.0% 49.1%"');
-  });
-
-  it("se o contêiner não achar o rosto, o agendamento grava vazio e não tenta de novo", async () => {
-    const { audio, studio, video } = await pronto("heygen");
     audio!.fail = "Rosto (HTTP 500)";
-    expect(await studio.findNextFace()).toMatchObject({ id: video.id, face: "{}" });
-    expect(await studio.findNextFace()).toBeNull();
+    expect(await studio.faceOnDemand({ video })).toBe("{}");
   });
 
   it("o rosto é achado pelo contêiner na primeira vez, fica guardado e vai no plano da edição", async () => {

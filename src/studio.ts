@@ -1,5 +1,5 @@
 import type { AudioApi, Face } from "./audio";
-import { Db, OPEN_STATUSES, type Video, type Voice } from "./db";
+import { type AvatarAsset, Db, OPEN_STATUSES, type Video, type Voice } from "./db";
 import type { Conta } from "./permissoes";
 import { ERROS } from "./erros";
 import { mp4Duration, mp4Size } from "./mp4";
@@ -821,22 +821,22 @@ export class Studio {
   }
 
   /**
-   * Agendamento: procura o rosto de um vídeo pronto que ainda não tem (para enquadrar a miniatura
-   * nas listas e já deixar pronto para a edição rápida). Sem rosto ou se o contêiner falhar, grava
-   * {} para não tentar de novo a cada minuto (a prévia da edição rápida usa o padrão).
+   * O rosto de um vídeo ou ativo só quando o agente pede (enquadrar com rosto): o contêiner procura
+   * uma vez e fica guardado ({} quando não há rosto). O agendamento não procura mais: ligava o
+   * AudioFixer por cada imagem e vídeo novo só para a miniatura, que usa o terço de cima.
    */
-  async findNextFace(): Promise<Video | null> {
+  async faceOnDemand(target: { video: Video } | { asset: AvatarAsset }): Promise<string | null> {
     if (!this.audio) return null;
-    const video = await this.db.nextWithoutFace();
-    if (!video) return null;
-    return this.db.updateVideo(video.id, { face: await this.detectFace((video.processed_key ?? video.video_key)!) });
-  }
-
-  /** Agendamento: acha o rosto de um ativo de avatar, para a miniatura enquadrar como a dos vídeos. */
-  async findNextAssetFace(): Promise<void> {
-    if (!this.audio) return;
-    const asset = await this.db.nextAssetWithoutFace();
-    if (asset) await this.db.updateAssetFace(asset.id, await this.detectFace(asset.key));
+    if ("video" in target) {
+      const key = target.video.processed_key ?? target.video.video_key;
+      if (!key) return null;
+      const face = await this.detectFace(key);
+      await this.db.updateVideo(target.video.id, { face });
+      return face;
+    }
+    const face = await this.detectFace(await this.db.assetKey(target.asset));
+    await this.db.updateAssetFace(target.asset.id, face);
+    return face;
   }
 
   /** O rosto do arquivo, em JSON; {} se não achou. */
@@ -846,7 +846,7 @@ export class Studio {
       const file = await this.media.get(key);
       if (file) face = await this.audio!.face(await file.arrayBuffer());
     } catch (err) {
-      console.error("Falha ao achar o rosto (agendamento)", key, err);
+      console.error("Falha ao achar o rosto", key, err);
     }
     return JSON.stringify(face);
   }

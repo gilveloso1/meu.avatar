@@ -727,11 +727,15 @@ export class Api {
     return res.json();
   }
 
-  /** O ponto entre os olhos, achado pelo agendamento (videos.face e avatar_assets.face). */
+  /** O ponto entre os olhos (videos.face e avatar_assets.face): o guardado ou, ainda não procurado, o do contêiner agora. */
   private async face(user: User, src: string): Promise<{ x: number; y: number } | null> {
     const id = /^\/videos\/([0-9a-f-]{36})/.exec(src)?.[1];
     const asset = /^\/avatares\/[0-9a-f-]{36}\/arquivos\/([0-9a-f-]{36})$/.exec(src)?.[1];
-    const face = id ? (await this.db.conta(user.id).video(id))?.face : asset ? (await this.db.assetOfUser(user.id, asset))?.face : null;
+    const video = id ? await this.db.conta(user.id).video(id) : null;
+    const ativo = asset ? await this.db.assetOfUser(user.id, asset) : null;
+    // Ainda não procurado (null): o contêiner procura agora, uma vez só (src/studio.ts, faceOnDemand).
+    let face = video?.face ?? ativo?.face ?? null;
+    if (face === null && this.studio && (video || ativo)) face = await this.studio.faceOnDemand(video ? { video } : { asset: ativo! });
     if (!face) return null;
     try {
       const { x, y } = JSON.parse(face) as { x?: unknown; y?: unknown };

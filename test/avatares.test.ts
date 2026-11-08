@@ -256,7 +256,7 @@ describe("vídeo com avatar ou arquivo solto", () => {
     expect(keys).toEqual(["avatares-ativos/foto", video.video_key]);
   });
 
-  it("a capa do avatar enquadra o rosto achado pelo agendamento", async () => {
+  it("a capa do avatar enquadra o rosto, quando procurado", async () => {
     const session = await cookie();
     const id = await criar(session, { nome: "Camila" });
     const f = new FormData();
@@ -266,8 +266,8 @@ describe("vídeo com avatar ou arquivo solto", () => {
     expect(antes).toContain('data-face="0.5,0.35"');
     const audio = new FakeAudioApi();
     const studio = new Studio(db(), env.MIDIA, new FakeVideoApi(), { siteUrl: SITE }, audio);
-    await studio.findNextAssetFace();
-    await studio.findNextAssetFace();
+    const [foto] = await db().assetsByAvatar(id);
+    await studio.faceOnDemand({ asset: foto! });
     expect(audio.faces).toBe(1);
     expect(await (await abrir("/avatares", session)).text()).toContain('data-face="0.46,0.44"');
     expect(await (await abrir(`/avatares/${id}`, session)).text()).toContain('data-face="0.46,0.44"');
@@ -278,7 +278,7 @@ describe("vídeo com avatar ou arquivo solto", () => {
     const { id, asset } = await vinculado(session);
     await env.MIDIA.put(asset.key, "mp4-falso");
     const audio = new FakeAudioApi();
-    await new Studio(db(), env.MIDIA, new FakeVideoApi(), { siteUrl: SITE }, audio).findNextAssetFace();
+    await new Studio(db(), env.MIDIA, new FakeVideoApi(), { siteUrl: SITE }, audio).faceOnDemand({ asset: (await db().assetsByAvatar(id))[0]! });
     expect(audio.faces).toBe(1);
     expect(await (await abrir(`/avatares/${id}`, session)).text()).toMatch(/<video data-src="[^"]+" data-face="0\.46,0\.44"/);
   });

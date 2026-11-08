@@ -166,8 +166,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   com colunas); chips de filtro por status, chip de ordem e chip "Agrupar por
   data" (desligado por padrão). Tudo no navegador, sem recarregar, e guardado
   no `localStorage` por lista (`lista-<modelo>`, `lista-videos`). Miniatura só
-  baixa quando aparece na tela e enquadra o rosto (`videos.face`, achado pelo
-  agendamento, um vídeo por minuto; sem rosto, o terço de cima). Imagens e vídeos dos
+  baixa quando aparece na tela e enquadra o rosto (`videos.face`; sem rosto, o terço de
+  cima). O servidor não procura rosto para miniatura (ligava o contêiner por cada arquivo novo):
+  só a edição rápida, a troca de avatar e o `rosto` do agente procuram, quando usados. Imagens e vídeos dos
   avatares seguem o mesmo enquadramento (`avatar_assets.face`). Com mouse, o
   vídeo aproxima de leve (1,06, 300 ms) dentro do card. No Safari, o recorte do
   vídeo fica preso às bordas do card (`inset: 0`), não em `height: 100%`. A busca pela fala de `/videos` fica no servidor.

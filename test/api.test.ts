@@ -4,7 +4,7 @@ import { sha256 } from "../src/auth";
 import { pausasAcima, sugestao, TIPOS } from "../src/comandos";
 import { normalizar } from "../src/transcricao";
 import { ERROS } from "../src/erros";
-import { call, cookie, FakeExportApi, FakeRenderApi, FakeTranscriber, FakeVideoApi, memberCookie, SITE } from "./helpers";
+import { call, cookie, FakeAudioApi, FakeExportApi, FakeRenderApi, FakeTranscriber, FakeVideoApi, memberCookie, SITE } from "./helpers";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
 const VIDEO2 = "33333333-3333-4333-8333-333333333333";
@@ -469,6 +469,19 @@ describe("edição fina", () => {
     await env.DB.prepare("UPDATE videos SET face = ? WHERE id = ?").bind('{"x":0.4,"y":0.2}', VIDEO).run();
     const r = await lote(id, v.revisao, [{ tipo: "enquadrar", bloco: a, zoom: 1.4, rosto: true }]);
     expect(bloco(r, a).frame!.keys).toEqual([{ t: 0, z: 1.4, x: 0.4, y: 0.2 }]);
+  });
+
+  it("zoom no rosto ainda não procurado: o contêiner procura uma vez e fica guardado", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, "mp4-falso");
+    const { id, a, v } = await dois();
+    const audio = new FakeAudioApi();
+    const pedir = (revisao: number) =>
+      call(new Request(`${SITE}/api/v1/projetos/${id}/comandos`, { method: "POST", headers: { authorization: `Bearer ${admin}`, "content-type": "application/json" }, body: JSON.stringify({ revisao, comandos: [{ tipo: "enquadrar", bloco: a, zoom: 1.4, rosto: true }] }) }), new FakeVideoApi(), audio);
+    const r = await (await pedir(v.revisao)).json<{ revisao: number }>();
+    expect(r.revisao).toBe(v.revisao + 1);
+    expect((await env.DB.prepare("SELECT face FROM videos WHERE id = ?").bind(VIDEO).first<{ face: string }>())!.face).toBe(JSON.stringify({ x: 0.46, y: 0.44, altura: 0.25 }));
+    await pedir(r.revisao);
+    expect(audio.faces).toBe(1);
   });
 
   it("remover pausas tira o silêncio do meio e mantém a sequência encostada", async () => {

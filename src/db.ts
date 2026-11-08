@@ -382,22 +382,6 @@ export class Db {
     return (await this.d1.prepare("SELECT * FROM videos ORDER BY created_at DESC, rowid DESC LIMIT ?").bind(limit).all<Video>()).results;
   }
 
-  /** Um vídeo pronto (e com o áudio já tratado, se for o caso) que ainda não teve o rosto procurado. */
-  async nextWithoutFace(): Promise<Video | null> {
-    return this.d1
-      .prepare(
-        `SELECT * FROM videos WHERE status = 'completed' AND video_key IS NOT NULL AND face IS NULL
-           AND (audio_status IS NULL OR audio_status IN ('done', 'failed'))
-         ORDER BY created_at DESC LIMIT 1`,
-      )
-      .first<Video>();
-  }
-
-  /** Uma imagem ou um vídeo de avatar que ainda não teve o rosto procurado. */
-  async nextAssetWithoutFace(): Promise<AvatarAsset | null> {
-    return this.d1.prepare("SELECT * FROM avatar_assets WHERE kind IN ('imagem', 'video') AND face IS NULL ORDER BY created_at DESC LIMIT 1").first<AvatarAsset>();
-  }
-
   /** Muda o nome de um ativo (a página do ativo; quem chama já conferiu o dono do avatar). */
   async renameAsset(id: string, name: string): Promise<void> {
     await this.d1.prepare("UPDATE avatar_assets SET name = ? WHERE id = ?").bind(name, id).run();
