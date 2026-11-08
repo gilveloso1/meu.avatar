@@ -387,6 +387,15 @@ export class Db {
     await this.d1.prepare("UPDATE avatar_assets SET name = ? WHERE id = ?").bind(name, id).run();
   }
 
+  /**
+   * O rosto achado no navegador (miniaturas e prévia da Edição rápida): só grava se ainda não foi
+   * procurado, e sem mexer no updated_at (não é uma mudança do vídeo).
+   */
+  async setFaceIfEmpty(table: "videos" | "avatar_assets", id: string, face: string): Promise<boolean> {
+    const r = await this.d1.prepare(`UPDATE ${table} SET face = ? WHERE id = ? AND face IS NULL`).bind(face, id).run();
+    return r.meta.changes > 0;
+  }
+
   async updateAssetFace(id: string, face: string): Promise<void> {
     await this.d1.prepare("UPDATE avatar_assets SET face = ? WHERE id = ?").bind(face, id).run();
   }

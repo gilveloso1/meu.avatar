@@ -234,7 +234,7 @@ export class Site {
     const quickEdit = /^\/videos\/([0-9a-f-]{36})\/edicao-rapida$/.exec(path);
     if (post && quickEdit) return this.quickEdit(request, user, quickEdit[1]!);
     const face = /^\/videos\/([0-9a-f-]{36})\/rosto$/.exec(path);
-    if (!post && face) return this.face(user, face[1]!);
+    if (face) return post ? this.saveVideoFace(request, user, face[1]!) : this.face(user, face[1]!);
     // Os arquivos que a pessoa usou para gerar o vídeo (a prévia do Refazer): só quem gerou vê.
     const reference = /^\/videos\/([0-9a-f-]{36})\/referencia\/(imagem|video|audio)$/.exec(path);
     if (!post && reference) {
@@ -282,7 +282,7 @@ export class Site {
       const pending = await this.savableVideo(url.searchParams.get("video"), user);
       return this.avatarPage(user, null, undefined, undefined, pending);
     }
-    const m = /^\/avatares\/([0-9a-f-]{36})(?:\/(salvar|apagar|arquivos)(?:\/([0-9a-f-]{36})(\/ver|\/apagar|\/nome)?)?)?$/.exec(path);
+    const m = /^\/avatares\/([0-9a-f-]{36})(?:\/(salvar|apagar|arquivos)(?:\/([0-9a-f-]{36})(\/ver|\/apagar|\/nome|\/rosto)?)?)?$/.exec(path);
     const avatar = m ? await this.db.avatarById(m[1]!) : null;
     // Avatar de outra pessoa (ou que não existe): a página nem existe.
     if (!m || !avatar || avatar.user_id !== user.id) return new Response("não encontrado", { status: 404 });
@@ -300,6 +300,13 @@ export class Site {
       const asset = await this.db.asset(avatar.id, assetId);
       if (!asset) return new Response("não encontrado", { status: 404 });
       if (assetAction === "/ver" && !post) return this.assetPage(user, avatar, asset);
+      // O rosto achado no navegador, para a miniatura enquadrar (src/site/site.ts, SCRIPT).
+      if (assetAction === "/rosto" && post) {
+        const found = faceFrom(await request.text());
+        if (!found) return new Response("rosto inválido", { status: 400 });
+        await this.db.setFaceIfEmpty("avatar_assets", asset.id, found);
+        return new Response(null, { status: 204 });
+      }
       if (assetAction === "/nome" && post) {
         // O ativo sempre tem nome: vazio não muda nada.
         const { name } = await nameFrom(request);
@@ -326,7 +333,7 @@ export class Site {
       tileCard({
         href: `/avatares/${a.id}`,
         tile: a.cover
-          ? faceImage(`/avatares/${a.id}/arquivos/${esc(a.cover)}`, a.cover_face, "avatar-cover")
+          ? faceImage(`/avatares/${a.id}/arquivos/${esc(a.cover)}`, a.cover_face, "avatar-cover", `/avatares/${a.id}/arquivos/${esc(a.cover)}/rosto`)
           : `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">face</span></span>`,
         headline: a.name,
         supporting: a.assets === 1 ? "1 ativo" : `${a.assets ?? 0} ativos`,
@@ -1088,17 +1095,32 @@ ${error ? snackbar(error) : ""}`;
   }
 
   /** Onde está o rosto (JSON), para a prévia da edição rápida mirar o zoom. */
+  /**
+   * O rosto guardado do vídeo, para a prévia da Edição rápida: o ponto, {} (procurado, sem rosto) ou
+   * null (ainda não procurado: o navegador procura e manda pelo POST). O servidor não procura.
+   */
   private async face(user: User, id: string): Promise<Response> {
     const video = await this.db.conta(user.id).video(id);
     if (!video) return new Response("não encontrado", { status: 404 });
     try {
-      const face = await this.studio.face(video, user);
-      return new Response(JSON.stringify(face ?? {}), { headers: { "content-type": "application/json", ...SECURITY_HEADERS } });
+      const face = this.studio.face(video, user);
+      return new Response(JSON.stringify(face), { headers: { "content-type": "application/json", ...SECURITY_HEADERS } });
     } catch (err) {
       if (err instanceof ForbiddenError) return new Response("forbidden", { status: 403 });
       if (err instanceof InputError) return new Response(err.message, { status: 400 });
       throw err;
     }
+  }
+
+  /** O rosto que o navegador achou num vídeo ou imagem gerada que a pessoa vê; só o primeiro vale. */
+  private async saveVideoFace(request: Request, user: User, id: string): Promise<Response> {
+    const video = await this.db.conta(user.id).video(id);
+    const structure = video && structureById(video.structure);
+    if (!video || !structure || !canUse(structure, user)) return new Response("não encontrado", { status: 404 });
+    const found = faceFrom(await request.text());
+    if (!found) return new Response("rosto inválido", { status: 400 });
+    await this.db.setFaceIfEmpty("videos", video.id, found);
+    return new Response(null, { status: 204 });
   }
 
   /**
@@ -1681,8 +1703,30 @@ function facePoint(json: string | null | undefined): [number, number] {
 }
 
 /** A imagem cortada no rosto: o script da página põe o corte quando sabe o tamanho dela. */
-function faceImage(src: string, face: string | null | undefined, cls = ""): string {
-  return `<img${cls ? ` class="${cls}"` : ""} src="${src}" alt="" loading="lazy" data-face="${facePoint(face).join(",")}">`;
+/**
+ * O corpo do POST de rosto: {} (sem rosto) ou o ponto entre os olhos e a altura do rosto, em frações
+ * do quadro, como o rosto.py. Volta o JSON a guardar, ou null se não for isso.
+ */
+export function faceFrom(text: string): string | null {
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const { x, y, altura, ...rest } = body as Record<string, unknown>;
+  if (Object.keys(rest).length) return null;
+  if (x === undefined && y === undefined && altura === undefined) return "{}";
+  const fraction = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
+  if (!fraction(x) || !fraction(y) || !fraction(altura)) return null;
+  const r = (n: number) => Math.round(n * 1000) / 1000;
+  return JSON.stringify({ x: r(x as number), y: r(y as number), altura: r(altura as number) });
+}
+
+/** Imagem cortada no rosto; `find` é onde guardar o rosto quando ele ainda não foi procurado (o navegador procura). */
+function faceImage(src: string, face: string | null | undefined, cls = "", find?: string): string {
+  return `<img${cls ? ` class="${cls}"` : ""} src="${src}" alt="" loading="lazy" data-face="${facePoint(face).join(",")}"${face == null && find ? ` data-face-find="${esc(find)}"` : ""}>`;
 }
 
 /**
@@ -1763,7 +1807,7 @@ function fab(icon: string, label: string, to: { href: string } | { post: string 
 /** A busca e a lista de avatares: `item` diz o que tocar faz. No diálogo e no painel de ativos. */
 function avatarPicker(o: { avatars: Avatar[]; item: (a: Avatar, content: string) => string; note?: (a: Avatar) => string | null }): string {
   const row = (a: Avatar) => {
-    const cover = a.cover ? faceImage(`/avatares/${a.id}/arquivos/${esc(a.cover)}`, a.cover_face, "avatar-cover") : `<span class="icon-tile icon-tile--large icon-tile--primary" aria-hidden="true"><span class="icon">face</span></span>`;
+    const cover = a.cover ? faceImage(`/avatares/${a.id}/arquivos/${esc(a.cover)}`, a.cover_face, "avatar-cover", `/avatares/${a.id}/arquivos/${esc(a.cover)}/rosto`) : `<span class="icon-tile icon-tile--large icon-tile--primary" aria-hidden="true"><span class="icon">face</span></span>`;
     const support = o.note?.(a) ?? (a.assets === 1 ? "1 ativo" : `${a.assets ?? 0} ativos`);
     return `<li data-avatar-item="${esc(a.name.toLowerCase())}">${o.item(a, `${cover}<span class="avatar-option__text"><span class="vrow__headline">${esc(a.name)}</span><span class="vrow__support">${esc(support)}</span></span>`)}</li>`;
   };
@@ -1988,8 +2032,8 @@ function library<T>(o: {
 /** A miniatura de um vídeo ou imagem pronto (o vídeo só baixa quando aparece na tela), enquadrando o rosto. */
 function outputThumb(v: Video, structure: Structure): string {
   return makesImage(structure)
-    ? faceImage(mediaSrc(v), v.face)
-    : `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"></video>`;
+    ? faceImage(mediaSrc(v), v.face, "", `/videos/${v.id}/rosto`)
+    : `<video data-src="${videoSrc(v)}" preload="metadata" muted playsinline tabindex="-1" style="object-position:${thumbPosition(v)}"${v.face == null ? ` data-face-find="/videos/${v.id}/rosto"` : ""}></video>`;
 }
 
 /** O nome de um vídeo (ou imagem) nas telas: o que a pessoa deu ou, sem nome, a fala. */
@@ -2125,10 +2169,12 @@ function formatBytes(n: number): string {
 /** Os ativos do avatar, na listagem do site. */
 /** A miniatura de um ativo: a foto, o vídeo (baixa quando aparece na tela) ou o ícone do áudio. */
 function assetThumb(a: AvatarAsset, src: string): string {
+  // Só o ativo de um avatar guarda o rosto (a prévia do "Salvar no avatar" ainda não é um ativo).
+  const find = a.id && a.avatar_id ? `/avatares/${a.avatar_id}/arquivos/${a.id}/rosto` : undefined;
   return a.kind === "imagem"
-    ? faceImage(src, a.face)
+    ? faceImage(src, a.face, "", find)
     : a.kind === "video"
-      ? `<video data-src="${src}" data-face="${facePoint(a.face).join(",")}" preload="metadata" muted playsinline tabindex="-1"></video>`
+      ? `<video data-src="${src}" data-face="${facePoint(a.face).join(",")}" preload="metadata" muted playsinline tabindex="-1"${a.face == null && find ? ` data-face-find="${esc(find)}"` : ""}></video>`
       : `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--tertiary" aria-hidden="true"><span class="icon">mic</span></span></span>`;
 }
 
@@ -2996,6 +3042,14 @@ const FILE_PATH = /^\/(?:videos\/[0-9a-f-]{36}(?:\.(?:original|editado))?\.(?:mp
 /** Indicador circular dos botões ocupados (.spinner, em style.ts). */
 const SPINNER = `<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.8"/></svg>`;
 
+/**
+ * O detector de rosto do navegador (MediaPipe Face Detector, do Google; aprovado pelo dono em
+ * 08/11/2026): a versão fixa, servida pelo jsDelivr, e o modelo BlazeFace de curto alcance. Uns
+ * 3,6 MB na primeira vez (o navegador guarda); só baixa quando há rosto a procurar.
+ */
+const MEDIAPIPE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.2";
+const FACE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
+
 const SCRIPT = `(() => {
   const SPINNER = '${SPINNER}';
   const setBusy = (el) => { el.classList.add("is-busy"); el.setAttribute("aria-busy", "true"); el.insertAdjacentHTML("beforeend", SPINNER); };
@@ -3122,7 +3176,7 @@ const SCRIPT = `(() => {
 
   // Ativos cortados no rosto: os olhos a 40% da altura e no meio da largura, como em thumbPosition.
   // window.mdThumbs(root) faz o mesmo (e a miniatura que só baixa quando aparece) no que chegou depois.
-  const placeFaces = (root) => { for (const el of root.querySelectorAll("[data-face]")) {
+  const placeFace = (el) => {
     const place = () => {
       const [fx, fy] = el.dataset.face.split(",").map(Number);
       const pct = (r, f, target) => (r > 1 ? Math.min(100, Math.max(0, ((r * f - target) / (r - 1)) * 100)) : 50);
@@ -3131,8 +3185,57 @@ const SCRIPT = `(() => {
     };
     if (el.naturalWidth || el.videoWidth) place();
     else el.addEventListener(el.tagName === "VIDEO" ? "loadedmetadata" : "load", place, { once: true });
-  } };
+  };
+  const placeFaces = (root) => { for (const el of root.querySelectorAll("[data-face]")) placeFace(el); };
   placeFaces(document);
+
+  // O rosto achado no navegador (MediaPipe), para o que ainda não foi procurado (data-face-find):
+  // o servidor não procura mais (ligava o contêiner por cada arquivo novo). A biblioteca só baixa
+  // quando uma dessas miniaturas aparece na tela; o achado vai para o site e vale para as próximas.
+  const MEDIAPIPE = "${MEDIAPIPE}";
+  let detector = null;
+  const loadDetector = () => (detector = detector || (async () => {
+    const { FaceDetector, FilesetResolver } = await import(MEDIAPIPE + "/vision_bundle.mjs");
+    const files = await FilesetResolver.forVisionTasks(MEDIAPIPE + "/wasm");
+    return FaceDetector.createFromOptions(files, { baseOptions: { modelAssetPath: "${FACE_MODEL}" }, runningMode: "IMAGE", minDetectionConfidence: 0.6 });
+  })());
+  // O rosto mais confiável de uma imagem ou do quadro atual de um vídeo: o ponto entre os olhos e a
+  // altura do rosto, em frações do quadro (o mesmo formato do rosto.py); {} sem rosto.
+  window.mdFindFace = async (el) => {
+    const d = await loadDetector();
+    const found = d.detect(el).detections.sort((a, b) => b.categories[0].score - a.categories[0].score)[0];
+    const h = el.naturalHeight || el.videoHeight;
+    if (!found || found.keypoints.length < 2 || !h) return {};
+    const [r, l] = found.keypoints;
+    const f = (n) => Math.min(1, Math.max(0, Math.round(n * 1000) / 1000));
+    return { x: f((r.x + l.x) / 2), y: f((r.y + l.y) / 2), altura: f(found.boundingBox.height / h) };
+  };
+  window.mdSaveFace = (url, face) => fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(face) }).catch(() => {});
+  // Uma por vez, na ordem em que aparecem; a que falhar fica para outra visita.
+  let faceQueue = Promise.resolve();
+  const findFace = (el) => {
+    const url = el.dataset.faceFind;
+    el.removeAttribute("data-face-find");
+    faceQueue = faceQueue.then(async () => {
+      try {
+        const face = await window.mdFindFace(el);
+        await window.mdSaveFace(url, face);
+        if (typeof face.x === "number") { el.dataset.face = face.x + "," + face.y; placeFace(el); }
+      } catch {}
+    });
+  };
+  const faceIo = "IntersectionObserver" in window ? new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) {
+      const el = e.target;
+      faceIo.unobserve(el);
+      // O vídeo procura no quadro que a miniatura mostra (o de 0,5 s); a imagem, quando carrega.
+      if (el.tagName === "VIDEO") { if (el.readyState >= 2 && !el.seeking) findFace(el); else el.addEventListener("seeked", () => findFace(el), { once: true }); }
+      else if (el.complete && el.naturalWidth) findFace(el);
+      else el.addEventListener("load", () => findFace(el), { once: true });
+    }
+  }) : null;
+  const findFaces = (root) => { if (faceIo) root.querySelectorAll("[data-face-find]").forEach((el) => faceIo.observe(el)); };
+  findFaces(document);
 
   // Miniaturas: o vídeo só baixa quando aparece na tela (a vista escondida não baixa nada).
   {
@@ -3147,7 +3250,7 @@ const SCRIPT = `(() => {
     }, { rootMargin: "200px" });
     const watch = (root) => root.querySelectorAll("video[data-src]").forEach((t) => io.observe(t));
     watch(document);
-    window.mdThumbs = (root) => { placeFaces(root); watch(root); };
+    window.mdThumbs = (root) => { placeFaces(root); watch(root); findFaces(root); };
   }
 
   // Lista de vídeos do modelo: filtro por status, ordem (grupos e itens) e vista (cards ou detalhes).
@@ -4075,13 +4178,15 @@ const PREVIEW_SCRIPT = `(() => {
     play.disabled = true;
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-      // O rosto vem junto (o contêiner acha na primeira vez); sem ele, o padrão.
-      const found = fetch(cfg.face).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+      // O rosto: o guardado ou, ainda não procurado (null), o que o navegador achar no próprio vídeo
+      // (window.mdFindFace, MediaPipe), sem o contêiner. Sem rosto, o padrão.
+      const stored = fetch(cfg.face).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
       const bytes = new Uint8Array(await (await fetch(cfg.src)).arrayBuffer());
-      // Na primeira vez o contêiner pode estar subindo: espera o rosto até 6 s e segue
-      // com o padrão; se ele chegar depois, o zoom passa a mirar nele.
       const useFace = (f) => { if (f && typeof f.x === "number" && typeof f.y === "number") face = { x: f.x, y: f.y }; };
+      const found = stored.then((f) => (f === null ? faceInVideo(bytes) : f)).catch(() => ({}));
       found.then(useFace);
+      // O detector baixa na primeira vez: espera o rosto até 6 s e segue com o padrão; se ele chegar
+      // depois, o zoom passa a mirar nele.
       await Promise.race([found, new Promise((ok) => setTimeout(ok, 6000))]);
       // decodeAudioData fica com o buffer: vai uma cópia.
       buf = await actx.decodeAudioData(bytes.slice().buffer);
@@ -4107,6 +4212,28 @@ const PREVIEW_SCRIPT = `(() => {
       setGenerate("auto_awesome", "Gerar prévia", false);
     }
   });
+  // O rosto do vídeo no navegador: três quadros (a 20%, 50% e 80%), a mediana dos achados; guarda no
+  // site (vale para a edição e para a miniatura) e devolve {} sem rosto.
+  const faceInVideo = async (bytes) => {
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = "auto";
+    const url = URL.createObjectURL(new Blob([bytes], { type: "video/mp4" }));
+    try {
+      v.src = url;
+      await new Promise((ok, no) => { v.addEventListener("loadeddata", ok, { once: true }); v.addEventListener("error", no, { once: true }); });
+      const found = [];
+      for (const at of [0.2, 0.5, 0.8]) {
+        v.currentTime = v.duration * at;
+        await new Promise((ok) => v.addEventListener("seeked", ok, { once: true }));
+        const f = await window.mdFindFace(v);
+        if (typeof f.x === "number") found.push(f);
+      }
+      const median = (k) => { const a = found.map((f) => f[k]).sort((p, q) => p - q); return a[Math.floor(a.length / 2)]; };
+      const face = found.length ? { x: median("x"), y: median("y"), altura: median("altura") } : {};
+      window.mdSaveFace(cfg.face, face);
+      return face;
+    } finally { URL.revokeObjectURL(url); }
+  };
   qe.querySelector("[data-qe-close]").addEventListener("click", () => {
     stop();
     if (decoder && decoder.state !== "closed") decoder.close();
@@ -4208,13 +4335,14 @@ function animationFrame(): Response {
 function csp(nonce: string, extra: CspExtra = {}): string {
   return [
     "default-src 'none'",
-    `script-src 'nonce-${nonce}'`,
+    // O detector de rosto (MEDIAPIPE): o módulo e o carregador do WebAssembly vêm do jsDelivr.
+    `script-src 'nonce-${nonce}' https://cdn.jsdelivr.net 'wasm-unsafe-eval'`,
     "style-src 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
     `img-src 'self' blob:${extra.img ? ` ${extra.img}` : ""}`,
     "media-src 'self' blob:",
     // A prévia da edição rápida baixa o vídeo para achar os silêncios.
-    `connect-src 'self'${extra.connect ? ` ${extra.connect}` : ""}`,
+    `connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com${extra.connect ? ` ${extra.connect}` : ""}`,
     // O canvas põe a animação em código num quadro isolado (animationFrame).
     ...(extra.frame ? [`frame-src ${extra.frame}`] : []),
     "form-action 'self'",

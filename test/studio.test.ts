@@ -1444,28 +1444,41 @@ describe("edição rápida", () => {
     expect(await studio.faceOnDemand({ video })).toBe("{}");
   });
 
-  it("o rosto é achado pelo contêiner na primeira vez, fica guardado e vai no plano da edição", async () => {
+  it("o rosto achado no navegador fica guardado (só o primeiro), vai à prévia e ao plano da edição, sem o contêiner", async () => {
     const { api, audio, studio, video } = await pronto("heygen");
     const session = await cookie();
     const rosto = () => call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: session } }), api, audio);
+    const guardar = (body: unknown) =>
+      call(new Request(`${SITE}/videos/${video.id}/rosto`, { method: "POST", body: JSON.stringify(body), headers: { origin: SITE, cookie: session, "content-type": "application/json" } }), api, audio);
+    // Ainda não procurado: null, para o navegador procurar.
     let res = await rosto();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ x: 0.46, y: 0.44, altura: 0.25 });
-    res = await rosto();
-    expect(await res.json()).toEqual({ x: 0.46, y: 0.44, altura: 0.25 });
-    expect(audio!.faces).toBe(1);
-    expect(await new Db(env.DB).videoById(video.id)).toMatchObject({ face: JSON.stringify({ x: 0.46, y: 0.44, altura: 0.25 }) });
+    expect(await res.json()).toBeNull();
+    // A lista pede a procura na miniatura.
+    let lista = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), api, audio)).text();
+    expect(lista).toContain(`data-face-find="/videos/${video.id}/rosto"`);
+
+    expect((await guardar({ x: 0.46, y: 0.44, altura: 0.25 })).status).toBe(204);
+    expect((await guardar({ x: 0.1, y: 0.1, altura: 0.1 })).status).toBe(204);
+    expect(await (await rosto()).json()).toEqual({ x: 0.46, y: 0.44, altura: 0.25 });
+    lista = await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: session } }), api, audio)).text();
+    expect(lista).not.toContain(`data-face-find="`);
+    expect(lista).toContain('style="object-position:50.0% 49.1%"');
+    // Fora do formato: recusa.
+    for (const ruim of [{ x: 2, y: 0.4, altura: 0.2 }, { x: 0.4 }, [], { x: 0.4, y: 0.4, altura: 0.2, outro: 1 }]) expect((await guardar(ruim)).status).toBe(400);
 
     await pedir(video.id, api, audio, session, { pausa: "media", camera: "close" });
     await studio.editNext();
     expect(audio!.plans[0]).toEqual({ pausa: 0.2, zooms: [1, 1.25, 1, 1.5], rosto: { x: 0.46, y: 0.44 } });
+    expect(audio!.faces).toBe(0);
   });
 
-  it("sem rosto achado, a resposta é vazia e o plano vai sem rosto (o contêiner tenta de novo)", async () => {
+  it("sem rosto achado no navegador, guarda vazio e o plano vai sem rosto (o contêiner acha na edição)", async () => {
     const { api, audio, studio, video } = await pronto("heygen");
-    audio!.faceFound = {};
-    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: await cookie() } }), api, audio);
-    expect(await res.json()).toEqual({});
+    const session = await cookie();
+    const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { method: "POST", body: "{}", headers: { origin: SITE, cookie: session } }), api, audio);
+    expect(res.status).toBe(204);
+    expect(await (await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: session } }), api, audio)).json()).toEqual({});
     await pedir(video.id, api, audio);
     await studio.editNext();
     expect(audio!.plans[0]).not.toHaveProperty("rosto");
@@ -1478,6 +1491,10 @@ describe("edição rápida", () => {
     const res = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { headers: { cookie: member } }), api, audio);
     expect(res.status).toBe(403);
     expect(audio!.faces).toBe(0);
+    // Nem guarda: o modelo em teste não existe para ela.
+    const post = await call(new Request(`${SITE}/videos/${video.id}/rosto`, { method: "POST", body: '{"x":0.5,"y":0.5,"altura":0.2}', headers: { origin: SITE, cookie: member } }), api, audio);
+    expect(post.status).toBe(404);
+    expect((await new Db(env.DB).videoById(video.id))!.face).toBeNull();
   });
 
   it("sem login, o rosto manda para /entrar", async () => {

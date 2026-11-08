@@ -273,6 +273,26 @@ describe("vídeo com avatar ou arquivo solto", () => {
     expect(await (await abrir(`/avatares/${id}`, session)).text()).toContain('data-face="0.46,0.44"');
   });
 
+  it("a capa e o ativo sem rosto pedem a procura no navegador; o achado fica guardado, só o primeiro, e só pelo dono", async () => {
+    const session = await cookie();
+    const id = await criar(session, { nome: "Camila" });
+    const f = new FormData();
+    f.set("arquivo", new File(["png"], "rosto.png", { type: "image/png" }));
+    await call(new Request(`${SITE}/avatares/${id}/arquivos`, { method: "POST", body: f, headers: { origin: SITE, cookie: session } }));
+    const [foto] = await db().assetsByAvatar(id);
+    const rota = `/avatares/${id}/arquivos/${foto!.id}/rosto`;
+    expect(await (await abrir("/avatares", session)).text()).toContain(`data-face-find="${rota}"`);
+    expect(await (await abrir(`/avatares/${id}`, session)).text()).toContain(`data-face-find="${rota}"`);
+    const guardar = (cookie: string, body: string) => call(new Request(`${SITE}${rota}`, { method: "POST", body, headers: { origin: SITE, cookie } }));
+    expect((await guardar(await memberCookie(), '{"x":0.1,"y":0.1,"altura":0.1}')).status).toBe(404);
+    expect((await guardar(session, '{"x":0.46,"y":0.44,"altura":0.25}')).status).toBe(204);
+    expect((await guardar(session, "{}")).status).toBe(204);
+    expect((await db().assetsByAvatar(id))[0]!.face).toBe(JSON.stringify({ x: 0.46, y: 0.44, altura: 0.25 }));
+    const pagina = await (await abrir(`/avatares/${id}`, session)).text();
+    expect(pagina).not.toContain(`data-face-find="`);
+    expect(pagina).toContain('data-face="0.46,0.44"');
+  });
+
   it("o vídeo na lista de ativos enquadra o rosto, como a imagem", async () => {
     const session = await cookie();
     const { id, asset } = await vinculado(session);

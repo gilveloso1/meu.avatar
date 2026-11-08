@@ -791,34 +791,21 @@ export class Studio {
   }
 
   /**
-   * Onde está o rosto do vídeo, para o zoom da edição rápida: o guardado ou,
-   * na primeira vez, o que o contêiner achar (e fica guardado). Sem contêiner
-   * ou se ele falhar, null (a prévia usa o padrão).
+   * O rosto guardado do vídeo, para a prévia da Edição rápida: o ponto, {} (procurado, sem rosto) ou
+   * null (ainda não procurado). O servidor não procura: quem procura é o navegador (src/site/site.ts).
    */
-  async face(video: Video, user: Conta): Promise<Face | null> {
+  face(video: Video, user: Conta): Face | Record<string, never> | null {
     const structure = structureById(video.structure);
     if (!structure || !canUse(structure, user)) throw new ForbiddenError(ERROS.semAcessoVideo);
     if (!structure.quickEdit) throw new InputError(ERROS.semEdicaoRapida);
-    if (video.face) {
-      try {
-        return JSON.parse(video.face) as Face;
-      } catch {
-        // Guardado ilegível: acha de novo.
-      }
-    }
-    const key = video.processed_key ?? video.video_key;
-    if (!this.audio || !key) return null;
-    const original = await this.media.get(key);
-    if (!original) return null;
+    if (video.face === null) return null;
     try {
-      const face = await this.audio.face(await original.arrayBuffer());
-      await this.db.updateVideo(video.id, { face: JSON.stringify(face) });
-      return face;
-    } catch (err) {
-      console.error("Falha ao achar o rosto", video.id, err);
+      return JSON.parse(video.face) as Face;
+    } catch {
       return null;
     }
   }
+
 
   /**
    * O rosto de um vídeo ou ativo só quando o agente pede (enquadrar com rosto): o contêiner procura
