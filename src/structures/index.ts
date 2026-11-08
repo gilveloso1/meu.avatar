@@ -9,13 +9,13 @@ import { OMNI, OMNI_11 } from "./omni";
 import { HEYGEN_DIRECT } from "./heygen-direta";
 import { SEEDANCE } from "./seedance";
 import type { CostRule, Structure, Values } from "./types";
-import { ELEVENLABS } from "./voz";
+import { ELEVENLABS, FISH } from "./voz";
 import { WAN } from "./wan";
 
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, OMNI, OMNI_11, SEEDANCE, ALEPH, NANO_BANANA, ELEVENLABS];
+export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, OMNI, OMNI_11, SEEDANCE, ALEPH, NANO_BANANA, ELEVENLABS, FISH];
 
 /** As versões do mesmo modelo (a principal primeiro); sem versões, só ela. */
 export function familyOf(structure: Structure): Structure[] {

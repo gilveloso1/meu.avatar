@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { type InspecaoDaAnimacao, type RenderApi, RenderError } from "../src/render";
 import type { Transcriber, Transcricao } from "../src/transcricao";
+import type { FishApi, FishVoice } from "../src/fish";
 import { handle } from "../src/index";
 import type { AudioApi, ContainerPlan, Face } from "../src/audio";
 import type { ExportApi } from "../src/exportar";
@@ -165,6 +166,9 @@ export const ELEVEN_MODEL: VideoModel = {
   supported_voices: ["sarah", "brian", "river"],
 };
 
+/** Fish Audio Drama 3: o preço por caractere; não lista vozes (as aprovadas ficam na estrutura). */
+export const FISH_MODEL: VideoModel = { ...ELEVEN_MODEL, id: "fish-audio/drama-3", name: "Fish Audio: Drama 3", pricing_skus: { character: "0.000002" }, supported_voices: null };
+
 /** Um MP3 de taxa constante (MPEG-1 Layer III, 128 kbit/s): 32.000 bytes são 2 s. */
 export function mp3(seconds = 2): ArrayBuffer {
   const bytes = new Uint8Array(seconds * 16_000);
@@ -243,8 +247,9 @@ export class FakeVideoApi implements VideoApi {
   speeches: SpeechRequest[] = [];
   failSpeech: string | null = null;
   async getSpeechModel(id: string) {
-    if (id !== ELEVEN_MODEL.id) throw new Error(`modelo de fala ${id} não existe`);
-    return ELEVEN_MODEL;
+    const model = [ELEVEN_MODEL, FISH_MODEL].find((m) => m.id === id);
+    if (!model) throw new Error(`modelo de fala ${id} não existe`);
+    return model;
   }
   async speech(body: SpeechRequest): Promise<SpeechResult> {
     if (this.failSpeech) throw new Error(this.failSpeech);
@@ -507,6 +512,33 @@ export class FakeHeyGenApi implements HeyGenApi {
   finish(videoId: string, changes: Partial<HeyGenVideo>) {
     this.details.set(videoId, { ...this.details.get(videoId)!, ...changes });
   }
+}
+
+/** O catálogo do Fish de mentira: duas vozes do Brasil, uma de Portugal e uma em inglês. */
+export class FakeFishApi implements FishApi {
+  catalog: FishVoice[] = [
+    { id: "fish-beatriz", name: "Beatriz", gender: "female", language: "Português (Brasil)" },
+    { id: "fish-caio", name: "Caio", gender: "male", language: "Português (Brasil)" },
+    { id: "fish-tomas", name: "Tomás", gender: "male", language: "Português (Portugal)" },
+    { id: "fish-sarah", name: "Sarah", gender: "female", language: "Inglês" },
+  ];
+  listed = 0;
+  samples: string[] = [];
+  failList = false;
+  async voices() {
+    this.listed++;
+    if (this.failList) throw new Error("Fish fora do ar");
+    return this.catalog;
+  }
+  async sample(id: string) {
+    this.samples.push(id);
+    return { bytes: new TextEncoder().encode(`amostra-${id}`).buffer as ArrayBuffer, type: "audio/mpeg" };
+  }
+}
+
+/** Como `call`, com o catálogo do Fish. */
+export function callFish(request: Request, api: VideoApi | null, fish: FishApi | null): Promise<Response> {
+  return handle(request, { ...env, SITE_URL: SITE }, { api, fish, machines: null });
 }
 
 export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null, exporter: ExportApi | null = null, transcriber: Transcriber | null = null, renderer: RenderApi | null = null): Promise<Response> {

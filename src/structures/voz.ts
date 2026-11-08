@@ -6,13 +6,14 @@
  *
  * Custo: o OpenRouter cobra por caractere do texto (`pricing.prompt` em GET /models); a resposta
  * não traz o custo, que sai do preço vezes os caracteres enviados.
- * Comparação e testes em docs/modelos/elevenlabs-v4.md.
+ * Comparação e testes em docs/modelos/elevenlabs-v4.md e docs/modelos/fish-audio-drama-3.md.
  */
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { speechSeconds } from "./heygen";
-import { InputError, type Option, type Structure, type VoiceOption } from "./types";
+import type { FishVoice } from "../fish";
+import { InputError, type Lists, type Option, type Structure, type VoiceOption } from "./types";
 
 /** O ElevenLabs v4 aceita 10.000 caracteres por pedido; a metade basta para vídeo curto. */
 export const MAX_SPEECH = 5000;
@@ -101,8 +102,8 @@ interface SpeechModel {
   name: string;
   model: string;
   summary: string;
-  /** As vozes do modelo, a partir do que o OpenRouter informa (ou a lista própria da estrutura). */
-  voices(model: VideoModel | null): VoiceOption[];
+  /** As vozes do modelo: o que o OpenRouter informa (ElevenLabs) ou o catálogo do provedor, nas listas (Fish). */
+  voices(model: VideoModel | null, lists?: Lists): VoiceOption[];
 }
 
 export function speechStructure(o: SpeechModel): Structure {
@@ -119,8 +120,8 @@ export function speechStructure(o: SpeechModel): Structure {
     wordsPerSecond: WORDS_PER_SECOND,
     cost: { sku: "character", seconds: { characters: "texto" } },
 
-    sections(model) {
-      const voices = o.voices(model);
+    sections(model, _defaults, lists) {
+      const voices = o.voices(model, lists);
       return [
         {
           title: "Fala",
@@ -141,12 +142,12 @@ export function speechStructure(o: SpeechModel): Structure {
       ];
     },
 
-    build(values, _hasImage, model) {
+    build(values, _hasImage, model, _video, lists) {
       const text = speechText(values("texto"));
       // Só emoções, sem nada para a voz dizer, não vale.
       if (!spokenText(text)) throw new InputError(ERROS.textoFala);
       if (text.length > MAX_SPEECH) throw new InputError(ERROS.falaLonga(MAX_SPEECH));
-      const voice = o.voices(model).find((v) => v.value === values("voz"));
+      const voice = o.voices(model, lists).find((v) => v.value === values("voz"));
       if (!voice) throw new InputError(ERROS.voz);
       return {
         request: { prompt: text },
@@ -205,4 +206,35 @@ export const ELEVENLABS = speechStructure({
   model: "elevenlabs/eleven-v4",
   summary: "Transforma o texto em fala, com direção de atuação.",
   voices: elevenVoices,
+});
+
+/** Ordem das línguas no menu do Fish: português do Brasil primeiro. */
+const FISH_LANGUAGE_RANK = ["Português (Brasil)", "Português (Portugal)", "Inglês", "Espanhol"];
+
+/**
+ * As vozes do Fish Audio: só as oficiais (a conta "Fish Official", lidas do Fish em src/fish.ts), não
+ * a biblioteca aberta, em que muitas imitam gente famosa ou trazem a descrição errada. O id é o
+ * `reference_id` do Fish (o `voice` do OpenRouter).
+ */
+export function fishVoices(voices: FishVoice[]): VoiceOption[] {
+  const rank = (language: string) => FISH_LANGUAGE_RANK.indexOf(language);
+  return voices
+    .map((v): VoiceOption => ({
+      value: v.id,
+      label: [v.name, v.gender === "female" ? "feminina" : v.gender === "male" ? "masculina" : "", v.language.toLowerCase()].filter(Boolean).join(" · "),
+      name: v.name,
+      gender: v.gender,
+      language: v.language,
+      preview: true,
+    }))
+    .sort((a, b) => rank(a.language) - rank(b.language) || a.name.localeCompare(b.name, "pt"));
+}
+
+export const FISH = speechStructure({
+  id: "fish",
+  name: "Fish Audio",
+  model: "fish-audio/drama-3",
+  summary: "Transforma o texto em fala, com vozes em português, inglês e espanhol.",
+  // As vozes vêm do catálogo do Fish (Studio.lists), já em VoiceOption.
+  voices: (_model, lists) => lists?.voices ?? [],
 });
