@@ -2794,7 +2794,7 @@ function speechEditor(f: Extract<Field, { kind: "textarea" }>, raw: string): str
           <span class="text-field__label" id="${f.name}-rotulo">${esc(f.label)}</span>
           <textarea name="${f.name}" hidden maxlength="${f.maxLength}"${f.speech ? " data-speech" : ""}>${esc(text)}</textarea>
           <template data-speech-tag>${speechTag({ value: "", label: "" }, true)}</template>
-          <div class="menu__list context-menu tag-menu" popover="manual" role="listbox" aria-label="Emoções" data-tag-menu>${f.tags!.map((t) => `<button class="menu__item interactive" type="button" role="option" tabindex="-1" aria-selected="false" data-tag-option="${esc(t.value)}">${esc(t.label)}</button>`).join("")}</div>
+          <div class="menu__list context-menu tag-menu" popover="manual" role="listbox" aria-label="Emoções" data-tag-menu>${[...f.tags!].sort((a, b) => a.label.localeCompare(b.label, "pt")).map((t) => `<button class="menu__item interactive" type="button" role="option" tabindex="-1" aria-selected="false" data-tag-option="${esc(t.value)}">${esc(t.label)}</button>`).join("")}</div>
           <p class="text-field__supporting" id="${f.name}-ajuda"><span${f.speech ? ` data-words data-default="${esc(f.supporting)}"` : ""}>${esc(f.supporting)}</span><span data-count>${text.length}/${f.maxLength}</span></p>
         </div>`;
 }
@@ -3281,6 +3281,19 @@ const SCRIPT = `(() => {
       const m = /#([\\p{L}]{0,20})$/u.exec(node.data.slice(0, at));
       return m ? { node, start: at - m[0].length, end: at, query: plain(m[1]) } : null;
     };
+    // As mais usadas primeiro (contadas neste navegador); as outras, em ordem alfabética, como vêm.
+    const USED = "emocoes-usadas";
+    const used = () => { try { return JSON.parse(localStorage.getItem(USED) || "{}"); } catch { return {}; } };
+    const count = (tag) => {
+      const all = used();
+      all[tag] = (all[tag] || 0) + 1;
+      try { localStorage.setItem(USED, JSON.stringify(all)); } catch {}
+    };
+    const order = () => {
+      const all = used();
+      options.sort((a, b) => (all[b.dataset.tagOption] || 0) - (all[a.dataset.tagOption] || 0) || a.textContent.localeCompare(b.textContent, "pt"));
+      for (const o of options) menu.append(o);
+    };
     const visible = () => options.filter((o) => !o.hidden);
     // O item marcado pelas setas fica sempre à vista: a lista rola junto.
     const mark = () => visible().forEach((o, i) => {
@@ -3292,8 +3305,10 @@ const SCRIPT = `(() => {
       if (menu.matches(":popover-open")) menu.hidePopover();
     };
     const open = () => {
+      const opening = !hash;
       hash = find();
       if (!hash) return close();
+      if (opening) order();
       for (const o of options) o.hidden = !plain(o.textContent).startsWith(hash.query);
       if (!visible().length) return close();
       active = 0;
@@ -3304,13 +3319,14 @@ const SCRIPT = `(() => {
       const rect = r.getBoundingClientRect();
       menu.style.left = rect.left + "px";
       menu.style.top = rect.bottom + 4 + "px";
-      if (!menu.matches(":popover-open")) menu.showPopover();
+      if (!menu.matches(":popover-open")) { menu.showPopover(); menu.scrollTop = 0; }
     };
     const choose = (o) => {
       if (!hash || !o) return;
       const { node, start, end } = hash;
       const chip = chipTemplate.content.firstElementChild.cloneNode(true);
       chip.dataset.tag = o.dataset.tagOption;
+      count(o.dataset.tagOption);
       chip.querySelector("[data-tag-label]").textContent = o.textContent;
       chip.querySelector("button").setAttribute("aria-label", "Tirar " + o.textContent);
       const after = node.splitText(end);

@@ -69,7 +69,7 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
   - Escolher um avatar: `avatarPicker` (busca e lista), em `avatarDialog` (diálogo básico do M3, em
     "Salvar no avatar") e em `assetPanel`.
   - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
-  - Texto com emoções (modelos de fala): `speechEditor`, o campo contornado que aceita as emoções em destaque (chip de entrada, com x); `#` abre a lista (`EMOTIONS`, `src/structures/voz.ts`, em português na tela e em inglês no formulário e para o agente).
+  - Texto com emoções (modelos de fala): `speechEditor`, o campo contornado que aceita as emoções em destaque (chip de entrada, com x); `#` abre a lista (`EMOTIONS`, `src/structures/voz.ts`, em português na tela e em inglês no formulário e para o agente), com as mais usadas no topo (contadas no `localStorage`, `emocoes-usadas`) e as outras em ordem alfabética.
   - Voz pronta: campo `voice` no painel, escolhida em `voicePanel`, no mesmo menu (busca, idioma, gênero e prévia); as vozes vêm de `/vozes/lista`, só as do filtro.
   - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`, que também é a página de não encontrado
     (`notFoundPage`): todo 404 em texto aberto pelo navegador vira essa página, a mesma para o que não existe

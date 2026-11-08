@@ -44,6 +44,9 @@ describe("Emoções da fala", () => {
     expect(page).toContain('data-speech-editor');
     expect(page).toContain('<textarea name="texto" hidden maxlength="5000" data-speech>');
     for (const e of EMOTIONS) expect(page).toContain(`data-tag-option="${e.value}">${e.label}<`);
+    // Sem uso ainda, em ordem alfabética (as mais usadas sobem no navegador).
+    const nomes = [...page.matchAll(/data-tag-option="[^"]+">([^<]+)</g)].map((m) => m[1]);
+    expect(nomes).toEqual([...nomes].sort((a, b) => a!.localeCompare(b!, "pt")));
     expect(page).toContain("Digite # para escolher uma emoção.");
   });
 
