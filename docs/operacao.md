@@ -369,10 +369,23 @@ painel:
   `processing` (AudioFixer) e exportação `running` (Exporter); no Durable Object, o último
   pedido ao contêiner (render e inspeção do Renderer, quadros e silêncios do Exporter), pela
   `pararSeOcioso` do `SleepyContainer`.
+- Já desligado no Durable Object (`pararSeOcioso` responde "desligado"): nada a avisar. O painel
+  chega com minutos de atraso e mostra como ligado o contêiner que acabou de dormir sozinho.
 - Sem trabalho: `console.error` ("Contêiner … com memória alocada há … min sem trabalho"), o
   contêiner é parado à força (SIGKILL, `destroy()`) e o administrador vê um aviso na página
-  Modelos por um dia (config `alarme.conteiner` no banco). Achou o aviso: confira nos logs do
-  Worker por que ele não dormiu, como na prova acima.
+  Modelos, com "Dispensar", por até um dia (config `alarme.conteiner` no banco; o dispensado fica
+  em `dispensado` e o aviso só volta com uma parada mais nova). O registro segue no Painel >
+  Atividade. Achou o aviso: confira nos logs do Worker por que ele não dormiu, como na prova acima.
+- A hora do último pedido ao contêiner fica também no armazenamento do Durable Object: na memória,
+  ela sumia quando o objeto era despejado, e o alarme lia "nenhum pedido".
+
+**Os avisos falsos de 06 e 07/11/2026.** Três "parado à força" do `AudioFixer` (16:30, 01:15 e
+22:15, horário de Brasília), todos iguais nos logs: a busca de rosto do agendamento (uma imagem ou
+vídeo por minuto, `findNextFace`; as imagens do Nano Banana geradas em série pelo agente) manteve o
+contêiner trabalhando 30 a 38 min seguidos; ele dormiu sozinho uns 3 min depois da última busca
+(alarmes "canceled" do Durable Object); a rodada seguinte do alarme viu o painel atrasado ainda com
+memória alocada, e o Durable Object, sem a hora do último pedido, respondeu "parado". Nada ficou
+ligado à toa. Corrigido com as duas regras acima.
 - Sem o token ou sem acesso ao painel, o administrador vê "O alarme de custos está sem acesso."
   na mesma página, e o log diz o motivo. No computador (`AMBIENTE=local`) o alarme não roda.
 
