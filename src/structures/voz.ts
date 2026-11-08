@@ -13,7 +13,8 @@ import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { speechSeconds } from "./heygen";
 import type { FishVoice } from "../fish";
-import { InputError, type Lists, type Option, type Structure, type VoiceOption } from "./types";
+import { MAX_CLONE_NAME, NEW_CLONE, SOURCES } from "./heygen-direta";
+import { type Built, type Field, InputError, type Lists, type Option, type Structure, type VoiceOption } from "./types";
 
 /** O ElevenLabs v4 aceita 10.000 caracteres por pedido; a metade basta para vídeo curto. */
 export const MAX_SPEECH = 5000;
@@ -104,7 +105,14 @@ interface SpeechModel {
   summary: string;
   /** As vozes do modelo: o que o OpenRouter informa (ElevenLabs) ou o catálogo do provedor, nas listas (Fish). */
   voices(model: VideoModel | null, lists?: Lists): VoiceOption[];
+  /** Clona voz (Voz pronta | Voz clonada, como a HeyGen direta); a gravação vai em cada pedido. */
+  clone?: boolean;
 }
+
+/** A fonte da voz nos modelos que clonam: a mesma escolha da HeyGen, sem o "Meu áudio". */
+const SPEECH_SOURCES = SOURCES.filter((s) => s.value !== "audio");
+/** O Fish recebe a gravação em cada pedido: até 15 MB (o limite do OpenRouter para a referência). */
+export const MAX_CLONE_BYTES = 15 * 1024 * 1024;
 
 export function speechStructure(o: SpeechModel): Structure {
   return {
@@ -120,13 +128,27 @@ export function speechStructure(o: SpeechModel): Structure {
     wordsPerSecond: WORDS_PER_SECOND,
     cost: { sku: "character", seconds: { characters: "texto" } },
 
-    sections(model, _defaults, lists) {
+    sections(model, _defaults, lists = {}) {
       const voices = o.voices(model, lists);
+      const voice = voices.length ? [{ kind: "voice" as const, name: "voz", label: "Voz pronta", voices, value: voices[0]!.value, ...(o.clone ? { showIf: { fonte: ["pronta"] } } : {}) }] : [];
+      // A voz clonada, no molde da HeyGen direta: a lista das vozes da pessoa e dos avatares, e a nova.
+      const clones = [...(lists.clones ?? []), { value: NEW_CLONE, label: "Clonar uma voz nova" }];
+      const newClone = { fonte: ["clonada"], clone: [NEW_CLONE] };
+      const clone: Field[] = o.clone
+        ? [
+            { kind: "segmented", name: "fonte", label: "Voz", options: SPEECH_SOURCES, value: "pronta", hideLabel: true },
+            ...voice,
+            { kind: "select", name: "clone", label: "Voz clonada", options: clones, value: clones[0]!.value, showIf: { fonte: ["clonada"] } },
+            { kind: "audio", name: "amostra", label: "Gravação da voz", supporting: "MP3 ou WAV, de 15 s a 3 min de fala limpa.", showIf: newClone },
+            { kind: "text", name: "nome_voz", label: "Nome da voz", maxLength: MAX_CLONE_NAME, placeholder: "Ex.: Minha voz", supporting: "Para achar a voz na lista depois.", showIf: newClone },
+            { kind: "checkbox", name: "consentimento", label: "A voz é minha ou tenho autorização para cloná-la.", showIf: { fonte: ["clonada"], clone: [NEW_CLONE, ...(lists.newClones ?? [])] } },
+          ]
+        : voice;
       return [
         {
           title: "Fala",
           fields: [
-            ...(voices.length ? [{ kind: "voice" as const, name: "voz", label: "Voz", voices, value: voices[0]!.value }] : []),
+            ...clone,
             {
               kind: "textarea",
               name: "texto",
@@ -142,16 +164,40 @@ export function speechStructure(o: SpeechModel): Structure {
       ];
     },
 
-    build(values, _hasImage, model, _video, lists) {
+    build(values, _hasImage, model, _video, lists = {}) {
       const text = speechText(values("texto"));
       // Só emoções, sem nada para a voz dizer, não vale.
       if (!spokenText(text)) throw new InputError(ERROS.textoFala);
       if (text.length > MAX_SPEECH) throw new InputError(ERROS.falaLonga(MAX_SPEECH));
-      const voice = o.voices(model, lists).find((v) => v.value === values("voz"));
-      if (!voice) throw new InputError(ERROS.voz);
+      const source = o.clone ? SPEECH_SOURCES.find((s) => s.value === values("fonte"))?.value : "pronta";
+      if (!source) throw new InputError(ERROS.fonteVoz);
+      let settings: Record<string, string>;
+      let speech: Built["speech"];
+      if (source === "pronta") {
+        const voice = o.voices(model, lists).find((v) => v.value === values("voz"));
+        if (!voice) throw new InputError(ERROS.voz);
+        settings = { voice_id: voice.value, voice: voice.name };
+      } else {
+        // A voz clonada: a nova (gravação, nome e consentimento), uma da pessoa ou a de um avatar.
+        const clone = values("clone");
+        let cloneName: string | null = null;
+        if (clone === NEW_CLONE) {
+          cloneName = values("nome_voz").replace(/\s+/g, " ").trim().slice(0, MAX_CLONE_NAME);
+          if (!cloneName) throw new InputError(ERROS.nomeVoz);
+          if (values("consentimento") !== "sim") throw new InputError(ERROS.consentimentoVoz);
+        } else {
+          const known = lists.clones?.find((c) => c.value === clone);
+          if (!known) throw new InputError(ERROS.vozClonada);
+          if (lists.newClones?.includes(clone) && values("consentimento") !== "sim") throw new InputError(ERROS.consentimentoVoz);
+          cloneName = known.label;
+        }
+        speech = { clone, cloneName };
+        settings = { source: "clonada", voice: cloneName };
+      }
       return {
         request: { prompt: text },
         image: null,
+        ...(speech ? { speech } : {}),
         record: {
           prompt: text,
           // Estimativa pela fala; a duração certa sai do MP3 quando ele fica pronto.
@@ -162,7 +208,7 @@ export function speechStructure(o: SpeechModel): Structure {
           style: null,
           language: null,
           extra: null,
-          settings: { voice_id: voice.value, voice: voice.name },
+          settings,
         },
       };
     },
@@ -174,7 +220,8 @@ export function speechStructure(o: SpeechModel): Structure {
       } catch {
         // Configurações ilegíveis: mostra só o que der.
       }
-      return [{ term: "Voz", description: settings.voice ?? "—" }];
+      const voice = settings.voice ?? "—";
+      return [{ term: "Voz", description: settings.source === "clonada" ? `Voz clonada · ${voice}` : voice }];
     },
   };
 }
@@ -237,4 +284,5 @@ export const FISH = speechStructure({
   summary: "Transforma o texto em fala, com vozes em português, inglês e espanhol.",
   // As vozes vêm do catálogo do Fish (Studio.lists), já em VoiceOption.
   voices: (_model, lists) => lists?.voices ?? [],
+  clone: true,
 });

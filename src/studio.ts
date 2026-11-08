@@ -1,5 +1,5 @@
 import type { AudioApi, Face } from "./audio";
-import { type AvatarAsset, Db, OPEN_STATUSES, type Video, type Voice } from "./db";
+import { type AvatarAsset, Db, OPEN_STATUSES, type Video, type Voice, type VoiceProvider } from "./db";
 import type { Conta } from "./permissoes";
 import { ERROS } from "./erros";
 import { mp3Duration } from "./mp3";
@@ -9,9 +9,9 @@ import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace
 import type { ImageRunner } from "./imagens";
 import type { FishApi, FishVoice } from "./fish";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
-import { canUse, InputError, type Lists, madeAtOnce, makesAudio, onPlatform, STRUCTURES, structureById, type Structure, type Values, videoPlatform } from "./structures";
+import { type Built, canUse, InputError, type Lists, madeAtOnce, makesAudio, onPlatform, STRUCTURES, structureById, type Structure, type Values, videoPlatform } from "./structures";
 import { HEYGEN_AVATAR } from "./structures/heygen";
-import { FISH, fishVoices, PREVIEW_TEXT, speechCost } from "./structures/voz";
+import { FISH, fishVoices, MAX_CLONE_BYTES, PREVIEW_TEXT, speechCost } from "./structures/voz";
 import { AVATAR_VOICE, HEYGEN_MODEL, MAX_CLONE_NAME, NEW_CLONE, PRICE_PER_SECOND, voiceOptions } from "./structures/heygen-direta";
 import {
   aspectLabel,
@@ -139,13 +139,20 @@ export class Studio {
 
   /** As listas do formulário: as vozes oficiais do Fish; na HeyGen direta, as prontas e as clonadas da pessoa. */
   async lists(structure: Structure, userId: number): Promise<Lists> {
-    if (structure.id === FISH.id) return { voices: fishVoices(await this.fishCatalog()) };
+    if (structure.id === FISH.id) return { voices: fishVoices(await this.fishCatalog()), ...(await this.cloneLists(userId, "fish")) };
     if (structure.platform !== "heygen" || !this.heygen) return {};
-    const catalog = await this.voiceCatalog();
-    const voices = await this.db.voicesByUser(userId);
+    // A voz de cada avatar entra na mesma lista; a que ainda não existe é clonada no primeiro uso.
+    return { voices: voiceOptions(await this.voiceCatalog()), ...(await this.cloneLists(userId, "heygen")) };
+  }
+
+  /**
+   * A lista "Voz clonada" de um provedor: as vozes que a pessoa clonou e a de cada avatar com gravação;
+   * a do avatar que ainda não foi clonada pede o consentimento (`newClones`).
+   */
+  private async cloneLists(userId: number, provider: VoiceProvider): Promise<Pick<Lists, "clones" | "newClones">> {
+    const voices = await this.db.voicesByUser(userId, provider);
     const label = (v: Voice, name = v.name) => (v.status === "ACTIVE" ? name : `${name} (preparando)`);
     const clones = voices.filter((v) => !v.asset_id).map((v) => ({ value: v.id, label: label(v) }));
-    // A voz de cada avatar entra na mesma lista; a que ainda não existe é clonada no primeiro uso.
     const newClones: string[] = [];
     for (const avatar of await this.db.avatarsWithVoice(userId)) {
       const value = `${AVATAR_VOICE}${avatar.id}`, name = `Voz de ${avatar.name}`;
@@ -153,7 +160,34 @@ export class Studio {
       if (!voice) newClones.push(value);
       clones.push({ value, label: voice ? label(voice, name) : name });
     }
-    return { voices: voiceOptions(catalog), clones, newClones };
+    return { clones, newClones };
+  }
+
+  /**
+   * A gravação da voz clonada de um modelo de fala, guardada no vídeo para ir em cada pedido: a nova
+   * (enviada agora, fica no R2 e vira voz da pessoa), a de um avatar (a primeira vez, com o
+   * consentimento, vira voz do Fish) ou uma voz que a pessoa já clonou.
+   */
+  private async speechReference(plan: NonNullable<Built["speech"]>, input: NewVideoInput): Promise<Record<string, string>> {
+    const userId = input.user.id;
+    let voice: Voice | null = null;
+    if (plan.clone === NEW_CLONE) {
+      const sample = checkAudio(input.sample, ERROS.amostraVoz);
+      if (sample.file.size > MAX_CLONE_BYTES) throw new InputError(ERROS.audioTamanho(MAX_CLONE_BYTES / 1024 / 1024));
+      const key = `vozes/clonadas/${crypto.randomUUID()}.${sample.ext}`;
+      await this.media.put(key, await sample.file.arrayBuffer(), { httpMetadata: { contentType: sample.file.type } });
+      voice = await this.db.insertVoice({ id: crypto.randomUUID(), user_id: userId, name: plan.cloneName!, provider_voice_id: key, status: "ACTIVE", provider: "fish" });
+    } else if (plan.clone.startsWith(AVATAR_VOICE)) {
+      const avatar = await this.db.avatarById(plan.clone.slice(AVATAR_VOICE.length));
+      const asset = avatar?.voice_asset && avatar.user_id === userId ? await this.db.asset(avatar.id, avatar.voice_asset) : null;
+      if (!asset) throw new InputError(ERROS.vozClonada);
+      voice = (await this.db.voiceByAsset(asset.id, "fish")) ?? (await this.db.insertVoice({ id: crypto.randomUUID(), user_id: userId, name: `Voz de ${avatar!.name}`.slice(0, MAX_CLONE_NAME), provider_voice_id: asset.key, status: "ACTIVE", asset_id: asset.id, provider: "fish" }));
+    } else {
+      voice = await this.db.voiceById(plan.clone);
+      if (!voice || voice.user_id !== userId || voice.provider !== "fish") throw new InputError(ERROS.vozClonada);
+    }
+    // O Refazer volta com a mesma escolha da lista (a voz nova passa a ser uma voz da pessoa).
+    return { voice_row: plan.clone === NEW_CLONE ? voice.id : plan.clone, reference_key: voice.provider_voice_id };
   }
 
   /** As vozes oficiais do Fish: da instância, do banco ou do Fish, nessa ordem; sem elas, o último guardado. */
@@ -261,6 +295,8 @@ export class Studio {
     // As vozes do Fish vêm das listas; as outras estruturas daqui não usam listas.
     const lists = makesAudio(structure) ? await this.lists(structure, input.user.id) : {};
     const built = structure.build(input.values, image !== null, model, seconds !== null ? { seconds } : null, lists);
+    // A voz clonada: a gravação fica anotada no vídeo e vai junto em cada pedido.
+    if (built.speech) built.record.settings = { ...built.record.settings, ...(await this.speechReference(built.speech, input)) };
     // O preparo (Aleph 2) roda no contêiner: sem ele, não dá para começar.
     if (built.prepare && !this.audio) throw new InputError(ERROS.trocaIndisponivel);
     const request: VideoRequest = { model: structure.model, ...built.request };
@@ -346,9 +382,16 @@ export class Studio {
   private async finishAudio(video: Video, structure: Structure): Promise<Video> {
     try {
       const text = video.request_prompt ?? video.prompt;
-      const voice = parseSettings(video.settings).voice_id;
-      if (!voice) throw new Error("A fala não tem voz.");
-      const result = await this.requireApi().speech({ model: video.model, input: text, voice });
+      const settings = parseSettings(video.settings);
+      // A voz pronta, ou a gravação da voz clonada (que vai inteira em cada pedido).
+      let reference: { bytes: ArrayBuffer; type: string } | undefined;
+      if (settings.reference_key) {
+        const object = await this.media.get(settings.reference_key);
+        if (!object) throw new Error(`A gravação da voz clonada sumiu do R2: ${settings.reference_key}`);
+        reference = { bytes: await object.arrayBuffer(), type: object.httpMetadata?.contentType ?? "audio/mpeg" };
+      }
+      if (!settings.voice_id && !reference) throw new Error("A fala não tem voz.");
+      const result = await this.requireApi().speech({ model: video.model, input: text, ...(reference ? { reference } : { voice: settings.voice_id }) });
       const key = `audios/${video.id}.mp3`;
       await this.media.put(key, result.bytes, { httpMetadata: { contentType: result.type } });
       const seconds = mp3Duration(result.bytes);

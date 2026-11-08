@@ -7,7 +7,7 @@ import { mp3Duration } from "../src/mp3";
 import { resetVoiceCache } from "../src/studio";
 import { estimate } from "../src/structures";
 import { ELEVENLABS, elevenVoices, EMOTIONS, FISH, fishVoices, MAX_SPEECH, PREVIEW_TEXT, speechText, spokenText } from "../src/structures/voz";
-import { call, callFish, cookie, ELEVEN_MODEL, FakeFishApi, FakeHeyGenApi, FISH_MODEL, FakeVideoApi, memberCookie, mp3, postForm, SITE } from "./helpers";
+import { call, callFish, cookie, dono, ELEVEN_MODEL, FakeFishApi, FakeHeyGenApi, FISH_MODEL, FakeVideoApi, memberCookie, mp3, postForm, SITE } from "./helpers";
 
 const TEXTO = "[excited] Gente, eu preciso contar uma coisa! Olha a diferença na minha pele.";
 
@@ -246,5 +246,71 @@ describe("Fish Audio (fala)", () => {
     await env.DB.prepare("UPDATE config SET value = json_set(value, '$.at', 0) WHERE key = 'vozes.fish.oficiais'").run();
     fish.failList = true;
     expect(await (await getFish("/modelo/fish", api, fish)).text()).toContain('value="fish-beatriz" data-voice-input');
+  });
+
+  describe("voz clonada", () => {
+    const gravacao = (texto = "gravacao-da-voz") => new File([new TextEncoder().encode(texto)], "voz.mp3", { type: "audio/mpeg" });
+    const postClone = async (fields: Record<string, string | File>, api: FakeVideoApi, fish: FakeFishApi, session?: string) =>
+      callFish(postForm("/modelo/fish", { fonte: "clonada", texto: "Bom dia, turma!", ...fields }, { cookie: session ?? (await cookie()) }), api, fish);
+    const texto = (b?: ArrayBuffer) => (b ? new TextDecoder().decode(b) : null);
+
+    it("o formulário tem Voz pronta e Voz clonada, como a HeyGen", async () => {
+      const page = await (await getFish("/modelo/fish", new FakeVideoApi(), new FakeFishApi())).text();
+      expect(page).toContain('name="fonte"');
+      expect(page).toContain(">Voz clonada<");
+      expect(page).toContain('<option value="nova"');
+      expect(page).toContain("Clonar uma voz nova");
+      expect(page).toContain('name="amostra"');
+      expect(page).toContain("A voz é minha ou tenho autorização para cloná-la.");
+    });
+
+    it("a voz nova: a gravação fica no R2, vira voz da pessoa e vai em cada pedido, sem voz pronta", async () => {
+      const api = new FakeVideoApi(), fish = new FakeFishApi();
+      for (const [fields, erro] of [
+        [{ clone: "nova", nome_voz: "Touro", consentimento: "sim" }, ERROS.amostraVoz],
+        [{ clone: "nova", amostra: gravacao(), consentimento: "sim" }, ERROS.nomeVoz],
+        [{ clone: "nova", amostra: gravacao(), nome_voz: "Touro" }, ERROS.consentimentoVoz],
+      ] as [Record<string, string | File>, string][]) expect(await (await postClone(fields, api, fish)).text()).toContain(erro);
+      expect(api.speeches).toHaveLength(0);
+
+      expect((await postClone({ clone: "nova", amostra: gravacao(), nome_voz: "Touro", consentimento: "sim" }, api, fish)).status).toBe(303);
+      expect(api.speeches[0]).toMatchObject({ model: "fish-audio/drama-3", input: "Bom dia, turma!" });
+      expect(api.speeches[0]!.voice).toBeUndefined();
+      expect(texto(api.speeches[0]!.reference?.bytes)).toBe("gravacao-da-voz");
+      const voz = await env.DB.prepare("SELECT * FROM voices WHERE name = 'Touro'").first<{ id: string; provider: string; provider_voice_id: string; status: string }>();
+      expect(voz).toMatchObject({ provider: "fish", status: "ACTIVE" });
+      expect(voz!.provider_voice_id).toMatch(/^vozes\/clonadas\/.+\.mp3$/);
+      const audio = await ultimo();
+      expect(JSON.parse(audio.settings!)).toMatchObject({ source: "clonada", voice: "Touro", voice_row: voz!.id, reference_key: voz!.provider_voice_id });
+      expect(await (await getFish(`/video/${audio.id}`, api, fish)).text()).toContain("Voz clonada · Touro");
+
+      // Depois, a voz está na lista, sem pedir a gravação nem o consentimento de novo; o Refazer volta com ela.
+      expect(await (await getFish("/modelo/fish", api, fish)).text()).toContain(`<option value="${voz!.id}"`);
+      expect((await postClone({ clone: voz!.id }, api, fish)).status).toBe(303);
+      expect(texto(api.speeches[1]!.reference?.bytes)).toBe("gravacao-da-voz");
+      expect(await (await getFish(`/modelo/fish?refazer=${audio.id}`, api, fish)).text()).toContain(`<option value="${voz!.id}" selected`);
+      // A voz do Fish não entra na voz clonada da HeyGen.
+      await new Db(env.DB).setPlatform("heygen");
+      expect(await (await call(new Request(`${SITE}/modelo/heygen`, { headers: { cookie: await cookie() } }), api, null, new FakeHeyGenApi())).text()).not.toContain(`<option value="${voz!.id}"`);
+      // A de outra pessoa não vale.
+      await env.DB.prepare("UPDATE voices SET user_id = ? WHERE id = ?").bind(await dono(), voz!.id).run();
+      expect(await (await postClone({ clone: voz!.id }, api, fish)).text()).toContain(ERROS.vozClonada);
+    });
+
+    it("a voz do avatar: pede o consentimento na primeira vez e manda a gravação do avatar", async () => {
+      const api = new FakeVideoApi(), fish = new FakeFishApi(), session = await cookie();
+      const res = await call(postForm("/avatares", { nome: "Urso", imagem: new File([new Uint8Array([137, 80, 78, 71])], "urso.png", { type: "image/png" }), voz: gravacao("voz-do-urso") }, { cookie: session }));
+      const avatar = res.headers.get("location")!.split("/").pop()!;
+      const page = await (await getFish("/modelo/fish", api, fish)).text();
+      expect(page).toContain(`<option value="avatar:${avatar}"`);
+      expect(page).toContain("Voz de Urso");
+      expect(await (await postClone({ clone: `avatar:${avatar}` }, api, fish, session)).text()).toContain(ERROS.consentimentoVoz);
+      expect((await postClone({ clone: `avatar:${avatar}`, consentimento: "sim" }, api, fish, session)).status).toBe(303);
+      expect(texto(api.speeches[0]!.reference?.bytes)).toBe("voz-do-urso");
+      expect(await env.DB.prepare("SELECT provider, asset_id IS NOT NULL AS doAvatar FROM voices WHERE name = 'Voz de Urso'").first()).toEqual({ provider: "fish", doAvatar: 1 });
+      // Da segunda vez em diante, sem o consentimento.
+      expect((await postClone({ clone: `avatar:${avatar}` }, api, fish, session)).status).toBe(303);
+      expect(api.speeches).toHaveLength(2);
+    });
   });
 });
