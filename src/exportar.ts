@@ -15,6 +15,7 @@ import { type ExportWork, exportWork } from "./canvas/modelo.js";
 import type { Db, ExportRow, Project, ProjectFile } from "./db";
 import type { Conta } from "./permissoes";
 import { ligado, SleepyContainer } from "./conteiner";
+import { downloadName } from "./arquivos";
 import { ERROS } from "./erros";
 import { canUse, InputError, structureById } from "./structures";
 import { CABECALHO_BYTES, temSom } from "./som";
@@ -121,10 +122,10 @@ const ANIMACAO = "animacao:";
 
 const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
-/** Nome do arquivo baixado: "01-gancho-1-corpo-cta-a.mp4", sem acento nem caractere estranho. */
+/** Nome da versão baixada (sozinha ou no ZIP): "01 - Gancho 1 + Corpo + CTA A.mp4", pela regra de todo download. */
 export function fileName(index: number, nome: string): string {
-  const slug = nome.normalize("NFD").replace(/\p{M}/gu, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 80);
-  return `${String(index + 1).padStart(2, "0")}${slug ? `-${slug}` : ""}.mp4`;
+  const n = String(index + 1).padStart(2, "0");
+  return downloadName(nome.trim() ? `${n} - ${nome}` : n, "video/mp4");
 }
 
 export class Exports {

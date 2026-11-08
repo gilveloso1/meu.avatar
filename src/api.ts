@@ -7,6 +7,7 @@ import { baseGaps, finalRate, groups, links, members, output, PX, upgrade, versi
 import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, trechos } from "./legenda";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
+import { downloadName, videoFileName } from "./arquivos";
 import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
@@ -58,6 +59,12 @@ function data(v: string, ate: boolean): string | null {
 
 const KINDS: Record<AssetKind, Fonte["kind"]> = { imagem: "image", video: "video", audio: "audio" };
 const assetSrc = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
+
+/**
+ * O que o agente precisa para baixar um arquivo: o nome com que ele chega (o mesmo do "Baixar" da
+ * tela, src/arquivos.ts), o tipo e o endereço completo, que abre com o mesmo token.
+ */
+const arquivo = (nome: string, mime: string, src: string, url: URL) => ({ arquivo: downloadName(nome, mime), mime, baixar: `${url.origin}${src}?baixar` });
 
 const falha = (status: number, erro: string, extra: Record<string, unknown> = {}) => Response.json({ erro, ...extra }, { status });
 
@@ -253,7 +260,7 @@ export class Api {
     if (m[2] === "animacao") return post ? falha(405, "metodo_invalido") : this.inspectCode(project, url);
     if (m[2] === "imagem") return post ? this.generateImage(request, user, project) : falha(405, "metodo_invalido");
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
-    return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(",")));
+    return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(","), url));
   }
 
   /**
@@ -275,8 +282,26 @@ export class Api {
     const videos = await this.db.conta(user.id).readyVideos(usable, { q: (p.get("q") ?? "").trim(), desde, ate, depois: criado && id ? { criado, id } : undefined, limite: limite + 1 });
     const pagina = videos.slice(0, limite);
     const ultimo = pagina[pagina.length - 1];
+    // De onde é cada vídeo: o modelo que o gerou e o avatar usado (quando houve).
+    const avatares = new Map((await this.db.avatarsByUser(user.id)).map((a) => [a.id, a.name]));
     return Response.json({
-      videos: pagina.map((v) => ({ id: v.id, ...(v.name ? { nome: v.name } : {}), fala: v.prompt, duracao: v.duration, resolucao: v.resolution, formato: v.aspect_ratio, criado: v.created_at, src: `/videos/${v.id}.mp4` })),
+      videos: pagina.map((v) => {
+        const structure = structureById(v.structure);
+        const avatar = v.avatar_id && avatares.get(v.avatar_id);
+        return {
+          id: v.id,
+          ...(v.name ? { nome: v.name } : {}),
+          fala: v.prompt,
+          modelo: { id: v.structure, nome: structure?.name ?? v.structure },
+          ...(avatar ? { avatar: { id: v.avatar_id, nome: avatar } } : {}),
+          duracao: v.duration,
+          resolucao: v.resolution,
+          formato: v.aspect_ratio,
+          criado: v.created_at,
+          src: `/videos/${v.id}.mp4`,
+          ...arquivo(videoFileName(v), "video/mp4", `/videos/${v.id}.mp4`, url),
+        };
+      }),
       ...(videos.length > limite && ultimo ? { continuar: `${ultimo.created_at}|${ultimo.id}` } : {}),
     });
   }
@@ -321,7 +346,7 @@ export class Api {
         descricao: a.description,
         ativos: assets
           .filter((x) => x.avatar_id === a.id)
-          .map((x) => ({ id: x.id, nome: x.name, tipo: x.kind, origem: x.source_video ? "gerado" : "enviado", foto: x.id === a.photo_asset, voz: x.id === a.voice_asset, src: assetSrc(x) })),
+          .map((x) => ({ id: x.id, nome: x.name, tipo: x.kind, origem: x.source_video ? "gerado" : "enviado", foto: x.id === a.photo_asset, voz: x.id === a.voice_asset, src: assetSrc(x), tamanho: x.size, ...arquivo(x.name, x.type, assetSrc(x), url) })),
       })),
     });
   }
@@ -342,7 +367,7 @@ export class Api {
    * O projeto salvo, com o que ele significa. Os arquivos, o código das animações e o canvas inteiro (o maior gasto do
    * agente: uns 7 e 10 mil caracteres no projeto da Lara Resende) só vêm quando pedidos em incluir.
    */
-  private async view(project: Project, incluir: string[] = []) {
+  private async view(project: Project, incluir: string[] = [], url?: URL) {
     const data = JSON.parse(project.data) as CanvasProject;
     const files = incluir.includes("arquivos") ? await this.db.projectFiles(project.id) : null;
     return {
@@ -353,7 +378,14 @@ export class Api {
       ...resumo(data),
       // As notas que a pessoa colou ou escreveu no canvas (briefing, roteiro, referências): fora dos vídeos.
       ...(data.notes?.length ? { notas: data.notes.map((n) => ({ id: n.id, texto: n.text })) } : {}),
-      ...(files ? { arquivos: files.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, src: `/projetos/${project.id}/arquivos/${f.id}` })) } : {}),
+      ...(files
+        ? {
+            arquivos: files.map((f) => {
+              const src = `/projetos/${project.id}/arquivos/${f.id}`;
+              return { id: f.id, nome: f.name, tipo: f.type, src, tamanho: f.size, ...(url ? arquivo(f.name, f.type, src, url) : {}) };
+            }),
+          }
+        : {}),
       ...(incluir.includes("codigo") ? { codigo: data.blocks.filter((b) => b.code).map((b) => ({ bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), html: b.code!.html, ...(b.code!.params ? { parametros: b.code!.params } : {}), ...(b.code!.escala ? { escala: b.code!.escala } : {}), ...(b.code!.fixa ? { esticar: false } : {}) })) } : {}),
       ...(incluir.includes("canvas") ? { canvas: data } : {}),
     };

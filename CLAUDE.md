@@ -279,9 +279,12 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   pacote, com teste dela dada e tirada (`test/permissoes.test.ts`).
 - Os dados de cada conta saem da `ContaDb` (`db.conta(userId)`, `src/db.ts`): toda consulta
   leva o dono. O banco recusa vídeo sem dono (`migrations/0018_dono.sql`).
-- Arquivo enviado (ativos, projetos, MCP) só de uma lista fechada de tipos (`MEDIA_KINDS`,
-  `src/site/site.ts`), nunca qualquer `image/*`: SVG e HTML levam script e são servidos pelo endereço
+- Arquivo enviado (ativos, projetos, MCP) só de uma lista fechada de tipos (`MEDIA_TYPES`,
+  `src/arquivos.ts`), nunca qualquer `image/*`: SVG e HTML levam script e são servidos pelo endereço
   do site. Todo arquivo do R2 sai pelo `object()`, com `nosniff` e CSP com `sandbox`.
+- Todo download (vídeo, imagem, ativo, arquivo de projeto, exportação) tem o mesmo nome: o da tela,
+  sem mudança, e a extensão do tipo real (`downloadName` e `contentDisposition`, `src/arquivos.ts`).
+  Download novo passa por elas; nada de montar nome de arquivo à parte.
 
 ## Modelos: uma estrutura para cada
 

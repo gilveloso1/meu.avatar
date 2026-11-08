@@ -39,7 +39,7 @@ describe("renomear vídeo", () => {
     expect(await (await get(`/video/${id}`, session)).text()).toContain("<title>Gancho do produto · ");
     expect(await (await get("/videos?q=gancho", session)).text()).toContain(`/video/${id}?`);
     const file = await get(`/videos/${id}.mp4?baixar`, session);
-    expect(file.headers.get("content-disposition")).toContain("gancho-do-produto.mp4");
+    expect(file.headers.get("content-disposition")).toContain(`filename*=UTF-8''${encodeURIComponent("Gancho do produto.mp4")}`);
   });
 
   it("salvo pelo script da página, responde 204 sem recarregar", async () => {

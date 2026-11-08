@@ -64,7 +64,7 @@ const src = texto('Endereço do arquivo: "/videos/<id>.mp4" de listar_videos, o 
 const FERRAMENTAS = [
   {
     name: "listar_videos",
-    description: "Vídeos prontos que podem entrar num projeto, com a fala, a duração e a data, do mais novo ao mais antigo, 20 por vez. Filtre pela fala e pela data; continuar traz os próximos.",
+    description: "Vídeos prontos que podem entrar num projeto, com a fala, o modelo, o avatar, a duração e a data, do mais novo ao mais antigo, 20 por vez. Filtre pela fala e pela data; continuar traz os próximos. Para baixar: baixar é o endereço (com o mesmo token) e arquivo, o nome com a extensão.",
     inputSchema: objeto({
       busca: texto("Parte da fala ou do nome."),
       desde: texto('Data, como "2026-11-02" (UTC): só os feitos nesse dia ou depois.'),
@@ -73,7 +73,7 @@ const FERRAMENTAS = [
       continuar: texto("O continuar da resposta anterior, para a página seguinte."),
     }),
   },
-  { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
+  { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}. De cada ativo: arquivo (o nome com a extensão), mime, tamanho em bytes e baixar (o endereço, com o mesmo token).", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   {
     name: "listar_animacoes",
     description: "Animações em código já feitas nos projetos da conta, para reusar com adicionar {animacao: {projeto, bloco}}: do mesmo projeto, dos projetos que usam um avatar ou pela busca. Cada uma traz o projeto, o bloco, o nome, a duração, o texto na tela e os parametros, sem o código (leia com ver_projeto incluir: codigo).",
@@ -219,7 +219,7 @@ const MAX_URL = 50 * 1024 * 1024;
 /**
  * enviar_arquivo com url: o servidor baixa e manda para a mesma rota do envio. Assim o agente sem
  * terminal (que não consegue montar o base64) põe uma imagem da web no projeto; o tipo e o
- * tamanho passam pela mesma conferência do envio (só os tipos de MEDIA_KINDS).
+ * tamanho passam pela mesma conferência do envio (só os tipos de MEDIA_TYPES, src/arquivos.ts).
  */
 async function baixar(a: Args, chama: Interna, destino: string): Promise<Response> {
   let url: URL;

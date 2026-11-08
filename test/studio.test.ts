@@ -469,7 +469,7 @@ describe("tratamento do áudio", () => {
     expect(await tratado.text()).toBe("mp4-falso+tratado");
     const original = await call(new Request(`${SITE}/videos/${video.id}.original.mp4?baixar`, { headers: { cookie: session } }), api, audio);
     expect(await original.text()).toBe("mp4-falso");
-    expect(original.headers.get("content-disposition")).toContain("-original.mp4");
+    expect(original.headers.get("content-disposition")).toContain(" (original).mp4");
 
     page = await (await call(new Request(`${SITE}/modelo/wan`, { headers: { cookie: session } }), api, audio)).text();
     expect(page).not.toContain("data-refresh=");
@@ -1389,7 +1389,7 @@ describe("edição rápida", () => {
 
     const mp4 = await call(new Request(`${SITE}/videos/${video.id}.editado.mp4?baixar`, { headers: { cookie: session } }), api, audio);
     expect(await mp4.text()).toBe("mp4-falso+editado");
-    expect(mp4.headers.get("content-disposition")).toContain("-editado.mp4");
+    expect(mp4.headers.get("content-disposition")).toContain(" (editado).mp4");
     // A edição que vale fica guardada: quando e com que escolhas.
     expect(editado.edited_at).toBeTruthy();
     expect(JSON.parse(editado.edited_plan!)).toMatchObject({ pause: "longa", camera: "zoom" });

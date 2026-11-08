@@ -36,6 +36,7 @@ import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO
 import { CANVAS_ANIMACAO, CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { MAX_VERSOES } from "../canvas/modelo.js";
 import { type ExportPlan, type Exports, fileName, zipFits } from "../exportar";
+import { contentDisposition, downloadName, MEDIA_TYPES, mediaType, videoFileName } from "../arquivos";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
 
@@ -135,6 +136,8 @@ export class Site {
       if (path === "/mcp") return handleMcp(request, (method, to, body, headers) => this.handle(new Request(new URL(to, url), { method, body, headers: { ...headers, authorization: `Bearer ${bearer}` } })));
       if (API_PATH.test(path)) return new Api(this.db, this.media, this.exports, this.studio).handle(request, caller, path, url);
       if (PROJECT_API_PATH.test(path)) return this.projects(request, caller, path, url);
+      // Baixar com o token: o arquivo de um vídeo (ou imagem) gerado e o de um ativo, como no navegador.
+      if (request.method === "GET" && FILE_PATH.test(path)) return this.signedIn(request, caller, url);
       return Response.json({ erro: "nao_encontrado" }, { status: 404 });
     }
 
@@ -242,7 +245,7 @@ export class Site {
       const version = file[2];
       const key = version === "original" ? video?.video_key : version === "editado" ? video?.edited_key : (video?.processed_key ?? video?.video_key);
       if (!video || !key) return new Response("não encontrado", { status: 404 });
-      const name = `${(video.name && slug(video.name)) || `meu-avatar-${video.id.slice(0, 8)}`}${version ? `-${version}` : ""}.${file[3]}`;
+      const name = `${videoFileName(video)}${version ? ` (${version})` : ""}`;
       return this.object(request, key, "private, max-age=86400", url.searchParams.has("baixar") ? name : undefined);
     }
 
@@ -304,7 +307,7 @@ export class Site {
         await this.db.deleteAsset(asset.id);
         return redirect(`/avatares/${avatar.id}`);
       }
-      if (!assetAction && !post) return this.object(request, await this.db.assetKey(asset), "private, max-age=86400", url.searchParams.has("baixar") ? asset.name.replace(/[^\w.-]+/g, "-") : undefined);
+      if (!assetAction && !post) return this.object(request, await this.db.assetKey(asset), "private, max-age=86400", url.searchParams.has("baixar") ? asset.name : undefined);
     }
     return new Response("não encontrado", { status: 404 });
   }
@@ -694,7 +697,7 @@ ${error ? snackbar(error) : ""}`;
     if (action === "arquivos" && post && !fileId) return this.uploadProjectFile(request, project);
     if (action === "arquivos" && !post && fileId) {
       const file = await this.db.projectFile(project.id, fileId);
-      return file ? this.object(request, file.key, "private, max-age=86400") : new Response("não encontrado", { status: 404 });
+      return file ? this.object(request, file.key, "private, max-age=86400", url.searchParams.has("baixar") ? file.name : undefined) : new Response("não encontrado", { status: 404 });
     }
     if (action === "apagar") {
       if (!post) return this.deleteProjectPage(user, project);
@@ -1420,7 +1423,7 @@ ${error ? snackbar(error) : ""}`;
   }
 
   /** Arquivo do R2, com suporte a Range (o player de vídeo pede pedaços). */
-  private async object(request: Request, key: string, cache: string, downloadName?: string): Promise<Response> {
+  private async object(request: Request, key: string, cache: string, download?: string): Promise<Response> {
     const object = await this.media.get(key, { range: request.headers, onlyIf: request.headers });
     if (!object) return new Response("não encontrado", { status: 404 });
     const headers = new Headers({ "cache-control": cache, "accept-ranges": "bytes", etag: object.httpEtag });
@@ -1429,7 +1432,8 @@ ${error ? snackbar(error) : ""}`;
     // logado (um SVG ou HTML guardado antes da lista fechada de tipos): sem adivinhar o tipo, sem script.
     headers.set("x-content-type-options", "nosniff");
     headers.set("content-security-policy", "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
-    if (downloadName) headers.set("content-disposition", `attachment; filename="${downloadName}"`);
+    // Todo download sai com o mesmo nome: o da tela e a extensão do tipo do arquivo (src/arquivos.ts).
+    if (download !== undefined) headers.set("content-disposition", contentDisposition(downloadName(download, object.httpMetadata?.contentType ?? "", key)));
     if (!("body" in object)) return new Response(null, { status: 304, headers });
     const r = object.range as { offset?: number; length?: number } | undefined;
     if (request.headers.has("range") && r) {
@@ -1514,14 +1518,8 @@ function overflowMenu(label: string, items: MenuItem[]): string {
  * lista fechada, e não qualquer image/*. SVG e HTML ficam de fora: podem levar script e o arquivo é
  * servido pelo próprio endereço do site. WebM é o vídeo das animações (render).
  */
-const MEDIA_KINDS: Record<string, AssetKind> = {
-  "image/jpeg": "imagem", "image/png": "imagem", "image/webp": "imagem",
-  "video/mp4": "video", "video/quicktime": "video", "video/webm": "video",
-  "audio/mpeg": "audio", "audio/wav": "audio", "audio/x-wav": "audio", "audio/mp4": "audio", "audio/x-m4a": "audio", "audio/ogg": "audio",
-};
-
 function assetKind(type: string): AssetKind | null {
-  return MEDIA_KINDS[type.split(";")[0]!.trim().toLowerCase()] ?? null;
+  return mediaType(type)?.kind ?? null;
 }
 
 function tileCard(c: { href: string; tile: string; headline: string; supporting: string; hidden?: string; badge?: { label: string; title: string }; menu: MenuItem[] }): string {
@@ -2006,11 +2004,6 @@ function nameSaved(request: Request, back: string): Response {
   return request.headers.get("x-fetch") ? new Response(null, { status: 204, headers: SECURITY_HEADERS }) : redirect(back);
 }
 
-/** O nome do arquivo baixado: o nome do vídeo sem acentos nem símbolos. */
-function slug(name: string): string {
-  return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
-}
-
 function videoLibrary(videos: Video[], o: LibraryOptions): string {
   const h = o.heading ?? "h2";
   const head = (count: string) => {
@@ -2107,7 +2100,7 @@ function generatedPick(v: Video, structure: Structure): PickItem {
   return { id: `gerado:${v.id}`, kind, name: videoTitle(v).slice(0, 80) || structure.name, src: mediaSrc(v), hint: kind === "imagem" ? "Imagem gerada" : "Vídeo gerado" };
 }
 const ASSET_ICONS: Record<AssetKind, string> = { imagem: "image", video: "movie", audio: "mic" };
-const ASSET_ACCEPT = Object.keys(MEDIA_KINDS).join(",");
+const ASSET_ACCEPT = Object.keys(MEDIA_TYPES).join(",");
 
 function formatBytes(n: number): string {
   return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
@@ -2981,6 +2974,9 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }
  * da página do modelo que se recolhem (lembrados no navegador). Com vídeo na fila,
  * atualiza a página de tempos em tempos (a prévia da edição rápida tem o seu, PREVIEW_SCRIPT).
  */
+/** Os arquivos que o token também baixa: o de um vídeo (ou imagem) gerado e o de um ativo do avatar. */
+const FILE_PATH = /^\/(?:videos\/[0-9a-f-]{36}(?:\.(?:original|editado))?\.(?:mp4|png|jpg|webp)|avatares\/[0-9a-f-]{36}\/arquivos\/[0-9a-f-]{36})$/;
+
 /** Indicador circular dos botões ocupados (.spinner, em style.ts). */
 const SPINNER = `<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.8"/></svg>`;
 
