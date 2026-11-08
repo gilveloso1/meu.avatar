@@ -38,7 +38,8 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
   M3; não edite as cores à mão. Fontes: Roboto e Material Symbols do Google
   Fonts, só com os ícones listados em `ICONS`.
 - Nada de biblioteca de componentes ou de CSS (nem de CDN) sem combinar antes
-  com o usuário.
+  com o usuário. Exceção combinada (08/11/2026): o detector de rosto do MediaPipe, em versão fixa
+  pelo jsDelivr (`MEDIAPIPE`, `src/site/site.ts`), que só baixa quando há rosto a procurar.
 - Exceção combinada: o canvas de edição (`/canvas`, só o administrador) tem um
   script de verdade, em módulos sem biblioteca em `src/canvas/` (tela, modelo,
   prévia). `npm run canvas` junta tudo em `src/site/canvas.ts` (gerado; não edite
@@ -167,8 +168,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   data" (desligado por padrão). Tudo no navegador, sem recarregar, e guardado
   no `localStorage` por lista (`lista-<modelo>`, `lista-videos`). Miniatura só
   baixa quando aparece na tela e enquadra o rosto (`videos.face`; sem rosto, o terço de
-  cima). O servidor não procura rosto para miniatura (ligava o contêiner por cada arquivo novo):
-  só a edição rápida, a troca de avatar e o `rosto` do agente procuram, quando usados. Imagens e vídeos dos
+  cima). Quem acha o rosto é o navegador de quem vê (MediaPipe, `data-face-find`), uma vez por
+  arquivo, e guarda no site; a prévia da Edição rápida também. O servidor não procura (ligava o
+  contêiner por cada arquivo novo): só o `rosto` do agente, quando pedido, e a edição sem rosto guardado. Imagens e vídeos dos
   avatares seguem o mesmo enquadramento (`avatar_assets.face`). Com mouse, o
   vídeo aproxima de leve (1,06, 300 ms) dentro do card. No Safari, o recorte do
   vídeo fica preso às bordas do card (`inset: 0`), não em `height: 100%`. A busca pela fala de `/videos` fica no servidor.

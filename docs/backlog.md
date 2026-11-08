@@ -34,12 +34,8 @@ Já feito (tudo no ar e conferido em 02/11/2026, ver [api.md](api.md)):
 - Rascunho no lugar de um vídeo que ainda não existe e `trocar` pelo vídeo pronto (PR 52), com a
   fala editável nos Ajustes do canvas.
 
-**Rosto das miniaturas no navegador** (próximo PR, combinado em 08/11/2026): o servidor parou de
-procurar rosto para as miniaturas (o AudioFixer ligava por cada imagem e vídeo novo); elas usam o
-terço de cima. Falta achar o rosto no navegador de quem vê, com o MediaPipe (biblioteca aprovada
-pelo dono para isso), e guardar no site para as próximas vezes. A prévia da Edição rápida usa o
-mesmo rosto achado no navegador e deixa de ligar o contêiner só para isso (`/videos/<id>/rosto`);
-o contêiner fica só para montar o vídeo editado.
+Feito em 08/11/2026 (falta publicar): o **rosto das miniaturas e da prévia da Edição rápida é achado
+no navegador** (MediaPipe), sem o contêiner; o servidor só procura no `rosto` do agente.
 
 Também no ar (04/11/2026), a **animação como código** (PRs 69 a 83; ver [canvas.md](canvas.md) e
 [api.md](api.md)): o projeto guarda o HTML da animação, não o WebM, e só renderiza na exportação.

@@ -50,7 +50,7 @@ describe("projetos do canvas", () => {
     expect(c.projeto).toMatchObject({ id, name: "Projeto sem nome", data: { blocks: [], edges: [] }, salvar: `/projetos/${id}/salvar`, arquivos: `/projetos/${id}/arquivos` });
     expect(c.erros).toMatchObject({ arquivo: ERROS.canvasArquivo, salvar: ERROS.canvasSalvar, nome: ERROS.projetoNome });
     expect(res.headers.get("content-security-policy")).toContain("img-src 'self' blob: data:");
-    expect(res.headers.get("content-security-policy")).toContain("connect-src 'self' blob:");
+    expect(res.headers.get("content-security-policy")).toContain("connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com blob:");
   });
 
   it("salva o canvas e o nome, e a lista mostra o projeto", async () => {
