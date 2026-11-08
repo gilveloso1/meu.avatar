@@ -125,7 +125,7 @@ describe("protocolo", () => {
     const { result } = await legado("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
     expect(result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "meu-avatar" } });
     expect((await legado("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-11-25");
-    expect((await legado("tools/list")).result.tools).toHaveLength(25);
+    expect((await legado("tools/list")).result.tools).toHaveLength(27);
     expect((await legado("ping")).result).toEqual({});
   });
 
@@ -143,7 +143,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "criar_avatar", "editar_avatar", "enviar_ativo", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "gerar_video", "gerar_audio", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "criar_avatar", "editar_avatar", "enviar_ativo", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "gerar_video", "gerar_audio", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao", "listar_ferramentas", "usar_ferramenta"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });
@@ -247,6 +247,49 @@ describe("ferramentas", () => {
     expect(r.isError).toBe(false);
     const { canvas } = dados<{ canvas: { blocks: { name: string; audio: string }[] } }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["canvas"] }));
     expect(canvas.blocks.map((b) => [b.name, b.audio])).toEqual([["titulo.webm", "none"], ["fala.webm", "linked"]]);
+  });
+});
+
+describe("ferramentas publicadas depois de conectar", () => {
+  it("listar_ferramentas traz todas, curtas, e uma inteira pelo nome", async () => {
+    const { ferramentas } = dados<{ ferramentas: { nome: string; descricao: string }[] }>(await ferramenta("listar_ferramentas"));
+    const nomes = ferramentas.map((f) => f.nome);
+    expect(nomes).toContain("enviar_ativo");
+    expect(nomes).not.toContain("usar_ferramenta");
+    // Curta: a do editar_projeto tem milhares de caracteres.
+    expect(Math.max(...ferramentas.map((f) => f.descricao.length))).toBeLessThanOrEqual(240);
+    const uma = dados<{ nome: string; descricao: string; parametros: { required: string[] } }>(await ferramenta("listar_ferramentas", { nome: "gerar_audio" }));
+    expect(uma.parametros.required).toEqual(["texto", "voz"]);
+    expect(uma.descricao.length).toBeGreaterThan(240);
+    expect(dados<{ ferramentas: { nome: string }[] }>(await ferramenta("listar_ferramentas", { busca: "avatar" })).ferramentas.map((f) => f.nome)).toContain("criar_avatar");
+    expect((await ferramenta("listar_ferramentas", { nome: "nao_existe" })).isError).toBe(true);
+  });
+
+  it("usar_ferramenta chama qualquer uma pelo nome, com as mesmas regras", async () => {
+    const r = await ferramenta("usar_ferramenta", { nome: "criar_projeto", argumentos: { nome: "Pela outra" } });
+    expect(r.isError).toBeFalsy();
+    const { id } = dados<{ id: string }>(r);
+    expect(dados<{ nome: string }>(await ferramenta("usar_ferramenta", { nome: "ver_projeto", argumentos: { projeto: id } })).nome).toBe("Pela outra");
+    // O erro da ferramenta volta como dela.
+    const erro = await ferramenta("usar_ferramenta", { nome: "ver_projeto", argumentos: { projeto: crypto.randomUUID() } });
+    expect(erro.isError).toBe(true);
+    expect(erro.content[0]!.text).toContain("nao_encontrado");
+    // Sem volta infinita e sem ferramenta inventada.
+    for (const nome of ["usar_ferramenta", "nao_existe", ""]) {
+      const r = await ferramenta("usar_ferramenta", { nome, argumentos: {} });
+      expect(r.isError, nome).toBe(true);
+      expect(r.content[0]!.text).toContain("ferramenta_inexistente");
+    }
+    expect(dados<{ ferramentas: unknown[] }>(await ferramenta("usar_ferramenta", { nome: "listar_ferramentas" })).ferramentas.length).toBeGreaterThan(20);
+  });
+
+  it("projeto de outra conta segue fechado pela usar_ferramenta", async () => {
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Dela" }));
+    await memberCookie();
+    await env.DB.prepare("UPDATE projects SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com') WHERE id = ?").bind(id).run();
+    const r = await ferramenta("usar_ferramenta", { nome: "ver_projeto", argumentos: { projeto: id } });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("nao_encontrado");
   });
 });
 

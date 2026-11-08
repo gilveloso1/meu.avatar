@@ -16,7 +16,7 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.13.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.14.0" };
 /**
  * A lista de ferramentas não depende de quem pede. Curto: com 1 h, uma sessão aberta antes de
  * publicar seguiu com a descrição velha (sem rascunho e trocar) no teste de 02/11/2026.
@@ -25,7 +25,7 @@ export const CACHE = { ttlMs: 5 * 60_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Depois de editar, olhe os avisos novos em mudou: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Exportar usa o contêiner, sem créditos de modelo. Gerar vídeo e imagem gastam créditos. Vídeo: gerar_video faz o avatar falar com o HeyGen Avatar (uns US$ 0,04 por segundo de fala); antes, mostre à pessoa o texto, a voz (de listar_vozes) e o custo, e só gere com o sim dela. O vídeo leva minutos: acompanhe com acompanhar_video e, pronto, ponha no projeto com adicionar {video}. Imagem: gerar_imagem gasta créditos (uns US$ 0,04 em 1K) e devolve a imagem para você olhar antes de usar; se não ficou boa, refaça com outra descrição ou com ela mesma como referencia. Ela entra no projeto com adicionar {imagem}. Fala sem vídeo: gerar_audio faz o MP3 na hora (Fish Audio, centavos por minuto; vozes de listar_vozes com modelo: "fish", inclusive a de um avatar); antes, mostre à pessoa o texto e a voz. Ela entra no projeto com adicionar {audio} ou vira a fala do gerar_video {audio}.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Depois de editar, olhe os avisos novos em mudou: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Exportar usa o contêiner, sem créditos de modelo. Gerar vídeo e imagem gastam créditos. Vídeo: gerar_video faz o avatar falar com o HeyGen Avatar (uns US$ 0,04 por segundo de fala); antes, mostre à pessoa o texto, a voz (de listar_vozes) e o custo, e só gere com o sim dela. O vídeo leva minutos: acompanhe com acompanhar_video e, pronto, ponha no projeto com adicionar {video}. Imagem: gerar_imagem gasta créditos (uns US$ 0,04 em 1K) e devolve a imagem para você olhar antes de usar; se não ficou boa, refaça com outra descrição ou com ela mesma como referencia. Ela entra no projeto com adicionar {imagem}. Fala sem vídeo: gerar_audio faz o MP3 na hora (Fish Audio, centavos por minuto; vozes de listar_vozes com modelo: "fish", inclusive a de um avatar); antes, mostre à pessoa o texto e a voz. Ela entra no projeto com adicionar {audio} ou vira a fala do gerar_video {audio}. Ferramenta nova: se uma ferramenta citada aqui, numa descrição ou pela pessoa não estiver na sua lista, ela foi publicada depois que você conectou; veja listar_ferramentas e chame com usar_ferramenta, sem pedir para reconectar.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro e diz em comando a posição do que falhou, a partir de 0. Cada um tem "tipo":
 adicionar {video|arquivo|ativo|imagem|audio, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos} (imagem: o id de gerar_imagem; a imagem fica na tela de inicio a fim, 3 s sem fim; audio: o id de um áudio gerado, de listar_arquivos)
@@ -281,6 +281,18 @@ const FERRAMENTAS = [
     inputSchema: objeto({ projeto, final: texto("Id do Final."), versoes: { type: "array", items: { type: "integer" }, description: "Posições das variações; sem isso, todas." } }, ["projeto", "final"]),
   },
   { name: "acompanhar_exportacao", description: "Faz o próximo passo e devolve o andamento; pronta, traz os endereços para baixar com o mesmo token.", inputSchema: objeto({ projeto, exportacao: texto("Id da exportação.") }, ["projeto", "exportacao"]) },
+  {
+    name: "listar_ferramentas",
+    description:
+      "As ferramentas do servidor agora, inclusive as publicadas depois que você conectou (a sua lista não se atualiza sozinha no meio da conversa). Sem nome, o nome e a primeira frase de cada uma; com nome, a descrição inteira e os parâmetros. Chame a que não estiver na sua lista com usar_ferramenta.",
+    inputSchema: objeto({ nome: texto("Nome de uma ferramenta: traz a descrição inteira e os parâmetros."), busca: texto("Parte do nome ou da descrição.") }),
+  },
+  {
+    name: "usar_ferramenta",
+    description:
+      "Chama qualquer ferramenta do servidor pelo nome, com os argumentos dela: serve para as que não estão na sua lista porque foram publicadas depois que você conectou. Veja os parâmetros em listar_ferramentas {nome}. A resposta é a da própria ferramenta, com as mesmas regras e o mesmo custo.",
+    inputSchema: objeto({ nome: texto("Nome da ferramenta, como gerar_audio."), argumentos: { type: "object", description: "Os argumentos da ferramenta, como ela pede." } }, ["nome"]),
+  },
 ];
 
 type Args = Record<string, unknown>;
@@ -450,8 +462,39 @@ type Resposta = Certo | Falha;
 
 const falha = (status: number, code: number, message: string, data?: unknown): Falha => ({ status, error: { code, message, ...(data ? { data } : {}) } });
 
+/** A primeira frase de uma descrição: a lista de listar_ferramentas fica curta. */
+const primeiraFrase = (d: string) => (/^[\s\S]*?[.:](?=\s|$)/.exec(d)?.[0] ?? d).slice(0, 240);
+
+/**
+ * listar_ferramentas: a lista de agora. O Claude Code guarda a lista da hora em que conectou e não
+ * relê no meio da conversa (visto em 08/11/2026, mesmo com a validade de 5 min, CACHE); com esta e
+ * usar_ferramenta, a ferramenta publicada depois chega a quem já está conectado.
+ */
+function listarFerramentas(a: Args): Record<string, unknown> {
+  const todas = FERRAMENTAS.filter((f) => f.name !== "listar_ferramentas" && f.name !== "usar_ferramenta");
+  if (typeof a.nome === "string" && a.nome) {
+    const f = todas.find((x) => x.name === a.nome);
+    if (!f) return { content: [{ type: "text", text: json({ erro: "ferramenta_inexistente", ferramentas: todas.map((x) => x.name) }) }], isError: true };
+    return { content: [{ type: "text", text: json({ nome: f.name, descricao: f.description, parametros: f.inputSchema }) }] };
+  }
+  const busca = typeof a.busca === "string" ? a.busca.toLowerCase() : "";
+  const lista = todas.filter((f) => !busca || `${f.name} ${f.description}`.toLowerCase().includes(busca)).map((f) => ({ nome: f.name, descricao: primeiraFrase(f.description) }));
+  return { content: [{ type: "text", text: json({ versao: SERVIDOR.version, ferramentas: lista }) }] };
+}
+
 async function chamar(params: Args, chama: Interna): Promise<Resposta> {
-  const res = pedido(String(params.name), (params.arguments ?? {}) as Args, chama);
+  const args = (params.arguments ?? {}) as Args;
+  if (params.name === "listar_ferramentas") return { result: listarFerramentas(args) };
+  if (params.name === "usar_ferramenta") {
+    const nome = typeof args.nome === "string" ? args.nome : "";
+    // Uma ferramenta de verdade, não ela mesma: sem volta infinita.
+    if (nome === "usar_ferramenta" || !FERRAMENTAS.some((f) => f.name === nome)) {
+      return { result: { content: [{ type: "text", text: json({ erro: "ferramenta_inexistente", ferramentas: FERRAMENTAS.map((f) => f.name).filter((n) => n !== "usar_ferramenta") }) }], isError: true } };
+    }
+    const argumentos = args.argumentos && typeof args.argumentos === "object" && !Array.isArray(args.argumentos) ? args.argumentos : {};
+    return chamar({ name: nome, arguments: argumentos }, chama);
+  }
+  const res = pedido(String(params.name), args, chama);
   if (!res) return falha(400, -32602, `Unknown tool: ${String(params.name)}`);
   try {
     return { result: await resultado(await res) };
