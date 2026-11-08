@@ -888,12 +888,12 @@ describe("Nano Banana 2.1 (imagem)", () => {
     expect(started).toEqual([video.id]);
     expect(api.images).toHaveLength(0);
 
-    const done = await studio.finishImage(video.id);
+    const done = await studio.finishOutput(video.id);
     expect(done).toMatchObject({ status: "completed", cost: 0.039, video_key: `imagens/${video.id}.png` });
     expect(api.images[0]).toMatchObject({ prompt: `${CENA} ${IMAGE_GUIDE} ${IMAGE_REFERENCE_GUIDE}`, resolution: "1K", aspect_ratio: "9:16" });
     expect(api.images[0]!.input_references![0]).toMatchObject({ type: "image_url", image_url: { url: `${SITE}/midia/${video.image_key}` } });
     // O alarme repetido não paga a imagem de novo.
-    await studio.finishImage(video.id);
+    await studio.finishOutput(video.id);
     expect(api.images).toHaveLength(1);
     // Quem espera (o gerar_imagem do MCP) vê a imagem pronta.
     expect(await studio.waitImage(video, 1000, 10)).toMatchObject({ status: "completed" });
@@ -919,7 +919,7 @@ describe("Nano Banana 2.1 (imagem)", () => {
     await db.insertVideo({ id: "00000000-0000-4000-8000-000000000001", prompt: CENA, model: NANO_BANANA.model, duration: 0, resolution: "1K", aspect_ratio: "9:16", image_key: null, user_id: await dono(), request_prompt: CENA, style: null, language: null, extra: null, structure: "nano-banana", settings: null, avatar_id: null });
     await env.DB.prepare("UPDATE videos SET status = 'in_progress', created_at = ? WHERE id = ?").bind(old, "00000000-0000-4000-8000-000000000001").run();
     await createStudio(env, { api: new FakeVideoApi() }).syncOpen();
-    expect(await db.videoById("00000000-0000-4000-8000-000000000001")).toMatchObject({ status: "failed", error: "A imagem não voltou a tempo." });
+    expect(await db.videoById("00000000-0000-4000-8000-000000000001")).toMatchObject({ status: "failed", error: "A imagem ou a fala não voltou a tempo." });
   });
 
   it("recusa sem descrição e descrição longa, sem chamar a API", async () => {

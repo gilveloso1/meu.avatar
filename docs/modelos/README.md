@@ -35,4 +35,6 @@ caminho no R2).
 | [Veo 3.1 Lite](veo-3.1-lite.md) (`google/veo-3.1-lite`) | Cena sem fala, a partir da foto | Em teste pelo terminal: fez uma cena e o filtro recusou a outra (US$ 0,03/s em 720p) | — |
 | `bytedance-seed/seedream-5-0-flash` | Esboço inicial | Descartado para esboço com referência: manteve a pessoa do print em vez do avatar (ver [gemini-nano-banana-2.1.md](gemini-nano-banana-2.1.md)) | — |
 | `qwen/qwen-image-2.1-turbo` | Esboço inicial | Opção barata (US$ 0,018): manteve o rosto, mas copiou o gesto da foto e sai em 576×1024 (ver [gemini-nano-banana-2.1.md](gemini-nano-banana-2.1.md)) | — |
+| [ElevenLabs v4](elevenlabs-v4.md) (`elevenlabs/eleven-v4`) | Fala a partir do texto (o áudio vira o vídeo no HeyGen, como Meu áudio) | Em teste: estrutura só para o administrador desde 08/11/2026, 21 vozes prontas, US$ 0,00008 por caractere (uns US$ 0,07 por minuto). Sem voz clonada pelo OpenRouter | `voz.ts` |
+| `fish-audio/drama-3` | Fala a partir do texto, com direção de atuação | Testado em 08/11/2026 contra o ElevenLabs (ver [elevenlabs-v4.md](elevenlabs-v4.md)): boa qualidade por US$ 0,000002 por caractere; 16 vozes da biblioteca aprovadas. Estrutura no próximo PR | — |
 | [Higgsfield Genjutsu](higgsfield-genjutsu.md) (fora do OpenRouter) | Trocar avatar | Não testado | — |

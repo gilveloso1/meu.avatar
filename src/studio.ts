@@ -2,13 +2,15 @@ import type { AudioApi, Face } from "./audio";
 import { type AvatarAsset, Db, OPEN_STATUSES, type Video, type Voice } from "./db";
 import type { Conta } from "./permissoes";
 import { ERROS } from "./erros";
+import { mp3Duration } from "./mp3";
 import { mp4Duration, mp4Size } from "./mp4";
 import { type ImageRequest, type InputReference, validate, type VideoApi, type VideoJob, type VideoModel, type VideoRequest } from "./openrouter";
 import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace } from "./quickedit";
 import type { ImageRunner } from "./imagens";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
-import { canUse, InputError, type Lists, makesImage, onPlatform, STRUCTURES, structureById, type Structure, type Values, videoPlatform } from "./structures";
+import { canUse, InputError, type Lists, madeAtOnce, makesAudio, onPlatform, STRUCTURES, structureById, type Structure, type Values, videoPlatform } from "./structures";
 import { HEYGEN_AVATAR } from "./structures/heygen";
+import { PREVIEW_TEXT, speechCost } from "./structures/voz";
 import { AVATAR_VOICE, HEYGEN_MODEL, MAX_CLONE_NAME, NEW_CLONE, PRICE_PER_SECOND, voiceOptions } from "./structures/heygen-direta";
 import {
   aspectLabel,
@@ -166,8 +168,21 @@ export class Studio {
     return voicesCache.voices;
   }
 
-  /** A amostra de uma voz pronta; null se a voz não existe ou não tem amostra. */
-  async voicePreview(voiceId: string): Promise<{ bytes: ArrayBuffer; type: string } | null> {
+  /**
+   * A amostra de uma voz pronta; null se a voz não existe ou não tem amostra. A da HeyGen vem do
+   * catálogo; a de um modelo de fala é gerada uma vez (uma frase, menos de um centavo) e fica no R2.
+   */
+  async voicePreview(structure: Structure, voiceId: string): Promise<{ bytes: ArrayBuffer; type: string } | null> {
+    if (makesAudio(structure)) {
+      const voices = structure.sections(await this.modelOf(structure), { duration: 0, resolution: "", aspectRatio: "" }).flatMap((s) => s.fields).find((f) => f.kind === "voice");
+      if (!voices || voices.kind !== "voice" || !voices.voices.some((v) => v.value === voiceId)) return null;
+      const key = `vozes/previas/${structure.id}/${voiceId}.mp3`;
+      const saved = await this.media.get(key);
+      if (saved) return { bytes: await saved.arrayBuffer(), type: "audio/mpeg" };
+      const audio = await this.requireApi().speech({ model: structure.model, input: PREVIEW_TEXT, voice: voiceId });
+      await this.media.put(key, audio.bytes, { httpMetadata: { contentType: audio.type } });
+      return audio;
+    }
     if (!this.heygen) return null;
     const url = (await this.voiceCatalog()).find((v) => v.voice_id === voiceId)?.preview_audio_url;
     if (!url) return null;
@@ -181,13 +196,13 @@ export class Studio {
     return model;
   }
 
-  /** O modelo da estrutura: da lista de vídeos ou, se ela gera imagem, da de imagens. */
+  /** O modelo da estrutura: da lista de vídeos ou, se ela gera imagem ou fala, da lista delas. */
   modelOf(structure: Structure): Promise<VideoModel> {
-    if (!makesImage(structure)) return this.model(structure.model);
+    if (!madeAtOnce(structure)) return this.model(structure.model);
     const api = this.requireApi();
-    const id = `imagem:${structure.model}`;
+    const id = `${structure.output}:${structure.model}`;
     let model = this.models.get(id);
-    if (!model) this.models.set(id, (model = api.getImageModel(structure.model)));
+    if (!model) this.models.set(id, (model = makesAudio(structure) ? api.getSpeechModel(structure.model) : api.getImageModel(structure.model)));
     return model;
   }
 
@@ -259,10 +274,10 @@ export class Studio {
       settings: settings || sourceKey || input.origins ? JSON.stringify({ ...settings, ...input.origins, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
     });
 
-    // A imagem sai fora do pedido (src/imagens.ts): a página fica "Gerando" e atualiza sozinha.
-    if (makesImage(structure)) {
+    // A imagem e a fala saem fora do pedido (src/imagens.ts): a página fica "Gerando" e atualiza sozinha.
+    if (madeAtOnce(structure)) {
       const started = (await this.db.updateVideo(id, { status: "in_progress" }))!;
-      if (!this.images) return (await this.finishImage(id)) ?? started;
+      if (!this.images) return (await this.finishOutput(id)) ?? started;
       try {
         await this.images.start(id);
       } catch (err) {
@@ -284,13 +299,40 @@ export class Studio {
   }
 
   /**
-   * Faz a imagem registrada por create (uns 30 s a 1,5 min) e guarda no R2. O pedido sai da
-   * própria linha (modelo, prompt, resolução, formato e a foto de referência). Só uma vez: a
-   * linha que não está mais "Gerando" (ou já tem arquivo) fica como está.
+   * Faz a imagem ou a fala registrada por create e guarda no R2. O pedido sai da própria linha.
+   * Só uma vez: a linha que não está mais "Gerando" (ou já tem arquivo) fica como está.
    */
-  async finishImage(id: string): Promise<Video | null> {
+  async finishOutput(id: string): Promise<Video | null> {
     const video = await this.db.videoById(id);
     if (!video || video.status !== "in_progress" || video.video_key) return video;
+    const structure = structureById(video.structure);
+    return makesAudio(structure) ? this.finishAudio(video, structure!) : this.finishImage(video);
+  }
+
+  /** A fala: o texto e a voz guardados na linha vão para o modelo; a duração sai do MP3. */
+  private async finishAudio(video: Video, structure: Structure): Promise<Video> {
+    try {
+      const text = video.request_prompt ?? video.prompt;
+      const voice = parseSettings(video.settings).voice_id;
+      if (!voice) throw new Error("A fala não tem voz.");
+      const result = await this.requireApi().speech({ model: video.model, input: text, voice });
+      const key = `audios/${video.id}.mp3`;
+      await this.media.put(key, result.bytes, { httpMetadata: { contentType: result.type } });
+      const seconds = mp3Duration(result.bytes);
+      return (await this.db.updateVideo(video.id, {
+        status: "completed",
+        video_key: key,
+        duration: seconds ? Math.max(1, Math.round(seconds)) : video.duration,
+        cost: speechCost(await this.modelOf(structure), text),
+      }))!;
+    } catch (err) {
+      console.error("Falha ao gerar a fala", video.id, err);
+      return (await this.db.updateVideo(video.id, { status: "failed", error: errorMessage(err) }))!;
+    }
+  }
+
+  /** A imagem (uns 30 s a 1,5 min): modelo, prompt, resolução, formato e a foto de referência. */
+  private async finishImage(video: Video): Promise<Video> {
     try {
       let input_references: InputReference[] | undefined;
       if (video.image_key) {
@@ -746,8 +788,8 @@ export class Studio {
   /** Agendamento: confere os vídeos ainda abertos. */
   async syncOpen(limit = 10, now = new Date()): Promise<Video[]> {
     if (!this.api && !this.heygen) return [];
-    // Imagem presa em "Gerando" (o pedido caiu no meio): vira falha depois de 5 min.
-    const images = STRUCTURES.filter(makesImage).map((s) => s.id);
+    // Imagem ou fala presa em "Gerando" (o pedido caiu no meio): vira falha depois de 5 min.
+    const images = STRUCTURES.filter(madeAtOnce).map((s) => s.id);
     await this.db.failStaleImages(images, new Date(now.getTime() - IMAGE_TIMEOUT_MS).toISOString(), now.toISOString());
     const done: Video[] = [];
     for (const video of await this.db.openVideos(limit)) done.push(await this.sync(video));

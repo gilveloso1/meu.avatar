@@ -125,9 +125,21 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    a imagem sai na hora e fica na lista do modelo; "Salvar no avatar" a leva para os ativos.
    O agente também gera pelo MCP (`gerar_imagem`) e põe no canvas (`adicionar {imagem}`).
    Falta: liberar para todos; mais de uma referência (rosto e cena juntos).
-4. **Depois: interface de produção de texto e copy.** Transcrever o áudio do
+4. **Vozes dos personagens** (pedido de 08/11/2026): modelos de fala com card e painel próprios,
+   que geram áudio; o áudio entra no HeyGen como "Meu áudio" (pelo "Adicionar ativo") e vira o
+   vídeo falado. Feito: o áudio como tipo de saída (`output: "audio"`, na lista do modelo, na
+   página do áudio, no "Adicionar ativo" e no `listar_arquivos`, com `adicionar {audio}`) e o
+   ElevenLabs v4 (`voz.ts`, 21 vozes, só para o administrador; ver
+   `docs/modelos/elevenlabs-v4.md`). Falta, um PR por vez:
+   - **Fish Audio Drama 3** com as 16 vozes aprovadas em 08/11/2026 (ids em
+     `temp/vozes/fish/aprovadas.json`, fora do git; cada voz ganha um nome nosso, aprovado antes).
+   - **Voz clonada**: no Fish, no molde da "Voz clonada" do HeyGen ("Clonar uma voz nova" com a
+     gravação, o nome e o consentimento, e a voz de cada avatar), sem espera: o Fish clona a cada
+     pedido pela gravação. No ElevenLabs, só pela API direta (conta e chave próprias).
+   - O agente gerar áudio pelo MCP (`gerar_audio`) e o "Usar para gerar" do áudio abrir o HeyGen.
+5. **Depois: interface de produção de texto e copy.** Transcrever o áudio do
    vídeo de referência (só o áudio, nunca o vídeo) e ajustar a fala.
-5. **Configuração do administrador**: tela para trocar a plataforma do HeyGen
+6. **Configuração do administrador**: tela para trocar a plataforma do HeyGen
    (hoje pelo wrangler) e outras configs da tabela `config`.
 
 ## Ordem
@@ -136,8 +148,8 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    Avatar IV no ar para o administrador testar)
 2. **Trocar avatar** (em andamento: Seedance 2.0, uso "Trocar avatar", pronto
    para o administrador testar; ver abaixo)
-3. Voz gerada à parte e avatar falante (o HeyGen Avatar IV já faz isso numa
-   chamada só; ver o item 1)
+3. Voz gerada à parte e avatar falante (em andamento: o ElevenLabs gera a fala e o HeyGen
+   anima a foto com ela; ver "Vozes dos personagens", acima)
 
 ## Onde estamos (25/10/2026)
 
@@ -280,9 +292,9 @@ Próximos passos:
 
 ## 3. Voz gerada à parte e avatar falante
 
-Só se nenhum modelo do item 1 entregar voz limpa. Gerar a voz num modelo de
-voz (TTS do OpenRouter, `/api/v1/audio/speech`) e animar a foto com um modelo
-que sincroniza a boca com o áudio: `heygen/avatar-iv` no OpenRouter
+Em andamento (08/11/2026): o ElevenLabs v4 gera a fala pelo TTS do OpenRouter
+(`/api/v1/audio/speech`, estrutura `voz.ts`) e o HeyGen pela API direta anima a foto com ela
+("Meu áudio"). Outras opções para sincronizar a boca com o áudio: `heygen/avatar-iv` no OpenRouter
 (US$ 0,05/s; aceita `voice_id` e `voice_settings`) ou o Seedance com áudio de
 referência. É o que o Higgsfield faz no explainer narrado (voz à parte, juntada
 depois). Muda mais o fluxo: duas chamadas e duas esperas por vídeo.

@@ -6,7 +6,7 @@ import type { AudioApi, ContainerPlan, Face } from "../src/audio";
 import type { ExportApi } from "../src/exportar";
 import { randomToken, sha256 } from "../src/auth";
 import type { CloneStatus, HeyGenApi, HeyGenVideo, HeyGenVideoRequest, HeyGenVoice } from "../src/heygen";
-import type { ChatRequest, ChatResult, ImageRequest, ImageResult, VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
+import type { ChatRequest, ChatResult, ImageRequest, ImageResult, SpeechRequest, SpeechResult, VideoApi, VideoJob, VideoModel, VideoRequest } from "../src/openrouter";
 
 export const SITE = "https://meu-avatar.gilveloso.workers.dev";
 
@@ -152,6 +152,26 @@ export function fakeMp4(seconds: number, { version = 0, moovFirst = false, width
   return out;
 }
 
+/** ElevenLabs v4 pela lista de fala: o preço por caractere e três das 21 vozes. */
+export const ELEVEN_MODEL: VideoModel = {
+  id: "elevenlabs/eleven-v4",
+  name: "ElevenLabs: Eleven v4",
+  supported_durations: null,
+  supported_resolutions: null,
+  supported_aspect_ratios: null,
+  supported_frame_images: null,
+  generate_audio: null,
+  pricing_skus: { character: "0.00008" },
+  supported_voices: ["sarah", "brian", "river"],
+};
+
+/** Um MP3 de taxa constante (MPEG-1 Layer III, 128 kbit/s): 32.000 bytes são 2 s. */
+export function mp3(seconds = 2): ArrayBuffer {
+  const bytes = new Uint8Array(seconds * 16_000);
+  bytes.set([0xff, 0xfb, 0x90, 0x64]);
+  return bytes.buffer;
+}
+
 /** OpenRouter de mentira: guarda os pedidos e responde o status que o teste mandar. */
 export class FakeVideoApi implements VideoApi {
   submitted: VideoRequest[] = [];
@@ -218,6 +238,18 @@ export class FakeVideoApi implements VideoApi {
     if (this.failImage) throw new Error(this.failImage);
     this.images.push(body);
     return { bytes: new TextEncoder().encode("png-falso").buffer as ArrayBuffer, type: "image/png", cost: 0.039 };
+  }
+  /** Pedidos à API de fala; `failSpeech` faz o próximo falhar. */
+  speeches: SpeechRequest[] = [];
+  failSpeech: string | null = null;
+  async getSpeechModel(id: string) {
+    if (id !== ELEVEN_MODEL.id) throw new Error(`modelo de fala ${id} não existe`);
+    return ELEVEN_MODEL;
+  }
+  async speech(body: SpeechRequest): Promise<SpeechResult> {
+    if (this.failSpeech) throw new Error(this.failSpeech);
+    this.speeches.push(body);
+    return { bytes: mp3(), type: "audio/mpeg" };
   }
   finish(jobId: string, changes: Partial<VideoJob>) {
     this.jobs.set(jobId, { ...this.jobs.get(jobId)!, ...changes });

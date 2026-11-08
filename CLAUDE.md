@@ -69,6 +69,7 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
   - Escolher um avatar: `avatarPicker` (busca e lista), em `avatarDialog` (diálogo básico do M3, em
     "Salvar no avatar") e em `assetPanel`.
   - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
+  - Texto com emoções (modelos de fala): `speechEditor`, o campo contornado que aceita as emoções em destaque (chip de entrada, com x); `#` abre a lista (`EMOTIONS`, `src/structures/voz.ts`, em português na tela e em inglês no formulário e para o agente), com as mais usadas no topo (contadas no `localStorage`, `emocoes-usadas`) e as outras em ordem alfabética.
   - Voz pronta: campo `voice` no painel, escolhida em `voicePanel`, no mesmo menu (busca, idioma, gênero e prévia); as vozes vêm de `/vozes/lista`, só as do filtro.
   - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`, que também é a página de não encontrado
     (`notFoundPage`): todo 404 em texto aberto pelo navegador vira essa página, a mesma para o que não existe
@@ -295,7 +296,7 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 ## Modelos: uma estrutura para cada
 
 - Cada modelo de vídeo é uma estrutura em `src/structures/` (hoje `wan.ts`,
-  `heygen.ts`, `grok.ts` (cena sem fala), `imagem.ts` (Nano Banana: imagem, não vídeo, com `output: "image"`; fica na tabela e nas telas dos vídeos, gerada pela API de imagens fora do pedido, num Durable Object com alarme (`src/imagens.ts`), para não ficar presa se o navegador sair da página e fora da aba Vídeos; o agente acha as imagens no `listar_arquivos` (`tipo: imagem`), gera pelo `gerar_imagem` do MCP e põe no canvas com `adicionar {imagem}`), `seedance.ts` e `aleph.ts`; os dois últimos com o campo Uso, hoje só a troca de avatar): campos do formulário, prompt de sistema, montagem do pedido,
+  `heygen.ts`, `grok.ts` (cena sem fala), `imagem.ts` (Nano Banana: imagem, não vídeo, com `output: "image"`; fica na tabela e nas telas dos vídeos, gerada pela API de imagens fora do pedido, num Durable Object com alarme (`src/imagens.ts`), para não ficar presa se o navegador sair da página e fora da aba Vídeos; o agente acha as imagens no `listar_arquivos` (`tipo: imagem`), gera pelo `gerar_imagem` do MCP e põe no canvas com `adicionar {imagem}`), `voz.ts` (modelos de fala, hoje o ElevenLabs v4: áudio, com `output: "audio"`, pelo mesmo caminho da imagem e com a mesma página; o menu de vozes é o do HeyGen, por `?modelo=`, e o áudio entra no HeyGen como "Meu áudio" pelo "Adicionar ativo"; o agente acha no `listar_arquivos` (`tipo: audio`) e põe no canvas com `adicionar {audio}`), `seedance.ts` e `aleph.ts`; os dois últimos com o campo Uso, hoje só a troca de avatar): campos do formulário, prompt de sistema, montagem do pedido,
   regra de custo, se o áudio passa pelo contêiner e se o vídeo pronto tem o
   botão "Edição rápida" (`quickEdit`, `container/editar.py`). A tela inicial tem um card
   por modelo e uma aba com os vídeos de todos (`/videos`). As telas estão em

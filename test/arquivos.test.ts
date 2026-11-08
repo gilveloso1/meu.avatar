@@ -182,6 +182,22 @@ describe("listar_arquivos: o acervo numa lista só", () => {
     expect(por(a.enviado)).toMatchObject({ tipo: "audio", fonte: "projeto", projeto: { id: a.projeto, nome: "Campanha" }, arquivo: "trilha.mp3", usar: { arquivo: a.enviado } });
   });
 
+  it("o áudio de um modelo de fala é gerado do tipo audio e entra no projeto com adicionar {audio}", async () => {
+    await cookie();
+    const id = crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, 'completed', 'Olha a diferença', 'elevenlabs/eleven-v4', 3, '', '', ?, 'elevenlabs', ?, ?)")
+      .bind(id, `audios/${id}.mp3`, new Date().toISOString(), new Date().toISOString())
+      .run();
+    const { arquivos } = await lista({ tipo: "audio", fonte: "gerado" });
+    expect(arquivos).toHaveLength(1);
+    expect(arquivos[0]).toMatchObject({ id, tipo: "audio", fonte: "gerado", modelo: { id: "elevenlabs" }, src: `/videos/${id}.mp3`, mime: "audio/mpeg", usar: { audio: id } });
+    const { id: projeto, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Narração" }));
+    const editado = await ferramenta("editar_projeto", { projeto, revisao, comandos: [{ tipo: "adicionar", audio: id }] });
+    expect(editado.isError).toBeFalsy();
+    const visto = dados<{ grupos: { blocos: { tipo: string; dur?: number }[] }[] }>(await ferramenta("ver_projeto", { projeto }));
+    expect(visto.grupos.flatMap((g) => g.blocos).some((b) => b.tipo === "audio")).toBe(true);
+  });
+
   it("filtra por tipo, fonte, modelo, avatar, projeto e busca", async () => {
     const a = await acervo();
     const ids = async (args: Record<string, unknown>) => new Set((await lista(args)).arquivos.map((x) => x.id));

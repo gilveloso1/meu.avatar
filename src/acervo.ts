@@ -6,7 +6,7 @@
  */
 import { downloadName, MEDIA_TYPES, mediaType, mimeOf, videoFileName } from "./arquivos";
 import type { AssetKind, AvatarAsset, Db, Pagina, ProjectFile, User, Video } from "./db";
-import { canUse, makesImage, STRUCTURES, structureById } from "./structures";
+import { canUse, makesImage, outputKind, STRUCTURES, structureById } from "./structures";
 
 /** De onde o arquivo vem: gerado por um modelo, guardado num avatar ou enviado a um projeto. */
 export type Fonte = "gerado" | "avatar" | "projeto";
@@ -41,7 +41,7 @@ export interface Item {
   mime: string;
   baixar: string;
   /** O que vai no adicionar (editar_projeto) para pôr este arquivo num projeto. */
-  usar: { video: string } | { imagem: string } | { ativo: string } | { arquivo: string };
+  usar: { video: string } | { imagem: string } | { audio: string } | { ativo: string } | { arquivo: string };
 }
 
 /** O que o agente precisa para baixar um arquivo: o nome (a regra de todo download), o tipo e o endereço. */
@@ -49,15 +49,16 @@ export function paraBaixar(nome: string, mime: string, src: string, url: URL): P
   return { arquivo: downloadName(nome, mime), mime, baixar: `${url.origin}${src}?baixar` };
 }
 
-/** Um vídeo ou imagem gerado (pronto, com arquivo). */
+/** Um vídeo, imagem ou áudio gerado (pronto, com arquivo). */
 export function itemGerado(v: Video, url: URL, avatar: Ref | null): Item {
   const structure = structureById(v.structure);
   const imagem = !!structure && makesImage(structure);
+  const tipo = structure ? outputKind(structure) : "video";
   const src = `/videos/${v.id}.${v.video_key!.split(".").pop()}`;
   return {
     id: v.id,
     ...(v.name ? { nome: v.name } : {}),
-    tipo: imagem ? "imagem" : "video",
+    tipo,
     fonte: "gerado",
     modelo: { id: v.structure ?? "", nome: structure?.name ?? v.structure ?? "" },
     ...(avatar ? { avatar } : {}),
@@ -67,7 +68,7 @@ export function itemGerado(v: Video, url: URL, avatar: Ref | null): Item {
     criado: v.created_at,
     src,
     ...paraBaixar(videoFileName(v), mimeOf(v.video_key!), src, url),
-    usar: imagem ? { imagem: v.id } : { video: v.id },
+    usar: tipo === "imagem" ? { imagem: v.id } : tipo === "audio" ? { audio: v.id } : { video: v.id },
   };
 }
 
@@ -140,7 +141,7 @@ export async function listar(db: Db, user: User, f: Filtro, url: URL): Promise<{
   const pagina: Filtro = { ...f, limite: f.limite + 1 };
   const quer = (fonte: Fonte) => !f.fonte || f.fonte === fonte;
   // O modelo só gera; o projeto só tem os enviados a ele; o avatar tem os ativos e os gerados com ele.
-  const structures = STRUCTURES.filter((s) => canUse(s, user) && (!f.modelo || s.id === f.modelo) && (!f.tipo || f.tipo === (makesImage(s) ? "imagem" : "video"))).map((s) => s.id);
+  const structures = STRUCTURES.filter((s) => canUse(s, user) && (!f.modelo || s.id === f.modelo) && (!f.tipo || f.tipo === outputKind(s))).map((s) => s.id);
   const [gerados, ativos, enviados, avatares] = await Promise.all([
     quer("gerado") && !f.projeto ? conta.readyVideos(structures, pagina) : [],
     quer("avatar") && !f.modelo && !f.projeto ? conta.assetsPage({ ...pagina, kind: f.tipo }) : [],
