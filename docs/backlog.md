@@ -34,6 +34,9 @@ Já feito (tudo no ar e conferido em 02/11/2026, ver [api.md](api.md)):
 - Rascunho no lugar de um vídeo que ainda não existe e `trocar` pelo vídeo pronto (PR 52), com a
   fala editável nos Ajustes do canvas.
 
+Feito em 08/11/2026 (falta publicar): o agente **gera vídeo** com o HeyGen Avatar (`gerar_video`,
+`acompanhar_video` e `listar_vozes`, ver [api.md](api.md)).
+
 **Rosto das miniaturas no navegador** (próximo PR, combinado em 08/11/2026): o servidor parou de
 procurar rosto para as miniaturas (o AudioFixer ligava por cada imagem e vídeo novo); elas usam o
 terço de cima. Falta achar o rosto no navegador de quem vê, com o MediaPipe (biblioteca aprovada

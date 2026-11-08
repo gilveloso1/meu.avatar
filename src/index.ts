@@ -161,7 +161,7 @@ export async function handle(request: Request, env: Env, deps: Deps = {}): Promi
 export function vigiaConteineres(env: Env, doFetch: typeof fetch = fetch) {
   const db = new Db(env.DB);
   const parar = (ns: DurableObjectNamespace<AudioFixer | Exporter | Renderer> | undefined, nome: string) => (limiteMs: number) =>
-    ns ? ns.getByName(nome).pararSeOcioso(limiteMs) : Promise.resolve("parado" as const);
+    ns ? ns.getByName(nome).pararSeOcioso(limiteMs) : Promise.resolve("desligado" as const);
   const vigiados: Vigiado[] = [
     { classe: "AudioFixer", trabalhoNoBanco: () => db.audioWorking(), pararSeOcioso: parar(env.AUDIO, "audio") },
     { classe: "Exporter", trabalhoNoBanco: () => db.exportWorking(), pararSeOcioso: parar(env.EXPORTAR, "exportar") },

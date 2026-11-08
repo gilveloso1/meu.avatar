@@ -31,7 +31,7 @@ import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, R
 import { canUse, type Defaults, estimate, familyOf, type Field, fixedCost, makesImage, type Option, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { temSom } from "../som";
-import { type Alarme, CHAVE as ALARME, LIMITE_MS } from "../vigia";
+import { type Alarme, avisoNovo, CHAVE as ALARME, dispensar, LIMITE_MS } from "../vigia";
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_ANIMACAO, CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { MAX_VERSOES } from "../canvas/modelo.js";
@@ -182,6 +182,12 @@ export class Site {
     // Contas: convidar, link de senha, suspender, reativar e os ajustes de permissão.
     const account = /^\/painel\/contas(?:\/(\d+)\/(link|suspender|reativar|testador|canvas))?$/.exec(path);
     if (post && account) return pode(user, "ver:painel") && pode(user, "gerenciar:contas") ? this.accountAction(request, user, url, account[1], account[2]) : new Response("não encontrado", { status: 404 });
+    // "Dispensar", no banner do alarme de contêiner (página Modelos).
+    if (post && path === "/alarme/dispensar") {
+      if (!pode(user, "ver:painel")) return new Response("não encontrado", { status: 404 });
+      await dispensar(this.db);
+      return redirect("/");
+    }
     // Endereços da versão anterior.
     if (!post && path === "/novo") return redirect("/");
     const old = /^\/novo\/([a-z0-9-]+)$/.exec(path);
@@ -659,10 +665,20 @@ ${error ? snackbar(error) : ""}`;
     });
     // Só o administrador vê o alarme de contêiner ligado sem trabalho (src/vigia.ts).
     const alarm = pode(user, "ver:painel") && !this.config.local ? await this.db.alarm<Alarme>(ALARME) : null;
-    const banners = [...(alarm?.ligados.length ? [ERROS.servicoLigado] : []), ...(alarm?.semPainel ? [ERROS.alarmeSemPainel] : [])];
+    // A parada já foi feita: o aviso tem "Dispensar" e só volta com uma parada nova. Sem painel, segue até ele voltar.
+    const banners = [
+      ...(avisoNovo(alarm) ? [{ text: ERROS.servicoLigado, dismiss: true }] : []),
+      ...(alarm?.semPainel ? [{ text: ERROS.alarmeSemPainel, dismiss: false }] : []),
+    ];
     const body = `
 <main class="page" id="conteudo">
-  ${banners.map((b) => `<p class="banner" role="status"><span class="icon">error</span>${esc(b)}</p>`).join("")}
+  ${banners
+    .map((b) =>
+      b.dismiss
+        ? `<form class="banner" role="status" method="post" action="/alarme/dispensar"><span class="icon">error</span><span>${esc(b.text)}</span><button class="button button--text interactive banner__action" type="submit">Dispensar</button></form>`
+        : `<p class="banner" role="status"><span class="icon">error</span>${esc(b.text)}</p>`,
+    )
+    .join("")}
   ${pageHead("Modelos", cards.length, "Escolha um modelo para criar imagens ou vídeos.")}
   ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : emptyState("search", "Nenhum modelo encontrado", `Nada com “${q}” no nome.`)}
 </main>`;

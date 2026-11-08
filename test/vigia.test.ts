@@ -10,7 +10,7 @@ import { ERROS } from "../src/erros";
 import { type Alarme, CHAVE, LIMITE_MS, ligadoDesde, Painel, type Vigiado, vigiar } from "../src/vigia";
 import { vigiaConteineres } from "../src/index";
 import type { Env } from "../src/env";
-import { call, cookie, dono, SITE } from "./helpers";
+import { call, cookie, dono, memberCookie, postForm, SITE } from "./helpers";
 
 const APPS = [
   { id: "app-audio", name: "meu-avatar-audiofixer" },
@@ -41,8 +41,8 @@ function vigiados(nome: string): Vigiado[] {
   const stub = env.TESTE_CONTEINER.getByName(nome);
   return [
     { classe: "AudioFixer", trabalhoNoBanco: () => db.audioWorking(), pararSeOcioso: (ms) => stub.pararSeOcioso(ms) },
-    { classe: "Exporter", trabalhoNoBanco: () => db.exportWorking(), pararSeOcioso: async () => "parado" },
-    { classe: "Renderer", trabalhoNoBanco: async () => false, pararSeOcioso: async () => "parado" },
+    { classe: "Exporter", trabalhoNoBanco: () => db.exportWorking(), pararSeOcioso: async () => "desligado" },
+    { classe: "Renderer", trabalhoNoBanco: async () => false, pararSeOcioso: async () => "desligado" },
   ];
 }
 
@@ -84,6 +84,45 @@ describe("alarme de contêiner ligado sem trabalho", () => {
     expect((await vigiar(painel({}, AGORA.getTime() + 13 * MIN), vigiados("ocioso"), new Db(env.DB), new Date(AGORA.getTime() + 15 * MIN)))?.ligados).toHaveLength(1);
     expect(await vigiar(painel({}, AGORA.getTime() + 26 * 60 * MIN - 2 * MIN), vigiados("ocioso"), new Db(env.DB), new Date(AGORA.getTime() + 26 * 60 * MIN))).toEqual({ ligados: [] });
     expect(await guardado()).toBeNull();
+  });
+
+  it("Dispensar tira o banner até a próxima parada; o registro fica para o painel", async () => {
+    await vigiar(painel({ "app-audio": ligado(45) }), vigiados("dispensar"), new Db(env.DB), AGORA);
+    const admin = await cookie();
+    const home = async () => (await (await call(new Request(`${SITE}/`, { headers: { cookie: admin } }))).text());
+    expect(await home()).toContain('action="/alarme/dispensar"');
+
+    // Quem não é administrador nem chega à ação.
+    const outro = await memberCookie();
+    expect((await call(postForm("/alarme/dispensar", {}, { cookie: outro }))).status).toBe(404);
+    expect((await guardado())?.dispensado).toBeUndefined();
+
+    const res = await call(postForm("/alarme/dispensar", {}, { cookie: admin }));
+    expect(res.status).toBe(303);
+    expect(await home()).not.toContain(ERROS.servicoLigado);
+    expect((await guardado())?.ligados).toHaveLength(1);
+
+    // A rodada seguinte, sem parada nova, não traz o banner de volta.
+    await vigiar(painel({}, AGORA.getTime() + 13 * MIN), vigiados("dispensar"), new Db(env.DB), new Date(AGORA.getTime() + 15 * MIN));
+    expect(await home()).not.toContain(ERROS.servicoLigado);
+  });
+
+  it("o painel atrasado mostra ligado, mas o contêiner já dormiu sozinho: nenhum aviso", async () => {
+    // Como em 06 e 07/11/2026: 35 min de busca de rosto, um pedido por minuto, e o contêiner dormiu.
+    const nome = "dormiu";
+    await runInDurableObject(env.TESTE_CONTEINER.getByName(nome), (_, state) => void ((state.container as unknown as { running: boolean }).running = false));
+    expect(await vigiar(painel({ "app-audio": ligado(38, 8) }), vigiados(nome), new Db(env.DB), AGORA)).toEqual({ ligados: [] });
+    expect(await guardado()).toBeNull();
+    expect(await destruido(nome)).toBe(false);
+  });
+
+  it("a hora do último pedido sobrevive ao despejo do Durable Object", async () => {
+    const nome = "despejado";
+    await env.TESTE_CONTEINER.getByName(nome).configurar(60 * MIN, "1h", 10_000, true);
+    // Despejado, o objeto volta com a memória zerada; a hora fica no armazenamento.
+    await runInDurableObject(env.TESTE_CONTEINER.getByName(nome), (obj) => void Object.assign(obj, { lastRequestAt: 0, inflightRequests: 0 }));
+    expect(await env.TESTE_CONTEINER.getByName(nome).pararSeOcioso(LIMITE_MS)).toBe("trabalhando");
+    expect(await destruido(nome)).toBe(false);
   });
 
   it("ligado há menos que o limite, ou desligado há tempo: nenhum aviso", async () => {
