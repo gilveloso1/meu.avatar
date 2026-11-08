@@ -7,7 +7,7 @@ import { baseGaps, finalRate, groups, links, members, output, PX, upgrade, versi
 import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, trechos } from "./legenda";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
-import { downloadName, videoFileName } from "./arquivos";
+import { filtro, itemAtivo, itemProjeto, listar } from "./acervo";
 import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
@@ -32,7 +32,6 @@ const MAX_QUADROS = 12;
  */
 const conflito = (project: Project) => falha(409, "conflito", { ...resumo(JSON.parse(project.data) as CanvasProject), revisao: project.revision });
 
-const PAGINA_VIDEOS = 20;
 const PAGINA_ANIMACOES = 20;
 const MAX_PAGINA_ANIMACOES = 100;
 
@@ -47,24 +46,9 @@ function textoNaTela(html: string): string {
     .trim();
   return t.length > 160 ? `${t.slice(0, 159)}…` : t;
 }
-const MAX_PAGINA_VIDEOS = 100;
-
-/** "2026-11-02" ou uma data ISO, no fuso UTC; um dia só vale inteiro no ate. Null se não é data. */
-function data(v: string, ate: boolean): string | null {
-  const dia = /^\d{4}-\d{2}-\d{2}$/.test(v);
-  const t = Date.parse(dia ? `${v}T00:00:00Z` : v);
-  if (!Number.isFinite(t)) return null;
-  return new Date(dia && ate ? t + 86_400_000 : t).toISOString();
-}
 
 const KINDS: Record<AssetKind, Fonte["kind"]> = { imagem: "image", video: "video", audio: "audio" };
 const assetSrc = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
-
-/**
- * O que o agente precisa para baixar um arquivo: o nome com que ele chega (o mesmo do "Baixar" da
- * tela, src/arquivos.ts), o tipo e o endereço completo, que abre com o mesmo token.
- */
-const arquivo = (nome: string, mime: string, src: string, url: URL) => ({ arquivo: downloadName(nome, mime), mime, baixar: `${url.origin}${src}?baixar` });
 
 const falha = (status: number, erro: string, extra: Record<string, unknown> = {}) => Response.json({ erro, ...extra }, { status });
 
@@ -246,7 +230,7 @@ export class Api {
 
   async handle(request: Request, user: User, path: string, url: URL): Promise<Response> {
     const post = request.method === "POST";
-    if (path === "/api/v1/videos" && !post) return this.videos(user, url);
+    if (path === "/api/v1/arquivos" && !post) return this.files(user, url);
     if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
     if (path === "/api/v1/animacoes" && !post) return this.animations(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
@@ -264,46 +248,12 @@ export class Api {
   }
 
   /**
-   * Os vídeos prontos, do mais novo ao mais antigo, uma página por vez (o histórico inteiro custava
-   * 17 mil caracteres ao agente). desde e ate filtram pela data; continuar traz a página seguinte.
+   * O acervo da conta (src/acervo.ts): vídeos, imagens e áudios gerados, dos avatares e dos
+   * projetos, uma página por vez, com os filtros de tipo, fonte, modelo, avatar, projeto e data.
    */
-  private async videos(user: User, url: URL): Promise<Response> {
-    const p = url.searchParams;
-    const limite = p.has("limite") ? Number(p.get("limite")) : PAGINA_VIDEOS;
-    if (!Number.isInteger(limite) || limite < 1 || limite > MAX_PAGINA_VIDEOS) return falha(400, "limite_invalido");
-    const desde = p.get("desde") ? data(p.get("desde")!, false) : undefined;
-    const ate = p.get("ate") ? data(p.get("ate")!, true) : undefined;
-    if (desde === null || ate === null) return falha(400, "data_invalida");
-    const [criado, id] = (p.get("continuar") ?? "").split("|");
-    if (p.get("continuar") && (!criado || !id)) return falha(400, "continuar_invalido");
-    // Só vídeos: as imagens do modelo de imagem não entram num projeto.
-    const usable = STRUCTURES.filter((s) => canUse(s, user) && !makesImage(s)).map((s) => s.id);
-    // Um a mais que o pedido diz se há outra página.
-    const videos = await this.db.conta(user.id).readyVideos(usable, { q: (p.get("q") ?? "").trim(), desde, ate, depois: criado && id ? { criado, id } : undefined, limite: limite + 1 });
-    const pagina = videos.slice(0, limite);
-    const ultimo = pagina[pagina.length - 1];
-    // De onde é cada vídeo: o modelo que o gerou e o avatar usado (quando houve).
-    const avatares = new Map((await this.db.avatarsByUser(user.id)).map((a) => [a.id, a.name]));
-    return Response.json({
-      videos: pagina.map((v) => {
-        const structure = structureById(v.structure);
-        const avatar = v.avatar_id && avatares.get(v.avatar_id);
-        return {
-          id: v.id,
-          ...(v.name ? { nome: v.name } : {}),
-          fala: v.prompt,
-          modelo: { id: v.structure, nome: structure?.name ?? v.structure },
-          ...(avatar ? { avatar: { id: v.avatar_id, nome: avatar } } : {}),
-          duracao: v.duration,
-          resolucao: v.resolution,
-          formato: v.aspect_ratio,
-          criado: v.created_at,
-          src: `/videos/${v.id}.mp4`,
-          ...arquivo(videoFileName(v), "video/mp4", `/videos/${v.id}.mp4`, url),
-        };
-      }),
-      ...(videos.length > limite && ultimo ? { continuar: `${ultimo.created_at}|${ultimo.id}` } : {}),
-    });
+  private async files(user: User, url: URL): Promise<Response> {
+    const f = filtro(url.searchParams, user);
+    return "erro" in f ? falha(400, f.erro) : Response.json(await listar(this.db, user, f, url));
   }
 
   /** Os avatares da pessoa com os ativos, para entrar num projeto como os vídeos. */
@@ -346,7 +296,7 @@ export class Api {
         descricao: a.description,
         ativos: assets
           .filter((x) => x.avatar_id === a.id)
-          .map((x) => ({ id: x.id, nome: x.name, tipo: x.kind, origem: x.source_video ? "gerado" : "enviado", foto: x.id === a.photo_asset, voz: x.id === a.voice_asset, src: assetSrc(x), tamanho: x.size, ...arquivo(x.name, x.type, assetSrc(x), url) })),
+          .map((x) => ({ ...itemAtivo(x, a.name, url), origem: x.source_video ? "gerado" : "enviado", foto: x.id === a.photo_asset, voz: x.id === a.voice_asset })),
       })),
     });
   }
@@ -369,7 +319,7 @@ export class Api {
    */
   private async view(project: Project, incluir: string[] = [], url?: URL) {
     const data = JSON.parse(project.data) as CanvasProject;
-    const files = incluir.includes("arquivos") ? await this.db.projectFiles(project.id) : null;
+    const arquivos = incluir.includes("arquivos") && url ? (await this.db.projectFiles(project.id)).map((f) => itemProjeto(f, project.name, url)) : null;
     return {
       id: project.id,
       nome: project.name,
@@ -378,14 +328,7 @@ export class Api {
       ...resumo(data),
       // As notas que a pessoa colou ou escreveu no canvas (briefing, roteiro, referências): fora dos vídeos.
       ...(data.notes?.length ? { notas: data.notes.map((n) => ({ id: n.id, texto: n.text })) } : {}),
-      ...(files
-        ? {
-            arquivos: files.map((f) => {
-              const src = `/projetos/${project.id}/arquivos/${f.id}`;
-              return { id: f.id, nome: f.name, tipo: f.type, src, tamanho: f.size, ...(url ? arquivo(f.name, f.type, src, url) : {}) };
-            }),
-          }
-        : {}),
+      ...(arquivos ? { arquivos } : {}),
       ...(incluir.includes("codigo") ? { codigo: data.blocks.filter((b) => b.code).map((b) => ({ bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), html: b.code!.html, ...(b.code!.params ? { parametros: b.code!.params } : {}), ...(b.code!.escala ? { escala: b.code!.escala } : {}), ...(b.code!.fixa ? { esticar: false } : {}) })) } : {}),
       ...(incluir.includes("canvas") ? { canvas: data } : {}),
     };

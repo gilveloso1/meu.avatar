@@ -76,7 +76,7 @@ describe("acesso à API", () => {
     await memberCookie();
     const code = await token("membro@exemplo.com", "ma_membro");
     expect((await api("/api/v1/projetos", code)).status).toBe(404);
-    expect((await api("/api/v1/videos", code)).status).toBe(404);
+    expect((await api("/api/v1/arquivos", code)).status).toBe(404);
   });
 
   it("projeto de outra pessoa: 404 ao ler, editar e exportar", async () => {
@@ -103,15 +103,15 @@ describe("acesso à API", () => {
 describe("leitura", () => {
   it("lista só os vídeos prontos que a conta pode usar", async () => {
     await video("22222222-2222-4222-8222-222222222222", "wan", "pending");
-    const { videos } = await (await api("/api/v1/videos", admin)).json<{ videos: { id: string; src: string }[] }>();
-    expect(videos.map((v) => v.id).sort()).toEqual([VIDEO, VIDEO2]);
-    expect(videos[0]!.src).toMatch(/^\/videos\/.+\.mp4$/);
+    const { arquivos } = await (await api("/api/v1/arquivos?tipo=video", admin)).json<{ arquivos: { id: string; src: string }[] }>();
+    expect(arquivos.map((v) => v.id).sort()).toEqual([VIDEO, VIDEO2]);
+    expect(arquivos[0]!.src).toMatch(/^\/videos\/.+\.mp4$/);
   });
 });
 
-describe("listar vídeos", () => {
-  type Lista = { videos: { id: string; criado: string }[]; continuar?: string };
-  const lista = async (q = "") => (await api(`/api/v1/videos${q}`, admin)).json<Lista>();
+describe("listar arquivos: a página", () => {
+  type Lista = { arquivos: { id: string; criado: string }[]; continuar?: string };
+  const lista = async (q = "") => (await api(`/api/v1/arquivos${q}`, admin)).json<Lista>();
   /** Cinco vídeos prontos, um por dia, de 1 a 5 de outubro (os do beforeEach são de hoje). */
   async function porDia() {
     for (let d = 1; d <= 5; d++) {
@@ -127,7 +127,7 @@ describe("listar vídeos", () => {
     const vistos: string[] = [];
     let r = await lista("?limite=3");
     for (let i = 0; i < 5 && r; i++) {
-      vistos.push(...r.videos.map((v) => v.id));
+      vistos.push(...r.arquivos.map((v) => v.id));
       r = r.continuar ? await lista(`?limite=3&continuar=${encodeURIComponent(r.continuar)}`) : (null as unknown as Lista);
     }
     expect(vistos.slice(2)).toEqual(["dia-5", "dia-4", "dia-3", "dia-2", "dia-1"]);
@@ -137,13 +137,13 @@ describe("listar vídeos", () => {
 
   it("desde e ate pela data, com o dia do ate inteiro", async () => {
     await porDia();
-    expect((await lista("?desde=2026-10-02&ate=2026-10-04")).videos.map((v) => v.id)).toEqual(["dia-4", "dia-3", "dia-2"]);
-    expect((await lista("?ate=2026-10-01")).videos.map((v) => v.id)).toEqual(["dia-1"]);
+    expect((await lista("?desde=2026-10-02&ate=2026-10-04")).arquivos.map((v) => v.id)).toEqual(["dia-4", "dia-3", "dia-2"]);
+    expect((await lista("?ate=2026-10-01")).arquivos.map((v) => v.id)).toEqual(["dia-1"]);
   });
 
   it("recusa limite, data e continuar errados", async () => {
-    for (const [q, erro] of [["?limite=0", "limite_invalido"], ["?limite=101", "limite_invalido"], ["?desde=ontem", "data_invalida"], ["?continuar=x", "continuar_invalido"]]) {
-      const res = await api(`/api/v1/videos${q}`, admin);
+    for (const [q, erro] of [["?limite=0", "limite_invalido"], ["?limite=101", "limite_invalido"], ["?desde=ontem", "data_invalida"], ["?continuar=x", "continuar_invalido"], ["?tipo=pdf", "tipo_invalido"], ["?fonte=web", "fonte_invalida"], ["?modelo=nao-existe", "modelo_invalido"]]) {
+      const res = await api(`/api/v1/arquivos${q}`, admin);
       expect([res.status, await res.json()]).toEqual([400, { erro }]);
     }
   });
@@ -1433,10 +1433,10 @@ describe("vídeo de outra conta", () => {
     await env.MIDIA.put(`videos/${ALHEIO}.mp4`, new Uint8Array([1, 2, 3]));
   }
 
-  it("não aparece no listar_videos, nem na busca", async () => {
+  it("não aparece no listar_arquivos, nem na busca", async () => {
     await alheio();
     for (const q of ["", "?q=produto"]) {
-      const ids = (await (await api(`/api/v1/videos${q}`, admin)).json<{ videos: { id: string }[] }>()).videos.map((v) => v.id);
+      const ids = (await (await api(`/api/v1/arquivos${q}`, admin)).json<{ arquivos: { id: string }[] }>()).arquivos.map((v) => v.id);
       expect(ids).toContain(VIDEO);
       expect(ids).not.toContain(ALHEIO);
     }

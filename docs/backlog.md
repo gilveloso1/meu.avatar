@@ -291,7 +291,7 @@ e não tela por tela. Tudo o que existe hoje é do administrador (no ar, nenhum 
   (`test/dono.test.ts` confere). O site lê os vídeos por ela: listas, contagem, página,
   arquivos, rosto, edição rápida, Refazer, Salvar no avatar e "Adicionar ativo". O administrador
   abre o vídeo de outra conta só para ver (o painel leva às falhas), sem agir nele. Canvas, API,
-  MCP e exportação também: a lista do canvas, o `listar_videos`, os vídeos e imagens que entram
+  MCP e exportação também: a lista do canvas, o `listar_arquivos`, os vídeos e imagens que entram
   num projeto, quadros, silêncios, transcrição, o rosto e a exportação são só da conta dona do
   projeto. O Canvas já pode abrir para os membros (falta o limite de uso, acima).
   No banco (`migrations/0018_dono.sql`): gatilhos recusam vídeo sem dono e ativo de avatar ligado a

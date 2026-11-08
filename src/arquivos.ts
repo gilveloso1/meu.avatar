@@ -29,6 +29,12 @@ export function mediaType(type: string): { kind: AssetKind; ext: string } | null
   return MEDIA_TYPES[type.split(";")[0]!.trim().toLowerCase()] ?? null;
 }
 
+/** O tipo (mime) de uma chave do R2 pela extensão dela, como "imagens/<id>.png". */
+export function mimeOf(key: string): string {
+  const ext = key.split(".").pop()?.toLowerCase();
+  return Object.keys(MEDIA_TYPES).find((t) => MEDIA_TYPES[t]!.ext === ext) ?? (ext === "jpeg" ? "image/jpeg" : "application/octet-stream");
+}
+
 const EXTENSOES = new Set([...Object.values(MEDIA_TYPES).map((t) => t.ext), "jpeg"]);
 // Os caracteres que algum sistema não aceita em nome de arquivo (Windows, macOS, Linux).
 const PROIBIDOS = /[\u0000-\u001f\u007f"*/:<>?\\|]+/g;

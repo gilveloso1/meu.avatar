@@ -973,6 +973,30 @@ export class Db {
 }
 
 /** O trecho `%q%` do LIKE, com os curingas do texto escapados (ESCAPE '\\'). */
+/**
+ * Uma página de uma lista do agente: busca, datas e onde a página anterior parou (criado e id do
+ * último). Toda lista ordena do mais novo ao mais antigo e para no mesmo ponto.
+ */
+export interface Pagina {
+  q?: string;
+  desde?: string;
+  ate?: string;
+  depois?: { criado: string; id: string };
+  limite: number;
+}
+
+/** As condições de data e de continuação de uma `Pagina`, para a coluna `created_at` e o `id` da tabela. */
+function pagina(f: Pagina, bind: (v: string | number) => string, t = ""): string[] {
+  const where: string[] = [];
+  if (f.desde) where.push(`${t}created_at >= ${bind(f.desde)}`);
+  if (f.ate) where.push(`${t}created_at < ${bind(f.ate)}`);
+  if (f.depois) {
+    const criado = bind(f.depois.criado);
+    where.push(`(${t}created_at < ${criado} OR (${t}created_at = ${criado} AND ${t}id < ${bind(f.depois.id)}))`);
+  }
+  return where;
+}
+
 function like(q: string): string {
   return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
@@ -1026,21 +1050,47 @@ export class ContaDb {
   }
 
   /**
-   * Os vídeos prontos (com arquivo) das estruturas, do mais novo ao mais antigo, uma página por vez.
-   * `depois` é o último da página anterior (criado e id): a página seguinte começa logo depois dele.
+   * Os vídeos (e imagens) prontos, com arquivo, das estruturas, do mais novo ao mais antigo, uma
+   * página por vez; com `avatar`, só os gerados com ele. Os filtros de página são os de toda lista
+   * do agente (`Pagina`).
    */
-  async readyVideos(structures: string[], f: { q?: string; desde?: string; ate?: string; depois?: { criado: string; id: string }; limite: number }): Promise<Video[]> {
+  async readyVideos(structures: string[], f: Pagina & { avatar?: string }): Promise<Video[]> {
     if (!structures.length) return [];
     const binds: (string | number)[] = [this.userId, like(f.q ?? "")];
     const bind = (v: string | number) => `?${binds.push(v)}`;
     const where = [`structure IN (${structures.map(bind).join(", ")})`, "status = 'completed'", "video_key IS NOT NULL", "(prompt LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\')"];
-    if (f.desde) where.push(`created_at >= ${bind(f.desde)}`);
-    if (f.ate) where.push(`created_at < ${bind(f.ate)}`);
-    if (f.depois) {
-      const criado = bind(f.depois.criado);
-      where.push(`(created_at < ${criado} OR (created_at = ${criado} AND id < ${bind(f.depois.id)}))`);
-    }
-    return (await this.d1.prepare(`SELECT * FROM videos WHERE user_id = ?1 AND ${where.join(" AND ")} ORDER BY created_at DESC, id DESC LIMIT ${bind(f.limite)}`).bind(...binds).all<Video>()).results;
+    if (f.avatar) where.push(`avatar_id = ${bind(f.avatar)}`);
+    return (await this.d1.prepare(`SELECT * FROM videos WHERE user_id = ?1 AND ${[...where, ...pagina(f, bind)].join(" AND ")} ORDER BY created_at DESC, id DESC LIMIT ${bind(f.limite)}`).bind(...binds).all<Video>()).results;
+  }
+
+  /** Os ativos dos avatares da conta, com o nome do avatar, uma página por vez (como `readyVideos`). */
+  async assetsPage(f: Pagina & { kind?: AssetKind; avatar?: string }): Promise<(AvatarAsset & { avatar_name: string })[]> {
+    const binds: (string | number)[] = [this.userId, like(f.q ?? "")];
+    const bind = (v: string | number) => `?${binds.push(v)}`;
+    const where = ["x.name LIKE ?2 ESCAPE '\\'"];
+    if (f.kind) where.push(`x.kind = ${bind(f.kind)}`);
+    if (f.avatar) where.push(`x.avatar_id = ${bind(f.avatar)}`);
+    return (
+      await this.d1
+        .prepare(`SELECT x.*, a.name AS avatar_name FROM avatar_assets x JOIN avatars a ON a.id = x.avatar_id WHERE a.user_id = ?1 AND ${[...where, ...pagina(f, bind, "x.")].join(" AND ")} ORDER BY x.created_at DESC, x.id DESC LIMIT ${bind(f.limite)}`)
+        .bind(...binds)
+        .all<AvatarAsset & { avatar_name: string }>()
+    ).results;
+  }
+
+  /** Os arquivos enviados aos projetos da conta (ou a um deles), com o nome do projeto, uma página por vez. */
+  async projectFilesPage(f: Pagina & { types?: string[]; project?: string }): Promise<(ProjectFile & { project_name: string })[]> {
+    const binds: (string | number)[] = [this.userId, like(f.q ?? "")];
+    const bind = (v: string | number) => `?${binds.push(v)}`;
+    const where = ["f.name LIKE ?2 ESCAPE '\\'"];
+    if (f.types) where.push(f.types.length ? `f.type IN (${f.types.map(bind).join(", ")})` : "0");
+    if (f.project) where.push(`f.project_id = ${bind(f.project)}`);
+    return (
+      await this.d1
+        .prepare(`SELECT f.*, p.name AS project_name FROM project_files f JOIN projects p ON p.id = f.project_id WHERE p.user_id = ?1 AND ${[...where, ...pagina(f, bind, "f.")].join(" AND ")} ORDER BY f.created_at DESC, f.id DESC LIMIT ${bind(f.limite)}`)
+        .bind(...binds)
+        .all<ProjectFile & { project_name: string }>()
+    ).results;
   }
 
   /** O avatar de cada vídeo da conta (os que têm), para saber que avatar um projeto usa. */

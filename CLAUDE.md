@@ -182,7 +182,7 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   o ícone e o texto; no celular, 16 px abaixo da barra do player); o status e o
   conteúdo na mesma margem de 24 px;
   em Informações, o campo Nome (salva ao sair dele, sem recarregar; vazio, as listas e o
-  `listar_videos` mostram a fala), Texto (com Copiar), os textos livres (Movimento, Instruções
+  `listar_arquivos` mostram a fala), Texto (com Copiar), os textos livres (Movimento, Instruções
   extras) em bloco próprio e Detalhes no card de linhas (ícone, rótulo, valor);
   abaixo de "Salvar no avatar", "Usar para gerar" (só quando a página foi aberta de um modelo,
   `?de=/modelo/<id>`, que aceita o tipo; volta a ele com o arquivo no painel, `?usar=gerado:<id>`);
@@ -282,6 +282,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 - Arquivo enviado (ativos, projetos, MCP) só de uma lista fechada de tipos (`MEDIA_TYPES`,
   `src/arquivos.ts`), nunca qualquer `image/*`: SVG e HTML levam script e são servidos pelo endereço
   do site. Todo arquivo do R2 sai pelo `object()`, com `nosniff` e CSP com `sandbox`.
+- O que o agente vê dos arquivos sai de um item só (`src/acervo.ts`): `listar_arquivos`, os ativos do
+  `listar_avatares` e os arquivos do `ver_projeto`. Fonte nova de arquivo é mais uma consulta ali, com o
+  mesmo item e a mesma página (`Pagina`, `src/db.ts`), nunca uma lista à parte.
 - Todo download (vídeo, imagem, ativo, arquivo de projeto, exportação) tem o mesmo nome: o da tela,
   sem mudança, e a extensão do tipo real (`downloadName` e `contentDisposition`, `src/arquivos.ts`).
   Download novo passa por elas; nada de montar nome de arquivo à parte.
@@ -289,7 +292,7 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 ## Modelos: uma estrutura para cada
 
 - Cada modelo de vídeo é uma estrutura em `src/structures/` (hoje `wan.ts`,
-  `heygen.ts`, `grok.ts` (cena sem fala), `imagem.ts` (Nano Banana: imagem, não vídeo, com `output: "image"`; fica na tabela e nas telas dos vídeos, gerada pela API de imagens fora do pedido, num Durable Object com alarme (`src/imagens.ts`), para não ficar presa se o navegador sair da página e fora da aba Vídeos e do `listar_videos`; o agente gera pelo `gerar_imagem` do MCP e põe no canvas com `adicionar {imagem}`), `seedance.ts` e `aleph.ts`; os dois últimos com o campo Uso, hoje só a troca de avatar): campos do formulário, prompt de sistema, montagem do pedido,
+  `heygen.ts`, `grok.ts` (cena sem fala), `imagem.ts` (Nano Banana: imagem, não vídeo, com `output: "image"`; fica na tabela e nas telas dos vídeos, gerada pela API de imagens fora do pedido, num Durable Object com alarme (`src/imagens.ts`), para não ficar presa se o navegador sair da página e fora da aba Vídeos; o agente acha as imagens no `listar_arquivos` (`tipo: imagem`), gera pelo `gerar_imagem` do MCP e põe no canvas com `adicionar {imagem}`), `seedance.ts` e `aleph.ts`; os dois últimos com o campo Uso, hoje só a troca de avatar): campos do formulário, prompt de sistema, montagem do pedido,
   regra de custo, se o áudio passa pelo contêiner e se o vídeo pronto tem o
   botão "Edição rápida" (`quickEdit`, `container/editar.py`). A tela inicial tem um card
   por modelo e uma aba com os vídeos de todos (`/videos`). As telas estão em

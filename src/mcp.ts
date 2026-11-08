@@ -9,6 +9,7 @@
  * recebe o protocolo antigo no mesmo endereço, sem cabeçalhos novos.
  */
 import { FONTES } from "./render";
+import { STRUCTURES } from "./structures";
 
 const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -59,14 +60,19 @@ const RENDER = `Regras do HTML: anime só pela linha do tempo tl (GSAP 3, já cr
 const texto = (descricao: string) => ({ type: "string", description: descricao });
 const objeto = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
 const projeto = texto("Id do projeto.");
-const src = texto('Endereço do arquivo: "/videos/<id>.mp4" de listar_videos, o src de um ativo de listar_avatares, um arquivo de ver_projeto (incluir: arquivos) ou o href de uma exportação pronta.');
+const src = texto('Endereço do arquivo: o src de um item de listar_arquivos (vídeo, imagem ou áudio), o src de um ativo de listar_avatares, um arquivo de ver_projeto (incluir: arquivos) ou o href de uma exportação pronta.');
 
 const FERRAMENTAS = [
   {
-    name: "listar_videos",
-    description: "Vídeos prontos que podem entrar num projeto, com a fala, o modelo, o avatar, a duração e a data, do mais novo ao mais antigo, 20 por vez. Filtre pela fala e pela data; continuar traz os próximos. Para baixar: baixar é o endereço (com o mesmo token) e arquivo, o nome com a extensão.",
+    name: "listar_arquivos",
+    description: `Os arquivos da conta, numa lista só, do mais novo ao mais antigo, 20 por vez: os vídeos e imagens que os modelos geraram, os ativos dos avatares (fotos, vídeos e áudios) e os arquivos enviados aos projetos. Cada item diz o tipo, a fonte (gerado, avatar ou projeto), de quem é (modelo, avatar ou projeto), a fala ou a descrição do gerado, usar (o que vai no adicionar para pôr no projeto) e, para baixar, arquivo (o nome com a extensão), mime e baixar (o endereço, com o mesmo token). Filtre por tipo, fonte, modelo, avatar, projeto, busca e data; continuar traz os próximos. Modelos: ${STRUCTURES.map((s) => `${s.id} (${s.name})`).join(", ")}.`,
     inputSchema: objeto({
-      busca: texto("Parte da fala ou do nome."),
+      tipo: texto('"video", "imagem" ou "audio".'),
+      fonte: texto('"gerado" (pelos modelos), "avatar" (os ativos) ou "projeto" (os enviados aos projetos).'),
+      modelo: texto("Id do modelo: só o que ele gerou."),
+      avatar: texto("Id do avatar: os ativos dele e o que foi gerado com ele."),
+      projeto: texto("Id do projeto: só os arquivos enviados a ele."),
+      busca: texto("Parte do nome, da fala ou da descrição."),
       desde: texto('Data, como "2026-11-02" (UTC): só os feitos nesse dia ou depois.'),
       ate: texto('Data, como "2026-11-02" (UTC): só os feitos até o fim desse dia.'),
       limite: { type: "integer", description: "Quantos por vez, de 1 a 100; sem isso, 20." },
@@ -275,8 +281,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
   const p = `/api/v1/projetos/${seguro(a.projeto)}`;
   const site = `/projetos/${seguro(a.projeto)}`;
   switch (nome) {
-    case "listar_videos":
-      return chama("GET", `/api/v1/videos?${new URLSearchParams(Object.entries({ q: a.busca, desde: a.desde, ate: a.ate, limite: a.limite, continuar: a.continuar }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
+    case "listar_arquivos":
+      return chama("GET", `/api/v1/arquivos?${new URLSearchParams(Object.entries({ tipo: a.tipo, fonte: a.fonte, modelo: a.modelo, avatar: a.avatar, projeto: a.projeto, q: a.busca, desde: a.desde, ate: a.ate, limite: a.limite, continuar: a.continuar }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "listar_avatares":
       return chama("GET", `/api/v1/avatares?q=${seguro(a.busca ?? "")}`);
     case "listar_animacoes":

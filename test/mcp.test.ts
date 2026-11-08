@@ -87,8 +87,8 @@ describe("protocolo", () => {
   });
 
   it("cabeçalho que falta ou não bate com o corpo: 400 e -32020", async () => {
-    const m = (headers: Record<string, string>) => post({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "listar_videos", _meta: META } }, "ma_admin", headers);
-    for (const h of [{}, { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/list", "mcp-name": "listar_videos" }, CABECALHOS("tools/call"), CABECALHOS("tools/call", "outro"), { ...CABECALHOS("tools/call", "listar_videos"), "mcp-protocol-version": "2025-11-25" }]) {
+    const m = (headers: Record<string, string>) => post({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "listar_arquivos", _meta: META } }, "ma_admin", headers);
+    for (const h of [{}, { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/list", "mcp-name": "listar_arquivos" }, CABECALHOS("tools/call"), CABECALHOS("tools/call", "outro"), { ...CABECALHOS("tools/call", "listar_arquivos"), "mcp-protocol-version": "2025-11-25" }]) {
       const res = await m(h);
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32020);
@@ -96,7 +96,7 @@ describe("protocolo", () => {
   });
 
   it("Mcp-Name em base64 vale pelo valor decodificado", async () => {
-    const res = await post({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "listar_videos", _meta: META } }, "ma_admin", { ...CABECALHOS("tools/call"), "mcp-name": `=?base64?${btoa("listar_videos")}?=` });
+    const res = await post({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "listar_arquivos", _meta: META } }, "ma_admin", { ...CABECALHOS("tools/call"), "mcp-name": `=?base64?${btoa("listar_arquivos")}?=` });
     expect(res.status).toBe(200);
   });
 
@@ -142,7 +142,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_videos", "listar_avatares", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });
@@ -151,7 +151,7 @@ describe("ferramentas", () => {
   it("monta e exporta um projeto do começo ao fim", async () => {
     await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
     const fake = new FakeExportApi();
-    expect(dados<{ videos: { id: string }[] }>(await ferramenta("listar_videos")).videos[0]!.id).toBe(VIDEO);
+    expect(dados<{ arquivos: { id: string }[] }>(await ferramenta("listar_arquivos")).arquivos[0]!.id).toBe(VIDEO);
     const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Campanha" }));
     const editado = dados<{ mudou: { finais: { variacoes: unknown[] }[] }; criados: string[] }>(await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", video: VIDEO, fim: 4 }] }));
     expect(editado.mudou.finais[0]!.variacoes).toHaveLength(1);
@@ -202,11 +202,12 @@ describe("ferramentas", () => {
     expect(dados(q)).toEqual({ erro: "conteiner_falhou" });
   });
 
-  it("listar_videos passa a busca, a data, o limite e o continuar", async () => {
-    const um = dados<{ videos: { id: string }[]; continuar?: string }>(await ferramenta("listar_videos", { busca: "Oi", desde: "2020-01-01", limite: 1 }));
-    expect(um.videos.map((v) => v.id)).toEqual([VIDEO]);
+  it("listar_arquivos passa os filtros, a busca, a data, o limite e o continuar", async () => {
+    const um = dados<{ arquivos: { id: string }[]; continuar?: string }>(await ferramenta("listar_arquivos", { tipo: "video", fonte: "gerado", modelo: "wan", busca: "Oi", desde: "2020-01-01", limite: 1 }));
+    expect(um.arquivos.map((v) => v.id)).toEqual([VIDEO]);
     expect(um.continuar).toBeUndefined();
-    expect(dados<{ videos: unknown[] }>(await ferramenta("listar_videos", { ate: "2020-01-01" })).videos).toEqual([]);
+    expect(dados<{ arquivos: unknown[] }>(await ferramenta("listar_arquivos", { ate: "2020-01-01" })).arquivos).toEqual([]);
+    expect(dados<{ arquivos: unknown[] }>(await ferramenta("listar_arquivos", { tipo: "audio", fonte: "gerado" })).arquivos).toEqual([]);
   });
 
   it("limpar_arquivos mostra os sem uso e só apaga com apagar: true", async () => {
@@ -314,12 +315,12 @@ describe("gerar_imagem", () => {
 });
 
 describe("vídeo de outra conta", () => {
-  it("o listar_videos do agente não traz", async () => {
+  it("o listar_arquivos do agente não traz", async () => {
     const alheio = "55555555-5555-4555-8555-555555555555";
     await memberCookie();
     const now = new Date().toISOString();
     await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES ((SELECT id FROM users WHERE email = 'membro@exemplo.com'), ?, 'completed', 'Oi, gente', 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?)").bind(alheio, `videos/${alheio}.mp4`, now, now).run();
-    const ids = dados<{ videos: { id: string }[] }>(await ferramenta("listar_videos")).videos.map((v) => v.id);
+    const ids = dados<{ arquivos: { id: string }[] }>(await ferramenta("listar_arquivos")).arquivos.map((v) => v.id);
     expect(ids).toContain(VIDEO);
     expect(ids).not.toContain(alheio);
   });
