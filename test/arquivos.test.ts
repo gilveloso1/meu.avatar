@@ -51,7 +51,7 @@ describe("enviar_arquivo por url", () => {
     expect(src).toContain(`/projetos/${id}/arquivos/`);
     expect(pedidos).toHaveLength(1);
     const { arquivos } = dados<{ arquivos: Record<string, unknown>[] }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["arquivos"] }));
-    expect(arquivos[0]).toMatchObject({ nome: "foto produto.png", tipo: "image/png", arquivo: "foto produto.png", mime: "image/png", tamanho: PNG.byteLength, baixar: `${SITE}${src}?baixar` });
+    expect(arquivos[0]).toMatchObject({ nome: "foto produto.png", tipo: "imagem", fonte: "projeto", arquivo: "foto produto.png", mime: "image/png", tamanho: PNG.byteLength, baixar: `${SITE}${src}?baixar` });
     // O arquivo do projeto baixa com o token, pela mesma regra de nome.
     const baixado = await call(new Request(`${SITE}${src}?baixar`, { headers: { authorization: "Bearer ma_url" } }));
     expect(baixado.headers.get("content-disposition")).toBe(contentDisposition("foto produto.png"));
@@ -94,9 +94,20 @@ describe("baixar com o token do agente", () => {
     const foto = new File([PNG], "principal.png", { type: "image/png" });
     const res = await call(postForm("/avatares", { nome: "Turma ANB", imagem: foto }, { cookie: session }));
     const avatar = res.headers.get("location")!.split("/").pop()!;
-    const asset = (await env.DB.prepare("SELECT id FROM avatar_assets WHERE avatar_id = ?").bind(avatar).first<string>("id"))!;
+    const asset = (await env.DB.prepare("SELECT id FROM avatar_assets WHERE avatar_id = ? AND kind = 'imagem'").bind(avatar).first<string>("id"))!;
     await env.DB.prepare("UPDATE avatar_assets SET name = 'Raposa - Character Sheet' WHERE id = ?").bind(asset).run();
     return { avatar, asset };
+  }
+
+  /** Um vídeo (ou imagem) gerado e pronto, com o arquivo no R2. */
+  async function gerado(o: { structure: string; key: "mp4" | "png"; avatar?: string; nome?: string; prompt?: string; criado?: string }) {
+    const id = crypto.randomUUID(), quando = o.criado ?? new Date().toISOString();
+    const key = o.key === "png" ? `imagens/${id}.png` : `videos/${id}.mp4`;
+    await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, avatar_id, name, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, 'completed', ?, 'm', 10, '480p', '9:16', ?, ?, ?, ?, ?, ?)")
+      .bind(id, o.prompt ?? "Oi, gente", key, o.structure, o.avatar ?? null, o.nome ?? null, quando, quando)
+      .run();
+    await env.MIDIA.put(key, o.key === "png" ? PNG : new Uint8Array([0, 0, 0, 8]), { httpMetadata: { contentType: o.key === "png" ? "image/png" : "video/mp4" } });
+    return id;
   }
 
   it("listar_avatares diz o arquivo, o tipo, o tamanho e o endereço; o endereço baixa com o nome e a extensão", async () => {
@@ -110,14 +121,12 @@ describe("baixar com o token do agente", () => {
     expect(res.headers.get("content-disposition")).toBe(contentDisposition("Raposa - Character Sheet.png"));
   });
 
-  it("listar_videos diz o modelo, o avatar e o arquivo; o vídeo baixa com o token", async () => {
+  it("o vídeo gerado da lista baixa com o token, com o nome e a extensão", async () => {
     await cookie();
     const { avatar } = await avatarComFoto(await cookie());
-    const id = crypto.randomUUID(), now = new Date().toISOString();
-    await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, avatar_id, name, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, 'completed', 'Oi, gente', 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, 'Gancho', ?, ?)").bind(id, `videos/${id}.mp4`, avatar, now, now).run();
-    await env.MIDIA.put(`videos/${id}.mp4`, new Uint8Array([0, 0, 0, 8]), { httpMetadata: { contentType: "video/mp4" } });
-    const { videos } = dados<{ videos: Record<string, unknown>[] }>(await ferramenta("listar_videos", {}));
-    expect(videos[0]).toMatchObject({ id, nome: "Gancho", modelo: { id: "wan" }, avatar: { id: avatar, nome: "Turma ANB" }, arquivo: "Gancho.mp4", mime: "video/mp4", baixar: `${SITE}/videos/${id}.mp4?baixar` });
+    const id = await gerado({ structure: "wan", key: "mp4", avatar, nome: "Gancho" });
+    const { arquivos } = dados<{ arquivos: Record<string, unknown>[] }>(await ferramenta("listar_arquivos", { tipo: "video" }));
+    expect(arquivos[0]).toMatchObject({ id, nome: "Gancho", tipo: "video", fonte: "gerado", modelo: { id: "wan" }, avatar: { id: avatar, nome: "Turma ANB" }, arquivo: "Gancho.mp4", mime: "video/mp4", baixar: `${SITE}/videos/${id}.mp4?baixar`, usar: { video: id } });
     const res = await baixar(`/videos/${id}.mp4?baixar`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toBe(contentDisposition("Gancho.mp4"));
@@ -132,5 +141,80 @@ describe("baixar com o token do agente", () => {
     expect((await baixar(`/avatares/${proprio.avatar}`)).status).toBe(404);
     expect((await baixar("/videos")).status).toBe(404);
     expect((await baixar(`/avatares/${proprio.avatar}/arquivos/${proprio.asset}?baixar`, "ma_errado")).status).toBe(401);
+  });
+});
+
+describe("listar_arquivos: o acervo numa lista só", () => {
+  type Item = { id: string; tipo: string; fonte: string; criado: string; usar: Record<string, string>; [k: string]: unknown };
+  const lista = async (args: Record<string, unknown> = {}) => dados<{ arquivos: Item[]; continuar?: string }>(await ferramenta("listar_arquivos", args));
+
+  /** Um de cada: vídeo e imagem gerados, foto e áudio do avatar, arquivo enviado a um projeto. */
+  async function acervo() {
+    const session = await cookie();
+    const res = await call(postForm("/avatares", { nome: "Turma ANB", imagem: new File([PNG], "raposa.png", { type: "image/png" }), voz: new File(["voz"], "voz.mp3", { type: "audio/mpeg" }) }, { cookie: session }));
+    const avatar = res.headers.get("location")!.split("/").pop()!;
+    const ids = async (kind: string) => (await env.DB.prepare("SELECT id FROM avatar_assets WHERE avatar_id = ? AND kind = ?").bind(avatar, kind).first<string>("id"))!;
+    const ontem = (h: number) => new Date(Date.now() - 86_400_000 + h * 3_600_000).toISOString();
+    const insere = async (structure: string, key: "mp4" | "png", criado: string, prompt: string) => {
+      const id = crypto.randomUUID();
+      const chave = key === "png" ? `imagens/${id}.png` : `videos/${id}.mp4`;
+      await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, avatar_id, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, 'completed', ?, 'm', 8, '1K', '9:16', ?, ?, ?, ?, ?)").bind(id, prompt, chave, structure, structure === "wan" ? avatar : null, criado, criado).run();
+      return id;
+    };
+    const video = await insere("wan", "mp4", ontem(1), "Fala do gancho");
+    const imagem = await insere("nano-banana", "png", ontem(2), "Raposa na cozinha");
+    const { id: projeto } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Campanha" }));
+    const { src } = dados<{ src: string }>(await ferramenta("enviar_arquivo", { projeto, nome: "trilha.mp3", tipo: "audio/mpeg", base64: btoa("mp3") }));
+    return { avatar, foto: await ids("imagem"), audio: await ids("audio"), video, imagem, projeto, enviado: src.split("/").pop()! };
+  }
+
+  it("traz as três fontes juntas, do mais novo ao mais antigo, com o mesmo item", async () => {
+    const a = await acervo();
+    const { arquivos } = await lista();
+    expect(new Set(arquivos.map((x) => x.id))).toEqual(new Set([a.foto, a.audio, a.video, a.imagem, a.enviado]));
+    expect(arquivos.map((x) => x.criado)).toEqual([...arquivos.map((x) => x.criado)].sort().reverse());
+    for (const x of arquivos) expect(Object.keys(x)).toEqual(expect.arrayContaining(["id", "tipo", "fonte", "criado", "src", "arquivo", "mime", "baixar", "usar"]));
+    const por = (id: string) => arquivos.find((x) => x.id === id)!;
+    expect(por(a.imagem)).toMatchObject({ tipo: "imagem", fonte: "gerado", modelo: { id: "nano-banana" }, descricao: "Raposa na cozinha", mime: "image/png", usar: { imagem: a.imagem } });
+    expect(por(a.video)).toMatchObject({ tipo: "video", fonte: "gerado", fala: "Fala do gancho", avatar: { id: a.avatar, nome: "Turma ANB" }, usar: { video: a.video } });
+    expect(por(a.foto)).toMatchObject({ tipo: "imagem", fonte: "avatar", nome: "raposa.png", arquivo: "raposa.png", avatar: { nome: "Turma ANB" }, usar: { ativo: a.foto } });
+    expect(por(a.audio)).toMatchObject({ tipo: "audio", fonte: "avatar", arquivo: "voz.mp3", mime: "audio/mpeg" });
+    expect(por(a.enviado)).toMatchObject({ tipo: "audio", fonte: "projeto", projeto: { id: a.projeto, nome: "Campanha" }, arquivo: "trilha.mp3", usar: { arquivo: a.enviado } });
+  });
+
+  it("filtra por tipo, fonte, modelo, avatar, projeto e busca", async () => {
+    const a = await acervo();
+    const ids = async (args: Record<string, unknown>) => new Set((await lista(args)).arquivos.map((x) => x.id));
+    expect(await ids({ tipo: "imagem" })).toEqual(new Set([a.foto, a.imagem]));
+    expect(await ids({ tipo: "audio" })).toEqual(new Set([a.audio, a.enviado]));
+    expect(await ids({ tipo: "video" })).toEqual(new Set([a.video]));
+    expect(await ids({ fonte: "gerado" })).toEqual(new Set([a.video, a.imagem]));
+    expect(await ids({ fonte: "avatar" })).toEqual(new Set([a.foto, a.audio]));
+    expect(await ids({ fonte: "projeto" })).toEqual(new Set([a.enviado]));
+    expect(await ids({ modelo: "nano-banana" })).toEqual(new Set([a.imagem]));
+    expect(await ids({ avatar: a.avatar })).toEqual(new Set([a.foto, a.audio, a.video]));
+    expect(await ids({ projeto: a.projeto })).toEqual(new Set([a.enviado]));
+    expect(await ids({ busca: "raposa" })).toEqual(new Set([a.foto, a.imagem]));
+    expect(await ids({ tipo: "audio", fonte: "gerado" })).toEqual(new Set());
+  });
+
+  it("a página passa de uma fonte para outra sem repetir nem pular", async () => {
+    await acervo();
+    const vistos: string[] = [];
+    let r = await lista({ limite: 2 });
+    for (let i = 0; i < 5; i++) {
+      vistos.push(...r.arquivos.map((x) => x.id));
+      if (!r.continuar) break;
+      r = await lista({ limite: 2, continuar: r.continuar });
+    }
+    expect(vistos).toHaveLength(5);
+    expect(new Set(vistos).size).toBe(5);
+  });
+
+  it("o de outra conta não aparece", async () => {
+    await acervo();
+    const membro = await memberCookie();
+    await call(postForm("/avatares", { nome: "Dela", imagem: new File([PNG], "dela.png", { type: "image/png" }) }, { cookie: membro }));
+    expect((await lista()).arquivos.some((x) => x.nome === "dela.png")).toBe(false);
   });
 });
