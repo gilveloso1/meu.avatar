@@ -34,12 +34,22 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - **Clientes antigos** (`initialize`, até 2025-11-25) seguem funcionando no mesmo endereço. Por
   padrão, até o SDK v2 ainda conecta assim.
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
-- Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
+- Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `listar_vozes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `inspecionar_animacao` (texto; imagem só com
   `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `gerar_imagem` (devolve
-  a imagem para o agente olhar), `renderizar_html`, `legendar`, `limpar_arquivos`,
-  `exportar` e `acompanhar_exportacao`. Não apagam projeto e não geram vídeo. Só `gerar_imagem`
-  gasta créditos de modelo (uns US$ 0,04 por imagem em 1K).
+  a imagem para o agente olhar), `gerar_video` e `acompanhar_video`, `renderizar_html`, `legendar`, `limpar_arquivos`,
+  `exportar` e `acompanhar_exportacao`. Não apagam projeto. Só `gerar_imagem` (uns US$ 0,04 por
+  imagem em 1K) e `gerar_video` gastam créditos de modelo.
+- **Gerar vídeo** (desde 08/11/2026): `gerar_video` faz o avatar falar com o HeyGen Avatar, o
+  mesmo modelo e a mesma plataforma do site (a config `plataforma.heygen`; no ar, a API direta, a
+  US$ 0,0385 por segundo). Recebe a foto (src de imagem: ativo, arquivo do projeto ou imagem
+  gerada), a fala e a voz de `listar_vozes` (pronta ou clonada, com a voz dos avatares), ou um
+  áudio no lugar das duas (só na API direta); expressividade, movimento, resolução e formato (o do
+  Final, sem isso). Responde na hora com o id, a duração e o custo estimados; o vídeo leva minutos,
+  e `acompanhar_video` diz gerando, pronto (com o src e o `usar` do `adicionar`) ou falhou. As
+  instruções do servidor pedem ao agente que mostre o texto, a voz e o custo à pessoa e só gere
+  com o sim dela. Rotas: `POST /api/v1/projetos/<id>/video`, `GET /api/v1/videos/<id>` e
+  `GET /api/v1/vozes`.
 
 ```bash
 claude mcp add --transport http meu-avatar https://meuavatar.ia.br/mcp --header "Authorization: Bearer ma_..."

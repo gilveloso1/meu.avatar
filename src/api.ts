@@ -11,7 +11,9 @@ import { filtro, itemAtivo, itemProjeto, listar } from "./acervo";
 import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
-import { canUse, InputError, makesImage, STRUCTURES, structureById } from "./structures";
+import { canUse, estimate, InputError, makesImage, STRUCTURES, structureById } from "./structures";
+import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
+import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
 import { NANO_BANANA } from "./structures/imagem";
 import { base64, ForbiddenError, type Studio } from "./studio";
 import { FONTES, MAX_RENDER_SECONDS, RenderError } from "./render";
@@ -234,7 +236,10 @@ export class Api {
     if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
     if (path === "/api/v1/animacoes" && !post) return this.animations(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem))?$/.exec(path);
+    if (path === "/api/v1/vozes" && !post) return this.voices(user, url);
+    const video = /^\/api\/v1\/videos\/([0-9a-f-]{36})$/.exec(path);
+    if (video) return post ? falha(405, "metodo_invalido") : this.followVideo(user, video[1]!);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
@@ -243,6 +248,7 @@ export class Api {
     if (m[2] === "limpar") return post ? this.cleanFiles(request, project) : falha(405, "metodo_invalido");
     if (m[2] === "animacao") return post ? falha(405, "metodo_invalido") : this.inspectCode(project, url);
     if (m[2] === "imagem") return post ? this.generateImage(request, user, project) : falha(405, "metodo_invalido");
+    if (m[2] === "video") return post ? this.generateVideo(request, user, project) : falha(405, "metodo_invalido");
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(","), url));
   }
@@ -377,6 +383,124 @@ export class Api {
   }
 
   /** O WebM no projeto, com os erros do render em códigos para o agente. */
+  /**
+   * As vozes do HeyGen Avatar para o gerar_video: as prontas (o catálogo da HeyGen, com busca,
+   * idioma e gênero, como o menu de vozes do site) e as clonadas da pessoa, com as dos avatares.
+   */
+  private async voices(user: User, url: URL): Promise<Response> {
+    if (!this.studio || !canUse(HEYGEN_AVATAR, user)) return falha(404, "nao_encontrado");
+    const structure = await this.studio.resolve(HEYGEN_AVATAR);
+    const lists = await this.studio.lists(structure, user.id);
+    const q = url.searchParams;
+    const busca = (q.get("q") ?? "").trim().toLowerCase();
+    const idioma = (q.get("idioma") ?? "").trim().toLowerCase();
+    const genero = q.get("genero") === "feminina" ? "female" : q.get("genero") === "masculina" ? "male" : "";
+    const limite = Math.min(100, Math.max(1, Number(q.get("limite")) || 30));
+    // Sem o catálogo, as vozes de reserva, como no formulário do site.
+    const prontas = (lists.voices?.length ? lists.voices : structure.platform === "heygen" ? DIRECT_VOICES : VOICES)
+      .filter((v) => (!busca || v.name.toLowerCase().includes(busca)) && (!idioma || v.language.toLowerCase().includes(idioma)) && (!genero || v.gender === genero));
+    return Response.json({
+      prontas: prontas.slice(0, limite).map((v) => ({ id: v.value, nome: v.name, idioma: v.language, genero: v.gender === "female" ? "feminina" : v.gender === "male" ? "masculina" : null })),
+      total: prontas.length,
+      // Só a API direta da HeyGen clona voz; pelo OpenRouter, a lista fica vazia.
+      clonadas: (lists.clones ?? []).filter((c) => !busca || c.label.toLowerCase().includes(busca)).map((c) => ({ id: c.value, nome: c.label, ...(lists.newClones?.includes(c.value) ? { clonarNoPrimeiroUso: true } : {}) })),
+    });
+  }
+
+  /**
+   * Gera um vídeo com o HeyGen Avatar (gasta créditos), como o formulário do modelo no site: a foto
+   * é qualquer src de imagem que o projeto aceita (a foto de um ativo, um arquivo do projeto, uma
+   * imagem gerada); a fala é o texto lido por uma voz de listar_vozes, ou um áudio (Meu áudio). O
+   * formato padrão é o do Final. O vídeo leva minutos: a resposta traz o id para o acompanhar_video.
+   */
+  private async generateVideo(request: Request, user: User, project: Project): Promise<Response> {
+    if (!this.studio) return falha(503, "criacao_pausada");
+    if (!canUse(HEYGEN_AVATAR, user)) return falha(404, "nao_encontrado");
+    const structure = await this.studio.resolve(HEYGEN_AVATAR);
+    if (!this.studio.canGenerateWith(structure)) return falha(503, "criacao_pausada");
+    const body = await json(request);
+    const texto = (k: string) => (typeof body?.[k] === "string" ? (body[k] as string) : "");
+    const data = JSON.parse(project.data) as CanvasProject;
+    const final = texto("final") ? data.finals.find((f) => f.id === body!.final) : data.finals[0];
+    if (texto("final") && !final) return falha(400, "final_inexistente");
+    if (!texto("foto")) return falha(400, "foto_obrigatoria");
+    const direta = structure.platform === "heygen";
+    if (texto("audio") && !direta) return falha(400, "audio_indisponivel");
+    if (!texto("audio") && !texto("fala").trim()) return falha(400, "fala_obrigatoria");
+
+    /** O arquivo de um src do projeto, se for de um desses tipos. */
+    const arquivo = async (src: string, tipos: RegExp, nome: string): Promise<File | Response> => {
+      let key: string;
+      try {
+        key = await this.exports.source(project, user, src);
+      } catch (err) {
+        if (err instanceof InputError) return falha(404, "arquivo_indisponivel", { src });
+        throw err;
+      }
+      const object = await this.media.get(key);
+      const type = object?.httpMetadata?.contentType ?? "";
+      if (!object) return falha(404, "arquivo_indisponivel", { src });
+      if (!tipos.test(type)) return falha(400, `${nome}_tipo_invalido`, { tipo: type });
+      return new File([await object.arrayBuffer()], nome, { type });
+    };
+    const image = await arquivo(texto("foto"), /^image\/(jpeg|png|webp)$/, "foto");
+    if (image instanceof Response) return image;
+    const audio = texto("audio") ? await arquivo(texto("audio"), /^audio\/(mpeg|mp3|wav|x-wav|wave)$/, "audio") : null;
+    if (audio instanceof Response) return audio;
+
+    // A voz: com áudio, nenhuma; uma clonada da lista vai como "Voz clonada"; o resto, como voz pronta.
+    const lists = await this.studio.lists(structure, user.id);
+    const voz = texto("voz");
+    const clonada = !audio && !!lists.clones?.some((c) => c.value === voz);
+    const formato = texto("formato") || (final ? output(final).format : "9:16");
+    const fields: Record<string, string> = {
+      fonte: audio ? "audio" : clonada ? "clonada" : "pronta",
+      voz: clonada ? "" : voz,
+      clone: clonada ? voz : "",
+      consentimento: body?.consentimento === true ? "sim" : "",
+      fala: texto("fala"),
+      expressividade: texto("expressividade") || "low",
+      movimento: texto("movimento"),
+      resolucao: texto("resolucao") || "720p",
+      formato,
+    };
+    const values = (name: string) => fields[name] ?? "";
+    const avatar = /^\/avatares\/([0-9a-f-]{36})\/arquivos\//.exec(texto("foto"))?.[1] ?? null;
+    try {
+      const v = await this.studio.create({ structure, values, image, audio, avatarId: avatar, user });
+      if (v.status === "failed") return falha(502, "video_falhou", { id: v.id });
+      // A API direta tem o próprio preço (HEYGEN_MODEL), como no formulário do site.
+      const custo = estimate(structure, direta ? HEYGEN_MODEL : await this.studio.modelOf(structure), values);
+      return Response.json(
+        { video: { id: v.id, status: v.status, duracaoEstimada: v.duration || null, custoEstimado: custo !== undefined ? +custo.toFixed(2) : null, resolucao: v.resolution, formato: v.aspect_ratio } },
+        { status: 201 },
+      );
+    } catch (err) {
+      if (err instanceof ForbiddenError) return falha(404, "nao_encontrado");
+      // Voz que não existe, fala longa, formato fora do modelo: a frase diz o que fazer.
+      if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
+      throw err;
+    }
+  }
+
+  /** O andamento de um vídeo gerado (acompanhar_video): consulta o provedor e, pronto, traz o src. */
+  private async followVideo(user: User, id: string): Promise<Response> {
+    const found = await this.db.conta(user.id).video(id);
+    const structure = found && structureById(found.structure);
+    if (!found || !structure || makesImage(structure) || !canUse(structure, user)) return falha(404, "nao_encontrado");
+    const v = this.studio ? await this.studio.sync(found) : found;
+    const pronto = ready(v);
+    // O áudio tratado no contêiner vem depois do vídeo pronto: até lá, o src é o original.
+    const tratando = pronto && (v.audio_status === "pending" || v.audio_status === "processing");
+    return Response.json({
+      id: v.id,
+      status: pronto ? "pronto" : v.status === "failed" ? "falhou" : "gerando",
+      ...(pronto ? { src: `/videos/${v.id}.mp4`, duracao: await this.duration(v), usar: { video: v.id } } : {}),
+      ...(tratando ? { audio: "tratando" } : {}),
+      custo: v.cost,
+    });
+  }
+
   /**
    * Gera uma imagem com o modelo de imagem (gasta créditos) para entrar no projeto com
    * adicionar {imagem}. O formato padrão é o do Final; a referência é qualquer src que o projeto

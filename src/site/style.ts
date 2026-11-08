@@ -989,6 +989,8 @@ button.asset-upload { background: none; }
   background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container);
   font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem;
 }
+/* A ação do banner (Dispensar), um botão de texto no fim da linha. */
+.banner__action { margin-left: auto; flex: none; }
 
 /* Confirmação numa página (apagar um projeto): o diálogo básico do M3, no meio da página
    (surface-container-high, cantos de 28 px, 24 px de margem, até 560 px, ações à direita). */

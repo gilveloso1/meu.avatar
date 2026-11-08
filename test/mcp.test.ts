@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
-import { call, cookie, FakeExportApi, FakeRenderApi, FakeVideoApi, memberCookie, SITE, webmBytes } from "./helpers";
+import { Db } from "../src/db";
+import { call, cookie, FakeExportApi, FakeHeyGenApi, FakeRenderApi, FakeVideoApi, memberCookie, SITE, webmBytes } from "./helpers";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
 
@@ -124,7 +125,7 @@ describe("protocolo", () => {
     const { result } = await legado("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
     expect(result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "meu-avatar" } });
     expect((await legado("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-11-25");
-    expect((await legado("tools/list")).result.tools).toHaveLength(18);
+    expect((await legado("tools/list")).result.tools).toHaveLength(21);
     expect((await legado("ping")).result).toEqual({});
   });
 
@@ -142,7 +143,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "gerar_video", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });
@@ -311,6 +312,76 @@ describe("gerar_imagem", () => {
     const r = await comApi(api, "gerar_imagem", { projeto: id, descricao: "cena" });
     expect(r.content[0]!.text).toContain("imagem_falhou");
     expect(r.content[0]!.text).not.toContain("HTTP 500");
+  });
+});
+
+describe("gerar_video", () => {
+  /** A ferramenta com a HeyGen falsa (API direta, como no ar) e o OpenRouter falso (a foto vem do gerar_imagem). */
+  const comHeyGen = async (heygen: FakeHeyGenApi | null, name: string, args: unknown, code = "ma_admin") => {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
+    const res = await call(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: `Bearer ${code}`, ...CABECALHOS("tools/call", name) } }), new FakeVideoApi(), null, heygen);
+    return ((await res.json()) as { result: Result }).result;
+  };
+  /** Um projeto e uma foto gerada para animar. */
+  const preparar = async () => {
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Vídeo" }));
+    const { imagem } = dados<{ imagem: { src: string } }>(await ferramenta("gerar_imagem", { projeto: id, descricao: "mulher sorrindo" }));
+    return { id, revisao, foto: imagem.src };
+  };
+
+  it("lista as vozes, gera pela HeyGen direta no formato do projeto, acompanha e o vídeo pronto entra no projeto", async () => {
+    await new Db(env.DB).setPlatform("heygen");
+    const heygen = new FakeHeyGenApi();
+    const { id, revisao, foto } = await preparar();
+    const vozes = dados<{ prontas: { id: string; nome: string; idioma: string; genero: string }[]; clonadas: unknown[] }>(await comHeyGen(heygen, "listar_vozes", { genero: "feminina" }));
+    expect(vozes.prontas).toEqual([{ id: "voz-ana|pt-BR", nome: "Ana", idioma: "Português", genero: "feminina" }]);
+
+    const r = await comHeyGen(heygen, "gerar_video", { projeto: id, foto, fala: "Oi, gente! Hoje eu vou mostrar o meu sérum favorito.", voz: vozes.prontas[0]!.id });
+    expect(r.isError).toBeFalsy();
+    const { video } = dados<{ video: { id: string; status: string; formato: string; custoEstimado: number; duracaoEstimada: number } }>(r);
+    expect(video).toMatchObject({ formato: "9:16" });
+    // O preço da API direta (US$ 0,0385/s), não o do OpenRouter.
+    expect(video.custoEstimado).toBe(+(0.0385 * video.duracaoEstimada).toFixed(2));
+    expect(heygen.videos).toHaveLength(1);
+    expect(JSON.stringify(heygen.videos[0])).toContain("voz-ana");
+
+    expect(dados(await comHeyGen(heygen, "acompanhar_video", { video: video.id }))).toMatchObject({ status: "gerando" });
+    const job = (await new Db(env.DB).videoById(video.id))!.job_id!;
+    heygen.finish(job, { status: "completed", video_url: "https://files.heygen.ai/v.mp4", duration: 4 });
+    const pronto = dados<{ status: string; src: string; usar: { video: string } }>(await comHeyGen(heygen, "acompanhar_video", { video: video.id }));
+    expect(pronto).toMatchObject({ status: "pronto", src: `/videos/${video.id}.mp4`, usar: { video: video.id } });
+    expect((await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", ...pronto.usar }] })).isError).toBe(false);
+  });
+
+  it("recusa sem foto, sem fala, foto que não é imagem, voz que não existe e áudio pelo OpenRouter, sem pedir vídeo", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]), { httpMetadata: { contentType: "video/mp4" } });
+    const heygen = new FakeHeyGenApi();
+    const { id, foto } = await preparar();
+    const casos: [Record<string, unknown>, string][] = [
+      [{ fala: "Oi", voz: "voz-ana|pt-BR" }, "foto_obrigatoria"],
+      [{ foto, voz: "voz-ana|pt-BR" }, "fala_obrigatoria"],
+      [{ foto: `/videos/${VIDEO}.mp4`, fala: "Oi", voz: "voz-ana|pt-BR" }, "foto_tipo_invalido"],
+      [{ foto, fala: "Oi", voz: "nao-existe" }, "pedido_invalido"],
+      [{ foto, fala: "Oi", voz: "voz-ana|pt-BR", final: "outro" }, "final_inexistente"],
+      // Pelo OpenRouter (a plataforma padrão dos testes), o áudio próprio não existe.
+      [{ foto, audio: `/videos/${VIDEO}.mp4` }, "audio_indisponivel"],
+    ];
+    for (const [args, erro] of casos) {
+      const r = await comHeyGen(heygen, "gerar_video", { projeto: id, ...args });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain(erro);
+    }
+    expect(heygen.videos).toHaveLength(0);
+  });
+
+  it("vídeo de outra conta não se acompanha", async () => {
+    const alheio = "66666666-6666-4666-8666-666666666666";
+    await memberCookie();
+    const now = new Date().toISOString();
+    await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, structure, created_at, updated_at) VALUES ((SELECT id FROM users WHERE email = 'membro@exemplo.com'), ?, 'pending', 'Oi', 'heygen/avatar-iv', 5, '720p', '9:16', 'heygen', ?, ?)").bind(alheio, now, now).run();
+    const r = await comHeyGen(null, "acompanhar_video", { video: alheio });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("nao_encontrado");
   });
 });
 
