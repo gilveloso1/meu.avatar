@@ -29,8 +29,14 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 
 - **Revisão 2026-07-28**, a atual: sem sessão e sem handshake, com `server/discover`, a versão
   e as capacidades em `_meta` e os cabeçalhos `MCP-Protocol-Version`, `Mcp-Method` e `Mcp-Name`.
-  A lista de ferramentas e o `server/discover` valem 5 min (`ttlMs`): depois de publicar, o
-  agente vê as ferramentas novas em poucos minutos. O Claude Code usa esta revisão.
+  A lista de ferramentas e o `server/discover` valem 5 min (`ttlMs`). O Claude Code usa esta
+  revisão (visto nos logs em 08/11/2026), mas guarda a lista da hora em que conectou e não relê no
+  meio da conversa, mesmo vencida; e a revisão não tem mais o aviso de lista alterada. Por isso:
+- **Ferramenta nova sem reconectar:** `listar_ferramentas` (a lista de agora; com `nome`, a
+  descrição inteira e os parâmetros) e `usar_ferramenta {nome, argumentos}`, que chama qualquer
+  outra pelo nome, pela mesma rota, com o mesmo token e as mesmas regras. As instruções do servidor
+  dizem ao agente para usá-las quando uma ferramenta citada não está na lista dele. Só o agente
+  conectado antes delas existirem precisa reconectar uma vez.
 - **Clientes antigos** (`initialize`, até 2025-11-25) seguem funcionando no mesmo endereço. Por
   padrão, até o SDK v2 ainda conecta assim.
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
@@ -38,7 +44,7 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   `editar_projeto`, `ver_quadros` (devolve imagem), `inspecionar_animacao` (texto; imagem só com
   `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `gerar_imagem` (devolve
   a imagem para o agente olhar), `gerar_video` e `acompanhar_video`, `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
-  `exportar` e `acompanhar_exportacao`. Não apagam projeto. Só `gerar_imagem` (uns US$ 0,04 por
+  `exportar` e `acompanhar_exportacao`, mais `listar_ferramentas` e `usar_ferramenta`. Não apagam projeto. Só `gerar_imagem` (uns US$ 0,04 por
   imagem em 1K), `gerar_video` e `gerar_audio` gastam créditos de modelo.
 - **Gerar vídeo** (desde 08/11/2026): `gerar_video` faz o avatar falar com o HeyGen Avatar, o
   mesmo modelo e a mesma plataforma do site (a config `plataforma.heygen`; no ar, a API direta, a
