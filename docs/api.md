@@ -34,7 +34,7 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - **Clientes antigos** (`initialize`, até 2025-11-25) seguem funcionando no mesmo endereço. Por
   padrão, até o SDK v2 ainda conecta assim.
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
-- Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `listar_vozes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
+- Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `criar_avatar`, `editar_avatar`, `enviar_ativo`, `listar_vozes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `inspecionar_animacao` (texto; imagem só com
   `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `gerar_imagem` (devolve
   a imagem para o agente olhar), `gerar_video` e `acompanhar_video`, `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
@@ -50,6 +50,24 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   instruções do servidor pedem ao agente que mostre o texto, a voz e o custo à pessoa e só gere
   com o sim dela. Rotas: `POST /api/v1/projetos/<id>/video`, `GET /api/v1/videos/<id>` e
   `GET /api/v1/vozes`.
+- **Avatares** (desde 08/11/2026): `criar_avatar` (nome e descrição), `editar_avatar` (nome,
+  descrição e qual ativo enviado é a foto principal ou a voz para clonagem; `""` tira) e
+  `enviar_ativo`, que põe um arquivo nos ativos de um avatar sem base64 (o agente não conseguia
+  montar o base64 na mensagem). Com `url`, o site baixa, como no `enviar_arquivo`. Sem `url`, a
+  resposta traz um **link de envio** e o comando `curl` para mandar o arquivo do computador
+  (`src/ativos.ts`). Com `uso: "foto"` ou `"voz"`, o arquivo vira a foto principal ou a voz para
+  clonagem (a "Voz de <avatar>" do `gerar_audio` e do `gerar_video`). Não apagam nada. Rotas:
+  `POST /api/v1/avatares` `{nome, descricao?}`, `POST /api/v1/avatares/<id>` `{nome?, descricao?,
+  foto?, voz?}`, `POST /api/v1/avatares/<id>/arquivos?uso=` (o arquivo cru, com `content-type` e
+  `x-nome`) e `POST /api/v1/avatares/<id>/envio` `{nome?, uso?, tipo?}`. Erros: `nome_obrigatorio`,
+  `tipo_invalido` (415), `arquivo_vazio`, `arquivo_grande_demais` (413, com `maximo`),
+  `uso_invalido`, `ativo_inexistente` e `nao_encontrado` (avatar de outra conta).
+- **Link de envio** (`POST /envio/<código>`, sem token nem sessão): só abre o envio de **um**
+  arquivo para **um** avatar. O link só nasce de quem tem o token da API; o código tem 256 bits e só
+  o hash fica guardado (R2, `envios/`, que nenhuma rota serve); vale por 30 min e uma tentativa (some
+  no primeiro uso, dê certo ou não); na hora do envio, confere de novo a conta (não suspensa, com a
+  API) e o dono do avatar; aceita só os tipos de `MEDIA_TYPES` e o tamanho máximo (imagem 10 MB,
+  vídeo e áudio 50 MB), sem CORS. Vencido, usado, de outra conta ou inexistente: `envio_invalido` (404).
 - **Gerar áudio** (desde 08/11/2026): `gerar_audio` faz uma fala (MP3) com um modelo de fala, o
   mesmo do site: `modelo` `fish` (padrão, uns US$ 0,002 por minuto) ou `elevenlabs`. Recebe o
   `texto`, com as emoções em inglês entre colchetes (a lista vai na descrição da ferramenta), e a

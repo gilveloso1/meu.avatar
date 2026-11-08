@@ -16,7 +16,7 @@ const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.12.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.13.0" };
 /**
  * A lista de ferramentas não depende de quem pede. Curto: com 1 h, uma sessão aberta antes de
  * publicar seguiu com a descrição velha (sem rascunho e trocar) no teste de 02/11/2026.
@@ -81,6 +81,31 @@ const FERRAMENTAS = [
     }),
   },
   { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}. De cada ativo: arquivo (o nome com a extensão), mime, tamanho em bytes e baixar (o endereço, com o mesmo token).", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
+  {
+    name: "criar_avatar",
+    description: "Cria um avatar (um personagem ou uma pessoa) com nome e descrição; os arquivos entram depois com enviar_ativo. Antes, veja em listar_avatares se ele já existe.",
+    inputSchema: objeto({ nome: texto("Nome do avatar, até 120 caracteres."), descricao: texto("Quem é, até 500 caracteres. Opcional.") }, ["nome"]),
+  },
+  {
+    name: "editar_avatar",
+    description: 'Muda o nome, a descrição ou qual ativo enviado é a foto principal (uma imagem) ou a voz para clonagem (um áudio, a gravação que o gerar_audio e o gerar_video usam como "Voz de <avatar>"). Ids dos ativos em listar_avatares; "" tira a foto ou a voz. O que não vier fica como está.',
+    inputSchema: objeto({ avatar: texto("Id do avatar."), nome: texto("Nome novo."), descricao: texto("Descrição nova."), foto: texto("Id de uma imagem enviada ao avatar."), voz: texto("Id de um áudio enviado ao avatar.") }, ["avatar"]),
+  },
+  {
+    name: "enviar_ativo",
+    description:
+      'Põe um arquivo (imagem, vídeo ou áudio) nos ativos de um avatar, sem base64. Com url (um endereço público), o site baixa e guarda, e a resposta traz o ativo. Sem url, a resposta traz um link de envio e o comando curl: rode no terminal trocando o caminho do arquivo e o tipo; não precisa de token, vale por 30 min e para um arquivo só (se falhar, peça outro link). Com uso: "voz", o áudio vira a voz para clonagem; com uso: "foto", a imagem vira a foto principal. Tipos: jpeg, png, webp, mp4, mov, webm, mp3, wav, m4a e ogg; imagem até 10 MB, vídeo e áudio até 50 MB.',
+    inputSchema: objeto(
+      {
+        avatar: texto("Id do avatar."),
+        url: texto("Endereço público (https) do arquivo. Sem ele, vem o link de envio."),
+        nome: texto("Nome do ativo, como aparece na tela, como \"Voz do Touro.mp3\"."),
+        uso: texto('"foto" (a imagem vira a foto principal) ou "voz" (o áudio vira a voz para clonagem). Opcional.'),
+        tipo: texto('Tipo do arquivo, como "audio/mpeg" ou "image/png": com url, no lugar do que o endereço disser; sem url, já entra no comando.'),
+      },
+      ["avatar"],
+    ),
+  },
   {
     name: "listar_vozes",
     description: "Vozes para o gerar_video (sem modelo: as do HeyGen Avatar) ou para o gerar_audio (modelo: \"fish\" ou \"elevenlabs\"): as prontas, português primeiro, e as clonadas da conta, com a voz de cada avatar que tem gravação (o ElevenLabs não clona). O id de uma delas vai em voz. Uma clonada com clonarNoPrimeiroUso ainda será clonada: o gerar_video e o gerar_audio pedem consentimento: true.",
@@ -337,6 +362,15 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("GET", `/api/v1/arquivos?${new URLSearchParams(Object.entries({ tipo: a.tipo, fonte: a.fonte, modelo: a.modelo, avatar: a.avatar, projeto: a.projeto, q: a.busca, desde: a.desde, ate: a.ate, limite: a.limite, continuar: a.continuar }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "listar_avatares":
       return chama("GET", `/api/v1/avatares?q=${seguro(a.busca ?? "")}`);
+    case "criar_avatar":
+      return chama("POST", "/api/v1/avatares", json({ nome: a.nome, descricao: a.descricao }));
+    case "editar_avatar":
+      return chama("POST", `/api/v1/avatares/${seguro(a.avatar)}`, json({ nome: a.nome, descricao: a.descricao, foto: a.foto, voz: a.voz }));
+    case "enviar_ativo": {
+      const destino = `/api/v1/avatares/${seguro(a.avatar)}`;
+      if (typeof a.url === "string" && a.url) return baixar(a, chama, `${destino}/arquivos?uso=${seguro(a.uso ?? "")}`);
+      return chama("POST", `${destino}/envio`, json({ nome: a.nome, uso: a.uso, tipo: a.tipo }));
+    }
     case "listar_animacoes":
       return chama("GET", `/api/v1/animacoes?${new URLSearchParams(Object.entries({ projeto: a.projeto, avatar: a.avatar, q: a.busca, limite: a.limite }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "listar_projetos":
