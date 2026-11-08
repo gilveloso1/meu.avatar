@@ -127,6 +127,11 @@ export interface Built {
   prepare?: boolean;
   /** Pedido pela API direta da HeyGen (estruturas com `platform: "heygen"`). */
   heygen?: HeyGenPlan;
+  /**
+   * A voz clonada dos modelos de fala: `clone` é o valor da lista (a nova, uma voz da pessoa ou
+   * `avatar:<id>`); o estúdio acha a gravação e a guarda no vídeo para ir em cada pedido.
+   */
+  speech?: { clone: string; cloneName: string | null };
   /** O que fica guardado no banco. */
   record: {
     /** A fala. */

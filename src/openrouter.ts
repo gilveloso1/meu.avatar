@@ -66,7 +66,10 @@ export interface ImageResult {
 export interface SpeechRequest {
   model: string;
   input: string;
-  voice: string;
+  /** A voz pronta; sem ela, a voz clonada da gravação em `reference`. */
+  voice?: string;
+  /** A gravação da voz clonada (o Fish clona em cada pedido, sem criar a voz antes). */
+  reference?: { bytes: ArrayBuffer; type: string };
 }
 
 export interface SpeechResult {
@@ -224,7 +227,9 @@ export class OpenRouterVideo implements VideoApi {
 
   /** A fala em MP3. A resposta não traz o custo: ele sai do preço por caractere (src/structures/voz.ts). */
   async speech(body: SpeechRequest): Promise<SpeechResult> {
-    const res = await this.request(`${this.base}/audio/speech`, { method: "POST", body: JSON.stringify({ ...body, response_format: "mp3" }) });
+    const { reference, ...rest } = body;
+    const input_references = reference ? [{ type: "input_audio", input_audio: { data: `data:${reference.type};base64,${base64(reference.bytes)}` } }] : undefined;
+    const res = await this.request(`${this.base}/audio/speech`, { method: "POST", body: JSON.stringify({ ...rest, response_format: "mp3", ...(input_references ? { input_references } : {}) }) });
     const type = (res.headers.get("content-type") ?? "").split(";")[0]!.trim();
     // Erro vem em JSON: só áudio vira arquivo.
     if (!type.startsWith("audio/")) throw new Error(`O modelo de fala não devolveu áudio (${type || "sem tipo"}): ${(await res.text()).slice(0, 300)}`);
@@ -280,6 +285,14 @@ interface ImageModelInfo {
   id: string;
   name: string;
   supported_parameters?: { resolution?: { values: string[] }; aspect_ratio?: { values: string[] } };
+}
+
+/** Base64 de um arquivo, em pedaços (o btoa de uma string grande estoura a pilha). */
+function base64(bytes: ArrayBuffer): string {
+  const view = new Uint8Array(bytes);
+  let out = "";
+  for (let i = 0; i < view.length; i += 0x8000) out += String.fromCharCode(...view.subarray(i, i + 0x8000));
+  return btoa(out);
 }
 
 /** Um modelo como GET /models descreve (só o que o projeto usa dos de fala). */

@@ -21,8 +21,14 @@ de uma voz da biblioteca do Fish) e `response_format: "mp3"`. O modelo não list
   primeiro toque (`vozes/previas/fish/`).
 - **Emoções:** entende direções entre colchetes, em linguagem livre; o site manda as mesmas
   marcações em inglês do ElevenLabs (`[whispers]`, `[laughs]`, `[whispers, laughs]`).
-- **Voz clonada:** o OpenRouter informa `supports_voice_cloning: true` (clonagem sem estado: a
-  gravação vai junto em cada pedido, em `input_references`). Fica para o próximo PR.
+- **Voz clonada:** no ar desde 08/11/2026, no molde da "Voz clonada" da HeyGen (Voz pronta | Voz
+  clonada; "Clonar uma voz nova" com a gravação, o nome e o consentimento; a voz de cada avatar com
+  gravação). Pelo OpenRouter não há voz criada no Fish nem id: a clonagem é sem estado, e a gravação
+  (até 15 MB) vai em cada pedido em `input_references`, sem `voice`. A voz nova fica no R2
+  (`vozes/clonadas/`) e na tabela `voices` com `provider = 'fish'` (migration 0022), e cada vídeo
+  guarda a gravação usada (`settings.reference_key`). O texto da gravação é opcional: com e sem ele, o
+  Urso clonado saiu igual (~91 Hz), e o site não manda. A gravação deve ir como o modelo gerou, só com
+  o volume ajustado: subir o tom por processamento deixou a voz clonada com estouros.
 
 ## Testes
 

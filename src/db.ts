@@ -72,11 +72,15 @@ export type PrepStatus = AudioStatus | "compose" | "composing" | "voz";
 export type Platform = "openrouter" | "heygen";
 
 /** Voz clonada na API direta da HeyGen (tabela voices). */
+export type VoiceProvider = "heygen" | "fish";
+
 export interface Voice {
   id: string;
   user_id: number;
   name: string;
-  /** O id da voz na HeyGen. */
+  /** De onde é a voz clonada: a HeyGen ou o Fish (migrations/0022_vozes_fish.sql). */
+  provider: VoiceProvider;
+  /** O id da voz na HeyGen; no Fish, a gravação no R2 (a clonagem vai em cada pedido). */
   provider_voice_id: string;
   status: "PENDING" | "ACTIVE" | "FAILED";
   error: string | null;
@@ -661,21 +665,21 @@ export class Db {
     await this.d1.prepare("INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(key, JSON.stringify(catalog)).run();
   }
 
-  async insertVoice(v: Omit<Voice, "created_at" | "error" | "asset_id"> & { asset_id?: string | null }, now = new Date()): Promise<Voice> {
+  async insertVoice(v: Omit<Voice, "created_at" | "error" | "asset_id" | "provider"> & { asset_id?: string | null; provider?: VoiceProvider }, now = new Date()): Promise<Voice> {
     return (await this.d1
-      .prepare("INSERT INTO voices (id, user_id, name, provider_voice_id, status, asset_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *")
-      .bind(v.id, v.user_id, v.name, v.provider_voice_id, v.status, v.asset_id ?? null, now.toISOString())
+      .prepare("INSERT INTO voices (id, user_id, name, provider_voice_id, status, asset_id, provider, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
+      .bind(v.id, v.user_id, v.name, v.provider_voice_id, v.status, v.asset_id ?? null, v.provider ?? "heygen", now.toISOString())
       .first<Voice>())!;
   }
 
   /** As vozes da pessoa, as mais novas primeiro (as que falharam ficam de fora). */
-  async voicesByUser(userId: number): Promise<Voice[]> {
-    return (await this.d1.prepare("SELECT * FROM voices WHERE user_id = ? AND status != 'FAILED' ORDER BY created_at DESC").bind(userId).all<Voice>()).results;
+  async voicesByUser(userId: number, provider: VoiceProvider = "heygen"): Promise<Voice[]> {
+    return (await this.d1.prepare("SELECT * FROM voices WHERE user_id = ? AND provider = ? AND status != 'FAILED' ORDER BY created_at DESC").bind(userId, provider).all<Voice>()).results;
   }
 
   /** A voz que já saiu desta gravação do avatar. */
-  voiceByAsset(assetId: string): Promise<Voice | null> {
-    return this.d1.prepare("SELECT * FROM voices WHERE asset_id = ? AND status != 'FAILED' ORDER BY created_at DESC LIMIT 1").bind(assetId).first<Voice>();
+  voiceByAsset(assetId: string, provider: VoiceProvider = "heygen"): Promise<Voice | null> {
+    return this.d1.prepare("SELECT * FROM voices WHERE asset_id = ? AND provider = ? AND status != 'FAILED' ORDER BY created_at DESC LIMIT 1").bind(assetId, provider).first<Voice>();
   }
 
   /** Os avatares da pessoa que têm gravação de voz. */

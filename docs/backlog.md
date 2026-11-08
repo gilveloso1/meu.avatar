@@ -131,9 +131,8 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    página do áudio, no "Adicionar ativo" e no `listar_arquivos`, com `adicionar {audio}`) e o
    ElevenLabs v4 e o Fish Audio Drama 3, com as vozes oficiais do Fish (`voz.ts`, só para o
    administrador; ver `docs/modelos/`), e o Texto com emoções (`#`). Falta, um PR por vez:
-   - **Voz clonada**: no Fish, no molde da "Voz clonada" do HeyGen ("Clonar uma voz nova" com a
-     gravação, o nome e o consentimento, e a voz de cada avatar), sem espera: o Fish clona a cada
-     pedido pela gravação. No ElevenLabs, só pela API direta (conta e chave próprias).
+   - **Voz clonada no ElevenLabs**: só pela API direta dele (conta e chave próprias). A do Fish está
+     feita (Voz clonada, como a da HeyGen; ver `docs/modelos/fish-audio-drama-3.md`).
    - O agente gerar áudio pelo MCP (`gerar_audio`) e o "Usar para gerar" do áudio abrir o HeyGen.
    - **Prévia de voz rápida, em todos os modelos com voz** (HeyGen, ElevenLabs, Fish): hoje a primeira
      escuta de cada voz leva de 1 a 3 s (busca ou gera a amostra; depois fica no R2 e no navegador).
