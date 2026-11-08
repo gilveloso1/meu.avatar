@@ -12,7 +12,7 @@ administrador, como o canvas; cada projeto é só de quem o criou. O código est
   lugares que precisam bater: `placement` e `len` no modelo (e a prévia, `player.js`) e
   `enquadrar` e `tempo` no `container/exportar.py`. Mudou um, mude o outro.
 - **Token, não sessão.** `Authorization: Bearer ma_...`. O banco guarda só o hash
-  (`api_tokens`). O token abre `/api/v1/` e as rotas de arquivos e de exportação de um
+  (`api_tokens`). O token abre `/api/v1/`, o arquivo de cada vídeo e de cada ativo (para baixar) e as rotas de arquivos e de exportação de um
   projeto; não abre páginas, não apaga projeto, não salva JSON cru e não gera vídeo.
 - **Sem tela de tokens por enquanto**: só há o administrador. Ela entra quando a API
   abrir para outras contas.
@@ -58,9 +58,9 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 
 | Rota | O que faz |
 |---|---|
-| `GET /api/v1/videos?q=&desde=&ate=&limite=&continuar=` | Vídeos prontos que a conta pode usar, do mais novo ao mais antigo, 20 por vez (`limite` até 100). `desde` e `ate` são datas (`2026-11-02`, UTC; o dia do `ate` vale inteiro). Com mais vídeos, a resposta traz `continuar`, que vai no pedido seguinte |
+| `GET /api/v1/videos?q=&desde=&ate=&limite=&continuar=` | Vídeos prontos que a conta pode usar, do mais novo ao mais antigo, 20 por vez (`limite` até 100). `desde` e `ate` são datas (`2026-11-02`, UTC; o dia do `ate` vale inteiro). Com mais vídeos, a resposta traz `continuar`, que vai no pedido seguinte. `q` procura na fala e no nome; o vídeo com nome (dado na página dele) traz `nome`. Cada um traz `modelo` (`id`, `nome`), `avatar` (`id`, `nome`, quando houve), `arquivo`, `mime` e `baixar` |
 | `GET /api/v1/animacoes?projeto=&avatar=&q=&limite=` | As animações em código já feitas nos projetos da conta, do projeto editado por último ao mais antigo (20 por vez, até 100): `{animacoes: [{projeto: {id, nome}, bloco, nome, duracao, texto, parametros, avatares, atualizado}], mais}`. `projeto` filtra um projeto; `avatar`, os projetos que usam vídeos ou ativos dele; `q` busca no nome, no texto na tela e nos valores dos parâmetros. Sem o código: leia com `ver_projeto` (`incluir: codigo`). Ver "Reusar animações", abaixo |
-| `GET /api/v1/avatares?q=` | Avatares da conta com os ativos: `id`, `nome`, `tipo` (`imagem`, `video`, `audio`), `origem` (`gerado`, `enviado`), `foto`, `voz` e `src` |
+| `GET /api/v1/avatares?q=` | Avatares da conta com os ativos: `id`, `nome`, `tipo` (`imagem`, `video`, `audio`), `origem` (`gerado`, `enviado`), `foto`, `voz`, `src`, `tamanho` (bytes) e, para baixar, `arquivo` (o nome com a extensão), `mime` e `baixar` (o endereço completo, com o mesmo token) |
 | `GET /api/v1/projetos?q=` | Projetos da conta |
 | `POST /api/v1/projetos` `{nome}` | Cria um projeto |
 | `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio, e `inicio` e `fim` em segundos do grupo), `ligacoes` (`id`, `de`, `para`: grupo ou Final), Finais com as variações, avisos e `notas` (`[{id, texto}]`, o texto que a pessoa colou ou escreveu no canvas: briefing, roteiro, referências; só vem quando há). Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
@@ -79,7 +79,7 @@ pronta deste projeto: é como o agente confere o que exportou.
 
 | Rota | O que faz |
 |---|---|
-| `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas): `{src}` e, em vídeo, `som` (`false` quando o arquivo não tem faixa de som). Só JPG, PNG, WebP, MP4, MOV, WebM, MP3, M4A, WAV e OGG; SVG e HTML não (podem levar script). Todo arquivo enviado é servido com `nosniff` e CSP com `sandbox` |
+| `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas): `{src}` e, em vídeo, `som` (`false` quando o arquivo não tem faixa de som). Só JPG, PNG, WebP, MP4, MOV, WebM, MP3, M4A, WAV e OGG; SVG e HTML não (podem levar script). Todo arquivo enviado é servido com `nosniff` e CSP com `sandbox`. Com `?baixar`, vem como download, pela regra de todo download do site: o nome da tela, sem mudança, e a extensão do tipo (`src/arquivos.ts`); o `ver_projeto` com `incluir: arquivos` traz `arquivo`, `mime`, `tamanho` e `baixar`. O corpo é o arquivo cru, com `content-type` e `x-nome`: com terminal, o agente manda direto (`curl --data-binary @foto.png`). No MCP, `enviar_arquivo` aceita `url` (o servidor baixa, até 50 MB, e passa pela mesma conferência; o melhor caminho sem terminal) ou `base64` (até 10 MB). Erros do `url`: `url_invalida`, `url_indisponivel`, `arquivo_grande_demais` |
 | `POST /projetos/<id>/exportar` `{final, versoes?}` | Começa a exportação |
 | `POST /projetos/<id>/exportacoes/<e>` | Faz o próximo passo; sem isso, o agendamento termina |
 | `GET /projetos/<id>/exportacoes/<e>` | Estado e endereços para baixar |

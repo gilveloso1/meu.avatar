@@ -181,7 +181,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   abas principais fixas do M3, de borda a borda da folha, indicador de 3 px só sob
   o ícone e o texto; no celular, 16 px abaixo da barra do player); o status e o
   conteúdo na mesma margem de 24 px;
-  em Informações, Texto (com Copiar), os textos livres (Movimento, Instruções
+  em Informações, o campo Nome (salva ao sair dele, sem recarregar; vazio, as listas e o
+  `listar_videos` mostram a fala), Texto (com Copiar), os textos livres (Movimento, Instruções
   extras) em bloco próprio e Detalhes no card de linhas (ícone, rótulo, valor);
   abaixo de "Salvar no avatar", "Usar para gerar" (só quando a página foi aberta de um modelo,
   `?de=/modelo/<id>`, que aceita o tipo; volta a ele com o arquivo no painel, `?usar=gerado:<id>`);
@@ -227,7 +228,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   o Novo avatar desse diálogo leva o vídeo junto (`?video=`), salvo com o avatar. O avatar
   só guarda arquivo do que foi enviado a ele; vídeo salvo é um vínculo (como no canvas),
   sem cópia no R2, e usa a versão que vale do vídeo. Regra única: `source_video` vazio quer
-  dizer que o arquivo é do avatar. A tela do ativo é a mesma para os dois; a Origem diz
+  dizer que o arquivo é do avatar. A tela do ativo é a mesma para os dois, com o mesmo campo Nome da página do vídeo (`nameField`;
+  no ativo, vazio não muda o nome); a Origem diz
   "Vídeo gerado", "Vídeo enviado", "Imagem enviada" ou "Áudio enviado".
 - Barra superior: a marca é o ícone de rosto (`face`, o mesmo da foto do
   avatar) e o nome, sem cara de botão (sem camada de estado no hover). Sair fica
@@ -277,9 +279,12 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   pacote, com teste dela dada e tirada (`test/permissoes.test.ts`).
 - Os dados de cada conta saem da `ContaDb` (`db.conta(userId)`, `src/db.ts`): toda consulta
   leva o dono. O banco recusa vídeo sem dono (`migrations/0018_dono.sql`).
-- Arquivo enviado (ativos, projetos, MCP) só de uma lista fechada de tipos (`MEDIA_KINDS`,
-  `src/site/site.ts`), nunca qualquer `image/*`: SVG e HTML levam script e são servidos pelo endereço
+- Arquivo enviado (ativos, projetos, MCP) só de uma lista fechada de tipos (`MEDIA_TYPES`,
+  `src/arquivos.ts`), nunca qualquer `image/*`: SVG e HTML levam script e são servidos pelo endereço
   do site. Todo arquivo do R2 sai pelo `object()`, com `nosniff` e CSP com `sandbox`.
+- Todo download (vídeo, imagem, ativo, arquivo de projeto, exportação) tem o mesmo nome: o da tela,
+  sem mudança, e a extensão do tipo real (`downloadName` e `contentDisposition`, `src/arquivos.ts`).
+  Download novo passa por elas; nada de montar nome de arquivo à parte.
 
 ## Modelos: uma estrutura para cada
 

@@ -64,16 +64,16 @@ const src = texto('Endereço do arquivo: "/videos/<id>.mp4" de listar_videos, o 
 const FERRAMENTAS = [
   {
     name: "listar_videos",
-    description: "Vídeos prontos que podem entrar num projeto, com a fala, a duração e a data, do mais novo ao mais antigo, 20 por vez. Filtre pela fala e pela data; continuar traz os próximos.",
+    description: "Vídeos prontos que podem entrar num projeto, com a fala, o modelo, o avatar, a duração e a data, do mais novo ao mais antigo, 20 por vez. Filtre pela fala e pela data; continuar traz os próximos. Para baixar: baixar é o endereço (com o mesmo token) e arquivo, o nome com a extensão.",
     inputSchema: objeto({
-      busca: texto("Parte da fala."),
+      busca: texto("Parte da fala ou do nome."),
       desde: texto('Data, como "2026-11-02" (UTC): só os feitos nesse dia ou depois.'),
       ate: texto('Data, como "2026-11-02" (UTC): só os feitos até o fim desse dia.'),
       limite: { type: "integer", description: "Quantos por vez, de 1 a 100; sem isso, 20." },
       continuar: texto("O continuar da resposta anterior, para a página seguinte."),
     }),
   },
-  { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
+  { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}. De cada ativo: arquivo (o nome com a extensão), mime, tamanho em bytes e baixar (o endereço, com o mesmo token).", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   {
     name: "listar_animacoes",
     description: "Animações em código já feitas nos projetos da conta, para reusar com adicionar {animacao: {projeto, bloco}}: do mesmo projeto, dos projetos que usam um avatar ou pela busca. Cada uma traz o projeto, o bloco, o nome, a duração, o texto na tela e os parametros, sem o código (leia com ver_projeto incluir: codigo).",
@@ -124,8 +124,18 @@ const FERRAMENTAS = [
   { name: "ver_silencios", description: "Duração e silêncios de um arquivo, com a regra da Edição rápida; som: false quando o arquivo não tem áudio (nada a cortar).", inputSchema: objeto({ projeto, src }, ["projeto", "src"]) },
   {
     name: "enviar_arquivo",
-    description: "Guarda um arquivo no projeto: JPG, PNG ou WebP (até 10 MB); MP4, MOV, WebM, MP3, M4A, WAV ou OGG (até 50 MB, limitados aqui a 10 MB pelo base64). SVG e HTML não entram. WebM com transparência serve de camada sobre o vídeo.",
-    inputSchema: objeto({ projeto, nome: texto("Nome do arquivo."), tipo: texto('Tipo, como "video/webm" ou "audio/mp4".'), base64: texto("Conteúdo em base64.") }, ["projeto", "nome", "tipo", "base64"]),
+    description:
+      "Guarda um arquivo no projeto: JPG, PNG ou WebP (até 10 MB); MP4, MOV, WebM, MP3, M4A, WAV ou OGG (até 50 MB). Mande url (o servidor baixa; o melhor caminho para uma imagem da web ou um link público) ou base64 (até 10 MB). SVG e HTML não entram. WebM com transparência serve de camada sobre o vídeo. Depois, ponha no projeto com adicionar {arquivo: id do src}.",
+    inputSchema: objeto(
+      {
+        projeto,
+        url: texto("Endereço público (http ou https) do arquivo; o servidor baixa. Sem url, mande base64."),
+        nome: texto("Nome do arquivo; com url, sem isso, o fim do endereço."),
+        tipo: texto('Tipo, como "image/png" ou "video/webm"; com url, sem isso, o que o endereço disser.'),
+        base64: texto("Conteúdo em base64, quando não houver url."),
+      },
+      ["projeto"],
+    ),
   },
   {
     name: "gerar_imagem",
@@ -203,6 +213,63 @@ function base64(bytes: ArrayBuffer): string {
   return btoa(s);
 }
 
+/** O teto do enviar_arquivo por url: o do maior arquivo que o projeto aceita (vídeo e áudio). */
+const MAX_URL = 50 * 1024 * 1024;
+
+/**
+ * enviar_arquivo com url: o servidor baixa e manda para a mesma rota do envio. Assim o agente sem
+ * terminal (que não consegue montar o base64) põe uma imagem da web no projeto; o tipo e o
+ * tamanho passam pela mesma conferência do envio (só os tipos de MEDIA_TYPES, src/arquivos.ts).
+ */
+async function baixar(a: Args, chama: Interna, destino: string): Promise<Response> {
+  let url: URL;
+  try {
+    url = new URL(String(a.url));
+  } catch {
+    return Response.json({ erro: "url_invalida" }, { status: 400 });
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return Response.json({ erro: "url_invalida" }, { status: 400 });
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { accept: "image/*,video/*,audio/*;q=0.9,*/*;q=0.1" } });
+  } catch (err) {
+    console.error("enviar_arquivo: o endereço não respondeu", url.host, err);
+    return Response.json({ erro: "url_indisponivel" }, { status: 502 });
+  }
+  if (!res.ok || !res.body) return Response.json({ erro: "url_indisponivel", status: res.status }, { status: 502 });
+  if (Number(res.headers.get("content-length")) > MAX_URL) return Response.json({ erro: "arquivo_grande_demais" }, { status: 413 });
+  // Lê aos pedaços e para no teto: o content-length pode faltar ou mentir.
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  const leitor = res.body.getReader();
+  for (;;) {
+    const { done, value } = await leitor.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_URL) {
+      await leitor.cancel();
+      return Response.json({ erro: "arquivo_grande_demais" }, { status: 413 });
+    }
+    partes.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let pos = 0;
+  for (const p of partes) {
+    bytes.set(p, pos);
+    pos += p.byteLength;
+  }
+  const tipo = (typeof a.tipo === "string" && a.tipo) || (res.headers.get("content-type") ?? "").split(";")[0]!.trim();
+  let nome = typeof a.nome === "string" ? a.nome : "";
+  if (!nome) {
+    try {
+      nome = decodeURIComponent(url.pathname.split("/").pop() ?? "");
+    } catch {
+      nome = "";
+    }
+  }
+  return chama("POST", destino, bytes, { "content-type": tipo, "x-nome": seguro(nome || "arquivo") });
+}
+
 /** O pedido interno de cada ferramenta. */
 function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null {
   const p = `/api/v1/projetos/${seguro(a.projeto)}`;
@@ -243,6 +310,7 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
     case "acompanhar_exportacao":
       return chama("POST", `${site}/exportacoes/${seguro(a.exportacao)}`);
     case "enviar_arquivo": {
+      if (typeof a.url === "string" && a.url) return baixar(a, chama, `${site}/arquivos`);
       const conteudo = typeof a.base64 === "string" ? a.base64 : "";
       if (!conteudo || conteudo.length > MAX_BASE64) return Promise.resolve(Response.json({ erro: "arquivo_grande_demais" }, { status: 413 }));
       let bytes: Uint8Array;

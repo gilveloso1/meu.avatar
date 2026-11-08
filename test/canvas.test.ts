@@ -248,7 +248,7 @@ describe("exportar projetos", () => {
     expect(JSON.parse(fake.segments[0]!.plan)).toMatchObject({ largura: 720, altura: 1280, duracao: 4, itens: [{ tipo: "video", arquivo: 0, volume: 1 }] });
     expect(fake.segments[0]!.sizes.slice(1)).toEqual([1000]);
     const mp4 = await com(fake, st.versoes[1]!.href, admin);
-    expect([mp4.status, await mp4.text(), mp4.headers.get("content-disposition")]).toEqual([200, "mp4ok", 'attachment; filename="02-variacao-2.mp4"']);
+    expect([mp4.status, await mp4.text(), mp4.headers.get("content-disposition")]).toEqual([200, "mp4ok", `attachment; filename="02 - Variacao 2.mp4"; filename*=UTF-8''${encodeURIComponent("02 - Variação 2.mp4")}`]);
   });
 
   it("exportar de novo sem mudar nada não chama o contêiner e os arquivos continuam baixando", async () => {
@@ -307,7 +307,7 @@ describe("exportar projetos", () => {
     expect(view.getUint32(central + 20, true)).toBe(5);
     expect(view.getUint32(central + 16, true)).toBe(123);
     const nome = view.getUint16(central + 28, true);
-    expect(new TextDecoder().decode(bytes.slice(central + 46, central + 46 + nome))).toBe("01-variacao-1.mp4");
+    expect(new TextDecoder().decode(bytes.slice(central + 46, central + 46 + nome))).toBe("01 - Variação 1.mp4");
     const segundo = view.getUint32(central + 46 + nome + 42, true);
     expect(view.getUint32(segundo, true)).toBe(0x04034b50);
   });
