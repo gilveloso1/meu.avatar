@@ -20,6 +20,7 @@
  */
 import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { handleMcp } from "../mcp";
+import { ENVIO_PATH, guardarAtivo, MAX_AVATAR_DESCRIPTION, usarEnvio } from "../ativos";
 import { type Accounts, INVITE_HOURS, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
 import type { AccountRow, AssetKind, Avatar, AvatarAsset, Db, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
 import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
@@ -123,6 +124,15 @@ export class Site {
     // Ícone da aba, sem login (o navegador também pede /favicon.ico por conta própria).
     if (!post && (path === "/favicon.svg" || path === "/favicon.ico")) {
       return new Response(FAVICON, { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" } });
+    }
+
+    // O link de envio do agente (src/ativos.ts): um arquivo para um avatar, sem token nem sessão.
+    const envio = ENVIO_PATH.exec(path);
+    if (envio) {
+      if (!post) return Response.json({ erro: "metodo_invalido" }, { status: 405 });
+      const r = await usarEnvio(this.db, this.media, envio[1]!, request);
+      if ("erro" in r) return Response.json({ erro: r.erro, ...r.extra }, { status: r.status });
+      return Response.json({ ativo: r.id, avatar: r.avatar.id, src: `/avatares/${r.avatar.id}/arquivos/${r.id}` }, { status: 201 });
     }
 
     // Formulário de outro site tentando agir em nome de quem está logado.
@@ -520,13 +530,9 @@ ${error ? snackbar(error) : ""}`;
     return redirect(`/avatares/${avatar.id}`);
   }
 
-  /** Guarda o arquivo no R2 como ativo do avatar e devolve o id. */
+  /** Guarda o arquivo no R2 como ativo do avatar e devolve o id (o mesmo caminho da API, src/ativos.ts). */
   private async storeAsset(avatarId: string, file: File, kind: AssetKind): Promise<string> {
-    const id = crypto.randomUUID();
-    const key = `avatares-ativos/${avatarId}/${id}`;
-    await this.media.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
-    await this.db.insertAsset({ id, avatar_id: avatarId, kind, key, name: file.name.slice(0, 200) || "arquivo", type: file.type, size: file.size, source_video: null });
-    return id;
+    return guardarAtivo(this.db, this.media, avatarId, { bytes: await file.arrayBuffer(), type: file.type, name: file.name }, kind);
   }
 
   /** "Salvar no avatar", na página do vídeo: copia o vídeo pronto para os ativos do avatar escolhido. */
@@ -2152,7 +2158,6 @@ function savedKind(s: SavableVideo): { kind: AssetKind; type: string } {
   return { kind: "imagem", type: ext === "jpg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png" };
 }
 
-const MAX_AVATAR_DESCRIPTION = 500;
 /** O tamanho máximo do nome de um vídeo ou de um ativo. */
 const MAX_NAME = 120;
 const ASSET_LABELS: Record<AssetKind, string> = { imagem: "Imagem", video: "Vídeo", audio: "Áudio" };

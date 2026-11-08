@@ -286,6 +286,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 - Arquivo enviado (ativos, projetos, MCP) só de uma lista fechada de tipos (`MEDIA_TYPES`,
   `src/arquivos.ts`), nunca qualquer `image/*`: SVG e HTML levam script e são servidos pelo endereço
   do site. Todo arquivo do R2 sai pelo `object()`, com `nosniff` e CSP com `sandbox`.
+- O agente envia arquivo sem base64 (ele não consegue montar): por url (o site baixa) ou pelo link de
+  envio do avatar (`/envio/<código>`, `src/ativos.ts`), a única rota que recebe arquivo sem token nem
+  sessão. Ela abre um arquivo para um avatar só, uma vez, por 30 min; regra nova ali ganha teste em
+  `test/avatares-agente.test.ts`.
 - O que o agente vê dos arquivos sai de um item só (`src/acervo.ts`): `listar_arquivos`, os ativos do
   `listar_avatares` e os arquivos do `ver_projeto`. Fonte nova de arquivo é mais uma consulta ali, com o
   mesmo item e a mesma página (`Pagina`, `src/db.ts`), nunca uma lista à parte.

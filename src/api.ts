@@ -8,7 +8,7 @@ import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, tre
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
 import { filtro, itemAtivo, itemProjeto, listar } from "./acervo";
-import type { AssetKind, AvatarAsset, Db, Project, User, Video } from "./db";
+import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp4Duration } from "./mp4";
 import { canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, STRUCTURES, structureById } from "./structures";
@@ -16,6 +16,8 @@ import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
 import { NANO_BANANA } from "./structures/imagem";
 import { FISH } from "./structures/voz";
+import { criarEnvio, MAX_ATIVO, MAX_AVATAR_DESCRIPTION, receberAtivo, uso } from "./ativos";
+import { MEDIA_TYPES, mediaType } from "./arquivos";
 import { base64, ForbiddenError, type Studio } from "./studio";
 import { FONTES, MAX_RENDER_SECONDS, RenderError } from "./render";
 import { AudioLongoError, type Palavra } from "./transcricao";
@@ -236,7 +238,17 @@ export class Api {
   async handle(request: Request, user: User, path: string, url: URL): Promise<Response> {
     const post = request.method === "POST";
     if (path === "/api/v1/arquivos" && !post) return this.files(user, url);
-    if (path === "/api/v1/avatares" && !post) return this.avatars(user, url);
+    if (path === "/api/v1/avatares") return post ? this.createAvatar(request, user) : this.avatars(user, url);
+    const av = /^\/api\/v1\/avatares\/([0-9a-f-]{36})(?:\/(arquivos|envio))?$/.exec(path);
+    if (av) {
+      const avatar = await this.db.avatarById(av[1]!);
+      // Avatar de outra pessoa (ou que não existe): nada existe.
+      if (!avatar || avatar.user_id !== user.id) return falha(404, "nao_encontrado");
+      if (!post) return falha(405, "metodo_invalido");
+      if (av[2] === "arquivos") return this.uploadAsset(request, avatar, url);
+      if (av[2] === "envio") return this.uploadLink(request, user, avatar, url);
+      return this.editAvatar(request, avatar);
+    }
     if (path === "/api/v1/animacoes" && !post) return this.animations(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
     if (path === "/api/v1/vozes" && !post) return this.voices(user, url);
@@ -295,6 +307,92 @@ export class Api {
       }
     }
     return Response.json({ animacoes: lista.slice(0, limite), ...(lista.length > limite ? { mais: lista.length - limite } : {}) });
+  }
+
+  /** Cria um avatar (criar_avatar): só o nome e a descrição; os arquivos entram com o enviar_ativo. */
+  private async createAvatar(request: Request, user: User): Promise<Response> {
+    const body = await json(request);
+    const name = typeof body?.nome === "string" ? body.nome.replace(/\s+/g, " ").trim().slice(0, 120) : "";
+    if (!name) return falha(400, "nome_obrigatorio");
+    const description = typeof body?.descricao === "string" ? body.descricao.trim().slice(0, MAX_AVATAR_DESCRIPTION) : "";
+    const a = await this.db.insertAvatar({ id: crypto.randomUUID(), user_id: user.id, name, description });
+    return Response.json({ avatar: { id: a.id, nome: a.name, descricao: a.description } }, { status: 201 });
+  }
+
+  /**
+   * Muda o avatar (editar_avatar): nome, descrição e qual ativo enviado é a foto principal ou a voz
+   * para clonagem ("" tira). A foto é uma imagem e a voz um áudio, ambos do próprio avatar.
+   */
+  private async editAvatar(request: Request, avatar: Avatar): Promise<Response> {
+    const body = await json(request);
+    if (!body) return falha(400, "json_invalido");
+    const name = typeof body.nome === "string" ? body.nome.replace(/\s+/g, " ").trim().slice(0, 120) : avatar.name;
+    if (!name) return falha(400, "nome_obrigatorio");
+    const description = typeof body.descricao === "string" ? body.descricao.trim().slice(0, MAX_AVATAR_DESCRIPTION) : avatar.description;
+    const papel = async (campo: "foto" | "voz", kind: AssetKind, atual: string | null): Promise<string | null | Response> => {
+      const v = body[campo];
+      if (v === undefined) return atual;
+      if (v === "" || v === null) return null;
+      const asset = typeof v === "string" ? await this.db.asset(avatar.id, v) : null;
+      if (!asset) return falha(404, "ativo_inexistente", { campo });
+      if (asset.kind !== kind || asset.source_video) return falha(400, "uso_invalido", { campo, precisa: `${kind} enviado ao avatar` });
+      return asset.id;
+    };
+    const photo = await papel("foto", "imagem", avatar.photo_asset);
+    if (photo instanceof Response) return photo;
+    const voice = await papel("voz", "audio", avatar.voice_asset);
+    if (voice instanceof Response) return voice;
+    await this.db.updateAvatar(avatar.id, { name, description, photo_asset: photo, voice_asset: voice });
+    return Response.json({ avatar: { id: avatar.id, nome: name, descricao: description, foto: photo, voz: voice } });
+  }
+
+  /** Recebe um arquivo para o avatar com o token (o enviar_ativo com url passa por aqui). */
+  private async uploadAsset(request: Request, avatar: Avatar, url: URL): Promise<Response> {
+    const papel = uso(url.searchParams.get("uso") ?? "");
+    if (papel === null) return falha(400, "uso_invalido", { foto: "imagem", voz: "audio" });
+    let name = "";
+    try {
+      name = decodeURIComponent(request.headers.get("x-nome") ?? "");
+    } catch {
+      name = "";
+    }
+    const tipo = mediaType(request.headers.get("content-type") ?? "");
+    if (tipo && Number(request.headers.get("content-length")) > MAX_ATIVO(tipo.kind)) return falha(413, "arquivo_grande_demais", { maximo: MAX_ATIVO(tipo.kind) });
+    const r = await receberAtivo(this.db, this.media, avatar, { bytes: tipo ? await request.arrayBuffer() : new ArrayBuffer(0), type: request.headers.get("content-type") ?? "", name }, papel);
+    if (typeof r !== "string") return falha(r.status, r.erro, r.extra);
+    return this.assetResponse(avatar.id, r, url);
+  }
+
+  /** O ativo recém-guardado, no mesmo item do listar_avatares. */
+  private async assetResponse(avatarId: string, id: string, url: URL): Promise<Response> {
+    const [avatar, asset] = await Promise.all([this.db.avatarById(avatarId), this.db.asset(avatarId, id)]);
+    return Response.json({ ativo: { ...itemAtivo(asset!, avatar!.name, url), origem: "enviado", foto: id === avatar!.photo_asset, voz: id === avatar!.voice_asset } }, { status: 201 });
+  }
+
+  /**
+   * O link de envio (enviar_ativo sem url): o agente manda o arquivo do computador com um curl, sem
+   * base64 e sem o token. Um arquivo, para este avatar, em até 30 min (src/ativos.ts).
+   */
+  private async uploadLink(request: Request, user: User, avatar: Avatar, url: URL): Promise<Response> {
+    const body = (await json(request)) ?? {};
+    const papel = uso(body.uso ?? "");
+    if (papel === null) return falha(400, "uso_invalido", { foto: "imagem", voz: "audio" });
+    const nome = typeof body.nome === "string" ? body.nome.trim() : "";
+    const tipo = typeof body.tipo === "string" && mediaType(body.tipo) ? body.tipo : "";
+    const { codigo, expira } = await criarEnvio(this.media, user.id, avatar.id, nome, papel);
+    const destino = `${url.origin}/envio/${codigo}`;
+    return Response.json(
+      {
+        envio: {
+          url: destino,
+          metodo: "POST",
+          expira,
+          comando: `curl -sS --data-binary @"<caminho do arquivo>" -H "content-type: ${tipo || "<tipo, como audio/mpeg ou image/png>"}" ${destino}`,
+          tipos: Object.keys(MEDIA_TYPES),
+        },
+      },
+      { status: 201 },
+    );
   }
 
   private async avatars(user: User, url: URL): Promise<Response> {
