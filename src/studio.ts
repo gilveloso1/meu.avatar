@@ -10,6 +10,7 @@ import type { ImageRunner } from "./imagens";
 import type { FishApi, FishVoice } from "./fish";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
 import { type Built, canUse, InputError, type Lists, madeAtOnce, makesAudio, onPlatform, STRUCTURES, structureById, type Structure, type Values, videoPlatform } from "./structures";
+import type { VoiceOption } from "./structures/types";
 import { HEYGEN_AVATAR } from "./structures/heygen";
 import { FISH, fishVoices, MAX_CLONE_BYTES, PREVIEW_TEXT, speechCost } from "./structures/voz";
 import { AVATAR_VOICE, HEYGEN_MODEL, MAX_CLONE_NAME, NEW_CLONE, PRICE_PER_SECOND, voiceOptions } from "./structures/heygen-direta";
@@ -229,16 +230,23 @@ export class Studio {
   }
 
   /**
+   * As vozes de um modelo de fala: as prontas (o campo de voz do formulário) e as listas da pessoa
+   * (as clonadas, no Fish). O Fish não precisa do modelo para listar as vozes.
+   */
+  async speechVoices(structure: Structure, userId: number): Promise<{ voices: VoiceOption[]; lists: Lists }> {
+    const lists = await this.lists(structure, userId);
+    const model = structure.id === FISH.id ? null : await this.modelOf(structure);
+    const field = structure.sections(model, { duration: 0, resolution: "", aspectRatio: "" }, lists).flatMap((s) => s.fields).find((f) => f.kind === "voice");
+    return { voices: field?.kind === "voice" ? field.voices : [], lists };
+  }
+
+  /**
    * A amostra de uma voz pronta; null se a voz não existe ou não tem amostra. A da HeyGen vem do
    * catálogo; a de um modelo de fala é gerada uma vez (uma frase, menos de um centavo) e fica no R2.
    */
   async voicePreview(structure: Structure, voiceId: string): Promise<{ bytes: ArrayBuffer; type: string } | null> {
     if (makesAudio(structure)) {
-      const lists = await this.lists(structure, 0);
-      // O Fish não precisa do modelo para listar as vozes (e a amostra vem dele, sem chave).
-      const model = structure.id === FISH.id ? null : await this.modelOf(structure);
-      const voices = structure.sections(model, { duration: 0, resolution: "", aspectRatio: "" }, lists).flatMap((s) => s.fields).find((f) => f.kind === "voice");
-      if (!voices || voices.kind !== "voice" || !voices.voices.some((v) => v.value === voiceId)) return null;
+      if (!(await this.speechVoices(structure, 0)).voices.some((v) => v.value === voiceId)) return null;
       const key = `vozes/previas/${structure.id}/${voiceId}.mp3`;
       const saved = await this.media.get(key);
       if (saved) return { bytes: await saved.arrayBuffer(), type: saved.httpMetadata?.contentType ?? "audio/mpeg" };

@@ -15,6 +15,7 @@ import { canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, STRUC
 import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
 import { NANO_BANANA } from "./structures/imagem";
+import { FISH } from "./structures/voz";
 import { base64, ForbiddenError, type Studio } from "./studio";
 import { FONTES, MAX_RENDER_SECONDS, RenderError } from "./render";
 import { AudioLongoError, type Palavra } from "./transcricao";
@@ -52,6 +53,8 @@ function textoNaTela(html: string): string {
 const KINDS: Record<AssetKind, Fonte["kind"]> = { imagem: "image", video: "video", audio: "audio" };
 const assetSrc = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`;
 
+/** Os modelos de fala que a conta usa, para o agente saber o que pôr em modelo. */
+const falas = (user: User) => STRUCTURES.filter((s) => makesAudio(s) && canUse(s, user)).map((s) => ({ id: s.id, nome: s.name }));
 const falha = (status: number, erro: string, extra: Record<string, unknown> = {}) => Response.json({ erro, ...extra }, { status });
 
 /** O contêiner não respondeu nem nas novas tentativas (src/conteiner.ts): o agente tenta mais tarde. */
@@ -237,6 +240,7 @@ export class Api {
     if (path === "/api/v1/animacoes" && !post) return this.animations(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
     if (path === "/api/v1/vozes" && !post) return this.voices(user, url);
+    if (path === "/api/v1/audios") return post ? this.generateAudio(request, user) : falha(405, "metodo_invalido");
     const video = /^\/api\/v1\/videos\/([0-9a-f-]{36})$/.exec(path);
     if (video) return post ? falha(405, "metodo_invalido") : this.followVideo(user, video[1]!);
     const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video))?$/.exec(path);
@@ -388,6 +392,8 @@ export class Api {
    * idioma e gênero, como o menu de vozes do site) e as clonadas da pessoa, com as dos avatares.
    */
   private async voices(user: User, url: URL): Promise<Response> {
+    const modelo = url.searchParams.get("modelo") ?? "";
+    if (modelo && modelo !== HEYGEN_AVATAR.id) return this.speechVoices(user, url, modelo);
     if (!this.studio || !canUse(HEYGEN_AVATAR, user)) return falha(404, "nao_encontrado");
     const structure = await this.studio.resolve(HEYGEN_AVATAR);
     const lists = await this.studio.lists(structure, user.id);
@@ -405,6 +411,68 @@ export class Api {
       // Só a API direta da HeyGen clona voz; pelo OpenRouter, a lista fica vazia.
       clonadas: (lists.clones ?? []).filter((c) => !busca || c.label.toLowerCase().includes(busca)).map((c) => ({ id: c.value, nome: c.label, ...(lists.newClones?.includes(c.value) ? { clonarNoPrimeiroUso: true } : {}) })),
     });
+  }
+
+  /**
+   * As vozes de um modelo de fala (listar_vozes com modelo): as prontas, com a mesma busca, idioma e
+   * gênero, e, no Fish, as clonadas da pessoa e a de cada avatar com gravação.
+   */
+  private async speechVoices(user: User, url: URL, modelo: string): Promise<Response> {
+    const structure = structureById(modelo);
+    if (!this.studio || !structure || !makesAudio(structure) || !canUse(structure, user)) return falha(404, "modelo_inexistente", { modelos: falas(user) });
+    const { voices, lists } = await this.studio.speechVoices(structure, user.id);
+    const q = url.searchParams;
+    const busca = (q.get("q") ?? "").trim().toLowerCase();
+    const idioma = (q.get("idioma") ?? "").trim().toLowerCase();
+    const genero = q.get("genero") === "feminina" ? "female" : q.get("genero") === "masculina" ? "male" : "";
+    const limite = Math.min(100, Math.max(1, Number(q.get("limite")) || 30));
+    const prontas = voices.filter((v) => (!busca || v.name.toLowerCase().includes(busca)) && (!idioma || v.language.toLowerCase().includes(idioma)) && (!genero || v.gender === genero));
+    return Response.json({
+      prontas: prontas.slice(0, limite).map((v) => ({ id: v.value, nome: v.name, idioma: v.language, genero: v.gender === "female" ? "feminina" : v.gender === "male" ? "masculina" : null })),
+      total: prontas.length,
+      clonadas: (lists.clones ?? []).filter((c) => !busca || c.label.toLowerCase().includes(busca)).map((c) => ({ id: c.value, nome: c.label, ...(lists.newClones?.includes(c.value) ? { clonarNoPrimeiroUso: true } : {}) })),
+    });
+  }
+
+  /**
+   * Gera um áudio com um modelo de fala (gerar_audio; gasta créditos, bem pouco), como o formulário
+   * do modelo no site: o texto, com as emoções em inglês entre colchetes, lido por uma voz pronta ou
+   * clonada de listar_vozes. O áudio sai na hora: a resposta já traz o src, que vai no adicionar
+   * {audio} e no gerar_video {audio}.
+   */
+  private async generateAudio(request: Request, user: User): Promise<Response> {
+    const body = await json(request);
+    const texto = (k: string) => (typeof body?.[k] === "string" ? (body[k] as string) : "");
+    const structure = structureById(texto("modelo") || FISH.id);
+    if (!structure || !makesAudio(structure) || !canUse(structure, user)) return falha(404, "modelo_inexistente", { modelos: falas(user) });
+    if (!this.studio?.canGenerateWith(structure)) return falha(503, "criacao_pausada");
+    if (!texto("texto").trim()) return falha(400, "texto_obrigatorio");
+    if (!texto("voz")) return falha(400, "voz_obrigatoria");
+    const { lists } = await this.studio.speechVoices(structure, user.id);
+    // Uma clonada da lista vai como "Voz clonada"; o resto, como voz pronta (a estrutura confere).
+    const clonada = !!lists.clones?.some((c) => c.value === texto("voz"));
+    const fields: Record<string, string> = {
+      fonte: clonada ? "clonada" : "pronta",
+      voz: clonada ? "" : texto("voz"),
+      clone: clonada ? texto("voz") : "",
+      consentimento: body?.consentimento === true ? "sim" : "",
+      texto: texto("texto"),
+    };
+    const values = (name: string) => fields[name] ?? "";
+    try {
+      const v = await this.studio.waitImage(await this.studio.create({ structure, values, user }));
+      if (v.status !== "completed" || !v.video_key) return falha(502, "audio_falhou", { id: v.id });
+      const settings = JSON.parse(v.settings ?? "{}") as Record<string, string>;
+      return Response.json(
+        { audio: { id: v.id, src: `/videos/${v.id}.mp3`, duracao: v.duration, custo: v.cost, modelo: structure.id, voz: settings.voice ?? null, ...(settings.source === "clonada" ? { clonada: true } : {}) }, usar: { audio: v.id } },
+        { status: 201 },
+      );
+    } catch (err) {
+      if (err instanceof ForbiddenError) return falha(404, "nao_encontrado");
+      // Voz que não existe, texto longo, consentimento que falta: a frase diz o que fazer.
+      if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
+      throw err;
+    }
   }
 
   /**

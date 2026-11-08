@@ -299,7 +299,7 @@ export class Exports {
   /** O arquivo de um bloco no R2: só um vídeo de quem é dono do projeto (num modelo que pode usar), um ativo de avatar dele ou um arquivo deste projeto. */
   async source(project: Project, conta: Conta, src: unknown): Promise<string> {
     const path = typeof src === "string" ? src : "";
-    const video = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.(?:mp4|png|jpg|webp)$/.exec(path);
+    const video = /^\/videos\/([0-9a-f-]{36})(?:\.(original|editado))?\.(?:mp4|png|jpg|webp|mp3)$/.exec(path);
     if (video) {
       const v = await this.db.conta(project.user_id).video(video[1]!);
       const structure = v && structureById(v.structure);

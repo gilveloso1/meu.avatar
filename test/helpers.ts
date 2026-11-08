@@ -537,8 +537,8 @@ export class FakeFishApi implements FishApi {
 }
 
 /** Como `call`, com o catálogo do Fish. */
-export function callFish(request: Request, api: VideoApi | null, fish: FishApi | null): Promise<Response> {
-  return handle(request, { ...env, SITE_URL: SITE }, { api, fish, machines: null });
+export function callFish(request: Request, api: VideoApi | null, fish: FishApi | null, heygen: HeyGenApi | null = null): Promise<Response> {
+  return handle(request, { ...env, SITE_URL: SITE }, { api, fish, heygen, machines: null });
 }
 
 export function call(request: Request, api: VideoApi | null = new FakeVideoApi(), audio: AudioApi | null = null, heygen: HeyGenApi | null = null, exporter: ExportApi | null = null, transcriber: Transcriber | null = null, renderer: RenderApi | null = null): Promise<Response> {
