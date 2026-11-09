@@ -13,7 +13,8 @@ em /emendar, todos são trechos. Os dois devolvem o arquivo pronto, e /emendar
 põe o CRC-32 em x-crc32 (o ZIP do "Exportar todas" é montado no Worker). Para o
 agente enxergar um arquivo (docs/api.md): POST /quadros devolve um JPG com os
 instantes de x-instantes lado a lado, POST /silencios, um JSON, e POST /audio, o
-som em MP3 mono de 16 kHz para o Whisper transcrever (no Worker). GET /saude
+som em MP3 mono de 16 kHz para o Whisper transcrever (no Worker). POST /som tira o som de uma
+versão exportada em MP3 (o "Meu áudio" do HeyGen, a fala montada no canvas). GET /saude
 responde ok. O contêiner não tem acesso à internet.
 
 Sem o contêiner (precisa de ffmpeg):
@@ -354,6 +355,11 @@ def silencios(saida, arquivo):
         json.dump({"duracao": duracao, "silencios": [[a, fins[i] if i < len(fins) else duracao] for i, a in enumerate(inicios)], "som": True}, f)
 
 
+def som(saida, arquivo):
+    """O som de uma versão exportada, em MP3 estéreo, no volume em que ela saiu (já nivelado na emenda)."""
+    subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-y", "-i", arquivo, "-vn", "-ac", "2", "-ar", str(TAXA), "-c:a", "libmp3lame", "-b:a", "192k", "-f", "mp3", saida], capture_output=True, check=True, timeout=300)
+
+
 def audio(saida, arquivo):
     """O som do arquivo, leve, para a transcrição: o Whisper trabalha em 16 kHz mono."""
     subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-y", "-i", arquivo, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "libmp3lame", "-b:a", "32k", "-f", "mp3", saida], capture_output=True, check=True, timeout=300)
@@ -372,7 +378,7 @@ class Handler(BaseHTTPRequestHandler):
         self.responder(200 if self.path == "/saude" else 404, b"ok" if self.path == "/saude" else b"nao encontrado")
 
     def do_POST(self):
-        if self.path not in ("/trecho", "/emendar", "/quadros", "/silencios", "/audio"):
+        if self.path not in ("/trecho", "/emendar", "/quadros", "/silencios", "/audio", "/som"):
             return self.responder(404, b"nao encontrado")
         total = int(self.headers.get("content-length") or 0)
         try:
@@ -408,6 +414,8 @@ class Handler(BaseHTTPRequestHandler):
                     silencios(saida, partes[0])
                 elif self.path == "/audio":
                     audio(saida, partes[0])
+                elif self.path == "/som":
+                    som(saida, partes[0])
                 else:
                     emendar(saida, partes)
                     extra["x-crc32"] = str(crc32(saida))

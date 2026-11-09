@@ -144,6 +144,7 @@ export const ERROS = {
   exportarRascunho: erro("Este vídeo ainda tem rascunhos.", "Troque cada rascunho pelo vídeo e exporte de novo."),
   exportarIndisponivel: erro("Exportação indisponível agora.", "Tente mais tarde."),
   exportarExpirou: erro("Este vídeo não está mais disponível.", "Toque em Exportar para gerar de novo."),
+  exportarSom: erro("Não foi possível tirar o som do vídeo.", "Tente de novo em instantes."),
 
   // Avatares
   avatarNome: campo("Escreva o nome do avatar."),

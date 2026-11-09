@@ -724,7 +724,7 @@ ${error ? snackbar(error) : ""}`;
       const project = await this.db.insertProject({ id: crypto.randomUUID(), user_id: user.id, name: "Projeto sem nome", data: EMPTY_PROJECT });
       return redirect(`/canvas/${project.id}`);
     }
-    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|estado|arquivos|apagar|exportar|exportacoes)(?:\/([0-9a-f-]{36})(?:\/(\d+\.mp4|todas\.zip))?)?)?$/.exec(path);
+    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|estado|arquivos|apagar|exportar|exportacoes)(?:\/([0-9a-f-]{36})(?:\/(\d+\.mp[34]|todas\.zip))?)?)?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     // Projeto de outra pessoa (ou que não existe): a página nem existe.
     if (!m || !project || project.user_id !== user.id) return new Response("não encontrado", { status: 404 });
@@ -829,6 +829,7 @@ ${error ? snackbar(error) : ""}`;
         grandeVideo: ERROS.canvasArquivoGrande(MAX_VIDEO_BYTES / 1024 / 1024),
         nome: ERROS.projetoNome,
         exportar: ERROS.exportarFalhou,
+        exportarSom: ERROS.exportarSom,
         exportarLimite: ERROS.exportarLimite(MAX_VERSOES),
         ligacaoCiclo: ERROS.ligacaoCiclo,
         ligacaoRepetida: ERROS.ligacaoRepetida,
@@ -871,19 +872,43 @@ ${CANVAS_BODY}
       const now = await this.exports.follow(id);
       return Response.json(this.exports.state(project, await this.exports.withLink(now ?? row), undefined, new URL(request.url).origin));
     }
-    if (request.method !== "GET") return new Response("não encontrado", { status: 404 });
+    // POST no som: só o prepara (a tela mostra o andamento no clique e baixa depois, já pronto).
+    const prepara = request.method === "POST" && !!download?.endsWith(".mp3");
+    if (request.method !== "GET" && !prepara) return new Response("não encontrado", { status: 404 });
     if (!download) return Response.json(this.exports.state(project, await this.exports.withLink(row), undefined, new URL(request.url).origin));
     if (row.status !== "done") return new Response("não encontrado", { status: 404 });
     if (row.expires_at <= new Date().toISOString()) return new Response(ERROS.exportarExpirou, { status: 410 });
+    if (prepara) {
+      const key = await this.soundOf(JSON.parse(row.plan) as ExportPlan, download!);
+      return typeof key === "string" ? new Response(null, { status: 204 }) : key;
+    }
     return this.exportFile(request, JSON.parse(row.plan) as ExportPlan, download);
   }
 
-  /** Uma versão (`0.mp4`) ou todas em ZIP, com o nome de sempre; a mesma resposta pela sessão, pelo token ou pelo link. */
-  private exportFile(request: Request, plan: ExportPlan, download: string): Promise<Response> | Response {
+  /** O MP3 de uma versão (`0.mp3`), feito no primeiro pedido; ou a resposta de erro. */
+  private async soundOf(plan: ExportPlan, download: string): Promise<string | Response> {
+    const version = plan.versoes[parseInt(download, 10)];
+    if (!version) return new Response("não encontrado", { status: 404 });
+    try {
+      return await this.exports.sound(version);
+    } catch (err) {
+      if (err instanceof InputError) return new Response(err.message, { status: err.message === ERROS.exportarExpirou ? 410 : 503 });
+      console.error("Falha ao tirar o som da exportação", err);
+      return new Response(ERROS.exportarSom, { status: 502 });
+    }
+  }
+
+  /** Uma versão (`0.mp4`), o som dela (`0.mp3`) ou todas em ZIP, com o nome de sempre; a mesma resposta pela sessão, pelo token ou pelo link. */
+  private async exportFile(request: Request, plan: ExportPlan, download: string): Promise<Response> {
     if (download === "todas.zip") return zipFits(plan) ? this.exports.zip(plan) : new Response("não encontrado", { status: 404 });
     const index = parseInt(download, 10);
     const version = plan.versoes[index];
-    return version ? this.object(request, version.chave, "private, no-store", fileName(index, version.nome)) : new Response("não encontrado", { status: 404 });
+    if (!version) return new Response("não encontrado", { status: 404 });
+    if (download.endsWith(".mp3")) {
+      const key = await this.soundOf(plan, download);
+      return typeof key === "string" ? this.object(request, key, "private, no-store", fileName(index, version.nome, "audio/mpeg")) : key;
+    }
+    return this.object(request, version.chave, "private, no-store", fileName(index, version.nome));
   }
 
   /** Salva o canvas (JSON) e o nome, enquanto a pessoa edita. */

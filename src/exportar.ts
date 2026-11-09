@@ -61,7 +61,7 @@ export class Exporter extends SleepyContainer {
   enableInternet = false;
 }
 
-export type Inspecao = "/quadros" | "/silencios" | "/audio";
+export type Inspecao = "/quadros" | "/silencios" | "/audio" | "/som";
 
 /** O que o site usa do contêiner; os testes trocam por um falso. */
 export interface ExportApi {
@@ -69,7 +69,7 @@ export interface ExportApi {
   segment(job: string, body: ReadableStream, sizes: number[]): Promise<Response>;
   /** Devolve a versão emendada, com o CRC-32 em x-crc32. */
   join(job: string, body: ReadableStream, sizes: number[]): Promise<Response>;
-  /** Olha um arquivo: "/quadros" devolve um JPG, "/silencios" um JSON e "/audio" o som em MP3 (docs/api.md). */
+  /** Olha um arquivo: "/quadros" devolve um JPG, "/silencios" um JSON, "/audio" o som leve para o Whisper e "/som" o MP3 de uma versão (docs/api.md). */
   inspect(path: Inspecao, body: ReadableStream, size: number, instants?: string): Promise<Response>;
 }
 
@@ -122,7 +122,7 @@ const LINK_MS = 60 * 60 * 1000;
  * tela e o MCP mostram o link). Vale para uma exportação, por 1 hora depois de entregue (cada pergunta renova),
  * e nunca depois de a exportação expirar (24 horas).
  */
-export const BAIXAR_PATH = /^\/baixar\/([0-9a-f-]{36})\/([0-9a-f]{64})\/(\d+\.mp4|todas\.zip)$/;
+export const BAIXAR_PATH = /^\/baixar\/([0-9a-f-]{36})\/([0-9a-f]{64})\/(\d+\.mp[34]|todas\.zip)$/;
 
 /** O que a tela recebe. */
 export interface ExportState {
@@ -131,7 +131,8 @@ export interface ExportState {
   feitos: number;
   total: number;
   erro: string | null;
-  versoes: { nome: string; href: string; arquivo: string; baixar?: string }[];
+  /** som: o MP3 da versão (feito no primeiro pedido), para virar o "Meu áudio" do HeyGen. */
+  versoes: { nome: string; href: string; arquivo: string; baixar?: string; som: string; arquivoSom: string; baixarSom?: string }[];
   zip: string | null;
   /** O ZIP pelo link sem token. */
   baixarZip?: string;
@@ -144,11 +145,14 @@ const ANIMACAO = "animacao:";
 
 const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
-/** Nome da versão baixada (sozinha ou no ZIP): "01 - Gancho 1 + Corpo + CTA A.mp4", pela regra de todo download. */
-export function fileName(index: number, nome: string): string {
+/** Nome da versão baixada (sozinha ou no ZIP): "01 - Gancho 1 + Corpo + CTA A.mp4", pela regra de todo download; o som, ".mp3". */
+export function fileName(index: number, nome: string, type = "video/mp4"): string {
   const n = String(index + 1).padStart(2, "0");
-  return downloadName(nome.trim() ? `${n} - ${nome}` : n, "video/mp4");
+  return downloadName(nome.trim() ? `${n} - ${nome}` : n, type);
 }
+
+/** Onde fica o som (MP3) de uma versão: ao lado do vídeo, com o mesmo prazo no R2. */
+export const soundKey = (chave: string) => chave.replace(/\.mp4$/, ".mp3");
 
 export class Exports {
   constructor(
@@ -360,6 +364,20 @@ export class Exports {
   }
 
   /**
+   * O som de uma versão pronta em MP3, feito no primeiro pedido (no contêiner, do vídeo exportado) e
+   * guardado ao lado dele: pedir de novo não liga o contêiner. Devolve a chave no R2.
+   */
+  async sound(version: ExportPlan["versoes"][number]): Promise<string> {
+    const key = soundKey(version.chave);
+    if (await this.media.head(key)) return key;
+    // O vídeo já saiu do R2 (o prazo da exportação): o som não tem de onde sair.
+    if (!(await this.media.head(version.chave))) throw new InputError(ERROS.exportarExpirou);
+    const res = await this.inspect(version.chave, "/som");
+    await this.keep(res, key, "audio/mpeg");
+    return key;
+  }
+
+  /**
    * A fala do arquivo com o tempo de cada palavra, ou null sem contêiner ou sem Whisper. Fica
    * guardada no R2 pelo etag: pedir de novo não paga de novo, e o áudio tratado outra vez é refeito.
    */
@@ -388,12 +406,13 @@ export class Exports {
       const key = video[2] === "original" ? v?.video_key : video[2] === "editado" ? v?.edited_key : (v?.processed_key ?? v?.video_key);
       if (key && structure && canUse(structure, conta)) return key;
     }
-    // O vídeo exportado: é assim que o agente confere o resultado do próprio trabalho.
-    const exported = /^\/projetos\/([0-9a-f-]{36})\/exportacoes\/([0-9a-f-]{36})\/(\d+)\.mp4$/.exec(path);
+    // O vídeo exportado: é assim que o agente confere o resultado do próprio trabalho. O som dele (.mp3)
+    // é a fala montada no canvas, que vira o áudio do gerar_video.
+    const exported = /^\/projetos\/([0-9a-f-]{36})\/exportacoes\/([0-9a-f-]{36})\/(\d+)\.(mp[34])$/.exec(path);
     if (exported?.[1] === project.id) {
       const row = await this.db.exportById(exported[2]!);
       const version = row?.project_id === project.id && row.status === "done" ? (JSON.parse(row.plan) as ExportPlan).versoes[Number(exported[3])] : undefined;
-      if (version) return version.chave;
+      if (version) return exported[4] === "mp3" ? this.sound(version) : version.chave;
     }
     const asset = /^\/avatares\/([0-9a-f-]{36})\/arquivos\/([0-9a-f-]{36})$/.exec(path);
     if (asset) {
@@ -534,7 +553,17 @@ export class Exports {
       feitos: row.step,
       total: row.total,
       erro: row.status === "failed" ? ERROS.exportarFalhou : null,
-      versoes: ready ? plan.versoes.map((v, i) => ({ nome: v.nome, href: `${base}/${i}.mp4`, arquivo: fileName(i, v.nome), ...(solto ? { baixar: `${solto}/${i}.mp4` } : {}) })) : [],
+      versoes: ready
+        ? plan.versoes.map((v, i) => ({
+            nome: v.nome,
+            href: `${base}/${i}.mp4`,
+            arquivo: fileName(i, v.nome),
+            ...(solto ? { baixar: `${solto}/${i}.mp4` } : {}),
+            som: `${base}/${i}.mp3`,
+            arquivoSom: fileName(i, v.nome, "audio/mpeg"),
+            ...(solto ? { baixarSom: `${solto}/${i}.mp3` } : {}),
+          }))
+        : [],
       zip: zip ? `${base}/todas.zip` : null,
       ...(zip && solto ? { baixarZip: `${solto}/todas.zip` } : {}),
       ...(solto ? { baixarAte: plan.linkAte } : {}),

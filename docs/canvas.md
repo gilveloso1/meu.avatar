@@ -277,6 +277,11 @@ menos custo.
   desconectado (antes, o passo que passava dos 60 s do MCP ficava preso por 15 min). Bloco só
   entra com vídeo que a pessoa pode usar ou arquivo do próprio projeto. Os vídeos ficam
   24 horas para baixar; cada exportação vai até 50 versões (`MAX_EXPORTAR`), um a um ou em ZIP sem compressão, montado no Worker.
+  Cada versão também sai **só o som**, em MP3 (10/11/2026): no diálogo, ao lado do vídeo (`movie`),
+  o botão `graphic_eq` prepara o MP3 no servidor (o indicador no botão enquanto isso; o primeiro
+  pedido liga o contêiner, `/som`, e o MP3 fica ao lado do vídeo no R2) e baixa. É a fala montada
+  no canvas para o "Meu áudio" do HeyGen; o agente usa o `som` do `acompanhar_exportacao` direto
+  no `gerar_video {audio}`.
 - Código em `src/canvas/` (tela.html, canvas.js, modelo.js, player.js,
   miniaturas.js); `npm run canvas` gera `src/site/canvas.ts`, que o Worker usa. A
   página do canvas libera `data:` nas imagens e `blob:` no fetch (miniaturas e a

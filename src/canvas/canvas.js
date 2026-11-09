@@ -1267,7 +1267,13 @@ function showExport(st) {
   if (st.feitos > 0) bar.setAttribute("aria-valuenow", Math.round((st.feitos / st.total) * 100));
   else bar.removeAttribute("aria-valuenow");
   $("#dlg-list").innerHTML = st.versoes
-    .map((v, i) => `<a class="xlist__item interactive" href="${esc(v.href)}" download><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(v.nome)}</span><span class="icon" aria-hidden="true">download</span></a>`)
+    .map(
+      (v, i) =>
+        `<div class="xlist__item xlist__item--acoes"><span class="xlist__lead">${i + 1}</span><span class="xlist__text">${esc(v.nome)}</span>` +
+        `<a class="icon-button interactive" href="${esc(v.href)}" download aria-label="Baixar o vídeo de ${esc(v.nome)}" title="Vídeo (MP4)"><span class="icon" aria-hidden="true">movie</span></a>` +
+        (v.som ? `<button class="icon-button interactive" type="button" data-som="${esc(v.som)}" aria-label="Baixar só o som de ${esc(v.nome)}" title="Só o som (MP3)"><span class="icon" aria-hidden="true">graphic_eq</span></button>` : "") +
+        `</div>`,
+    )
     .join("");
   const zip = $("#dlg-zip");
   zip.hidden = !st.zip;
@@ -1275,6 +1281,33 @@ function showExport(st) {
   // Quem fechou o diálogo continua editando; ele só volta quando ficar pronto.
   if (!$("#dlg").open && (!exportHidden || st.status !== "running")) $("#dlg").showModal();
 }
+
+// Só o som: o primeiro pedido faz o MP3 no servidor (uns segundos); o botão mostra o indicador
+// enquanto isso e o download começa quando ele está pronto.
+$("#dlg-list").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-som]");
+  if (!b || b.classList.contains("is-busy")) return;
+  b.classList.add("is-busy");
+  b.setAttribute("aria-busy", "true");
+  b.insertAdjacentHTML("beforeend", `<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.8"/></svg>`);
+  try {
+    const res = await fetch(b.dataset.som, { method: "POST" });
+    if (res.ok) {
+      const a = document.createElement("a");
+      a.href = b.dataset.som;
+      a.download = "";
+      a.click();
+    } else {
+      // Vencida ou sem contêiner, a frase do servidor (do catálogo) diz o que fazer; o resto, a de sempre.
+      toast(res.status === 410 || res.status === 503 ? await res.text() : (CONFIG.erros?.exportarSom ?? ""));
+    }
+  } catch {
+    toast(CONFIG.erros?.exportarSom ?? "");
+  }
+  b.classList.remove("is-busy");
+  b.removeAttribute("aria-busy");
+  b.querySelector(".spinner")?.remove();
+});
 
 async function followExport(st) {
   const url = `${PROJETO.exportar.replace(/\/exportar$/, "/exportacoes")}/${st.id}`;
