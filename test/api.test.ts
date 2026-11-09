@@ -1564,6 +1564,26 @@ describe("áudio em sequência", () => {
     expect(de(origem(fala))).toHaveLength(2);
   });
 
+  it("a animação por cima da narração é cobertura: o bloco não muda de base nem de id, e acompanha a fala", async () => {
+    const { id, revisao } = await novo();
+    const [f1, f2, efeito] = await audios(id, 3);
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", arquivo: f1, dur: 10, rotulo: "a" },
+      { tipo: "adicionar", arquivo: f2, dur: 10, depois: "@a", rotulo: "b" },
+      { tipo: "adicionar", arquivo: efeito, dur: 2, sobre: "@b", em: 6, rotulo: "efeito" },
+      { tipo: "adicionar", html: `<div id="t">FGC</div>`, duracao: 2, sobre: "@b", em: 6, rotulo: "titulo" },
+    ]);
+    const [a, b, , titulo] = r.criados as [string, string, string, string];
+    expect(r.grupos.map((g) => g.id)).toEqual([a]);
+    const camada = (v: Vista, bid: string) => v.grupos[0]!.blocos.find((o) => o.id === bid)!.camada;
+    expect([camada(r, a), camada(r, b), camada(r, titulo)]).toEqual(["base", "base", "cobertura"]);
+    expect(x(r, titulo)).toBe(16);
+    // Tirar 1 s do começo de a leva o título e o efeito junto com b.
+    const t = await lote(id, r.revisao, [{ tipo: "removerTrechos", bloco: a, trechos: [[0, 1]] }, { tipo: "mover", bloco: a, depois: b }]);
+    expect(t.grupos.map((g) => g.id)).toEqual([a]);
+    expect([x(t, b), x(t, titulo), x(t, r.criados[2]!), x(t, a)]).toEqual([0, 6, 6, 10]);
+  });
+
   it("som e imagem não se misturam numa sequência; trocar vale de áudio para áudio", async () => {
     const { id, revisao } = await novo();
     const [f1, f2] = await audios(id, 2);

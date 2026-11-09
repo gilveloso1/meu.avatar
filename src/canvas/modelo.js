@@ -194,7 +194,11 @@ export function groups(project) {
       break;
     }
   }
-  for (const g of out) finishGroup(g);
+  const order = new Map(blocks.map((b, i) => [b, i]));
+  for (const g of out) {
+    soundFirst(g, order);
+    finishGroup(g);
+  }
   // Bloco é o que tem a área tracejada: numerado na ordem em que os elementos entraram no canvas.
   const firstIndex = (g) => Math.min(...members(g).map((b) => blocks.indexOf(b)));
   out.filter(hasArea).sort((a, b) => firstIndex(a) - firstIndex(b)).forEach((g, i) => (g.number = i + 1));
@@ -203,6 +207,22 @@ export function groups(project) {
     g.label = own ?? (g.number ? `Bloco ${g.number}` : g.name);
   }
   return out;
+}
+
+/**
+ * Quem entrou primeiro no bloco diz a base. Imagem com som embaixo e vídeo com música embaixo têm a mesma
+ * geometria: se o primeiro foi um som da trilha 0 (a narração), a base é a de som, e o que está na trilha 0 de
+ * vídeo vira cobertura, como num bloco só de som. Assim a imagem posta por cima da fala acompanha a fala.
+ */
+function soundFirst(g, order) {
+  if (g.soloAudio || !g.blocks.length || !g.audios.length) return;
+  const first = members(g).reduce((a, b) => (order.get(b) < order.get(a) ? b : a));
+  if (visual(first) || trackIn(first, g) !== 0) return;
+  g.covers = [...g.blocks, ...g.covers];
+  g.blocks = [];
+  g.y += VIS_H;
+  g.soloAudio = true;
+  g.id = first.id;
 }
 
 const single = (b, blocks = [], covers = [], audios = []) => ({ id: b.id, blocks, covers, audios, x: b.x, y: b.y, w: width(b), h: VIS_H });

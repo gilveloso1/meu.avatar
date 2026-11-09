@@ -272,7 +272,9 @@ O primeiro bloco de um projeto vazio traz o Final `final`, já ligado a ele, com
 **Sequências** (09/11/2026): todo elemento está numa trilha do grupo, e a sequência dele é essa
 trilha, a mesma regra para vídeo, imagem e áudio (`sequence`, `src/canvas/modelo.js`). A **base** é a
 primeira trilha de vídeo ou, num grupo sem vídeo, a primeira de som: as falas de áudio encadeadas com
-`depois` formam a base de um grupo só de som. Quando a base muda (`cortar`, `velocidade`, `removerPausas`,
+`depois` formam a base de um grupo só de som. Quem entrou primeiro no grupo diz a base: com a narração
+primeiro, a imagem ou a animação posta por cima (`sobre`) é cobertura e acompanha a fala; com o vídeo
+primeiro, a música embaixo é som somado, como sempre. Quando a base muda (`cortar`, `velocidade`, `removerPausas`,
 `removerTrechos`, `trocar`), o resto dela encosta e as outras trilhas do grupo (coberturas, sons somados,
 a música embaixo das falas) acompanham o ponto da fala. Fora da base, a sequência é só a cadeia de
 elementos encostados naquela trilha: o que vem encostado depois encosta, e nada mais anda. É a mesma

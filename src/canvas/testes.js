@@ -588,3 +588,24 @@ test("aparar uma fala de áudio: a seguinte encosta, e a refeita da sequência l
   const r = M.relay(p, { ...p, blocks: p.blocks.map((o) => (o.id === "a" ? { ...o, tout: 1 } : o)) }, ["a", "b"], 0, 500);
   assert.deepEqual(["b", "m"].map((id) => r.blocks.find((o) => o.id === id).x), [40, 40]);
 });
+
+test("quem entrou primeiro diz a base: a narração com imagem por cima continua a base", () => {
+  const fala = (id, x, dur = 2) => el(id, x, M.VIS_H, dur, "audio");
+  // Narração primeiro, a imagem depois, por cima: a base é a fala, e a imagem é cobertura.
+  const n = { blocks: [fala("f1", 0), fala("f2", 80), el("img", 40, 0, 2)], finals: [], edges: [] };
+  const [g] = M.groups(n);
+  assert.equal(g.id, "f1");
+  assert.deepEqual(M.base(g).map((b) => b.id), ["f1", "f2"]);
+  assert.deepEqual(g.covers.map((b) => b.id), ["img"]);
+  // Cortar a primeira fala leva a imagem junto (ela começa na fala, como as camadas de um vídeo).
+  const cortado = { ...n, blocks: n.blocks.map((b) => (b.id === "f1" ? { ...b, tout: 1 } : b)) };
+  const r = M.relay(n, cortado, ["f1", "f2"], 0, M.VIS_H);
+  assert.deepEqual(["f2", "img"].map((id) => r.blocks.find((b) => b.id === id).x), [40, 40]);
+  const [h] = M.groups(r);
+  assert.deepEqual(M.base(h).map((b) => b.id), ["f1", "f2"]);
+  // Vídeo primeiro e a música depois: o de sempre, o vídeo é a base.
+  const v = { blocks: [el("vid", 0, 0, 4, "video"), fala("mus", 0, 4)], finals: [], edges: [] };
+  const [w] = M.groups(v);
+  assert.deepEqual(M.base(w).map((b) => b.id), ["vid"]);
+  assert.deepEqual(w.audios.map((b) => b.id), ["mus"]);
+});
