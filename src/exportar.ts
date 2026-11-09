@@ -34,7 +34,7 @@ const EXPORT_TTL_MS = 24 * 60 * 60 * 1000;
 /** Muda quando o render das animações passa a sair diferente (outra imagem de render, outro GSAP). */
 const ANIMATION_VERSION = "1";
 /** Muda quando container/exportar.py passa a gerar trechos diferentes: os antigos não servem mais. */
-const SEGMENT_VERSION = "7";
+const SEGMENT_VERSION = "8";
 /** Um passo que ficou sem resposta (Worker caiu) pode ser retomado depois disso. */
 const STALE_MS = 15 * 60 * 1000;
 /** Depois disso, a cena que falhou (ver_cena) pode ser montada de novo. */
