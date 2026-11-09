@@ -3130,8 +3130,8 @@ function page(title: string, body: string, opts: { refresh?: boolean; bar: Bar }
  * da página do modelo que se recolhem (lembrados no navegador). Com vídeo na fila,
  * atualiza a página de tempos em tempos (a prévia da edição rápida tem o seu, PREVIEW_SCRIPT).
  */
-/** Os arquivos que o token também baixa: o de um vídeo (ou imagem) gerado e o de um ativo do avatar. */
-const FILE_PATH = /^\/(?:videos\/[0-9a-f-]{36}(?:\.(?:original|editado))?\.(?:mp4|png|jpg|webp)|avatares\/[0-9a-f-]{36}\/arquivos\/[0-9a-f-]{36})$/;
+/** Os arquivos que o token também baixa: o de um vídeo (imagem, áudio) gerado e o de um ativo do avatar. */
+const FILE_PATH = /^\/(?:videos\/[0-9a-f-]{36}(?:\.(?:original|editado))?\.(?:mp4|png|jpg|webp|mp3)|avatares\/[0-9a-f-]{36}\/arquivos\/[0-9a-f-]{36})$/;
 
 /** Indicador circular dos botões ocupados (.spinner, em style.ts). */
 const SPINNER = `<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.8"/></svg>`;

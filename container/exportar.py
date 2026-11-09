@@ -40,6 +40,8 @@ MAX_QUADROS = 12
 ALTURA_QUADRO = 360
 # Rampa de som em cada ponta de clipe, como na Edição rápida (editar.py): corte seco estala.
 RAMPA = 0.01
+# Quanto o som começa a ser lido antes do corte, para o decodificador aquecer (ver filtros).
+AQUECER = 0.5
 # As regras de RULES (src/quickedit.ts).
 RUIDO = -35
 SILENCIO_MIN = 0.25
@@ -82,6 +84,9 @@ def tempo(velocidade):
     while resto < 0.5:
         passos.append("atempo=0.5")
         resto /= 0.5
+    if not passos and abs(resto - 1) < 1e-6:
+        # Em 1x, nada: o atempo perde o fim do som mesmo sem mudar a velocidade.
+        return "anull"
     return ",".join([*passos, f"atempo={resto:.5f}"])
 
 
@@ -160,7 +165,8 @@ def filtros(plano, arquivos):
     """Devolve as entradas e o filter_complex do trecho, com as saídas [v] e [a]."""
     w, h = lado(plano.get("largura")), lado(plano.get("altura"))
     duracao = numero(plano.get("duracao"), 0.1, 3600)
-    quadros = max(1, round(duracao * FPS))
+    # Arredonda como o exportedLength de modelo.js (o round do Python iria ao par no meio quadro).
+    quadros = max(1, math.floor(duracao * FPS + 0.5))
     # O som tem a duração exata dos quadros: é o que mantém a emenda em sincronia.
     exata = quadros / FPS
     entradas, grafo, sons, volumes = [], [f"color=c=black:s={w}x{h}:r={FPS}:d={exata:.6f},format=yuv420p[base]"], [], []
@@ -189,12 +195,12 @@ def filtros(plano, arquivos):
         if tipo == "imagem":
             # No servidor os arquivos não têm extensão: diz o demuxer, que é o que aceita -loop.
             entradas += ["-f", "image2", "-pattern_type", "none", "-loop", "1", "-framerate", str(FPS), "-t", f"{dura:.6f}", "-i", caminho]
-        else:
+        elif tipo == "video":
             # WebM com transparência: o decodificador nativo do ffmpeg ignora o alfa e cobre de preto.
-            alfa = ["-c:v", "libvpx-vp9"] if tipo == "video" and tem_alfa(caminho) else []
+            alfa = ["-c:v", "libvpx-vp9"] if tem_alfa(caminho) else []
             entradas += ["-ss", f"{corte:.6f}", "-t", f"{dura * velocidade:.6f}", *alfa, "-i", caminho]
-        i = len([a for a in entradas if a == "-i"]) - 1
         if tipo != "audio":
+            i = len([a for a in entradas if a == "-i"]) - 1
             # Cobre o quadro, como a prévia (object-fit: cover). O arquivo pode acabar um quadro
             # antes (24 ou 25 fps viram 30): repete o último, senão o fundo preto pisca na emenda.
             grafo.append(f"[{i}:v]setpts=(PTS-STARTPTS)/{velocidade:.5f},fps={FPS}[e{n}]")
@@ -203,12 +209,31 @@ def filtros(plano, arquivos):
             grafo.append(f"[{atual}][v{n}]overlay=eof_action=pass:format=yuv420[o{n}]")
             atual = f"o{n}"
         if tipo != "imagem" and volume > 0 and tem_som(caminho):
-            atraso = round(entra * 1000)
+            # O som entra à parte e começa a ler AQUECER antes: lido do ponto exato, o MP3 (e o AAC)
+            # sai mudo nos primeiros ~35 ms, e cada clipe começava com um buraco. E lê AQUECER a mais
+            # no fim: o -t conta do relógio do arquivo (o MP3 que começa em 25 ms deixava o fim mudo)
+            # e o atempo perde o fim. Começo e fim vêm do atrim, pela amostra. O som que continua o de
+            # outro clipe é lido de onde a corrente começa (origem) e acelerado dali, como o vizinho:
+            # o atempo não é exato, e cada um acelerando do seu corte não encaixaria (soundSeams).
+            origem = numero(item.get("origem", corte), 0, 36000)
+            desde = numero(item.get("desde", 0), 0, 36000)
+            antes = min(origem, AQUECER)
+            entradas += ["-ss", f"{origem - antes:.6f}", "-t", f"{(desde + dura) * velocidade + antes + AQUECER:.6f}", "-i", caminho]
+            i = len([a for a in entradas if a == "-i"]) - 1
+            primeira = round(desde * TAXA)
+            # Pela amostra, não pelo milésimo: o som que continua o anterior encosta nele sem salto.
+            atraso = round(entra * TAXA)
             rampa = min(RAMPA, dura / 2)
+            # Sem rampa onde o som continua o do lado (a música cortada por cena, soundSeams em modelo.js).
+            rampas = ([] if item.get("continua") is True else [f"afade=t=in:d={rampa:.6f}"]) + (
+                [] if item.get("segue") is True else [f"afade=t=out:st={dura - rampa:.6f}:d={rampa:.6f}"]
+            )
             grafo.append(
                 f"[{i}:a]aresample={TAXA},aformat=sample_fmts=fltp:channel_layouts=stereo,"
-                f"asetpts=PTS-STARTPTS,{tempo(velocidade)},volume={volume:.4f},"
-                f"afade=t=in:d={rampa:.6f},afade=t=out:st={dura - rampa:.6f}:d={rampa:.6f},adelay={atraso}:all=1[s{n}]"
+                f"asetpts=PTS-STARTPTS,atrim=start_sample={round(antes * TAXA)},asetpts=PTS-STARTPTS,{tempo(velocidade)},"
+                # Depois do atempo, que não sai com o tamanho exato: o fim vem da sobra lida a mais.
+                f"atrim=start_sample={primeira}:end_sample={primeira + round(dura * TAXA)},asetpts=PTS-STARTPTS,volume={volume:.4f},"
+                + "".join(r + "," for r in rampas) + f"adelay={atraso}S:all=1[s{n}]"
             )
             sons.append(f"[s{n}]")
             volumes.append(volume)

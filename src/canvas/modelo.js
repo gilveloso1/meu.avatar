@@ -439,7 +439,9 @@ export const finalRate = (final) => final?.speed ?? 1;
 /**
  * O que o contêiner monta para um Final: cada grupo vira um trecho, feito uma vez
  * só, e cada versão é a lista dos trechos dela. O Worker roda isto sobre o projeto
- * salvo (src/exportar.ts). pick: os índices das versões; sem ele, todas.
+ * salvo (src/exportar.ts). pick: os índices das versões; sem ele, todas. Um som que
+ * continua de um grupo para o seguinte (a música cortada por cena) muda o trecho conforme
+ * o vizinho (soundSeams): o mesmo grupo entre vizinhos diferentes pode virar dois trechos.
  */
 export function exportWork(project, finalId, pick) {
   const final = project.finals.find((f) => f.id === finalId);
@@ -450,14 +452,74 @@ export function exportWork(project, finalId, pick) {
   const { width: largura, height: altura } = output(final);
   const trechos = [];
   const seen = new Map();
-  const trecho = (g) => {
-    if (!seen.has(g)) {
-      seen.set(g, trechos.length);
-      trechos.push(segmentOf(g, final));
-    }
-    return seen.get(g);
+  const own = new Map();
+  const segment = (g) => {
+    if (!own.has(g)) own.set(g, segmentOf(g, final));
+    return structuredClone(own.get(g));
   };
-  return { largura, altura, trechos, versoes: chosen.map((i) => ({ nome: versionName(i), trechos: all[i].map(trecho) })) };
+  const trecho = (t, g) => {
+    const k = `${g.id}:${JSON.stringify(t)}`;
+    if (!seen.has(k)) {
+      seen.set(k, trechos.length);
+      trechos.push(t);
+    }
+    return seen.get(k);
+  };
+  return { largura, altura, trechos, versoes: chosen.map((i) => ({ nome: versionName(i), trechos: soundSeams(all[i].map(segment)).map((t, n) => trecho(t, all[i][n])) })) };
+}
+
+/** Quadros por segundo da exportação (FPS, container/exportar.py): o trecho sai com quadros inteiros. */
+const EXPORT_FPS = 30;
+/** A duração que o trecho tem de fato, com o mesmo arredondamento do exportar.py. */
+const exportedLength = (d) => Math.max(1, Math.floor(d * EXPORT_FPS + 0.5)) / EXPORT_FPS;
+/** Até quanto, em segundos, um som ainda continua o outro (a pausa que a edição tira é bem maior). */
+const SEAM = 0.01;
+const hasSound = (i) => i.tipo !== "imagem" && i.volume > 0;
+/** Onde o item para no arquivo. */
+const stopsAt = (i) => i.corte + i.dura * i.velocidade;
+const goesOn = (a, b) => hasSound(a) && hasSound(b) && a.src === b.src && a.velocidade === b.velocidade && Math.abs(stopsAt(a) - b.corte) < SEAM;
+
+/**
+ * Marca o som que continua o anterior sem salto no arquivo (segue no que acaba, continua no
+ * que começa): ali o contêiner não põe a rampa das pontas, que abriria um buraco no meio da
+ * música. Entre trechos, o primeiro vai até o fim que ele tem de fato (quadros inteiros) e o
+ * seguinte retoma dali. origem (onde a corrente começa no arquivo) e desde (segundos de saída
+ * desde ela) deixam o contêiner acelerar o som sempre do mesmo ponto: o atempo não é exato, e
+ * cada trecho acelerando do seu corte não encaixaria no vizinho. Muda os trechos e os devolve.
+ */
+function soundSeams(segs) {
+  const prev = new Map();
+  const crosses = new Set();
+  const used = new Set();
+  segs.forEach((t, k) => {
+    for (const b of t.itens) {
+      const pick = (list, end) => list.find((a) => a !== b && !used.has(a) && Math.abs(a.entra + a.dura - end(a)) < SEAM && goesOn(a, b));
+      let a = pick(t.itens, () => b.entra);
+      if (!a && k > 0 && b.entra < SEAM) {
+        a = pick(segs[k - 1].itens, () => segs[k - 1].duracao);
+        if (a) crosses.add(a);
+      }
+      if (a) {
+        used.add(a);
+        prev.set(b, a);
+      }
+    }
+  });
+  // Em ordem: quem vem antes já tem a duração e a origem certas quando o seguinte as lê.
+  for (const t of segs) {
+    for (const b of [...t.itens].sort((x, y) => x.entra - y.entra)) {
+      const a = prev.get(b);
+      if (a) {
+        a.segue = true;
+        b.continua = true;
+        b.origem = a.origem ?? a.corte;
+        b.desde = +((a.desde ?? 0) + a.dura).toFixed(6);
+        b.corte = +stopsAt(a).toFixed(6);
+      }
+      if (crosses.has(b)) b.dura = +(exportedLength(t.duracao) - b.entra).toFixed(6);
+    }
+  }
+  return segs;
 }
 
 /**
@@ -469,7 +531,7 @@ export function sceneWork(project, finalId, groupId) {
   const g = groupIndex(groups(project)).get(groupId);
   if (!final || !g) return null;
   const { width: largura, height: altura } = output(final);
-  return { largura, altura, trechos: [segmentOf(g, final)], versoes: [] };
+  return { largura, altura, trechos: soundSeams([segmentOf(g, final)]), versoes: [] };
 }
 
 /** O trecho de um grupo: cada elemento com a camada, o tempo e o corte, na velocidade do Final. */

@@ -100,13 +100,14 @@ describe("baixar com o token do agente", () => {
   }
 
   /** Um vídeo (ou imagem) gerado e pronto, com o arquivo no R2. */
-  async function gerado(o: { structure: string; key: "mp4" | "png"; avatar?: string; nome?: string; prompt?: string; criado?: string }) {
+  async function gerado(o: { structure: string; key: "mp4" | "png" | "mp3"; avatar?: string; nome?: string; prompt?: string; criado?: string }) {
     const id = crypto.randomUUID(), quando = o.criado ?? new Date().toISOString();
-    const key = o.key === "png" ? `imagens/${id}.png` : `videos/${id}.mp4`;
+    const key = o.key === "png" ? `imagens/${id}.png` : o.key === "mp3" ? `audios/${id}.mp3` : `videos/${id}.mp4`;
     await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, avatar_id, name, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, 'completed', ?, 'm', 10, '480p', '9:16', ?, ?, ?, ?, ?, ?)")
       .bind(id, o.prompt ?? "Oi, gente", key, o.structure, o.avatar ?? null, o.nome ?? null, quando, quando)
       .run();
-    await env.MIDIA.put(key, o.key === "png" ? PNG : new Uint8Array([0, 0, 0, 8]), { httpMetadata: { contentType: o.key === "png" ? "image/png" : "video/mp4" } });
+    const tipo = { png: "image/png", mp3: "audio/mpeg", mp4: "video/mp4" }[o.key];
+    await env.MIDIA.put(key, o.key === "png" ? PNG : new Uint8Array([0, 0, 0, 8]), { httpMetadata: { contentType: tipo } });
     return id;
   }
 
@@ -130,6 +131,16 @@ describe("baixar com o token do agente", () => {
     const res = await baixar(`/videos/${id}.mp4?baixar`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toBe(contentDisposition("Gancho.mp4"));
+  });
+
+  it("o áudio gerado da lista baixa com o token, pelo baixar que ela dá", async () => {
+    await cookie();
+    const id = await gerado({ structure: "elevenlabs", key: "mp3", nome: "Passo um" });
+    const { arquivos } = dados<{ arquivos: Record<string, unknown>[] }>(await ferramenta("listar_arquivos", { tipo: "audio" }));
+    expect(arquivos[0]).toMatchObject({ id, tipo: "audio", arquivo: "Passo um.mp3", baixar: `${SITE}/videos/${id}.mp3?baixar` });
+    const res = await baixar(new URL(String(arquivos[0]!.baixar)).pathname + "?baixar");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toBe(contentDisposition("Passo um.mp3"));
   });
 
   it("o token não baixa o de outra conta, nem abre páginas", async () => {

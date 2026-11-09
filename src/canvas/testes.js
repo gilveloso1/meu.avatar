@@ -609,3 +609,31 @@ test("quem entrou primeiro diz a base: a narração com imagem por cima continua
   assert.deepEqual(M.base(w).map((b) => b.id), ["vid"]);
   assert.deepEqual(w.audios.map((b) => b.id), ["mus"]);
 });
+
+test("a música cortada por cena continua sem rampa e retoma onde o trecho anterior acabou", () => {
+  const img = (id, y, dur) => el(id, 0, y, dur);
+  const som = (id, y, tin, tout, src = "musica") => ({ ...el(id, 0, y + M.VIS_H, tout - tin, "audio"), src, dur: 130, tin, tout, vol: 0.3 });
+  const p = {
+    blocks: [img("g1", 0, 4.913), som("m1", 0, 0, 4.913), img("g2", 400, 5), som("m2", 400, 4.913, 9.913), img("g3", 800, 3), som("m3", 800, 20, 23)],
+    finals: [{ id: "final", x: 900, y: 0, speed: 1.2 }],
+    edges: [{ id: "1", from: "g1", to: "g2" }, { id: "2", from: "g2", to: "g3" }, { id: "3", from: "g3", to: "final" }],
+  };
+  const w = M.exportWork(p, "final");
+  const [t1, t2, t3] = w.versoes[0].trechos.map((k) => w.trechos[k]);
+  const m = (t) => t.itens.find((i) => i.tipo === "audio");
+  // 4,913 s a 1,2x são 4,094 s: o trecho sai com 123 quadros (4,1 s), e a música vai até ali.
+  assert.deepEqual([m(t1).segue, m(t1).continua, m(t1).dura], [true, undefined, 4.1]);
+  assert.deepEqual([m(t2).continua, m(t2).segue, m(t2).origem, m(t2).desde, m(t2).corte], [true, undefined, 0, 4.1, 4.92]);
+  // Outro trecho do arquivo, sem continuar: rampa normal.
+  assert.deepEqual([m(t3).continua, m(t3).origem], [undefined, undefined]);
+  // A cena sozinha (ver_cena) não tem vizinho: sem marca.
+  assert.equal(M.sceneWork(p, "final", "g2").trechos[0].itens.find((i) => i.tipo === "audio").continua, undefined);
+});
+
+test("som cortado sem tirar nada no meio continua dentro da cena; a pausa tirada da fala, não", () => {
+  const som = (id, x, tin, tout) => ({ ...el(id, x, 0, tout - tin, "audio"), src: "fala", dur: 30, tin, tout });
+  const p = { blocks: [som("a", 0, 0, 2), som("b", 80, 2, 4), som("c", 160, 4.5, 6)], finals: [{ id: "final", x: 900, y: 0 }], edges: [{ id: "1", from: "a", to: "final" }] };
+  const [a, b, c] = M.exportWork(p, "final").trechos[0].itens;
+  assert.deepEqual([a.segue, b.continua, b.origem, b.desde], [true, true, 0, 2]);
+  assert.deepEqual([b.segue, c.continua], [undefined, undefined]);
+});
