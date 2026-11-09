@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
 import { contentDisposition, downloadName } from "../src/arquivos";
-import { call, cookie, memberCookie, postForm, SITE } from "./helpers";
+import { call, cookie, memberCookie, mp3, postForm, SITE } from "./helpers";
 
 // Arquivos e o agente: enviar por url (o servidor baixa), baixar com o token e o nome de todo
 // download (src/arquivos.ts), o mesmo na tela e no MCP.
@@ -196,6 +196,19 @@ describe("listar_arquivos: o acervo numa lista só", () => {
     expect(editado.isError).toBeFalsy();
     const visto = dados<{ grupos: { blocos: { tipo: string; dur?: number }[] }[] }>(await ferramenta("ver_projeto", { projeto }));
     expect(visto.grupos.flatMap((g) => g.blocos).some((b) => b.tipo === "audio")).toBe(true);
+  });
+
+  it("a fala entra com a duração do MP3 (a guardada é em segundos inteiros) e o nome sem as emoções", async () => {
+    await cookie();
+    const id = crypto.randomUUID();
+    await env.MIDIA.put(`audios/${id}.mp3`, mp3(2.5));
+    await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, created_at, updated_at) VALUES ((SELECT id FROM users WHERE role = 'admin'), ?, 'completed', '[serious] Aí o banco fecha', 'fish', 3, '', '', ?, 'fish', ?, ?)")
+      .bind(id, `audios/${id}.mp3`, new Date().toISOString(), new Date().toISOString())
+      .run();
+    const { id: projeto, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Narração" }));
+    await ferramenta("editar_projeto", { projeto, revisao, comandos: [{ tipo: "adicionar", audio: id }] });
+    const visto = dados<{ grupos: { duracao: number; blocos: { nome: string }[] }[] }>(await ferramenta("ver_projeto", { projeto }));
+    expect(visto.grupos[0]).toMatchObject({ duracao: 2.5, blocos: [{ nome: "Aí o banco fecha" }] });
   });
 
   it("filtra por tipo, fonte, modelo, avatar, projeto e busca", async () => {
