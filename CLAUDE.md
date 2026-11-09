@@ -375,6 +375,8 @@ colar um segredo no terminal, mudar uma configuração fora do repositório. Nes
 - Branch novo sempre a partir do `main` do GitHub (`git fetch` e
   `git checkout -b <nome> origin/main`). Antes de publicar de um branch,
   confira que `git log HEAD..origin/main` sai vazio.
+- O merge de um PR só com a autorização do usuário no chat, pedida a cada vez (como o deploy):
+  publicar não autoriza o merge.
 - O merge dos PRs é o merge comum ("Create a merge commit"), nunca squash nem rebase: com squash,
   o branch fica com commits que o `main` não reconhece e o próximo envio exige sobrescrever o
   branch (09/11/2026, PRs 135 a 137).
