@@ -4,6 +4,7 @@ import { Accounts } from "./auth";
 import { type CustosApi, CustosReais, lerHeyGen, lerOpenRouter } from "./custos";
 import { Db } from "./db";
 import { DurableImages, type ImageRunner } from "./imagens";
+import { DurableExports } from "./exportando";
 import { type MaquinasApi, MaquinasReais } from "./maquinas";
 import { ContainerExport, type ExportApi, type Exporter, Exports } from "./exportar";
 import { HeyGenClient, type HeyGenApi } from "./heygen";
@@ -19,6 +20,7 @@ export { AudioFixer } from "./audio";
 export { Exporter } from "./exportar";
 export { Renderer } from "./render";
 export { ImageMaker } from "./imagens";
+export { ExportMaker } from "./exportando";
 
 export interface Deps {
   api?: VideoApi | null;
@@ -41,7 +43,9 @@ export function createExports(env: Env, deps: Deps = {}): Exports {
   const api = deps.exporter !== undefined ? deps.exporter : env.EXPORTAR ? new ContainerExport(env.EXPORTAR) : null;
   const transcriber = deps.transcriber !== undefined ? deps.transcriber : env.AI ? new WorkersAiTranscriber(env.AI) : null;
   const renderer = deps.renderer !== undefined ? deps.renderer : env.RENDER ? new ContainerRender(env.RENDER) : null;
-  return new Exports(new Db(env.DB), env.MIDIA, api, transcriber, renderer);
+  // O Durable Object usa os contêineres do env: com outro (os testes), os passos saem no pedido.
+  const runner = deps.exporter === undefined && deps.renderer === undefined && env.EXPORTANDO ? new DurableExports(env.EXPORTANDO) : null;
+  return new Exports(new Db(env.DB), env.MIDIA, api, transcriber, renderer, runner);
 }
 
 export function createStudio(env: Env, deps: Deps = {}): Studio {

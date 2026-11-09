@@ -50,14 +50,17 @@
       { "class_name": "Exporter", "name": "EXPORTAR" },
       { "class_name": "Renderer", "name": "RENDER" },
       // A imagem do Nano Banana, feita fora do pedido pelo alarme (src/imagens.ts).
-      { "class_name": "ImageMaker", "name": "IMAGENS" }
+      { "class_name": "ImageMaker", "name": "IMAGENS" },
+      // Os passos das exportações, dados fora do pedido pelo alarme (src/exportando.ts).
+      { "class_name": "ExportMaker", "name": "EXPORTANDO" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["AudioFixer"] },
     { "tag": "v2", "new_sqlite_classes": ["Exporter"] },
     { "tag": "v3", "new_sqlite_classes": ["Renderer"] },
-    { "tag": "v4", "new_sqlite_classes": ["ImageMaker"] }
+    { "tag": "v4", "new_sqlite_classes": ["ImageMaker"] },
+    { "tag": "v5", "new_sqlite_classes": ["ExportMaker"] }
   ],
   "vars": {
     // Endereço público do Worker (sem barra no fim): o OpenRouter manda o aviso

@@ -758,6 +758,11 @@ export class Db {
   }
 
   /** A última exportação do projeto, para a tela retomar ou mostrar ao abrir. */
+  /** As exportações do projeto que ainda andam, da mais nova à mais antiga. */
+  async runningExports(projectId: string): Promise<ExportRow[]> {
+    return (await this.d1.prepare("SELECT * FROM exports WHERE project_id = ? AND status = 'running' ORDER BY created_at DESC").bind(projectId).all<ExportRow>()).results;
+  }
+
   async latestExport(projectId: string): Promise<ExportRow | null> {
     return this.d1.prepare("SELECT * FROM exports WHERE project_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1").bind(projectId).first<ExportRow>();
   }

@@ -1,5 +1,6 @@
 import type { AudioFixer } from "./audio";
 import type { Exporter } from "./exportar";
+import type { ExportMaker } from "./exportando";
 import type { ImageMaker } from "./imagens";
 import type { Renderer } from "./render";
 
@@ -23,6 +24,8 @@ export interface Env {
   RENDER?: DurableObjectNamespace<Renderer>;
   /** Faz a imagem do Nano Banana fora do pedido (src/imagens.ts). Sem ele, no próprio pedido. */
   IMAGENS?: DurableObjectNamespace<ImageMaker>;
+  /** Dá os passos das exportações fora do pedido (src/exportando.ts). Sem ele, no pedido de quem acompanha. */
+  EXPORTANDO?: DurableObjectNamespace<ExportMaker>;
   /** Workers AI: o Whisper que transcreve a fala dos arquivos dos projetos (src/transcricao.ts). */
   AI?: Ai;
   /** Token de leitura do painel da Cloudflare (docs/operacao.md): o alarme de contêiner ligado sem trabalho (src/vigia.ts). */

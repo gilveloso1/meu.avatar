@@ -854,12 +854,12 @@ ${CANVAS_BODY}
     }
   }
 
-  /** POST faz o próximo passo e GET só lê; os arquivos prontos ficam até expirar. */
+  /** POST acompanha (dá o próximo passo, ou confere que o servidor está dando) e GET só lê; os arquivos prontos ficam até expirar. */
   private async exportRoute(request: Request, project: Project, id: string, download: string | undefined): Promise<Response> {
     const row = await this.db.exportById(id);
     if (!row || row.project_id !== project.id) return new Response("não encontrado", { status: 404 });
     if (request.method === "POST" && !download) {
-      const now = await this.exports.advance(id);
+      const now = await this.exports.follow(id);
       return Response.json(this.exports.state(project, now ?? row));
     }
     if (request.method !== "GET") return new Response("não encontrado", { status: 404 });

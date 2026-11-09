@@ -125,8 +125,8 @@ pronta deste projeto: é como o agente confere o que exportou.
 | Rota | O que faz |
 |---|---|
 | `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas): `{src}` e, em vídeo, `som` (`false` quando o arquivo não tem faixa de som). Só JPG, PNG, WebP, MP4, MOV, WebM, MP3, M4A, WAV e OGG; SVG e HTML não (podem levar script). Todo arquivo enviado é servido com `nosniff` e CSP com `sandbox`. Com `?baixar`, vem como download, pela regra de todo download do site: o nome da tela, sem mudança, e a extensão do tipo (`src/arquivos.ts`); o `ver_projeto` com `incluir: arquivos` traz cada arquivo no item do acervo (`tipo` é `video`, `imagem` ou `audio`; o tipo do arquivo fica em `mime`). O corpo é o arquivo cru, com `content-type` e `x-nome`: com terminal, o agente manda direto (`curl --data-binary @foto.png`). No MCP, `enviar_arquivo` aceita `url` (o servidor baixa, até 50 MB, e passa pela mesma conferência; o melhor caminho sem terminal) ou `base64` (até 10 MB). Erros do `url`: `url_invalida`, `url_indisponivel`, `arquivo_grande_demais` |
-| `POST /projetos/<id>/exportar` `{final, versoes?}` | Começa a exportação |
-| `POST /projetos/<id>/exportacoes/<e>` | Faz o próximo passo; sem isso, o agendamento termina |
+| `POST /projetos/<id>/exportar` `{final, versoes?}` | Começa a exportação; a mesma (mesmas versões, mesmo conteúdo) já andando é devolvida, sem começar outra |
+| `POST /projetos/<id>/exportacoes/<e>` | O andamento; a exportação anda sozinha no servidor (`src/exportando.ts`) |
 | `GET /projetos/<id>/exportacoes/<e>` | Estado e endereços para baixar |
 
 A transcrição é do Whisper do Workers AI (`whisper-large-v3-turbo`, `src/transcricao.ts`): o

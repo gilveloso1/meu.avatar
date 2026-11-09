@@ -128,7 +128,8 @@ menos custo.
   blocos que já estavam no canvas não mudam.
 - **Exceções, e por quê**: só som tem limite de faixas (`MAX_FAIXAS`, a exportação soma todos);
   som solto não tem área de vídeo, então o conector dele fica na altura dele; a prévia junta as
-  trilhas de vídeo acima da primeira numa camada, porque cada uma cobre a imagem inteira.
+  trilhas de vídeo acima da base numa camada, e nela mostra todas as do instante, empilhadas pela
+  trilha (09/11/2026): a animação é transparente e deixa ver a imagem de baixo, como na exportação.
 - **Arrasto leve**: cada arrasto desenha no máximo uma vez por quadro, sem o painel (ele vem
   ao soltar). Sem mudança no lugar do elemento, nada é desenhado; cada elemento, as portas e
   as linhas só tocam a página se algo deles mudou.
@@ -260,8 +261,10 @@ menos custo.
   com ganho e limitador: a mistura é a que a pessoa fez, e o bloco mais alto diz o nível (só
   um som em 30% fica em 30%).
   Cada versão é a emenda dos trechos: vídeo copiado, só o som vira AAC. A imagem cobre o
-  quadro, como na prévia, a 30 quadros por segundo. Um passo por vez: a tela chama o
-  próximo assim que o anterior acaba; se ela fechar, o agendamento termina. Bloco só
+  quadro, como na prévia, a 30 quadros por segundo. Um passo por vez, dado no servidor
+  por um Durable Object com alarme (`src/exportando.ts`, desde 09/11/2026): a tela e o
+  `acompanhar_exportacao` só leem o andamento, e a exportação segue com a página fechada ou o agente
+  desconectado (antes, o passo que passava dos 60 s do MCP ficava preso por 15 min). Bloco só
   entra com vídeo que a pessoa pode usar ou arquivo do próprio projeto. Os vídeos ficam
   24 horas para baixar; cada exportação vai até 50 versões (`MAX_EXPORTAR`), um a um ou em ZIP sem compressão, montado no Worker.
 - Código em `src/canvas/` (tela.html, canvas.js, modelo.js, player.js,

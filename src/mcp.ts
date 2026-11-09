@@ -277,10 +277,10 @@ const FERRAMENTAS = [
   },
   {
     name: "exportar",
-    description: "Começa a exportação de um Final. Depois, chame acompanhar_exportacao até ficar pronta.",
+    description: "Começa a exportação de um Final; ela anda sozinha no servidor (cada animação e cada cena levam de segundos a uns 2 min). Acompanhe com acompanhar_exportacao, com uns 20 s entre as chamadas, até ficar pronta. Não comece outra da mesma versão enquanto esta anda.",
     inputSchema: objeto({ projeto, final: texto("Id do Final."), versoes: { type: "array", items: { type: "integer" }, description: "Posições das variações; sem isso, todas." } }, ["projeto", "final"]),
   },
-  { name: "acompanhar_exportacao", description: "Faz o próximo passo e devolve o andamento; pronta, traz os endereços para baixar com o mesmo token.", inputSchema: objeto({ projeto, exportacao: texto("Id da exportação.") }, ["projeto", "exportacao"]) },
+  { name: "acompanhar_exportacao", description: "Devolve o andamento da exportação (feitos de total), que anda sozinha no servidor; pronta, traz os endereços para baixar com o mesmo token.", inputSchema: objeto({ projeto, exportacao: texto("Id da exportação.") }, ["projeto", "exportacao"]) },
   {
     name: "listar_ferramentas",
     description:
