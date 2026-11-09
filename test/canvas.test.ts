@@ -221,7 +221,7 @@ describe("exportar projetos", () => {
     expect((await post(`/projetos/${id}/salvar`, session, JSON.stringify({ data }))).status).toBe(204);
     return id;
   }
-  type Estado = { id: string; status: string; feitos: number; total: number; versoes: { nome: string; href: string }[]; zip: string | null; erro: string | null };
+  type Estado = { id: string; status: string; feitos: number; total: number; versoes: { nome: string; href: string; arquivo: string; baixar?: string }[]; zip: string | null; baixarZip?: string; erro: string | null };
   /** Pede e chama os passos, como a tela faz. */
   async function exportar(fake: FakeExportApi, id: string, session: string, body: unknown = { final: "final" }): Promise<Estado> {
     const res = await com(fake, `/projetos/${id}/exportar`, session, body);
@@ -289,6 +289,29 @@ describe("exportar projetos", () => {
     const row = await exports.start((await new Db(env.DB).projectById(id))!, { id: 0, role: "admin", permissoes: [] }, "final", undefined, depois);
     for (let i = 0; i < row.total; i++) await exports.advance(row.id);
     expect([fake.segments.length, fake.joins.length]).toEqual([0, 2]);
+  });
+
+  it("a exportação pronta traz um link que baixa sem token nem sessão, só dela e só enquanto não expira", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const st = await exportar(fake, id, admin);
+    expect(st.versoes[0]).toMatchObject({ arquivo: "01 - Variação 1.mp4", baixar: expect.stringMatching(new RegExp(`^${SITE}/baixar/${st.id}/[0-9a-f]{64}/0\\.mp4$`)) });
+    expect(st.baixarZip).toBe(st.versoes[0]!.baixar!.replace(/0\.mp4$/, "todas.zip"));
+    const sem = (url: string, method = "GET") => call(new Request(url, { method }), new FakeVideoApi(), null, null, fake);
+    const res = await sem(st.versoes[0]!.baixar!);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toContain(`filename*=UTF-8''${encodeURIComponent("01 - Variação 1.mp4")}`);
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect((await sem(st.baixarZip!)).status).toBe(200);
+    // Código errado, de outra exportação, versão que não existe ou outro método: nada.
+    const outra = await exportar(fake, id, admin, { final: "final", versoes: [1] });
+    const codigo = st.versoes[0]!.baixar!.split("/")[5]!;
+    for (const url of [st.versoes[0]!.baixar!.replace(codigo, "0".repeat(64)), `${SITE}/baixar/${outra.id}/${codigo}/0.mp4`, st.versoes[0]!.baixar!.replace(/0\.mp4$/, "9.mp4")]) expect([url, (await sem(url)).status]).toEqual([url, 404]);
+    expect((await sem(st.versoes[0]!.baixar!, "POST")).status).not.toBe(200);
+    // Expirada: avisa, sem o arquivo.
+    await env.DB.prepare("UPDATE exports SET expires_at = ? WHERE id = ?").bind(new Date(Date.now() - 1000).toISOString(), st.id).run();
+    expect((await sem(st.versoes[0]!.baixar!)).status).toBe(410);
   });
 
   it("o ZIP traz as versões com os tamanhos certos", async () => {

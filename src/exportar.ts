@@ -108,7 +108,15 @@ export interface ExportPlan {
   animacoes?: { chave: string; html: string; largura: number; altura: number; duracao: number }[];
   trechos: { chave: string; plano: string; arquivos: string[] }[];
   versoes: { nome: string; trechos: number[]; chave: string; tamanho?: number; crc?: number }[];
+  /** O código do link de download sem token (BAIXAR_PATH), sorteado ao começar; exportações antigas não têm. */
+  codigo?: string;
 }
+
+/**
+ * O link de download sem token nem sessão: o agente baixa no terminal dele, que não tem o token do MCP (a
+ * tela e o MCP mostram o link). Vale para uma exportação, enquanto ela não expira (24 horas).
+ */
+export const BAIXAR_PATH = /^\/baixar\/([0-9a-f-]{36})\/([0-9a-f]{64})\/(\d+\.mp4|todas\.zip)$/;
 
 /** O que a tela recebe. */
 export interface ExportState {
@@ -117,8 +125,10 @@ export interface ExportState {
   feitos: number;
   total: number;
   erro: string | null;
-  versoes: { nome: string; href: string }[];
+  versoes: { nome: string; href: string; arquivo: string; baixar?: string }[];
   zip: string | null;
+  /** O ZIP pelo link sem token. */
+  baixarZip?: string;
 }
 
 /** No plano, o src de uma animação ainda por fazer: a chave do WebM dela no R2. */
@@ -288,6 +298,7 @@ export class Exports {
   private async run(project: Project, plan: ExportPlan, now: Date): Promise<ExportRow> {
     const { animacoes = [], trechos, versoes } = plan;
     const id = crypto.randomUUID();
+    plan.codigo = hex(crypto.getRandomValues(new Uint8Array(32)).buffer);
     // A mesma exportação já andando (dois cliques, o agente e a tela juntos): segue a que existe. Duas iguais
     // ao mesmo tempo fazem cada cena duas vezes, porque nenhuma vê a da outra pronta.
     const assinatura = (p: ExportPlan) => JSON.stringify([p.versoes.map((v) => [v.nome, v.chave]), p.trechos.map((t) => t.chave)]);
@@ -502,19 +513,32 @@ export class Exports {
     }
   }
 
-  state(project: Project, row: ExportRow, now = new Date()): ExportState {
+  /** origin: o endereço do site, para os links sem token (`baixar`), completos. */
+  state(project: Project, row: ExportRow, now = new Date(), origin?: string): ExportState {
     const plan = JSON.parse(row.plan) as ExportPlan;
     const base = `/projetos/${project.id}/exportacoes/${row.id}`;
     const ready = row.status === "done" && row.expires_at > now.toISOString();
+    const solto = ready && origin && plan.codigo ? `${origin}/baixar/${row.id}/${plan.codigo}` : null;
+    const zip = ready && plan.versoes.length > 1 && zipFits(plan);
     return {
       id: row.id,
       status: row.status === "done" && !ready ? "expired" : row.status,
       feitos: row.step,
       total: row.total,
       erro: row.status === "failed" ? ERROS.exportarFalhou : null,
-      versoes: ready ? plan.versoes.map((v, i) => ({ nome: v.nome, href: `${base}/${i}.mp4` })) : [],
-      zip: ready && plan.versoes.length > 1 && zipFits(plan) ? `${base}/todas.zip` : null,
+      versoes: ready ? plan.versoes.map((v, i) => ({ nome: v.nome, href: `${base}/${i}.mp4`, arquivo: fileName(i, v.nome), ...(solto ? { baixar: `${solto}/${i}.mp4` } : {}) })) : [],
+      zip: zip ? `${base}/todas.zip` : null,
+      ...(zip && solto ? { baixarZip: `${solto}/todas.zip` } : {}),
     };
+  }
+
+  /** A exportação do link sem token, se o código bate e ela está pronta e não expirou; senão null. */
+  async byCode(id: string, codigo: string, now = new Date()): Promise<{ row: ExportRow; plan: ExportPlan } | "expirou" | null> {
+    const row = await this.db.exportById(id);
+    if (!row || row.status !== "done") return null;
+    const plan = JSON.parse(row.plan) as ExportPlan;
+    if (!plan.codigo || !iguais(plan.codigo, codigo)) return null;
+    return row.expires_at > now.toISOString() ? { row, plan } : "expirou";
   }
 
   /** Todas as versões num ZIP sem compressão (vídeo não comprime), montado em fluxo aqui mesmo. */
@@ -585,4 +609,10 @@ function zipHeader(signature: number, f: { size: number; crc: number; name: Uint
   view.setUint16(at + 22, f.name.byteLength, true);
   if (!local) view.setUint32(42, offset, true);
   return new Uint8Array(view.buffer);
+}
+
+/** Compara o código sem vazar pelo tempo quanto dele bateu. */
+function iguais(a: string, b: string): boolean {
+  const [x, y] = [new TextEncoder().encode(a), new TextEncoder().encode(b)];
+  return x.byteLength === y.byteLength && crypto.subtle.timingSafeEqual(x, y);
 }
