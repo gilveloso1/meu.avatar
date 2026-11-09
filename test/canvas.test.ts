@@ -221,7 +221,7 @@ describe("exportar projetos", () => {
     expect((await post(`/projetos/${id}/salvar`, session, JSON.stringify({ data }))).status).toBe(204);
     return id;
   }
-  type Estado = { id: string; status: string; feitos: number; total: number; versoes: { nome: string; href: string; arquivo: string; baixar?: string }[]; zip: string | null; baixarZip?: string; erro: string | null };
+  type Estado = { id: string; status: string; feitos: number; total: number; versoes: { nome: string; href: string; arquivo: string; baixar?: string }[]; zip: string | null; baixarZip?: string; baixarAte?: string; erro: string | null };
   /** Pede e chama os passos, como a tela faz. */
   async function exportar(fake: FakeExportApi, id: string, session: string, body: unknown = { final: "final" }): Promise<Estado> {
     const res = await com(fake, `/projetos/${id}/exportar`, session, body);
@@ -309,9 +309,22 @@ describe("exportar projetos", () => {
     const codigo = st.versoes[0]!.baixar!.split("/")[5]!;
     for (const url of [st.versoes[0]!.baixar!.replace(codigo, "0".repeat(64)), `${SITE}/baixar/${outra.id}/${codigo}/0.mp4`, st.versoes[0]!.baixar!.replace(/0\.mp4$/, "9.mp4")]) expect([url, (await sem(url)).status]).toEqual([url, 404]);
     expect((await sem(st.versoes[0]!.baixar!, "POST")).status).not.toBe(200);
-    // Expirada: avisa, sem o arquivo.
+    // Uma hora depois de entregue, o link vence; perguntar de novo renova, com o mesmo endereço.
+    expect(Date.parse(st.baixarAte!) - Date.now()).toBeGreaterThan(59 * 60 * 1000);
+    expect(Date.parse(st.baixarAte!) - Date.now()).toBeLessThanOrEqual(60 * 60 * 1000);
+    const vence = async () => {
+      const row = (await new Db(env.DB).exportById(st.id))!;
+      await env.DB.prepare("UPDATE exports SET plan = ? WHERE id = ?").bind(JSON.stringify({ ...JSON.parse(row.plan), linkAte: new Date(Date.now() - 1000).toISOString() }), st.id).run();
+    };
+    await vence();
+    expect((await sem(st.versoes[0]!.baixar!)).status).toBe(410);
+    const de_novo = (await (await com(fake, `/projetos/${id}/exportacoes/${st.id}`, admin)).json()) as Estado;
+    expect(de_novo.versoes[0]!.baixar).toBe(st.versoes[0]!.baixar);
+    expect((await sem(st.versoes[0]!.baixar!)).status).toBe(200);
+    // Expirada a exportação: vence também, e perguntar não renova.
     await env.DB.prepare("UPDATE exports SET expires_at = ? WHERE id = ?").bind(new Date(Date.now() - 1000).toISOString(), st.id).run();
     expect((await sem(st.versoes[0]!.baixar!)).status).toBe(410);
+    expect(((await (await com(fake, `/projetos/${id}/exportacoes/${st.id}`, admin)).json()) as Estado).versoes).toEqual([]);
   });
 
   it("o ZIP traz as versões com os tamanhos certos", async () => {

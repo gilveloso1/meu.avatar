@@ -856,7 +856,7 @@ ${CANVAS_BODY}
     const pick = Array.isArray(body.versoes) && body.versoes.every((v) => Number.isInteger(v)) ? (body.versoes as number[]) : undefined;
     try {
       const row = await this.exports.start(project, user, typeof body.final === "string" ? body.final : "", pick);
-      return Response.json(this.exports.state(project, row, undefined, new URL(request.url).origin), { status: 201 });
+      return Response.json(this.exports.state(project, await this.exports.withLink(row), undefined, new URL(request.url).origin), { status: 201 });
     } catch (err) {
       if (err instanceof InputError) return new Response(err.message, { status: 400 });
       throw err;
@@ -869,10 +869,10 @@ ${CANVAS_BODY}
     if (!row || row.project_id !== project.id) return new Response("não encontrado", { status: 404 });
     if (request.method === "POST" && !download) {
       const now = await this.exports.follow(id);
-      return Response.json(this.exports.state(project, now ?? row, undefined, new URL(request.url).origin));
+      return Response.json(this.exports.state(project, await this.exports.withLink(now ?? row), undefined, new URL(request.url).origin));
     }
     if (request.method !== "GET") return new Response("não encontrado", { status: 404 });
-    if (!download) return Response.json(this.exports.state(project, row, undefined, new URL(request.url).origin));
+    if (!download) return Response.json(this.exports.state(project, await this.exports.withLink(row), undefined, new URL(request.url).origin));
     if (row.status !== "done") return new Response("não encontrado", { status: 404 });
     if (row.expires_at <= new Date().toISOString()) return new Response(ERROS.exportarExpirou, { status: 410 });
     return this.exportFile(request, JSON.parse(row.plan) as ExportPlan, download);

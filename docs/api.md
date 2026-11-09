@@ -129,7 +129,7 @@ pronta deste projeto: é como o agente confere o que exportou.
 | `POST /projetos/<id>/exportar` `{final, versoes?}` | Começa a exportação; a mesma (mesmas versões, mesmo conteúdo) já andando é devolvida, sem começar outra |
 | `POST /projetos/<id>/exportacoes/<e>` | O andamento; a exportação anda sozinha no servidor (`src/exportando.ts`) |
 | `GET /projetos/<id>/exportacoes/<e>` | Estado e endereços para baixar: `href` (com o token ou a sessão) e, pronta, `baixar` em cada versão e `baixarZip` |
-| `GET /baixar/<e>/<código>/<n>.mp4` ou `todas.zip` | O link de download sem token nem sessão (09/11/2026): o agente baixa no terminal, que não tem o token do MCP (`curl -L -o "<arquivo>" "<baixar>"`), ou passa à pessoa. Um código sorteado por exportação, válido enquanto ela não expira (24 horas; depois, 410). Código errado, outra exportação ou versão que não existe: 404 |
+| `GET /baixar/<e>/<código>/<n>.mp4` ou `todas.zip` | O link de download sem token nem sessão (09/11/2026): o agente baixa no terminal, que não tem o token do MCP (`curl -L -o "<arquivo>" "<baixar>"`), ou passa à pessoa. Um código sorteado por exportação; o link vale 1 hora depois de entregue (`baixarAte`; cada `acompanhar_exportacao` renova), nunca depois de a exportação expirar (24 horas). Vencido, 410. Código errado, outra exportação ou versão que não existe: 404 |
 
 A transcrição é do Whisper do Workers AI (`whisper-large-v3-turbo`, `src/transcricao.ts`): o
 contêiner de exportação tira o som em MP3 mono de 16 kHz (`/audio`), e o Worker manda ao Whisper.
