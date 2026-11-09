@@ -370,9 +370,9 @@ describe("gerar_imagem", () => {
 
 describe("gerar_video", () => {
   /** A ferramenta com a HeyGen falsa (API direta, como no ar) e o OpenRouter falso (a foto vem do gerar_imagem). */
-  const comHeyGen = async (heygen: FakeHeyGenApi | null, name: string, args: unknown, code = "ma_admin") => {
+  const comHeyGen = async (heygen: FakeHeyGenApi | null, name: string, args: unknown, code = "ma_admin", exporter: FakeExportApi | null = null) => {
     const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
-    const res = await call(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: `Bearer ${code}`, ...CABECALHOS("tools/call", name) } }), new FakeVideoApi(), null, heygen);
+    const res = await call(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: `Bearer ${code}`, ...CABECALHOS("tools/call", name) } }), new FakeVideoApi(), null, heygen, exporter);
     return ((await res.json()) as { result: Result }).result;
   };
   /** Um projeto e uma foto gerada para animar. */
@@ -425,6 +425,30 @@ describe("gerar_video", () => {
       expect(r.content[0]!.text).toContain(erro);
     }
     expect(heygen.videos).toHaveLength(0);
+  });
+
+  it("a fala montada no canvas vira o áudio: o som de uma exportação deste projeto, e só dele", async () => {
+    await new Db(env.DB).setPlatform("heygen");
+    const heygen = new FakeHeyGenApi(), fake = new FakeExportApi();
+    const { id, foto } = await preparar();
+    const outro = (await preparar()).id;
+    /** Uma exportação pronta do projeto, com o vídeo da versão no R2. */
+    const exportacao = async (projeto: string) => {
+      const eid = crypto.randomUUID(), chave = `exportacoes/versoes/${eid.replaceAll("-", "")}.mp4`, agora = new Date();
+      await env.MIDIA.put(chave, new Uint8Array([1, 2, 3]), { httpMetadata: { contentType: "video/mp4" } });
+      const plan = { trechos: [], versoes: [{ nome: "Variação 1", trechos: [], chave, tamanho: 3, crc: 0 }] };
+      await env.DB.prepare("INSERT INTO exports (id, project_id, status, step, total, plan, created_at, expires_at) VALUES (?, ?, 'done', 1, 1, ?, ?, ?)")
+        .bind(eid, projeto, JSON.stringify(plan), agora.toISOString(), new Date(agora.getTime() + 3600_000).toISOString())
+        .run();
+      return `/projetos/${projeto}/exportacoes/${eid}/0.mp3`;
+    };
+    const alheio = await exportacao(outro);
+    const recusado = await comHeyGen(heygen, "gerar_video", { projeto: id, foto, audio: alheio }, "ma_admin", fake);
+    expect([recusado.isError, recusado.content[0]!.text]).toEqual([true, expect.stringContaining("arquivo_indisponivel")]);
+    const r = await comHeyGen(heygen, "gerar_video", { projeto: id, foto, audio: await exportacao(id) }, "ma_admin", fake);
+    expect(r.isError).toBeFalsy();
+    expect(fake.inspected.map((i) => i.path)).toEqual(["/som"]);
+    expect(heygen.videos).toHaveLength(1);
   });
 
   it("vídeo de outra conta não se acompanha", async () => {

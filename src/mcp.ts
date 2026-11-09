@@ -212,7 +212,7 @@ const FERRAMENTAS = [
         foto: texto('src da foto do avatar (jpeg, png ou webp): a foto de um ativo de listar_avatares, um arquivo do projeto ou uma imagem gerada ("/videos/<id>.png").'),
         fala: texto("O texto que a voz lê, até 1.500 caracteres. A duração do vídeo segue a fala."),
         voz: texto("Id de uma voz de listar_vozes (pronta ou clonada). Obrigatória com fala."),
-        audio: texto("src de um áudio (mp3 ou wav) que é a fala, no lugar de fala e voz."),
+        audio: texto("src de um áudio (mp3 ou wav) que é a fala, no lugar de fala e voz. Serve o som de uma exportação deste projeto (som em acompanhar_exportacao): a fala montada no canvas."),
         consentimento: { type: "boolean", description: "true quando a pessoa confirmou que a voz é dela ou que tem autorização: pedido para clonar a voz de um avatar no primeiro uso." },
         expressividade: texto('"low" (padrão), "medium" ou "high": a energia da cabeça e do rosto.'),
         movimento: texto("Gestos que o avatar faz enquanto fala, até 500 caracteres. Opcional."),
@@ -286,7 +286,7 @@ const FERRAMENTAS = [
     description: "Começa a exportação de um Final; ela anda sozinha no servidor (cada animação e cada cena levam de segundos a uns 2 min). Acompanhe com acompanhar_exportacao, com uns 20 s entre as chamadas, até ficar pronta. Não comece outra da mesma versão enquanto esta anda.",
     inputSchema: objeto({ projeto, final: texto("Id do Final."), versoes: { type: "array", items: { type: "integer" }, description: "Posições das variações; sem isso, todas." } }, ["projeto", "final"]),
   },
-  { name: "acompanhar_exportacao", description: "Devolve o andamento da exportação (feitos de total), que anda sozinha no servidor. Pronta, cada versão traz baixar: um link que funciona sem token por 1 hora (baixarAte; perguntar de novo renova), para baixar no terminal (curl -L -o \"<arquivo>\" \"<baixar>\") ou passar à pessoa; arquivo é o nome do vídeo. Com mais de uma versão, baixarZip traz todas num ZIP. O href serve de src em ver_quadros e ver_silencios.", inputSchema: objeto({ projeto, exportacao: texto("Id da exportação.") }, ["projeto", "exportacao"]) },
+  { name: "acompanhar_exportacao", description: "Devolve o andamento da exportação (feitos de total), que anda sozinha no servidor. Pronta, cada versão traz baixar: um link que funciona sem token por 1 hora (baixarAte; perguntar de novo renova), para baixar no terminal (curl -L -o \"<arquivo>\" \"<baixar>\") ou passar à pessoa; arquivo é o nome do vídeo. Com mais de uma versão, baixarZip traz todas num ZIP. O href serve de src em ver_quadros e ver_silencios. som é só o som da versão em MP3 (feito no primeiro pedido, uns segundos): serve de audio no gerar_video, para o avatar falar a fala montada no canvas; baixarSom é o link sem token dele e arquivoSom o nome.", inputSchema: objeto({ projeto, exportacao: texto("Id da exportação.") }, ["projeto", "exportacao"]) },
   {
     name: "listar_ferramentas",
     description:

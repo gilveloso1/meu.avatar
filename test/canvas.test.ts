@@ -221,7 +221,7 @@ describe("exportar projetos", () => {
     expect((await post(`/projetos/${id}/salvar`, session, JSON.stringify({ data }))).status).toBe(204);
     return id;
   }
-  type Estado = { id: string; status: string; feitos: number; total: number; versoes: { nome: string; href: string; arquivo: string; baixar?: string }[]; zip: string | null; baixarZip?: string; baixarAte?: string; erro: string | null };
+  type Estado = { id: string; status: string; feitos: number; total: number; versoes: { nome: string; href: string; arquivo: string; baixar?: string; som: string; arquivoSom: string; baixarSom?: string }[]; zip: string | null; baixarZip?: string; baixarAte?: string; erro: string | null };
   /** Pede e chama os passos, como a tela faz. */
   async function exportar(fake: FakeExportApi, id: string, session: string, body: unknown = { final: "final" }): Promise<Estado> {
     const res = await com(fake, `/projetos/${id}/exportar`, session, body);
@@ -325,6 +325,37 @@ describe("exportar projetos", () => {
     await env.DB.prepare("UPDATE exports SET expires_at = ? WHERE id = ?").bind(new Date(Date.now() - 1000).toISOString(), st.id).run();
     expect((await sem(st.versoes[0]!.baixar!)).status).toBe(410);
     expect(((await (await com(fake, `/projetos/${id}/exportacoes/${st.id}`, admin)).json()) as Estado).versoes).toEqual([]);
+  });
+
+  it("só o som da versão: o MP3 sai no primeiro pedido, fica guardado e baixa pela sessão e pelo link", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const st = await exportar(fake, id, admin);
+    const som = `/projetos/${id}/exportacoes/${st.id}/0.mp3`;
+    expect(st.versoes[0]).toMatchObject({ som, arquivoSom: "01 - Variação 1.mp3", baixarSom: st.versoes[0]!.baixar!.replace(/0\.mp4$/, "0.mp3") });
+    // A tela prepara antes de baixar: o contêiner tira o som uma vez só.
+    expect((await com(fake, som, admin, undefined, "POST")).status).toBe(204);
+    const res = await com(fake, som, admin);
+    expect([res.status, res.headers.get("content-type"), await res.text()]).toEqual([200, "audio/mpeg", "som-mp3"]);
+    expect(res.headers.get("content-disposition")).toContain(`filename*=UTF-8''${encodeURIComponent("01 - Variação 1.mp3")}`);
+    const semToken = await call(new Request(st.versoes[0]!.baixarSom!), new FakeVideoApi(), null, null, fake);
+    expect([semToken.status, await semToken.text()]).toEqual([200, "som-mp3"]);
+    expect(fake.inspected.filter((i) => i.path === "/som").length).toBe(1);
+    // De outra conta, versão que não existe: nada.
+    expect((await com(fake, som, await memberCookie())).status).toBe(404);
+    expect((await com(fake, som.replace(/0\.mp3$/, "9.mp3"), admin)).status).toBe(404);
+    // Contêiner falhando: a frase do catálogo, sem o motivo técnico.
+    const outra = await exportar(fake, id, admin, { final: "final", versoes: [1] });
+    fake.fail = "ffmpeg quebrou";
+    const falha = await com(fake, `/projetos/${id}/exportacoes/${outra.id}/0.mp3`, admin, undefined, "POST");
+    expect([falha.status, await falha.text()]).toEqual([502, ERROS.exportarSom]);
+    // O vídeo já saiu do R2: não há de onde tirar o som.
+    fake.fail = null;
+    const plano = JSON.parse((await new Db(env.DB).exportById(outra.id))!.plan) as { versoes: { chave: string }[] };
+    await env.MIDIA.delete(plano.versoes[0]!.chave);
+    const sumiu = await com(fake, `/projetos/${id}/exportacoes/${outra.id}/0.mp3`, admin, undefined, "POST");
+    expect([sumiu.status, await sumiu.text()]).toEqual([410, ERROS.exportarExpirou]);
   });
 
   it("o ZIP traz as versões com os tamanhos certos", async () => {

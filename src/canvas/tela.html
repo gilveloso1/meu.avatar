@@ -236,6 +236,11 @@ a.xlist__item { color: inherit; text-decoration: none; }
 .xlist__lead { width: 24px; flex: none; text-align: center; font: var(--md-sys-typescale-label-large); color: var(--md-sys-color-on-surface-variant); }
 .xlist__item[aria-current="true"] .xlist__lead, .xlist__item[aria-current="true"] .xlist__trail { color: inherit; }
 .xlist__text { flex: 1; min-width: 0; }
+/* Versão pronta no diálogo: o nome e, à direita, baixar o vídeo e baixar só o som (o "Meu áudio" do HeyGen). */
+.xlist__item--acoes { gap: 4px; padding: 4px 4px 4px 16px; }
+.xlist__item--acoes .xlist__lead { margin-right: 12px; }
+.xlist__item--acoes .icon-button { position: relative; }
+.icon-button.is-busy .icon { visibility: hidden; }
 .xlist__trail { flex: none; font: var(--md-sys-typescale-label-small); letter-spacing: 0.031rem; font-variant-numeric: tabular-nums; color: var(--md-sys-color-on-surface-variant); }
 .fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 /* Botões conectados na largura da folha (o tamanho do vídeo no Final). */

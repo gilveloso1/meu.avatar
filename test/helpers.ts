@@ -318,7 +318,7 @@ export class FakeExportApi implements ExportApi {
     await new Response(body).arrayBuffer();
     this.inspected.push({ path, instants });
     if (this.fail) throw new Error(this.fail);
-    const out = new TextEncoder().encode(path === "/silencios" ? JSON.stringify(this.silences) : path === "/audio" ? "mp3" : "jpg");
+    const out = new TextEncoder().encode(path === "/silencios" ? JSON.stringify(this.silences) : path === "/audio" ? "mp3" : path === "/som" ? "som-mp3" : "jpg");
     return new Response(out, { headers: { "content-length": String(out.byteLength) } });
   }
   async join(_job: string, body: ReadableStream, sizes: number[]) {

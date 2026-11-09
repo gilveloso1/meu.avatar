@@ -85,8 +85,12 @@ Próximos passos, nesta ordem:
    o que um agente fizer para a marca, o próximo copia.
 3. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
 4. **Áudio**: as falas de áudio já se encadeiam e perdem pausas e trechos como o vídeo (09/11/2026,
-   "Sequências" em [api.md](api.md)). Falta exportar só o som (MP3) de uma variação, para a fala montada
-   no canvas virar o "Meu áudio" do HeyGen (hoje sai um MP4 de tela preta). Depois: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
+   "Sequências" em [api.md](api.md)). O som da exportação ficou limpo (09/11/2026, PRs 135 a 137, ver
+   "Exportar" em [canvas.md](canvas.md)): sem buraco nem estalo nas emendas (a música cortada por cena
+   continua sem salto, até 2x), e o volume no molde dos editores: cada arquivo de som a −14 LUFS, a
+   música no volume do canvas em todas as cenas e um ajuste só no vídeo inteiro. Cada versão também
+   sai só o som, em MP3 (10/11/2026), para a fala montada no canvas virar o "Meu áudio" do HeyGen
+   (no `gerar_video {audio}`, direto). Depois: fades, ducking, efeitos sonoros, biblioteca de música
    licenciada ou geração por API (a do caso real foi sintetizada, só para teste),
    realce de voz por bloco e volume animado.
 5. **Transições**: fusão, fade do preto, cortina, zoom, flash e transição em HyperFrames.
