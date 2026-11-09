@@ -38,6 +38,8 @@ MAX_ZOOM = 8
 SUPER = 2
 MAX_QUADROS = 12
 ALTURA_QUADRO = 360
+# Rampa de som em cada ponta de clipe, como na Edição rápida (editar.py): corte seco estala.
+RAMPA = 0.01
 # As regras de RULES (src/quickedit.ts).
 RUIDO = -35
 SILENCIO_MIN = 0.25
@@ -202,9 +204,11 @@ def filtros(plano, arquivos):
             atual = f"o{n}"
         if tipo != "imagem" and volume > 0 and tem_som(caminho):
             atraso = round(entra * 1000)
+            rampa = min(RAMPA, dura / 2)
             grafo.append(
                 f"[{i}:a]aresample={TAXA},aformat=sample_fmts=fltp:channel_layouts=stereo,"
-                f"asetpts=PTS-STARTPTS,{tempo(velocidade)},volume={volume:.4f},adelay={atraso}:all=1[s{n}]"
+                f"asetpts=PTS-STARTPTS,{tempo(velocidade)},volume={volume:.4f},"
+                f"afade=t=in:d={rampa:.6f},afade=t=out:st={dura - rampa:.6f}:d={rampa:.6f},adelay={atraso}:all=1[s{n}]"
             )
             sons.append(f"[s{n}]")
             volumes.append(volume)
@@ -213,7 +217,8 @@ def filtros(plano, arquivos):
     if sons:
         grafo.append(f"{silencio}[mudo]")
         # Sem normalizar a soma: o volume é o que a pessoa ajustou; o limitador só evita corte.
-        grafo.append(f"[mudo]{''.join(sons)}amix=inputs={len(sons) + 1}:duration=longest:normalize=0,alimiter=limit=0.97:level=0,atrim=end={exata:.6f}[a]")
+        # latency=1 em todo alimiter: sem ele o som atrasa 5 ms e o fim se perde (buraco na emenda).
+        grafo.append(f"[mudo]{''.join(sons)}amix=inputs={len(sons) + 1}:duration=longest:normalize=0,alimiter=limit=0.97:level=0:latency=1,atrim=end={exata:.6f}[a]")
     else:
         grafo.append(f"{silencio}[a]")
     # O bloco mais alto diz o nível do trecho: som baixado de propósito continua baixo.
@@ -245,7 +250,7 @@ def nivelar(caminho, nivel):
     temp = caminho + ".temp"
     ffmpeg(
         "-y", "-i", caminho, "-map", "0:v", "-map", "0:a", "-c:v", "copy",
-        "-af", f"volume={LUFS - medido + 20 * math.log10(nivel):.2f}dB,alimiter=limit=0.84:level=0", "-c:a", "flac", "-sample_fmt", "s16",
+        "-af", f"volume={LUFS - medido + 20 * math.log10(nivel):.2f}dB,alimiter=limit=0.84:level=0:latency=1", "-c:a", "flac", "-sample_fmt", "s16",
         "-ar", str(TAXA), "-ac", "2", "-f", "matroska", temp,
     )
     os.replace(temp, caminho)
