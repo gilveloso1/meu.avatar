@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { runInDurableObject } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ERROS } from "../src/erros";
 import { MAX_IMAGE_BYTES } from "../src/studio";
@@ -344,6 +345,33 @@ describe("exportar projetos", () => {
     const { id: eid } = (await (await com(fake, `/projetos/${id}/exportar`, admin, { final: "final" })).json()) as Estado;
     await new Exports(new Db(env.DB), env.MIDIA, fake).next();
     expect(((await (await com(fake, `/projetos/${id}/exportacoes/${eid}`, admin)).json()) as Estado).status).toBe("done");
+  });
+
+  it("com quem dá os passos no servidor, começar e acompanhar só o acionam, sem passo no pedido", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const fake = new FakeExportApi();
+    const acionados: string[] = [];
+    const exports = new Exports(new Db(env.DB), env.MIDIA, fake, null, null, { start: async (e) => void acionados.push(e) });
+    const project = (await new Db(env.DB).projectById(id))!;
+    const row = await exports.start(project, { id: 0, role: "admin", permissoes: [] }, "final");
+    expect(acionados).toEqual([row.id]);
+    expect((await exports.follow(row.id))!.step).toBe(0);
+    expect([fake.segments.length, acionados]).toEqual([0, [row.id, row.id]]);
+  });
+
+  it("o Durable Object dá os passos pelo alarme, sem pedido nenhum aberto", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    // Os trechos e a versão já estão no R2 (a primeira exportação): os passos não precisam do contêiner.
+    await exportar(new FakeExportApi(), id, admin);
+    const row = await new Exports(new Db(env.DB), env.MIDIA, new FakeExportApi()).start((await new Db(env.DB).projectById(id))!, { id: 0, role: "admin", permissoes: [] }, "final");
+    expect(row.status).toBe("running");
+    const stub = env.EXPORTANDO!.get(env.EXPORTANDO!.idFromName(row.id));
+    await stub.start(row.id);
+    for (const end = Date.now() + 3000; (await new Db(env.DB).exportById(row.id))!.status === "running" && Date.now() < end; ) await new Promise((ok) => setTimeout(ok, 50));
+    expect(await new Db(env.DB).exportById(row.id)).toMatchObject({ status: "done" });
+    expect(await runInDurableObject(stub, (_, state) => state.storage.get("export"))).toBeUndefined();
   });
 
   it("dois pedidos juntos não fazem o mesmo passo", async () => {

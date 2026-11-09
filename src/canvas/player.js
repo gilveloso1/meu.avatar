@@ -33,7 +33,7 @@ export class Player {
     this.t = 0;
     this.playing = false;
     this.waiting = false;
-    this.shown = { 0: null, 1: null };
+    this.shown = { 0: null, 1: [] };
     this.loop = this.loop.bind(this);
     // Só vale o que vem de um quadro desta prévia; o resto da página não ouve o código.
     addEventListener("message", (e) => {
@@ -50,7 +50,7 @@ export class Player {
     this.size = size;
     this.stage.querySelectorAll(".pv-media").forEach((el) => el.remove());
     this.duration = tl.duration;
-    this.shown = { 0: null, 1: null };
+    this.shown = { 0: null, 1: [] };
     this.back ??= this.stage.appendChild(Object.assign(document.createElement("canvas"), { className: "pv-back", width: 36, height: 64 }));
     this.back.hidden = true;
     this.items = tl.items.map((i) => {
@@ -169,26 +169,30 @@ export class Player {
     requestAnimationFrame(this.loop);
   }
 
-  /** Mostra, em cada camada, o trecho da vez; se ele ainda não tem imagem, fica o anterior. */
+  /**
+   * Mostra, em cada camada, o trecho da vez; se ele ainda não tem imagem, fica o anterior. Na camada de cima
+   * entram todas as coberturas do instante, empilhadas pela trilha (a ordem da lista): a animação é transparente
+   * e deixa ver a imagem de baixo, como na exportação.
+   */
   show() {
     const t = Math.min(this.t, this.duration - 0.001);
-    // Na mesma camada, vale quem está na trilha mais alta: é o último da lista.
-    const at = (layer) => this.items.findLast((i) => i.layer === layer && !i.el.error && !i.failed && t >= i.start && t < i.start + i.len);
+    const on = (i) => !i.el.error && !i.failed && t >= i.start && t < i.start + i.len;
     const ready = (i) => (i.el.tagName === "IFRAME" ? i.ready : i.el.tagName === "IMG" ? i.el.complete : i.el.readyState >= READY && !i.el.seeking);
-    const top = at(1);
-    const base = at(0);
+    // Na mesma camada de base, vale quem está na trilha mais alta: é o último da lista.
+    const base = this.items.findLast((i) => i.layer === 0 && on(i));
+    const tops = this.items.filter((i) => i.layer === 1 && on(i));
     // Quem deve aparecer ainda sem imagem: fica o que estava, senão outra coisa pisca na tela.
-    const front = top ?? base;
-    if (front && !ready(front)) return;
-    this.shown[1] = top ?? null;
+    const front = tops.length ? tops : base ? [base] : [];
+    if (front.some((i) => !ready(i))) return;
+    this.shown[1] = tops;
     // Sem ninguém naquele instante, a camada fica vazia (no fundo há sempre o preto).
     if (!base) this.shown[0] = null;
     else if (ready(base)) this.shown[0] = base;
     for (const i of this.items) {
       if (i.el.tagName === "AUDIO") continue;
-      const on = this.shown[0] === i || this.shown[1] === i;
-      i.el.classList.toggle("is-on", on);
-      if (on) this.place(i);
+      const visible = this.shown[0] === i || this.shown[1].includes(i);
+      i.el.classList.toggle("is-on", visible);
+      if (visible) this.place(i);
     }
     this.paintBack();
   }
@@ -214,7 +218,8 @@ export class Player {
 
   /** Fundo desfocado: um quadro pequeno, esticado e borrado pelo CSS, sem outro vídeo tocando. */
   paintBack() {
-    const i = this.shown[1] ?? this.shown[0];
+    // O fundo é o da imagem mais de cima que não é animação.
+    const i = this.shown[1].findLast((o) => !o.block.code) ?? this.shown[0];
     const blur = i?.block.frame?.fit === "blur";
     this.back.hidden = !blur;
     if (!blur) return;

@@ -7,10 +7,12 @@
  * A animação em código (o bloco com `code`) vira vídeo transparente antes, no contêiner de render,
  * guardada pelo hash do código, do tamanho e da duração: a mesma animação não renderiza duas vezes.
  *
- * O trabalho anda um passo por vez (uma animação, um trecho ou uma versão). Quem pede é a tela,
- * que chama o próximo passo assim que o anterior acaba (começa na hora); se ela
- * fechar, o agendamento termina. Um passo só roda uma vez por causa do claim do banco.
+ * O trabalho anda um passo por vez (uma animação, um trecho ou uma versão), dado no servidor por um
+ * Durable Object com alarme (src/exportando.ts); quem acompanha só lê. Sem ele (os testes), cada
+ * pedido de quem acompanha dá um passo, e o agendamento termina o que ficou. Um passo só roda uma
+ * vez por causa do claim do banco.
  */
+import type { ExportRunner } from "./exportando";
 import { type ExportWork, exportWork } from "./canvas/modelo.js";
 import type { Db, ExportRow, Project, ProjectFile } from "./db";
 import type { Conta } from "./permissoes";
@@ -135,7 +137,19 @@ export class Exports {
     private readonly api: ExportApi | null,
     private readonly transcriber: Transcriber | null = null,
     private readonly renderer: RenderApi | null = null,
+    private readonly runner: ExportRunner | null = null,
   ) {}
+
+  /**
+   * O pedido de quem acompanha (a tela, o acompanhar_exportacao): com o Durable Object, só confere que ele
+   * está andando e lê o andamento, sem esperar passo nenhum; sem ele, dá o próximo passo aqui.
+   */
+  async follow(id: string): Promise<ExportRow | null> {
+    if (!this.runner) return this.advance(id);
+    const row = await this.db.exportById(id);
+    if (row?.status === "running") await this.runner.start(id);
+    return row;
+  }
 
   /** Se o vídeo guardado tem som, pelo começo do arquivo no R2; null quando não dá para saber. */
   async hasSound(key: string, type: string): Promise<boolean | null> {
@@ -236,7 +250,10 @@ export class Exports {
     const versoes: ExportPlan["versoes"] = [];
     for (const v of work.versoes) versoes.push(await this.versionPlan(v, trechos, now));
     const plan: ExportPlan = { animacoes, trechos, versoes };
-    return this.db.insertExport({ id, project_id: project.id, total: animacoes.length + trechos.length + versoes.length, plan: JSON.stringify(plan), expires_at: new Date(now.getTime() + EXPORT_TTL_MS).toISOString() }, now);
+    const row = await this.db.insertExport({ id, project_id: project.id, total: animacoes.length + trechos.length + versoes.length, plan: JSON.stringify(plan), expires_at: new Date(now.getTime() + EXPORT_TTL_MS).toISOString() }, now);
+    // Com o Durable Object, a exportação começa a andar já, sem esperar quem acompanha.
+    if (this.runner && row.status === "running") await this.runner.start(row.id);
+    return row;
   }
 
   /**
