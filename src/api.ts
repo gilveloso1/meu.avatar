@@ -3,13 +3,14 @@
  * mesmo modelo da tela. Só o administrador, como o canvas; cada projeto é só de quem o
  * criou. Exportar e baixar usam as rotas do site, com o mesmo token.
  */
-import { baseGaps, finalRate, groups, links, members, output, PX, upgrade, versionName, versions, width } from "./canvas/modelo.js";
+import { base, baseGaps, finalRate, groups, links, members, output, PX, upgrade, versionName, versions, width } from "./canvas/modelo.js";
 import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, trechos } from "./legenda";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
 import { filtro, itemAtivo, itemProjeto, listar } from "./acervo";
 import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
+import { mp3Duration } from "./mp3";
 import { mp4Duration } from "./mp4";
 import { canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, STRUCTURES, structureById } from "./structures";
 import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
@@ -86,25 +87,29 @@ const segundos = (px: number) => +(px / PX).toFixed(3);
 function resumo(data: CanvasProject) {
   const gs = groups(data);
   return {
-    grupos: gs.map((g) => ({
+    grupos: gs.map((g) => {
+      // A base é a trilha 0 de vídeo ou, num bloco só de som, a 0 de som (a fala em sequência).
+      const main = base(g);
+      return {
       id: g.id,
       nome: g.label,
-      duracao: g.dur,
+      duracao: +g.dur.toFixed(3),
       blocos: members(g).map((b) => ({
         id: b.id,
         nome: b.name,
         tipo: b.draft ? "rascunho" : b.code ? "animacao" : TIPOS_DE_BLOCO[b.kind],
-        camada: g.blocks.includes(b) ? "base" : g.covers.includes(b) ? "cobertura" : "audio",
+        camada: main.includes(b) ? "base" : g.covers.includes(b) ? "cobertura" : "audio",
         inicio: segundos(b.x - g.x),
         fim: segundos(b.x + width(b) - g.x),
       })),
-    })),
+      };
+    }),
     // Cada ligação de grupo a grupo ou a um Final, com o id para remover (o primeiro bloco já vem ligado ao Final).
     ligacoes: links(data, gs).map((l) => ({ id: l.edge.id, de: l.from.id, para: typeof l.to === "string" ? l.to : l.to.id })),
     finais: data.finals.map((f) => {
       const { resolution, format } = output(f);
       const vs = versions(data, f.id);
-      return { id: f.id, resolucao: resolution, formato: format, variacoes: vs.map((v, i) => ({ nome: versionName(i), grupos: v.map((g) => g.id), duracao: v.reduce((t, g) => t + g.dur, 0) / finalRate(f) })) };
+      return { id: f.id, resolucao: resolution, formato: format, variacoes: vs.map((v, i) => ({ nome: versionName(i), grupos: v.map((g) => g.id), duracao: +(v.reduce((t, g) => t + g.dur, 0) / finalRate(f)).toFixed(3) })) };
     }),
     avisos: [
       ...gs.filter((g) => g.blocks.length).flatMap((g) => baseGaps(g).map(([de, ate]) => ({ tipo: "sem_video_de_base", grupo: g.id, de, ate, segundos: +(ate! - de!).toFixed(3) }))),
@@ -562,7 +567,7 @@ export class Api {
       if (v.status !== "completed" || !v.video_key) return falha(502, "audio_falhou", { id: v.id });
       const settings = JSON.parse(v.settings ?? "{}") as Record<string, string>;
       return Response.json(
-        { audio: { id: v.id, src: `/videos/${v.id}.mp3`, duracao: v.duration, custo: v.cost, modelo: structure.id, voz: settings.voice ?? null, ...(settings.source === "clonada" ? { clonada: true } : {}) }, usar: { audio: v.id } },
+        { audio: { id: v.id, src: `/videos/${v.id}.mp3`, duracao: await this.duration(v), custo: v.cost, modelo: structure.id, voz: settings.voice ?? null, ...(settings.source === "clonada" ? { clonada: true } : {}) }, usar: { audio: v.id } },
         { status: 201 },
       );
     } catch (err) {
@@ -859,7 +864,7 @@ export class Api {
       const v = await this.db.conta(user.id).video(c.audio);
       const structure = v && structureById(v.structure);
       if (!v || !v.video_key || v.status !== "completed" || !structure || !makesAudio(structure) || !canUse(structure, user)) return null;
-      return { src: `/videos/${v.id}.mp3`, kind: "audio", dur: v.duration, name: v.name ?? (v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Áudio") };
+      return { src: `/videos/${v.id}.mp3`, kind: "audio", dur: await this.duration(v), name: v.name ?? (nomeDaFala(v.prompt) || "Áudio") };
     }
     if (typeof c.video === "string") {
       const v = await this.db.conta(user.id).video(c.video);
@@ -918,19 +923,27 @@ export class Api {
     }
   }
 
-  /** A duração do arquivo que vale (o tratado ou o original), que pode diferir da pedida ao modelo. */
+  /**
+   * A duração do arquivo que vale (o tratado ou o original), que pode diferir da pedida ao modelo. A da fala
+   * fica guardada em segundos inteiros: o bloco usa a do MP3, para não passar do fim do arquivo.
+   */
   private async duration(v: Video): Promise<number> {
-    const object = await this.media.get(v.processed_key ?? v.video_key!);
+    const key = v.processed_key ?? v.video_key!;
+    const object = await this.media.get(key);
     if (!object) return v.duration;
     if (object.size > MAX_LEITURA) {
       await object.body.cancel();
       return v.duration;
     }
-    return mp4Duration(await object.arrayBuffer()) ?? v.duration;
+    const lida = (key.endsWith(".mp3") ? mp3Duration : mp4Duration)(await object.arrayBuffer());
+    return lida ? +lida.toFixed(3) : v.duration;
   }
 }
 
 const ready = (v: Video) => v.status === "completed" && !!v.video_key;
+
+/** O nome do bloco de uma fala sem nome: as primeiras palavras, sem as emoções ("[serious]"). */
+const nomeDaFala = (fala: string) => fala.replace(/\[[^\]]*\]/g, " ").trim().split(/\s+/).slice(0, 6).join(" ");
 
 async function json(request: Request): Promise<Record<string, unknown> | null> {
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BYTES) return null;

@@ -111,6 +111,14 @@ menos custo.
   passou da esquerda, sai do bloco. O bloco o segura numa área maior e, perto da trilha onde
   está, ele fica nela, para nada piscar. Alt solta sem encaixar. O tempo de cada elemento vem
   só da posição dele; quem está em trilha mais alta fica por cima.
+- **Sequência** (09/11/2026): a de um elemento é a trilha dele no bloco, a mesma regra para todo tipo
+  (`sequence` e `base`, `modelo.js`). A base é a trilha 0 de vídeo ou, num bloco só de som, a trilha 0
+  de som: as falas de áudio encostadas são a base desse bloco, e o que está nas outras trilhas (a música
+  embaixo, a imagem por cima) acompanha o ponto da fala. Quem entrou primeiro no bloco diz a base (`soundFirst`): imagem com
+  som embaixo e vídeo com música embaixo têm a mesma geometria; se o primeiro foi a fala, a imagem da
+  trilha 0 de vídeo é cobertura. Fora da base, a sequência é a cadeia dos que
+  encostam um no outro naquela trilha. O aparar da tela e os comandos (inserir depois, mover, cortar,
+  velocidade, tirar pausas e trechos) passam por ela.
 - **Som do vídeo**: vai na área de som (`g.sounds`), anda junto com o vídeo e pode mudar de
   faixa puxando por ele (`lane`, `setLane`). Se a faixa pedida estiver ocupada, fica na mais
   perto com lugar. `upgrade` acerta projetos antigos, em que o som de quem estava por cima

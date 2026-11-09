@@ -1479,3 +1479,154 @@ describe("vídeo de outra conta", () => {
     expect((await api(`/api/v1/projetos/${id}/transcricao?src=/videos/${ALHEIO}.mp4`, admin, undefined, fake, new FakeTranscriber())).status).toBe(404);
   });
 });
+
+describe("áudio em sequência", () => {
+  type Bloco = { id: string; x: number; y: number; tin: number; tout: number; src: string };
+  type Vista = { revisao: number; criados: string[]; grupos: { id: string; duracao: number; blocos: { id: string; camada: string }[] }[]; canvas: { blocks: Bloco[] } };
+  const lote = async (id: string, revisao: number, lista: unknown[], fake: FakeExportApi | null = null) => (await comandos(id, revisao, lista, fake)).json<Vista>();
+  const x = (v: Vista, id: string) => +(v.canvas.blocks.find((b) => b.id === id)!.x / 40).toFixed(3);
+  const pausa = () => {
+    const fake = new FakeExportApi();
+    fake.silences = { duracao: 10, silencios: [[3, 5]], som: true };
+    return fake;
+  };
+  /** Áudios enviados ao projeto (falas de 10 s), já no R2. */
+  async function audios(id: string, n: number): Promise<string[]> {
+    const ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const arquivo = crypto.randomUUID();
+      const key = `projetos/${id}/${arquivo}`;
+      await env.MIDIA.put(key, new Uint8Array([1, 2, 3]));
+      await env.DB.prepare("INSERT INTO project_files (id, project_id, key, name, type, size, created_at) VALUES (?, ?, ?, 'fala.mp3', 'audio/mpeg', 3, ?)").bind(arquivo, id, key, new Date().toISOString()).run();
+      ids.push(arquivo);
+    }
+    return ids;
+  }
+
+  it("depois encadeia áudios: uma sequência só, que é a base do bloco", async () => {
+    const { id, revisao } = await novo();
+    const [f1, f2, f3] = await audios(id, 3);
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", arquivo: f1, dur: 10, rotulo: "a" },
+      { tipo: "adicionar", arquivo: f2, dur: 10, depois: "@a", rotulo: "b" },
+      { tipo: "adicionar", arquivo: f3, dur: 10, depois: "@a", rotulo: "c" },
+    ]);
+    const [a, b, c] = r.criados as [string, string, string];
+    expect(r.grupos).toHaveLength(1);
+    expect(r.grupos[0]!.duracao).toBe(30);
+    expect(r.grupos[0]!.blocos.map((o) => o.camada)).toEqual(["base", "base", "base"]);
+    expect([x(r, a), x(r, c), x(r, b)]).toEqual([0, 10, 20]);
+    // mover vale do mesmo jeito: c vai para o fim.
+    const m = await lote(id, r.revisao, [{ tipo: "mover", bloco: c, depois: b }]);
+    expect([x(m, a), x(m, b), x(m, c)]).toEqual([0, 10, 20]);
+  });
+
+  it("tirar as pausas de um áudio: o seguinte encosta e o som somado acompanha a fala", async () => {
+    const { id, revisao } = await novo();
+    const [f1, f2, f3, musica] = await audios(id, 4);
+    const fake = pausa();
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", arquivo: f1, dur: 10, rotulo: "a" },
+      { tipo: "adicionar", arquivo: f2, dur: 10, depois: "@a", rotulo: "b" },
+      { tipo: "adicionar", arquivo: f3, dur: 10, depois: "@b", rotulo: "c" },
+      { tipo: "adicionar", arquivo: musica, dur: 30, fim: 2, sobre: "@c", em: 1 },
+    ]);
+    const [, b, c, efeito] = r.criados as [string, string, string, string];
+    expect(x(r, efeito)).toBe(21);
+    const p = await lote(id, r.revisao, [{ tipo: "removerPausas", bloco: b, acima: 0.5 }], fake);
+    // A pausa de 2 s fica com 0,5 s: b perde 1,5 s, e o que vem depois anda junto.
+    expect(p.canvas.blocks.filter((o) => o.id === b || o.id === p.criados[0]).map((o) => [o.tin, o.tout])).toEqual([[0, 3.3], [4.8, 10]]);
+    expect(x(p, c)).toBe(18.5);
+    expect(x(p, efeito)).toBe(19.5);
+    expect(p.grupos[0]!.duracao).toBe(28.5);
+    // removerTrechos também: tira 1 s do começo de c.
+    const t = await lote(id, p.revisao, [{ tipo: "removerTrechos", bloco: c, trechos: [[0, 1]] }]);
+    expect(t.canvas.blocks.find((o) => o.id === c)).toMatchObject({ tin: 1, tout: 10 });
+    expect(x(t, efeito)).toBe(18.5);
+  });
+
+  it("sem bloco, removerPausas corta a fala das bases (vídeo e áudio) e deixa a cobertura", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    await env.MIDIA.put(`videos/${VIDEO2}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const [f1] = await audios(id, 1);
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", video: VIDEO, rotulo: "v" },
+      { tipo: "adicionar", video: VIDEO2, fim: 3, sobre: "@v", em: 0 },
+      { tipo: "adicionar", arquivo: f1, dur: 10 },
+    ]);
+    const [v, capa, fala] = r.criados as [string, string, string];
+    const p = await lote(id, r.revisao, [{ tipo: "removerPausas", acima: 0.5 }], pausa());
+    const de = (src: string) => p.canvas.blocks.filter((o) => o.src === src);
+    const origem = (bid: string) => r.canvas.blocks.find((o) => o.id === bid)!.src;
+    expect(de(origem(v))).toHaveLength(2);
+    expect(p.canvas.blocks.find((o) => o.id === capa)).toMatchObject({ tin: 0, tout: 3 });
+    expect(de(origem(fala))).toHaveLength(2);
+  });
+
+  it("a animação por cima da narração é cobertura: o bloco não muda de base nem de id, e acompanha a fala", async () => {
+    const { id, revisao } = await novo();
+    const [f1, f2, efeito] = await audios(id, 3);
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", arquivo: f1, dur: 10, rotulo: "a" },
+      { tipo: "adicionar", arquivo: f2, dur: 10, depois: "@a", rotulo: "b" },
+      { tipo: "adicionar", arquivo: efeito, dur: 2, sobre: "@b", em: 6, rotulo: "efeito" },
+      { tipo: "adicionar", html: `<div id="t">FGC</div>`, duracao: 2, sobre: "@b", em: 6, rotulo: "titulo" },
+    ]);
+    const [a, b, , titulo] = r.criados as [string, string, string, string];
+    expect(r.grupos.map((g) => g.id)).toEqual([a]);
+    const camada = (v: Vista, bid: string) => v.grupos[0]!.blocos.find((o) => o.id === bid)!.camada;
+    expect([camada(r, a), camada(r, b), camada(r, titulo)]).toEqual(["base", "base", "cobertura"]);
+    expect(x(r, titulo)).toBe(16);
+    // Tirar 1 s do começo de a leva o título e o efeito junto com b.
+    const t = await lote(id, r.revisao, [{ tipo: "removerTrechos", bloco: a, trechos: [[0, 1]] }, { tipo: "mover", bloco: a, depois: b }]);
+    expect(t.grupos.map((g) => g.id)).toEqual([a]);
+    expect([x(t, b), x(t, titulo), x(t, r.criados[2]!), x(t, a)]).toEqual([0, 6, 6, 10]);
+  });
+
+  it("depois de uma fala cortada em pedaços é depois do último pedaço, no mesmo lote ou não", async () => {
+    const { id, revisao } = await novo();
+    const [f1, f2, f3] = await audios(id, 3);
+    const r = await lote(
+      id,
+      revisao,
+      [
+        { tipo: "adicionar", arquivo: f1, dur: 10, rotulo: "a" },
+        { tipo: "adicionar", arquivo: f2, dur: 10, depois: "@a", rotulo: "b" },
+        { tipo: "removerPausas", acima: 0.5 },
+        { tipo: "mover", bloco: "@a", depois: "@b" },
+      ],
+      pausa(),
+    );
+    const [a, b] = r.criados as [string, string];
+    // Cada fala virou 2 pedaços de 8,5 s no total; a vai inteira para depois dos dois de b.
+    const ordem = [...r.canvas.blocks].sort((p, q) => p.x - q.x).map((o) => o.id);
+    expect(ordem[0]).toBe(b);
+    expect(ordem[2]).toBe(a);
+    expect(x(r, a)).toBe(8.5);
+    expect(x(r, ordem[3]!)).toBe(11.8);
+    // adicionar depois de a, já em pedaços: entra no fim da fala, não no meio.
+    const t = await lote(id, r.revisao, [{ tipo: "adicionar", arquivo: f3, dur: 4, depois: a }]);
+    expect(x(t, t.criados[0]!)).toBe(17);
+    // A mesma fala repetida em seguida (outro bloco, do começo do arquivo) não é pedaço: depois dela é logo ali.
+    const u = await lote(id, t.revisao, [{ tipo: "adicionar", arquivo: f3, dur: 4, depois: t.criados[0] }, { tipo: "adicionar", arquivo: f1, dur: 2, depois: t.criados[0] }]);
+    expect(x(u, u.criados[1]!)).toBe(21);
+  });
+
+  it("som e imagem não se misturam numa sequência; trocar vale de áudio para áudio", async () => {
+    const { id, revisao } = await novo();
+    const [f1, f2] = await audios(id, 2);
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", video: VIDEO, rotulo: "v" },
+      { tipo: "adicionar", arquivo: f1, dur: 10, rotulo: "a" },
+    ]);
+    const [v, a] = r.criados as [string, string];
+    const erro = async (c: unknown) => (await comandos(id, r.revisao, [c])).json();
+    expect(await erro({ tipo: "adicionar", arquivo: f2, dur: 10, depois: v })).toEqual({ erro: "posicao_invalida", comando: 0 });
+    expect(await erro({ tipo: "adicionar", video: VIDEO2, depois: a })).toEqual({ erro: "posicao_invalida", comando: 0 });
+    expect(await erro({ tipo: "mover", bloco: a, depois: v })).toEqual({ erro: "posicao_invalida", comando: 0 });
+    expect(await erro({ tipo: "trocar", bloco: a, video: VIDEO2 })).toEqual({ erro: "posicao_invalida", comando: 0 });
+    const t = await lote(id, r.revisao, [{ tipo: "trocar", bloco: a, arquivo: f2, dur: 8 }]);
+    expect(t.canvas.blocks.find((o) => o.id === a)).toMatchObject({ src: `/projetos/${id}/arquivos/${f2}`, tin: 0, tout: 8 });
+  });
+});

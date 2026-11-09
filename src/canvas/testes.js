@@ -560,3 +560,52 @@ test("copiar e colar: bloco, grupo inteiro, nota e Final, com ids novos, no pont
   assert.equal(vazio.project.finals.length, 1);
   assert.deepEqual(vazio.project.edges.map((e) => [e.from, e.to]), [[vazio.ids[0], "final"]]);
 });
+
+test("sequência: a mesma regra para todo tipo; num bloco só de som, a base é a trilha 0 de som", () => {
+  const som = (id, x, y, dur = 2) => el(id, x, y, dur, "audio");
+  // Três falas encostadas (a, b, c), uma música embaixo (m) e uma fala solta mais longe (d).
+  const p = { blocks: [som("a", 1000, 500), som("b", 1080, 500), som("c", 1160, 500), som("m", 1000, 500 + M.AUD_H, 6), som("d", 3000, 500)], finals: [], edges: [] };
+  const s = M.sequence(p, "b");
+  assert.equal(s.base, true);
+  assert.deepEqual(s.blocks.map((o) => o.id), ["a", "b", "c"]);
+  assert.deepEqual(M.base(s.group).map((o) => o.id), ["a", "b", "c"]);
+  const m = M.sequence(p, "m");
+  assert.equal(m.base, false);
+  assert.deepEqual(m.blocks.map((o) => o.id), ["m"]);
+  assert.deepEqual(M.sequence(p, "d").blocks.map((o) => o.id), ["d"]);
+  // Fora da base, só os que encostam em cadeia: a capa solta mais à frente não entra.
+  const v = base(el("c1", 0, -M.VIS_H, 1), el("c2", 40, -M.VIS_H, 1), el("c3", 160, -M.VIS_H, 1));
+  assert.deepEqual(M.sequence(v, "c1").blocks.map((o) => o.id), ["c1", "c2"]);
+  assert.deepEqual(M.sequence(v, "a").blocks.map((o) => o.id), ["a", "b"]);
+});
+
+test("aparar uma fala de áudio: a seguinte encosta, e a refeita da sequência leva o som somado", () => {
+  const som = (id, x, y, dur = 2) => el(id, x, y, dur, "audio");
+  const p = { blocks: [som("a", 0, 500), som("b", 80, 500), som("m", 80, 500 + M.AUD_H, 1)], finals: [], edges: [] };
+  const t = M.trim(p, "a", "r", -1);
+  assert.equal(t.blocks.find((o) => o.id === "b").x, 40);
+  // relay: m está sob b e anda com ele.
+  const r = M.relay(p, { ...p, blocks: p.blocks.map((o) => (o.id === "a" ? { ...o, tout: 1 } : o)) }, ["a", "b"], 0, 500);
+  assert.deepEqual(["b", "m"].map((id) => r.blocks.find((o) => o.id === id).x), [40, 40]);
+});
+
+test("quem entrou primeiro diz a base: a narração com imagem por cima continua a base", () => {
+  const fala = (id, x, dur = 2) => el(id, x, M.VIS_H, dur, "audio");
+  // Narração primeiro, a imagem depois, por cima: a base é a fala, e a imagem é cobertura.
+  const n = { blocks: [fala("f1", 0), fala("f2", 80), el("img", 40, 0, 2)], finals: [], edges: [] };
+  const [g] = M.groups(n);
+  assert.equal(g.id, "f1");
+  assert.deepEqual(M.base(g).map((b) => b.id), ["f1", "f2"]);
+  assert.deepEqual(g.covers.map((b) => b.id), ["img"]);
+  // Cortar a primeira fala leva a imagem junto (ela começa na fala, como as camadas de um vídeo).
+  const cortado = { ...n, blocks: n.blocks.map((b) => (b.id === "f1" ? { ...b, tout: 1 } : b)) };
+  const r = M.relay(n, cortado, ["f1", "f2"], 0, M.VIS_H);
+  assert.deepEqual(["f2", "img"].map((id) => r.blocks.find((b) => b.id === id).x), [40, 40]);
+  const [h] = M.groups(r);
+  assert.deepEqual(M.base(h).map((b) => b.id), ["f1", "f2"]);
+  // Vídeo primeiro e a música depois: o de sempre, o vídeo é a base.
+  const v = { blocks: [el("vid", 0, 0, 4, "video"), fala("mus", 0, 4)], finals: [], edges: [] };
+  const [w] = M.groups(v);
+  assert.deepEqual(M.base(w).map((b) => b.id), ["vid"]);
+  assert.deepEqual(w.audios.map((b) => b.id), ["mus"]);
+});
