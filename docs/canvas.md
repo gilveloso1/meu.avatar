@@ -259,9 +259,14 @@ menos custo.
   exportar sem mudar nada não chama o contêiner. Mudou o que os trechos geram: suba
   `SEGMENT_VERSION` (`src/exportar.ts`). Cada trecho sai em −14 LUFS, como o resto do site,
   com ganho e limitador: a mistura é a que a pessoa fez, e o bloco mais alto diz o nível (só
-  um som em 30% fica em 30%). Todo clipe de som tem rampa de 10 ms em cada ponta, como a Edição
-  rápida, e todo limitador compensa o atraso (`latency=1`): sem isso, a troca de um arquivo de som
-  para outro estalava e cada emenda tinha 10 ms de silêncio (09/11/2026, `SEGMENT_VERSION` 6).
+  um som em 30% fica em 30%). O som (09/11/2026, `SEGMENT_VERSION` 7): todo clipe tem rampa de
+  10 ms em cada ponta, como a Edição rápida, menos onde ele continua outro sem salto no arquivo (a
+  música cortada por cena), que `soundSeams` (`modelo.js`) marca com `segue`/`continua`; aí o
+  trecho vai até o fim que tem de fato (quadros inteiros, o mesmo arredondamento de `exportar.py`) e
+  o seguinte retoma dali, acelerado desde a mesma `origem` (o `atempo` não é exato). Por isso o mesmo
+  grupo pode virar dois trechos, conforme o vizinho. O som é lido 0,5 s antes e depois do corte e
+  cortado pela amostra: o MP3 lido do ponto exato saía mudo nos primeiros ~35 ms (o buraco de cada
+  clipe) e o `atempo` perde o fim. Todo limitador compensa o atraso (`latency=1`).
   Cada versão é a emenda dos trechos: vídeo copiado, só o som vira AAC. A imagem cobre o
   quadro, como na prévia, a 30 quadros por segundo. Um passo por vez, dado no servidor
   por um Durable Object com alarme (`src/exportando.ts`, desde 09/11/2026): a tela e o
