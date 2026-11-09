@@ -2,7 +2,8 @@
 
 Cada grupo do canvas vira um trecho (H.264 sem B-frames e FLAC, em MKV), feito
 uma vez só. Cada versão é a emenda dos trechos: o vídeo é copiado, sem
-recodificar, e só o som vira AAC (AAC emendado pode estalar). Assim, 6 versões
+recodificar, e só o som vira AAC (AAC emendado pode estalar), com o ajuste de volume
+da versão inteira (cada arquivo de som já entra no trecho no nível). Assim, 6 versões
 custam o conteúdo único, não 6 vídeos inteiros.
 
 Servidor (imagem própria, Dockerfile.exportar): POST /trecho e POST /emendar. O
@@ -24,10 +25,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 FPS = 30
 TAXA = 48000
-# O mesmo volume do resto do site (tratar.sh, editar.py): sem isso, um gancho baixo seguido de
-# um corpo alto dá um salto na emenda. Abaixo de SILENCIO, não há o que medir.
+# O mesmo volume do resto do site (tratar.sh, editar.py), como nos editores de vídeo: cada
+# arquivo de som é levado a LUFS sozinho (um gancho baixo não fica abaixo do corpo), o volume do
+# canvas vale sobre isso (a música em 30% fica em 30% em todas as cenas) e a versão inteira
+# recebe um ajuste só, na emenda. Antes, cada trecho era nivelado com a música dentro, e a
+# música mudava de volume a cada cena. Abaixo de SILENCIO, não há o que medir.
 LUFS = -14
 SILENCIO = -60
+# O máximo que um arquivo baixo sobe: mais que isso é ruído sendo levantado.
+MAX_GANHO = 20
+# A etiqueta do trecho com o nível dele (o volume mais alto do canvas), lida na emenda.
+NIVEL = "meu_avatar_nivel"
 LIMITE = 4 * 1024 * 1024 * 1024  # 4 GB: até 200 trechos numa emenda
 MAX_LADO = 1920
 # Os limites de src/canvas/modelo.js.
@@ -170,6 +178,7 @@ def filtros(plano, arquivos):
     # O som tem a duração exata dos quadros: é o que mantém a emenda em sincronia.
     exata = quadros / FPS
     entradas, grafo, sons, volumes = [], [f"color=c=black:s={w}x{h}:r={FPS}:d={exata:.6f},format=yuv420p[base]"], [], []
+    ganhos = {}
     atual = "base"
     itens = plano.get("itens")
     if not isinstance(itens, list):
@@ -221,6 +230,10 @@ def filtros(plano, arquivos):
             entradas += ["-ss", f"{origem - antes:.6f}", "-t", f"{(desde + dura) * velocidade + antes + AQUECER:.6f}", "-i", caminho]
             i = len([a for a in entradas if a == "-i"]) - 1
             primeira = round(desde * TAXA)
+            # O arquivo inteiro diz o ganho: o mesmo em qualquer cena e em qualquer pedaço dele.
+            if caminho not in ganhos:
+                ganhos[caminho] = ganho(medir("-i", caminho))
+            fator = volume * 10 ** (ganhos[caminho] / 20)
             # Pela amostra, não pelo milésimo: o som que continua o anterior encosta nele sem salto.
             atraso = round(entra * TAXA)
             rampa = min(RAMPA, dura / 2)
@@ -232,7 +245,7 @@ def filtros(plano, arquivos):
                 f"[{i}:a]aresample={TAXA},aformat=sample_fmts=fltp:channel_layouts=stereo,"
                 f"asetpts=PTS-STARTPTS,atrim=start_sample={round(antes * TAXA)},asetpts=PTS-STARTPTS,{tempo(velocidade)},"
                 # Depois do atempo, que não sai com o tamanho exato: o fim vem da sobra lida a mais.
-                f"atrim=start_sample={primeira}:end_sample={primeira + round(dura * TAXA)},asetpts=PTS-STARTPTS,volume={volume:.4f},"
+                f"atrim=start_sample={primeira}:end_sample={primeira + round(dura * TAXA)},asetpts=PTS-STARTPTS,volume={fator:.6f},"
                 + "".join(r + "," for r in rampas) + f"adelay={atraso}S:all=1[s{n}]"
             )
             sons.append(f"[s{n}]")
@@ -241,13 +254,13 @@ def filtros(plano, arquivos):
     silencio = f"anullsrc=r={TAXA}:cl=stereo:d={exata:.6f}"
     if sons:
         grafo.append(f"{silencio}[mudo]")
-        # Sem normalizar a soma: o volume é o que a pessoa ajustou; o limitador só evita corte.
+        # Sem normalizar a soma nem o trecho: cada som já veio no nível; o limitador só evita corte.
         # latency=1 em todo alimiter: sem ele o som atrasa 5 ms e o fim se perde (buraco na emenda).
         grafo.append(f"[mudo]{''.join(sons)}amix=inputs={len(sons) + 1}:duration=longest:normalize=0,alimiter=limit=0.97:level=0:latency=1,atrim=end={exata:.6f}[a]")
     else:
         grafo.append(f"{silencio}[a]")
-    # O bloco mais alto diz o nível do trecho: som baixado de propósito continua baixo.
-    return entradas, ";".join(grafo), quadros, min(max(volumes, default=1), 1)
+    # O bloco mais alto diz o nível do trecho: som baixado de propósito continua baixo. Sem som, nenhum.
+    return entradas, ";".join(grafo), quadros, min(max(volumes, default=0), 1)
 
 
 def trecho(plano, saida, arquivos):
@@ -257,28 +270,33 @@ def trecho(plano, saida, arquivos):
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-profile:v", "high",
         # Sem B-frames e com o mesmo GOP e relógio em todos: a emenda sem recodificar sai limpa.
         # O FLAC na mesma profundidade em todos: o decodificador não aceita trocar no meio.
-        "-bf", "0", "-g", str(FPS * 2), "-r", str(FPS), "-c:a", "flac", "-sample_fmt", "s16", "-ar", str(TAXA), "-ac", "2", "-f", "matroska", saida,
+        "-bf", "0", "-g", str(FPS * 2), "-r", str(FPS), "-c:a", "flac", "-sample_fmt", "s16", "-ar", str(TAXA), "-ac", "2",
+        "-metadata", f"{NIVEL}={nivel:.4f}", "-f", "matroska", saida,
     )
-    nivelar(saida, nivel)
 
 
-def nivelar(caminho, nivel):
-    """Leva o som do trecho a LUFS, vezes o nível, só com ganho e limitador, sem mexer na imagem."""
+def medir(*entrada):
+    """O volume integrado (LUFS, EBU R128) do som da entrada, ou None se não há som que se meça.
+    O ebur128, não o loudnorm: em som curto o loudnorm erra (−18 contra −16,6 numa mistura de 6 s)."""
     r = subprocess.run(
-        ["ffmpeg", "-nostdin", "-hide_banner", "-i", caminho, "-af", f"loudnorm=I={LUFS}:print_format=json", "-vn", "-f", "null", "-"],
-        capture_output=True, text=True, check=True, timeout=300,
+        ["ffmpeg", "-nostdin", "-hide_banner", *entrada, "-af", "ebur128", "-vn", "-f", "null", "-"],
+        capture_output=True, text=True, check=True, timeout=600,
     )
-    log = r.stderr
-    medido = float(json.loads(log[log.rindex("{"):log.rindex("}") + 1])["input_i"])
-    if not math.isfinite(medido) or medido < SILENCIO:
-        return
-    temp = caminho + ".temp"
-    ffmpeg(
-        "-y", "-i", caminho, "-map", "0:v", "-map", "0:a", "-c:v", "copy",
-        "-af", f"volume={LUFS - medido + 20 * math.log10(nivel):.2f}dB,alimiter=limit=0.84:level=0:latency=1", "-c:a", "flac", "-sample_fmt", "s16",
-        "-ar", str(TAXA), "-ac", "2", "-f", "matroska", temp,
-    )
-    os.replace(temp, caminho)
+    resumo = r.stderr[r.stderr.rindex("Summary:"):]
+    medido = float(re.search(r"I:\s*(-?[\d.]+|-inf)\s*LUFS", resumo)[1])
+    return medido if math.isfinite(medido) and medido >= SILENCIO else None
+
+
+def ganho(medido):
+    """Os dB que levam o som medido a LUFS (nada, se não houve o que medir)."""
+    return 0 if medido is None else min(LUFS - medido, MAX_GANHO)
+
+
+def nivel_do(trecho):
+    """O nível que o trecho guardou ao ser feito (0 se não tem som ou é de antes da etiqueta)."""
+    log = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-i", trecho], capture_output=True, text=True, timeout=60).stderr
+    achou = re.search(NIVEL + r"\s*:\s*([\d.]+)", log, re.IGNORECASE)
+    return float(achou[1]) if achou else 0
 
 
 def emendar(saida, trechos):
@@ -287,9 +305,15 @@ def emendar(saida, trechos):
     with open(lista, "w") as f:
         for t in trechos:
             f.write("file '" + os.path.abspath(t).replace("'", "'\\''") + "'\n")
+    concat = ("-f", "concat", "-safe", "0", "-i", lista)
+    # O ajuste único da versão: leva tudo a LUFS, vezes o nível (som baixado de propósito em todo
+    # o vídeo continua baixo), só com ganho e limitador. O vídeo é copiado, o som vira AAC.
+    medido = medir(*concat)
+    nivel = max((nivel_do(t) for t in trechos), default=0) or 1
+    som = [] if medido is None else ["-af", f"volume={LUFS - medido + 20 * math.log10(nivel):.2f}dB,alimiter=limit=0.84:level=0:latency=1"]
     ffmpeg(
-        "-y", "-f", "concat", "-safe", "0", "-i", lista, "-map", "0:v", "-map", "0:a",
-        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-movflags", "+faststart", "-f", "mp4", saida,
+        "-y", *concat, "-map", "0:v", "-map", "0:a", "-c:v", "copy", *som,
+        "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-movflags", "+faststart", "-f", "mp4", saida,
     )
 
 

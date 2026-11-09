@@ -257,9 +257,12 @@ menos custo.
   `trechos/<hash>.mkv` pelo conteúdo: grupo igual não é refeito, nem entre exportações. A versão também: mesma lista de
   trechos, mesmo arquivo, em `exportacoes/versoes/<hash>.mp4`, reaproveitado por 24 horas;
   exportar sem mudar nada não chama o contêiner. Mudou o que os trechos geram: suba
-  `SEGMENT_VERSION` (`src/exportar.ts`). Cada trecho sai em −14 LUFS, como o resto do site,
-  com ganho e limitador: a mistura é a que a pessoa fez, e o bloco mais alto diz o nível (só
-  um som em 30% fica em 30%). O som (09/11/2026, `SEGMENT_VERSION` 7): todo clipe tem rampa de
+  `SEGMENT_VERSION` (`src/exportar.ts`). O volume segue o molde dos editores de vídeo (09/11/2026,
+  `SEGMENT_VERSION` 8): cada arquivo de som é medido inteiro (EBU R128) e levado a −14 LUFS, como o
+  resto do site, sempre com o mesmo ganho; o volume do canvas vale sobre isso, sem nivelar o trecho;
+  e a versão inteira recebe um ajuste só, na emenda, até −14 LUFS vezes o nível (o bloco mais alto,
+  guardado em cada trecho: só um som em 30% fica em 30%). Antes, cada trecho era nivelado com a
+  música dentro, e a música mudava de volume a cada cena. O som (09/11/2026, `SEGMENT_VERSION` 7): todo clipe tem rampa de
   10 ms em cada ponta, como a Edição rápida, menos onde ele continua outro sem salto no arquivo (a
   música cortada por cena), que `soundSeams` (`modelo.js`) marca com `segue`/`continua`; aí o
   trecho vai até o fim que tem de fato (quadros inteiros, o mesmo arredondamento de `exportar.py`) e
