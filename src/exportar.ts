@@ -250,6 +250,14 @@ export class Exports {
     const versoes: ExportPlan["versoes"] = [];
     for (const v of work.versoes) versoes.push(await this.versionPlan(v, trechos, now));
     const plan: ExportPlan = { animacoes, trechos, versoes };
+    // A mesma exportação já andando (dois cliques, o agente e a tela juntos): segue a que existe. Duas iguais
+    // ao mesmo tempo fazem cada cena duas vezes, porque nenhuma vê a da outra pronta.
+    const igual = (p: ExportPlan) => JSON.stringify(p.versoes.map((v) => [v.nome, v.chave])) === JSON.stringify(versoes.map((v) => [v.nome, v.chave]));
+    const andando = (await this.db.runningExports(project.id)).find((r) => igual(JSON.parse(r.plan) as ExportPlan));
+    if (andando) {
+      if (this.runner) await this.runner.start(andando.id);
+      return andando;
+    }
     const row = await this.db.insertExport({ id, project_id: project.id, total: animacoes.length + trechos.length + versoes.length, plan: JSON.stringify(plan), expires_at: new Date(now.getTime() + EXPORT_TTL_MS).toISOString() }, now);
     // Com o Durable Object, a exportação começa a andar já, sem esperar quem acompanha.
     if (this.runner && row.status === "running") await this.runner.start(row.id);

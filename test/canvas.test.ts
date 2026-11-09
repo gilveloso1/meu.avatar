@@ -360,6 +360,21 @@ describe("exportar projetos", () => {
     expect([fake.segments.length, acionados]).toEqual([0, [row.id, row.id]]);
   });
 
+  it("pedir de novo a mesma exportação enquanto ela anda devolve a mesma; outra versão começa outra", async () => {
+    const admin = await cookie();
+    const id = await projeto(admin);
+    const exports = new Exports(new Db(env.DB), env.MIDIA, new FakeExportApi());
+    const project = (await new Db(env.DB).projectById(id))!;
+    const conta = { id: 0, role: "admin" as const, permissoes: [] };
+    const a = await exports.start(project, conta, "final");
+    expect((await exports.start(project, conta, "final")).id).toBe(a.id);
+    const so = await exports.start(project, conta, "final", [1]);
+    expect(so.id).not.toBe(a.id);
+    // Terminada, a mesma volta a ser uma exportação nova.
+    for (let i = 0; i < a.total; i++) await exports.advance(a.id);
+    expect((await exports.start(project, conta, "final")).id).not.toBe(a.id);
+  });
+
   it("o Durable Object dá os passos pelo alarme, sem pedido nenhum aberto", async () => {
     const admin = await cookie();
     const id = await projeto(admin);
