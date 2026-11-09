@@ -1584,6 +1584,35 @@ describe("áudio em sequência", () => {
     expect([x(t, b), x(t, titulo), x(t, r.criados[2]!), x(t, a)]).toEqual([0, 6, 6, 10]);
   });
 
+  it("depois de uma fala cortada em pedaços é depois do último pedaço, no mesmo lote ou não", async () => {
+    const { id, revisao } = await novo();
+    const [f1, f2, f3] = await audios(id, 3);
+    const r = await lote(
+      id,
+      revisao,
+      [
+        { tipo: "adicionar", arquivo: f1, dur: 10, rotulo: "a" },
+        { tipo: "adicionar", arquivo: f2, dur: 10, depois: "@a", rotulo: "b" },
+        { tipo: "removerPausas", acima: 0.5 },
+        { tipo: "mover", bloco: "@a", depois: "@b" },
+      ],
+      pausa(),
+    );
+    const [a, b] = r.criados as [string, string];
+    // Cada fala virou 2 pedaços de 8,5 s no total; a vai inteira para depois dos dois de b.
+    const ordem = [...r.canvas.blocks].sort((p, q) => p.x - q.x).map((o) => o.id);
+    expect(ordem[0]).toBe(b);
+    expect(ordem[2]).toBe(a);
+    expect(x(r, a)).toBe(8.5);
+    expect(x(r, ordem[3]!)).toBe(11.8);
+    // adicionar depois de a, já em pedaços: entra no fim da fala, não no meio.
+    const t = await lote(id, r.revisao, [{ tipo: "adicionar", arquivo: f3, dur: 4, depois: a }]);
+    expect(x(t, t.criados[0]!)).toBe(17);
+    // A mesma fala repetida em seguida (outro bloco, do começo do arquivo) não é pedaço: depois dela é logo ali.
+    const u = await lote(id, t.revisao, [{ tipo: "adicionar", arquivo: f3, dur: 4, depois: t.criados[0] }, { tipo: "adicionar", arquivo: f1, dur: 2, depois: t.criados[0] }]);
+    expect(x(u, u.criados[1]!)).toBe(21);
+  });
+
   it("som e imagem não se misturam numa sequência; trocar vale de áudio para áudio", async () => {
     const { id, revisao } = await novo();
     const [f1, f2] = await audios(id, 2);

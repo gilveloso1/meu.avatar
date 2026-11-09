@@ -392,7 +392,7 @@ function adicionar(project: CanvasProject, c: Comando, f: Fonte, falha: (c: stri
     const seq = sequencia(project, alvo.id);
     if (!seq) throw falha("posicao_invalida");
     const ordem = seq.blocks.map((b) => b.id);
-    ordem.splice(ordem.indexOf(alvo.id) + 1, 0, block.id);
+    ordem.splice(ordem.indexOf(ultimoPedaco(seq, alvo.id)) + 1, 0, block.id);
     p = relay(project, p, ordem, seq.x, seq.y);
   } else if (sobre) {
     const grupo = groupIndex(groups(project)).get(sobre);
@@ -579,6 +579,26 @@ function alterar(project: CanvasProject, id: string, muda: (b: Block) => Block, 
   return acompanhar(novo, seq, antes, (off) => depois.x + mapa(off, antes, depois) * PX);
 }
 
+/**
+ * O último pedaço da fala que começa no bloco `id`: removerPausas, removerTrechos e dividir deixam o id no primeiro
+ * pedaço, e os outros seguem encostados, do mesmo arquivo e adiante nele. "Depois da fala" é depois de todos.
+ */
+function ultimoPedaco(seq: Sequence, id: string): string {
+  return pedacos(seq, id).at(-1)!;
+}
+
+/** Os ids da fala que começa no bloco `id`: ele e os pedaços que o seguem (ver ultimoPedaco). */
+function pedacos(seq: Sequence, id: string): string[] {
+  const i = seq.blocks.findIndex((b) => b.id === id);
+  if (i < 0) return [id];
+  let j = i;
+  for (; j < seq.blocks.length - 1; j++) {
+    const [a, b] = [seq.blocks[j]!, seq.blocks[j + 1]!];
+    if (b.src !== a.src || !b.src || b.tin < a.tout - EPS || Math.abs(a.x + width(a) - b.x) > 0.001) break;
+  }
+  return seq.blocks.slice(i, j + 1).map((b) => b.id);
+}
+
 /** Leva um bloco para depois ou antes de outro, fechando o buraco de onde saiu. */
 function mover(project: CanvasProject, c: Comando, falha: (c: string) => ComandoError): CanvasProject {
   const id = texto(c.bloco);
@@ -589,9 +609,13 @@ function mover(project: CanvasProject, c: Comando, falha: (c: string) => Comando
   // Som vai para uma sequência de som; imagem e vídeo, para uma de imagem e vídeo.
   const kind = (b: string) => project.blocks.find((o) => o.id === b)!.kind === "audio";
   if (kind(id!) !== kind(alvoId!)) throw falha("posicao_invalida");
-  const sem = (s: Sequence) => s.blocks.map((b) => b.id).filter((o) => o !== id);
+  // A fala cortada em pedaços anda inteira, e depois dela é depois do último pedaço.
+  const ids = pedacos(de, id!);
+  if (ids.includes(alvoId!)) throw falha("posicao_invalida");
+  const sem = (s: Sequence) => s.blocks.map((b) => b.id).filter((o) => !ids.includes(o));
   const ordem = sem(para);
-  ordem.splice(ordem.indexOf(alvoId!) + (c.depois ? 1 : 0), 0, id!);
+  const onde = c.depois ? ultimoPedaco({ ...para, blocks: para.blocks.filter((b) => !ids.includes(b.id)) }, alvoId!) : alvoId!;
+  ordem.splice(ordem.indexOf(onde) + (c.depois ? 1 : 0), 0, ...ids);
   // Uma sequência que perde o bloco anda primeiro; a de destino é a que vale no fim.
   const resto = de.blocks[0] !== para.blocks[0] ? sem(de) : [];
   const antes = resto.length ? relay(project, project, resto, de.x, de.y) : project;

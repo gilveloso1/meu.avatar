@@ -40,7 +40,7 @@ renomear {bloco, nome} ou {grupo, nome} (com grupo, o nome da cena, como Cena 1,
 trocar {bloco, video|arquivo|ativo|imagem|audio, inicio, fim, dur, nome, aparar} (põe o arquivo no lugar do bloco, como o vídeo pronto no do rascunho; áudio só por áudio; sem inicio nem fim, o vídeo ou o áudio entra sem o silêncio das pontas, e aparar: false o põe inteiro; o que está em cima fica e a sequência acompanha; no lugar de um rascunho, a camada vai para o mesmo ponto na proporção do bloco, já aparado; sem nome, o bloco fica com o nome do arquivo)
 cortar {bloco, inicio, fim | duracao} (duracao no lugar de fim: o que fica a partir do início; num rascunho, cortar {bloco, duracao: 3} deixa 3 s)
 dividir {bloco, em}
-mover {bloco, depois|antes} (põe o bloco em outra posição, também em outro grupo: assim se juntam dois grupos; áudio só entre áudios)
+mover {bloco, depois|antes} (põe o bloco em outra posição, também em outro grupo: assim se juntam dois grupos; áudio só entre áudios; a fala cortada em pedaços anda inteira, e depois dela, em mover e adicionar, é depois do último pedaço)
 velocidade {bloco, velocidade: 0,25 a 4}
 removerPausas {bloco?, pausa: curta|media|longa | acima: 0,1 a 5} (vídeo ou áudio; sem bloco, a fala de cada grupo: os vídeos e áudios das bases; acima: toda pausa maior que esses segundos fica com eles, 60% depois da fala e o resto antes da seguinte (no começo do bloco, só a parte de antes; no fim, só a de depois); corte menor que 0,08 s não é feito, nem o que deixaria pedaço menor que 0,5 s; pausa: a regra da Edição rápida; o bloco vira vários, com o mesmo nome, e os novos ids vêm em criados)
 removerTrechos {bloco, trechos: [[inicio, fim], ...]} (segundos do arquivo, como os de ver_transcricao; o resto encosta)
