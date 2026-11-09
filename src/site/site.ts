@@ -37,7 +37,7 @@ import { type Alarme, avisoNovo, CHAVE as ALARME, dispensar, LIMITE_MS } from ".
 import { ForbiddenError, InputError, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, type Studio } from "../studio";
 import { CANVAS_ANIMACAO, CANVAS_BODY, CANVAS_SCRIPT, CANVAS_STYLE } from "./canvas";
 import { MAX_VERSOES } from "../canvas/modelo.js";
-import { type ExportPlan, type Exports, fileName, zipFits } from "../exportar";
+import { BAIXAR_PATH, type ExportPlan, type Exports, fileName, zipFits } from "../exportar";
 import { contentDisposition, downloadName, MEDIA_TYPES, mediaType, videoFileName } from "../arquivos";
 import { CSS } from "./style";
 import { DARK, LIGHT } from "./theme";
@@ -133,6 +133,15 @@ export class Site {
       const r = await usarEnvio(this.db, this.media, envio[1]!, request);
       if ("erro" in r) return Response.json({ erro: r.erro, ...r.extra }, { status: r.status });
       return Response.json({ ativo: r.id, avatar: r.avatar.id, src: `/avatares/${r.avatar.id}/arquivos/${r.id}` }, { status: 201 });
+    }
+
+    // O link de download de uma exportação pronta (src/exportar.ts): sem token nem sessão, pelo código dela.
+    const baixar = BAIXAR_PATH.exec(path);
+    if (baixar) {
+      if (request.method !== "GET" && request.method !== "HEAD") return new Response("não encontrado", { status: 404 });
+      const r = await this.exports.byCode(baixar[1]!, baixar[2]!);
+      if (r === "expirou") return new Response(ERROS.exportarExpirou, { status: 410 });
+      return r ? this.exportFile(request, r.plan, baixar[3]!) : new Response("não encontrado", { status: 404 });
     }
 
     // Formulário de outro site tentando agir em nome de quem está logado.
@@ -847,7 +856,7 @@ ${CANVAS_BODY}
     const pick = Array.isArray(body.versoes) && body.versoes.every((v) => Number.isInteger(v)) ? (body.versoes as number[]) : undefined;
     try {
       const row = await this.exports.start(project, user, typeof body.final === "string" ? body.final : "", pick);
-      return Response.json(this.exports.state(project, row), { status: 201 });
+      return Response.json(this.exports.state(project, await this.exports.withLink(row), undefined, new URL(request.url).origin), { status: 201 });
     } catch (err) {
       if (err instanceof InputError) return new Response(err.message, { status: 400 });
       throw err;
@@ -860,13 +869,17 @@ ${CANVAS_BODY}
     if (!row || row.project_id !== project.id) return new Response("não encontrado", { status: 404 });
     if (request.method === "POST" && !download) {
       const now = await this.exports.follow(id);
-      return Response.json(this.exports.state(project, now ?? row));
+      return Response.json(this.exports.state(project, await this.exports.withLink(now ?? row), undefined, new URL(request.url).origin));
     }
     if (request.method !== "GET") return new Response("não encontrado", { status: 404 });
-    if (!download) return Response.json(this.exports.state(project, row));
+    if (!download) return Response.json(this.exports.state(project, await this.exports.withLink(row), undefined, new URL(request.url).origin));
     if (row.status !== "done") return new Response("não encontrado", { status: 404 });
     if (row.expires_at <= new Date().toISOString()) return new Response(ERROS.exportarExpirou, { status: 410 });
-    const plan = JSON.parse(row.plan) as ExportPlan;
+    return this.exportFile(request, JSON.parse(row.plan) as ExportPlan, download);
+  }
+
+  /** Uma versão (`0.mp4`) ou todas em ZIP, com o nome de sempre; a mesma resposta pela sessão, pelo token ou pelo link. */
+  private exportFile(request: Request, plan: ExportPlan, download: string): Promise<Response> | Response {
     if (download === "todas.zip") return zipFits(plan) ? this.exports.zip(plan) : new Response("não encontrado", { status: 404 });
     const index = parseInt(download, 10);
     const version = plan.versoes[index];

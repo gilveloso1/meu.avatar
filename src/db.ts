@@ -788,6 +788,11 @@ export class Db {
       .first<ExportRow>();
   }
 
+  /** Troca só o plano (o prazo do link de download), sem mexer no andamento. */
+  async setExportPlan(id: string, plan: string): Promise<ExportRow | null> {
+    return this.d1.prepare("UPDATE exports SET plan = ? WHERE id = ? RETURNING *").bind(plan, id).first<ExportRow>();
+  }
+
   async failStep(id: string, status: string, error: string | null): Promise<ExportRow | null> {
     return this.d1.prepare("UPDATE exports SET status = ?, error = ?, claimed_at = NULL WHERE id = ? RETURNING *").bind(status, error, id).first<ExportRow>();
   }

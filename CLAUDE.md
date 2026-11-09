@@ -290,6 +290,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   envio do avatar (`/envio/<código>`, `src/ativos.ts`), a única rota que recebe arquivo sem token nem
   sessão. Ela abre um arquivo para um avatar só, uma vez, por 30 min; regra nova ali ganha teste em
   `test/avatares-agente.test.ts`.
+- A exportação pronta tem um link de download sem token nem sessão (`/baixar/<exportação>/<código>/...`,
+  `BAIXAR_PATH` em `src/exportar.ts`): o agente baixa no terminal, que não tem o token. Só lê, só aquela
+  exportação e só por 1 hora depois de entregue (perguntar de novo renova); regra nova ali ganha teste em `test/canvas.test.ts`.
 - O que o agente vê dos arquivos sai de um item só (`src/acervo.ts`): `listar_arquivos`, os ativos do
   `listar_avatares` e os arquivos do `ver_projeto`. Fonte nova de arquivo é mais uma consulta ali, com o
   mesmo item e a mesma página (`Pagina`, `src/db.ts`), nunca uma lista à parte.

@@ -286,7 +286,7 @@ const FERRAMENTAS = [
     description: "Começa a exportação de um Final; ela anda sozinha no servidor (cada animação e cada cena levam de segundos a uns 2 min). Acompanhe com acompanhar_exportacao, com uns 20 s entre as chamadas, até ficar pronta. Não comece outra da mesma versão enquanto esta anda.",
     inputSchema: objeto({ projeto, final: texto("Id do Final."), versoes: { type: "array", items: { type: "integer" }, description: "Posições das variações; sem isso, todas." } }, ["projeto", "final"]),
   },
-  { name: "acompanhar_exportacao", description: "Devolve o andamento da exportação (feitos de total), que anda sozinha no servidor; pronta, traz os endereços para baixar com o mesmo token.", inputSchema: objeto({ projeto, exportacao: texto("Id da exportação.") }, ["projeto", "exportacao"]) },
+  { name: "acompanhar_exportacao", description: "Devolve o andamento da exportação (feitos de total), que anda sozinha no servidor. Pronta, cada versão traz baixar: um link que funciona sem token por 1 hora (baixarAte; perguntar de novo renova), para baixar no terminal (curl -L -o \"<arquivo>\" \"<baixar>\") ou passar à pessoa; arquivo é o nome do vídeo. Com mais de uma versão, baixarZip traz todas num ZIP. O href serve de src em ver_quadros e ver_silencios.", inputSchema: objeto({ projeto, exportacao: texto("Id da exportação.") }, ["projeto", "exportacao"]) },
   {
     name: "listar_ferramentas",
     description:
