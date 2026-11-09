@@ -3,8 +3,8 @@
  * vídeo depois daquele"), não a geometria do canvas. Tudo passa pelo mesmo modelo da tela
  * (src/canvas/modelo.js), com as mesmas regras. Um lote vale inteiro ou não vale nada.
  */
-import { addNote, arrange, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, len, linkFirst, linkProblem, links, maxEnd, MIN_LEN, newId, NOTE_MAX, nextTone, PX, relay, removeItems, renameGroup, RESOLUTIONS, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
-import type { Block, CanvasProject, Frame, FrameKey, Group } from "./canvas/modelo.js";
+import { addNote, arrange, base, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, len, linkFirst, linkProblem, links, maxEnd, members, MIN_LEN, newId, NOTE_MAX, nextTone, PX, relay, removeItems, renameGroup, RESOLUTIONS, sequence, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
+import type { Block, CanvasProject, Frame, FrameKey, Sequence } from "./canvas/modelo.js";
 import { PAUSES, planParts, RULES } from "./quickedit";
 
 /** Comando recusado: o código, a posição dele no lote e o que ajuda a corrigir. */
@@ -275,8 +275,9 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
         // Fechar: a sequência encosta onde saiu o bloco, sem deixar buraco.
         if (c.fechar === true) {
           for (const g of groups(antes)) {
-            const ordem = g.blocks.map((b) => b.id).filter((id) => !ids.includes(id));
-            if (ordem.length && ordem.length < g.blocks.length) project = relay(antes, project, ordem, g.x, g.blocks[0]!.y);
+            const main = base(g);
+            const ordem = main.map((b) => b.id).filter((id) => !ids.includes(id));
+            if (ordem.length && ordem.length < main.length) project = relay(antes, project, ordem, main[0]!.x, main[0]!.y);
           }
         }
         break;
@@ -386,12 +387,13 @@ function adicionar(project: CanvasProject, c: Comando, f: Fonte, falha: (c: stri
   if (antes) {
     const alvo = project.blocks.find((b) => b.id === antes);
     if (!alvo) throw falha("bloco_inexistente");
-    if (f.kind === "audio" || alvo.kind === "audio") throw falha("posicao_invalida");
+    // Na sequência do alvo, a mesma para todo tipo: som depois de som, imagem ou vídeo depois de imagem ou vídeo.
+    if ((f.kind === "audio") !== (alvo.kind === "audio")) throw falha("posicao_invalida");
     const seq = sequencia(project, alvo.id);
     if (!seq) throw falha("posicao_invalida");
     const ordem = seq.blocks.map((b) => b.id);
     ordem.splice(ordem.indexOf(alvo.id) + 1, 0, block.id);
-    p = relay(project, p, ordem, seq.x, seq.blocks[0]!.y);
+    p = relay(project, p, ordem, seq.x, seq.y);
   } else if (sobre) {
     const grupo = groupIndex(groups(project)).get(sobre);
     const ref = project.blocks.find((b) => b.id === sobre);
@@ -401,7 +403,8 @@ function adicionar(project: CanvasProject, c: Comando, f: Fonte, falha: (c: stri
     const desde = (ref.x - grupo.x) / PX;
     if (em < 0 || desde + em >= grupo.dur) throw falha("momento_invalido");
     const x = ref.x + em * PX;
-    const y = f.kind === "audio" ? grupo.y + VIS_H : grupo.y - height(block);
+    // Num bloco só de som, a linha do grupo já é a área de som (a de vídeo fica acima dela).
+    const y = f.kind === "audio" ? grupo.y + (grupo.soloAudio ? 0 : VIS_H) : grupo.y - height(block);
     const s = snap(p, block.id, x, y, 1, { group: grupo.id });
     if (!s.mode) throw falha("posicao_invalida");
     p = dropBlock(p, block.id, s);
@@ -421,14 +424,14 @@ function adicionar(project: CanvasProject, c: Comando, f: Fonte, falha: (c: stri
 async function trocar(project: CanvasProject, c: Comando, ctx: Contexto, falha: (c: string) => ComandoError): Promise<CanvasProject> {
   const b = project.blocks.find((o) => o.id === c.bloco);
   if (!b) throw falha("bloco_inexistente");
-  if (b.kind === "audio") throw falha("posicao_invalida");
   const f = await ctx.fonte(c);
   if (!f) throw falha("arquivo_indisponivel");
-  if (f.kind === "audio") throw falha("posicao_invalida");
+  // Som troca por som; imagem e vídeo, entre si.
+  if ((f.kind === "audio") !== (b.kind === "audio")) throw falha("posicao_invalida");
   const dur = f.kind === "image" ? IMAGE_MAX : (numero(c.dur) ?? f.dur);
   if (dur === null || dur <= 0) throw falha("duracao_obrigatoria");
-  // Sem início nem fim, o vídeo entra sem o silêncio da ponta (aparar: false o põe inteiro).
-  const ponta = f.kind === "video" && c.inicio === undefined && c.fim === undefined && c.aparar !== false ? await pontas(ctx, f.src, dur) : null;
+  // Sem início nem fim, o vídeo ou o áudio entra sem o silêncio da ponta (aparar: false o põe inteiro).
+  const ponta = f.kind !== "image" && c.inicio === undefined && c.fim === undefined && c.aparar !== false ? await pontas(ctx, f.src, dur) : null;
   const inicio = numero(c.inicio) ?? ponta?.[0] ?? 0;
   // A imagem fica com o tempo que o bloco tinha; o vídeo entra inteiro, se ninguém cortar.
   const fim = numero(c.fim) ?? ponta?.[1] ?? (f.kind === "image" ? Math.min(b.tout - b.tin, IMAGE_MAX) : dur);
@@ -458,7 +461,7 @@ async function trocar(project: CanvasProject, c: Comando, ctx: Contexto, falha: 
 const RESPIRO_ANTES = 0.1;
 const RESPIRO_DEPOIS = 0.2;
 
-/** O trecho do vídeo sem o silêncio do começo e do fim, ou null (sem análise, sem som ou nada a tirar). */
+/** O trecho do vídeo ou do áudio sem o silêncio do começo e do fim, ou null (sem análise, sem som ou nada a tirar). */
 async function pontas(ctx: Contexto, src: string, dur: number): Promise<[number, number] | null> {
   const som = await ctx.silencios(src).catch(() => null);
   if (!som?.som) return null;
@@ -511,10 +514,9 @@ function editarCodigo(project: CanvasProject, c: Comando, falha: (c: string, ext
   return { ...project, blocks: project.blocks.map((o) => (o === b ? { ...o, code } : o)) };
 }
 
-/** O grupo em que o bloco faz parte da sequência (e não da cobertura ou do som). */
-function sequencia(project: CanvasProject, id: string): Group | null {
-  const g = groups(project).find((o) => o.blocks.some((b) => b.id === id));
-  return g ?? null;
+/** A sequência do bloco (a trilha dele, a mesma regra para todo tipo; ver `sequence` em modelo.js). */
+function sequencia(project: CanvasProject, id: string): Sequence | null {
+  return sequence(project, id);
 }
 
 /** Onde fica, em segundos do bloco depois da mudança, o que começava a off segundos dele antes. */
@@ -534,8 +536,9 @@ const EPS = 1e-6;
  * animação em código também leva o fim, e estica ou encolhe até lá (a escala da linha do tempo, ver codeHtml); com
  * `fixa`, fica com a duração que tinha.
  */
-function acompanhar(novo: CanvasProject, seq: Group, alvo: Block, noAlvo: (off: number) => number): CanvasProject {
-  const camadas = [...seq.covers, ...seq.audios];
+function acompanhar(novo: CanvasProject, seq: Sequence, alvo: Block, noAlvo: (off: number) => number): CanvasProject {
+  // Só a base leva o resto do bloco; fora dela, a sequência anda sozinha.
+  const camadas = seq.base ? members(seq.group).filter((b) => !seq.blocks.includes(b)) : [];
   if (!camadas.length) return novo;
   const agora = new Map(novo.blocks.map((b) => [b.id, b]));
   const ultimo = seq.blocks[seq.blocks.length - 1]!;
@@ -571,7 +574,7 @@ function alterar(project: CanvasProject, id: string, muda: (b: Block) => Block, 
   const p = { ...project, blocks: project.blocks.map((b) => (b.id === id ? muda(b) : b)) };
   const seq = sequencia(project, id);
   if (!seq) return p;
-  const novo = relay(project, p, seq.blocks.map((b) => b.id), seq.x, seq.blocks[0]!.y);
+  const novo = relay(project, p, seq.blocks.map((b) => b.id), seq.x, seq.y);
   const depois = novo.blocks.find((b) => b.id === id)!;
   return acompanhar(novo, seq, antes, (off) => depois.x + mapa(off, antes, depois) * PX);
 }
@@ -583,16 +586,25 @@ function mover(project: CanvasProject, c: Comando, falha: (c: string) => Comando
   const de = id ? sequencia(project, id) : null;
   const para = alvoId ? sequencia(project, alvoId) : null;
   if (!de || !para || id === alvoId) throw falha(!de || !para ? "bloco_inexistente" : "posicao_invalida");
-  const sem = (g: Group) => g.blocks.map((b) => b.id).filter((o) => o !== id);
+  // Som vai para uma sequência de som; imagem e vídeo, para uma de imagem e vídeo.
+  const kind = (b: string) => project.blocks.find((o) => o.id === b)!.kind === "audio";
+  if (kind(id!) !== kind(alvoId!)) throw falha("posicao_invalida");
+  const sem = (s: Sequence) => s.blocks.map((b) => b.id).filter((o) => o !== id);
   const ordem = sem(para);
   ordem.splice(ordem.indexOf(alvoId!) + (c.depois ? 1 : 0), 0, id!);
   // Uma sequência que perde o bloco anda primeiro; a de destino é a que vale no fim.
-  const resto = de.id !== para.id ? sem(de) : [];
-  const base = resto.length ? relay(project, project, resto, de.x, de.blocks[0]!.y) : project;
-  return relay(base, base, ordem, para.x, para.blocks[0]!.y);
+  const resto = de.blocks[0] !== para.blocks[0] ? sem(de) : [];
+  const antes = resto.length ? relay(project, project, resto, de.x, de.y) : project;
+  return relay(antes, antes, ordem, para.x, para.y);
 }
 
-/** Tira as pausas dos blocos de vídeo, com a regra da Edição rápida. */
+/** Blocos com fala ou som do arquivo: os que têm pausas e trechos a tirar. */
+const temSom = (b: Block) => b.kind === "video" || b.kind === "audio";
+
+/**
+ * Tira as pausas dos blocos de vídeo e de áudio, com a regra da Edição rápida. Sem `bloco`, os das bases
+ * (a fala de cada bloco); coberturas e sons somados só pedidos um a um.
+ */
 async function removerPausas(project: CanvasProject, c: Comando, ctx: Contexto, falha: (c: string, extra?: Record<string, unknown>) => ComandoError): Promise<{ project: CanvasProject; ids: string[] }> {
   // acima: toda pausa maior que isso (s) fica com isso; sem ele, a regra da Edição rápida.
   const acima = c.acima === undefined ? null : numero(c.acima);
@@ -600,14 +612,14 @@ async function removerPausas(project: CanvasProject, c: Comando, ctx: Contexto, 
   if ((acima === null && c.acima !== undefined) || (acima !== null && (acima < ACIMA_MIN || acima > ACIMA_MAX))) throw falha("pausa_invalida", { minimo: ACIMA_MIN, maximo: ACIMA_MAX });
   const pausa = PAUSES.find((p) => p.value === (c.pausa ?? "media"));
   if (!pausa) throw falha("pausa_invalida");
-  const pedidos = c.bloco === undefined ? project.blocks.filter((b) => b.kind === "video") : project.blocks.filter((b) => b.id === c.bloco);
+  const pedidos = c.bloco === undefined ? project.blocks.filter((b) => temSom(b) && sequencia(project, b.id)?.base) : project.blocks.filter((b) => b.id === c.bloco);
   if (!pedidos.length) throw falha("bloco_inexistente");
   let p = project;
   const ids: string[] = [];
   for (const pedido of pedidos) {
     // O bloco como está agora: os anteriores já encolheram, e a posição dele mudou.
     const alvo = p.blocks.find((b) => b.id === pedido.id)!;
-    if (alvo.kind !== "video" || !sequencia(p, alvo.id)) throw falha("posicao_invalida");
+    if (!temSom(alvo) || !sequencia(p, alvo.id)) throw falha("posicao_invalida");
     const som = await ctx.silencios(alvo.src);
     if (!som) throw falha("analise_indisponivel");
     const silencios = som.silencios.filter(([a, b]) => a! < alvo.tout && b! > alvo.tin).map(([a, b]) => [Math.max(a!, alvo.tin), Math.min(b!, alvo.tout)]);
@@ -669,7 +681,7 @@ const MAX_TRECHOS = 200;
 function removerTrechos(project: CanvasProject, c: Comando, falha: (c: string) => ComandoError): { project: CanvasProject; ids: string[] } {
   const alvo = project.blocks.find((b) => b.id === c.bloco);
   if (!alvo) throw falha("bloco_inexistente");
-  if (alvo.kind === "image" || !sequencia(project, alvo.id)) throw falha("posicao_invalida");
+  if (!temSom(alvo) || !sequencia(project, alvo.id)) throw falha("posicao_invalida");
   if (!Array.isArray(c.trechos) || !c.trechos.length || c.trechos.length > MAX_TRECHOS) throw falha("trechos_invalidos");
   const trechos = (c.trechos as unknown[]).map((t) => {
     const [a, b] = Array.isArray(t) ? t.map(numero) : [null, null];
@@ -696,7 +708,7 @@ function manterPartes(project: CanvasProject, alvo: Block, partes: readonly (rea
   const novos: Block[] = outras.map(([a, b]) => ({ ...alvo, id: newId("b"), tin: a, tout: b }));
   const depois = { ...project, blocks: project.blocks.flatMap((b) => (b.id === alvo.id ? [{ ...b, tin: primeira![0], tout: primeira![1] }, ...novos] : [b])) };
   const ordem = seq.blocks.flatMap((b) => (b.id === alvo.id ? [b.id, ...novos.map((n) => n.id)] : [b.id]));
-  const p = relay(project, depois, ordem, seq.x, seq.blocks[0]!.y);
+  const p = relay(project, depois, ordem, seq.x, seq.y);
   // O que cobre o bloco vai para o mesmo ponto da fala; se ele caiu num trecho que saiu, para onde a fala volta.
   const pecas = [alvo.id, ...novos.map((n) => n.id)].map((id) => p.blocks.find((b) => b.id === id)!);
   const ultima = pecas[pecas.length - 1]!;

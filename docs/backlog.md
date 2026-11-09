@@ -83,7 +83,9 @@ Próximos passos, nesta ordem:
    Resende está em andamento). Os modelos por marca (títulos, lower thirds, selos) saem do reuso:
    o que um agente fizer para a marca, o próximo copia.
 3. **Conector do claude.ai**: OAuth no MCP (por token, `/mcp` já funciona, ver [api.md](api.md)).
-4. **Áudio**: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
+4. **Áudio**: as falas de áudio já se encadeiam e perdem pausas e trechos como o vídeo (09/11/2026,
+   "Sequências" em [api.md](api.md)). Falta exportar só o som (MP3) de uma variação, para a fala montada
+   no canvas virar o "Meu áudio" do HeyGen (hoje sai um MP4 de tela preta). Depois: fades, crossfade na emenda, ducking, efeitos sonoros, biblioteca de música
    licenciada ou geração por API (a do caso real foi sintetizada, só para teste),
    realce de voz por bloco e volume animado.
 5. **Transições**: fusão, fade do preto, cortina, zoom, flash e transição em HyperFrames.

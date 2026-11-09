@@ -210,6 +210,37 @@ export const members = (g) => [...g.blocks, ...g.covers, ...g.audios];
 /** Se o bloco tem a área tracejada: mais de um elemento. */
 export const hasArea = (g) => members(g).length > 1;
 
+/**
+ * A base do bloco: a trilha 0 de vídeo ou, num bloco sem vídeo, a 0 de som. É a sequência que os outros
+ * elementos do bloco (coberturas, sons somados) acompanham.
+ */
+export function base(g) {
+  if (g.blocks.length) return g.blocks;
+  if (!g.soloAudio) return [];
+  return g.audios.filter((a) => trackIn(a, g) === 0).sort((a, b) => a.x - b.x);
+}
+
+/**
+ * A sequência de um elemento, a mesma para todo tipo: os da trilha dele no mesmo bloco, em ordem, onde
+ * o que vem encostado depois acompanha. Na base, a base inteira, e o resto do bloco segue o ponto dela
+ * (`base: true`); nas outras trilhas, os que encostam nele em cadeia, e mais nada acompanha.
+ */
+export function sequence(project, id, gs = groups(project)) {
+  const g = groupIndex(gs).get(id);
+  if (!g) return null;
+  const b = members(g).find((o) => o.id === id);
+  const main = base(g);
+  if (main.includes(b)) return { group: g, base: true, blocks: main, x: main[0].x, y: main[0].y };
+  const t = trackIn(b, g);
+  const row = (visual(b) ? [...g.blocks, ...g.covers] : g.audios).filter((o) => o === b || (t >= 0 && trackIn(o, g) === t)).sort((a, c) => a.x - c.x);
+  let lo = row.indexOf(b);
+  let hi = lo;
+  while (lo > 0 && near(row[lo - 1].x + width(row[lo - 1]), row[lo].x)) lo--;
+  while (hi < row.length - 1 && near(row[hi].x + width(row[hi]), row[hi + 1].x)) hi++;
+  const blocks = row.slice(lo, hi + 1);
+  return { group: g, base: false, blocks, x: blocks[0].x, y: b.y };
+}
+
 /** Onde começa cada área do bloco: no som solto, o que existe é a área de som. */
 const videoY = (g) => (g.soloAudio ? g.y - VIS_H : g.y);
 const soundY = (g) => (g.soloAudio ? g.y : g.y + VIS_H);
@@ -659,11 +690,10 @@ export function trim(project, id, side, timelineSeconds) {
   const b = p.blocks.find((o) => o.id === id);
   // A borda anda no tempo da tela; no arquivo, isso vale a velocidade do bloco.
   const seconds = timelineSeconds * (b.speed ?? 1);
-  const g = groupIndex(groups(p)).get(id);
   const oldEnd = b.x + width(b);
   const max = maxEnd(b);
-  // Na mesma trilha, quem vem encostado depois acompanha, para não abrir buraco.
-  const track = g ? members(g).filter((o) => o.id !== id && near(o.y, b.y)) : [];
+  // Na sequência dele (a mesma trilha), quem vem encostado depois acompanha, para não abrir buraco.
+  const track = (sequence(p, id)?.blocks ?? []).filter((o) => o.id !== id);
   const followed = track.some((o) => near(o.x, oldEnd));
   if (side === "l") {
     let d;
@@ -712,10 +742,11 @@ export function relay(before, after, order, x0, y) {
   const seqOf = new Set(order);
   const riders = [];
   for (const g of groups(before)) {
-    const base = g.blocks.filter((b) => seqOf.has(b.id));
-    if (!base.length) continue;
-    for (const o of [...g.covers, ...g.audios]) {
-      const under = base.find((b) => o.x >= b.x - EPS && o.x < b.x + width(b) - EPS);
+    const main = base(g);
+    const under0 = main.filter((b) => seqOf.has(b.id));
+    if (!under0.length) continue;
+    for (const o of members(g).filter((b) => !main.includes(b))) {
+      const under = under0.find((b) => o.x >= b.x - EPS && o.x < b.x + width(b) - EPS);
       if (under) riders.push({ id: o.id, under: under.id });
     }
   }

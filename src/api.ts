@@ -3,7 +3,7 @@
  * mesmo modelo da tela. Só o administrador, como o canvas; cada projeto é só de quem o
  * criou. Exportar e baixar usam as rotas do site, com o mesmo token.
  */
-import { baseGaps, finalRate, groups, links, members, output, PX, upgrade, versionName, versions, width } from "./canvas/modelo.js";
+import { base, baseGaps, finalRate, groups, links, members, output, PX, upgrade, versionName, versions, width } from "./canvas/modelo.js";
 import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, trechos } from "./legenda";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
@@ -86,7 +86,10 @@ const segundos = (px: number) => +(px / PX).toFixed(3);
 function resumo(data: CanvasProject) {
   const gs = groups(data);
   return {
-    grupos: gs.map((g) => ({
+    grupos: gs.map((g) => {
+      // A base é a trilha 0 de vídeo ou, num bloco só de som, a 0 de som (a fala em sequência).
+      const main = base(g);
+      return {
       id: g.id,
       nome: g.label,
       duracao: g.dur,
@@ -94,11 +97,12 @@ function resumo(data: CanvasProject) {
         id: b.id,
         nome: b.name,
         tipo: b.draft ? "rascunho" : b.code ? "animacao" : TIPOS_DE_BLOCO[b.kind],
-        camada: g.blocks.includes(b) ? "base" : g.covers.includes(b) ? "cobertura" : "audio",
+        camada: main.includes(b) ? "base" : g.covers.includes(b) ? "cobertura" : "audio",
         inicio: segundos(b.x - g.x),
         fim: segundos(b.x + width(b) - g.x),
       })),
-    })),
+      };
+    }),
     // Cada ligação de grupo a grupo ou a um Final, com o id para remover (o primeiro bloco já vem ligado ao Final).
     ligacoes: links(data, gs).map((l) => ({ id: l.edge.id, de: l.from.id, para: typeof l.to === "string" ? l.to : l.to.id })),
     finais: data.finals.map((f) => {

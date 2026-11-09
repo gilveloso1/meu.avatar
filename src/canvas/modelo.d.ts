@@ -13,7 +13,9 @@ export interface CanvasFinal { id: string; x: number; y: number; resolution?: st
 export interface CanvasEdge { id: string; from: string; to: string }
 export interface CanvasNote { id: string; x: number; y: number; text: string }
 export interface CanvasProject { blocks: Block[]; finals: CanvasFinal[]; edges: CanvasEdge[]; names?: Record<string, string>; notes?: CanvasNote[] }
-export interface Group { id: string; x: number; y: number; dur: number; bottom: number; label: string; blocks: Block[]; covers: Block[]; audios: Block[] }
+export interface Group { id: string; x: number; y: number; dur: number; bottom: number; label: string; blocks: Block[]; covers: Block[]; audios: Block[]; soloAudio?: boolean }
+/** A sequência de um elemento: a trilha dele no bloco (base: a que os outros acompanham). */
+export interface Sequence { group: Group; base: boolean; blocks: Block[]; x: number; y: number }
 
 export const MAX_VERSOES: number;
 export const NOTE_W: number;
@@ -38,6 +40,8 @@ export function groupIndex(gs: Group[]): Map<string, Group>;
 export function renameGroup(project: CanvasProject, group: Group, name: string): CanvasProject;
 export function links(project: CanvasProject, gs?: Group[]): { edge: { id: string; from: string; to: string }; from: Group; to: Group | string }[];
 export function members(g: Group): Block[];
+export function base(g: Group): Block[];
+export function sequence(project: CanvasProject, id: string, gs?: Group[]): Sequence | null;
 export function baseGaps(g: Group): number[][];
 export function versions(project: CanvasProject, finalId: string): Group[][];
 export function versionName(i: number): string;

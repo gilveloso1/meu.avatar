@@ -560,3 +560,31 @@ test("copiar e colar: bloco, grupo inteiro, nota e Final, com ids novos, no pont
   assert.equal(vazio.project.finals.length, 1);
   assert.deepEqual(vazio.project.edges.map((e) => [e.from, e.to]), [[vazio.ids[0], "final"]]);
 });
+
+test("sequência: a mesma regra para todo tipo; num bloco só de som, a base é a trilha 0 de som", () => {
+  const som = (id, x, y, dur = 2) => el(id, x, y, dur, "audio");
+  // Três falas encostadas (a, b, c), uma música embaixo (m) e uma fala solta mais longe (d).
+  const p = { blocks: [som("a", 1000, 500), som("b", 1080, 500), som("c", 1160, 500), som("m", 1000, 500 + M.AUD_H, 6), som("d", 3000, 500)], finals: [], edges: [] };
+  const s = M.sequence(p, "b");
+  assert.equal(s.base, true);
+  assert.deepEqual(s.blocks.map((o) => o.id), ["a", "b", "c"]);
+  assert.deepEqual(M.base(s.group).map((o) => o.id), ["a", "b", "c"]);
+  const m = M.sequence(p, "m");
+  assert.equal(m.base, false);
+  assert.deepEqual(m.blocks.map((o) => o.id), ["m"]);
+  assert.deepEqual(M.sequence(p, "d").blocks.map((o) => o.id), ["d"]);
+  // Fora da base, só os que encostam em cadeia: a capa solta mais à frente não entra.
+  const v = base(el("c1", 0, -M.VIS_H, 1), el("c2", 40, -M.VIS_H, 1), el("c3", 160, -M.VIS_H, 1));
+  assert.deepEqual(M.sequence(v, "c1").blocks.map((o) => o.id), ["c1", "c2"]);
+  assert.deepEqual(M.sequence(v, "a").blocks.map((o) => o.id), ["a", "b"]);
+});
+
+test("aparar uma fala de áudio: a seguinte encosta, e a refeita da sequência leva o som somado", () => {
+  const som = (id, x, y, dur = 2) => el(id, x, y, dur, "audio");
+  const p = { blocks: [som("a", 0, 500), som("b", 80, 500), som("m", 80, 500 + M.AUD_H, 1)], finals: [], edges: [] };
+  const t = M.trim(p, "a", "r", -1);
+  assert.equal(t.blocks.find((o) => o.id === "b").x, 40);
+  // relay: m está sob b e anda com ele.
+  const r = M.relay(p, { ...p, blocks: p.blocks.map((o) => (o.id === "a" ? { ...o, tout: 1 } : o)) }, ["a", "b"], 0, 500);
+  assert.deepEqual(["b", "m"].map((id) => r.blocks.find((o) => o.id === id).x), [40, 40]);
+});
