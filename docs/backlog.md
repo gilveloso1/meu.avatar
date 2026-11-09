@@ -73,7 +73,8 @@ Próximos passos, nesta ordem:
      na tela do canvas, um aviso quando um corte tira o ponto em que a camada começava (hoje ela vai
      para o começo ou o fim do bloco, calada) e apagar um projeto pelo MCP (o teste de 05/11/2026
      deixou o projeto "Teste MCP tempo (agente) 05/11" na conta).
-   - *Ver o resultado*: quadros do Final montado sem exportar (a animação sozinha já se vê pelo
+   - *Ver o resultado* (feito em 09/11/2026): `ver_cena` mostra quadros de uma cena montada como na
+     exportação, com todas as camadas, sem exportar o vídeo (a animação sozinha também se vê pelo
      `inspecionar_animacao`).
    - *Pronto para usar*: em vez de templates adivinhados, o agente reusa o que já fez (feito,
      acima). Faltam: kit de marca por perfil, preset de legenda numa chamada, onde fica

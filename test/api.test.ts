@@ -1630,3 +1630,54 @@ describe("áudio em sequência", () => {
     expect(t.canvas.blocks.find((o) => o.id === a)).toMatchObject({ src: `/projetos/${id}/arquivos/${f2}`, tin: 0, tout: 8 });
   });
 });
+
+describe("ver a cena montada", () => {
+  type Vista = { revisao: number; criados: string[]; finais: { id: string }[] };
+  const cena = (id: string, q: string, fake: FakeExportApi) => api(`/api/v1/projetos/${id}/cena?${q}`, admin, undefined, fake);
+
+  it("monta a cena como na exportação, com as camadas, e mostra os quadros; a exportação depois reaproveita", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    await env.MIDIA.put(`videos/${VIDEO2}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = await novo();
+    const r = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" }, { tipo: "adicionar", video: VIDEO2, fim: 2, sobre: "@a", em: 1, semSom: true }, { tipo: "final", id: "final", velocidade: 2 }])).json<Vista>();
+    const [a] = r.criados as [string];
+    const fake = new FakeExportApi();
+    // Sem o Durable Object (os testes), cada pergunta dá um passo: a cena tem um trecho só, sem animação.
+    const res = await cena(id, `grupo=${a}&instantes=0,1.5,3`, fake);
+    expect(res.headers.get("content-type")).toBe("image/jpeg");
+    expect(fake.segments).toHaveLength(1);
+    const plano = JSON.parse(fake.segments[0]!.plan) as { itens: { camada: string }[] };
+    expect(plano.itens.map((i) => i.camada)).toEqual(["base", "cobertura"]);
+    // O Final acelera 2x: os segundos do grupo viram os do trecho.
+    expect(fake.inspected.at(-1)).toEqual({ path: "/quadros", instants: "0,0.75,1.5" });
+    // De novo, sem mudar nada: o trecho já está pronto.
+    await cena(id, `grupo=${a}&instantes=2`, fake);
+    expect(fake.segments).toHaveLength(1);
+    // A exportação usa o mesmo trecho, e a cena não aparece como a última exportação do canvas.
+    const ex = await (await api(`/projetos/${id}/exportar`, admin, { final: "final" }, fake)).json<{ status: string; feitos: number; total: number }>();
+    expect(fake.segments).toHaveLength(1);
+    expect(ex.total).toBe(2);
+  });
+
+  it("recusa grupo, Final e instantes que não existem", async () => {
+    const { id, revisao } = await novo();
+    const r = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4 }])).json<Vista>();
+    const fake = new FakeExportApi();
+    expect(await (await cena(id, `grupo=nada&instantes=1`, fake)).json()).toEqual({ erro: "grupo_inexistente" });
+    expect(await (await cena(id, `grupo=${r.criados[0]}&instantes=1&final=nada`, fake)).json()).toEqual({ erro: "final_inexistente" });
+    expect(await (await cena(id, `grupo=${r.criados[0]}&instantes=4`, fake)).json()).toEqual({ erro: "instantes_invalidos", duracao: 4 });
+  });
+
+  it("a cena que falha não recomeça a cada pergunta", async () => {
+    const { id, revisao } = await novo();
+    const r = await (await comandos(id, revisao, [{ tipo: "adicionar", video: VIDEO, fim: 4 }])).json<Vista>();
+    const fake = new FakeExportApi();
+    fake.fail = "ffmpeg quebrou";
+    let res = await cena(id, `grupo=${r.criados[0]}&instantes=1`, fake);
+    for (let i = 0; i < 3 && res.status === 202; i++) res = await cena(id, `grupo=${r.criados[0]}&instantes=1`, fake);
+    expect(await res.json()).toEqual({ erro: "cena_falhou" });
+    const n = (await env.DB.prepare("SELECT COUNT(*) n FROM exports WHERE project_id = ?").bind(id).first<{ n: number }>())!.n;
+    await cena(id, `grupo=${r.criados[0]}&instantes=1`, fake);
+    expect((await env.DB.prepare("SELECT COUNT(*) n FROM exports WHERE project_id = ?").bind(id).first<{ n: number }>())!.n).toBe(n);
+  });
+});

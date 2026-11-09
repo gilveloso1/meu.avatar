@@ -125,7 +125,7 @@ describe("protocolo", () => {
     const { result } = await legado("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
     expect(result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "meu-avatar" } });
     expect((await legado("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-11-25");
-    expect((await legado("tools/list")).result.tools).toHaveLength(27);
+    expect((await legado("tools/list")).result.tools).toHaveLength(28);
     expect((await legado("ping")).result).toEqual({});
   });
 
@@ -143,7 +143,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "criar_avatar", "editar_avatar", "enviar_ativo", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "gerar_video", "gerar_audio", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao", "listar_ferramentas", "usar_ferramenta"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "criar_avatar", "editar_avatar", "enviar_ativo", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "ver_cena", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "gerar_video", "gerar_audio", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao", "listar_ferramentas", "usar_ferramenta"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });
@@ -168,6 +168,16 @@ describe("ferramentas", () => {
     const r = await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "organizar" }] });
     expect(r.isError).toBe(true);
     expect(dados(r)).toMatchObject({ erro: "conflito", revisao: revisao + 1, grupos: [{ blocos: [{ tipo: "video" }] }] });
+  });
+
+  it("ver_cena devolve a imagem da cena montada", async () => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]));
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "A" }));
+    const { criados } = dados<{ criados: string[] }>(await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", video: VIDEO, fim: 4 }] }));
+    const grupo = criados[0];
+    const fake = new FakeExportApi();
+    const q = await ferramenta("ver_cena", { projeto: id, grupo, instantes: [1] }, fake);
+    expect(q.content[0]).toMatchObject({ type: "image", mimeType: "image/jpeg" });
   });
 
   it("ver_quadros devolve imagem, e ver_silencios, os silêncios", async () => {

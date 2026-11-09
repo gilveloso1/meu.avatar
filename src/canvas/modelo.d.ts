@@ -35,6 +35,7 @@ export const VIS_H: number;
 export const RESOLUTIONS: string[];
 export const FORMATS: { value: string }[];
 export function exportWork(project: unknown, finalId: string, pick?: number[]): ExportWork | null;
+export function sceneWork(project: unknown, finalId: string, groupId: string): ExportWork | null;
 export function groups(project: CanvasProject): Group[];
 export function groupIndex(gs: Group[]): Map<string, Group>;
 export function renameGroup(project: CanvasProject, group: Group, name: string): CanvasProject;

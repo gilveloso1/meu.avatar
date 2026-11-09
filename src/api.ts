@@ -260,7 +260,7 @@ export class Api {
     if (path === "/api/v1/audios") return post ? this.generateAudio(request, user) : falha(405, "metodo_invalido");
     const video = /^\/api\/v1\/videos\/([0-9a-f-]{36})$/.exec(path);
     if (video) return post ? falha(405, "metodo_invalido") : this.followVideo(user, video[1]!);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video|cena))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
@@ -270,6 +270,7 @@ export class Api {
     if (m[2] === "animacao") return post ? falha(405, "metodo_invalido") : this.inspectCode(project, url);
     if (m[2] === "imagem") return post ? this.generateImage(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "video") return post ? this.generateVideo(request, user, project) : falha(405, "metodo_invalido");
+    if (m[2] === "cena") return post ? falha(405, "metodo_invalido") : this.scene(user, project, url);
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(","), url));
   }
@@ -877,6 +878,38 @@ export class Api {
     if (!file) return null;
     const kind = file.type.startsWith("image/") ? "image" : file.type.startsWith("audio/") ? "audio" : "video";
     return { src: `/projetos/${project.id}/arquivos/${file.id}`, kind, dur: null, name: file.name, som: await this.exports.hasSound(file.key, file.type) };
+  }
+
+  /**
+   * Quadros de uma cena montada como na exportação, com todas as camadas (ver_cena), sem exportar o vídeo. Os
+   * instantes são segundos do grupo, como os de ver_projeto. A primeira vez monta o trecho no servidor (202,
+   * montando): é o mesmo que a exportação depois reaproveita.
+   */
+  private async scene(user: User, project: Project, url: URL): Promise<Response> {
+    const data = upgrade(JSON.parse(project.data) as CanvasProject);
+    const p = url.searchParams;
+    const final = p.get("final") ? data.finals.find((f) => f.id === p.get("final")) : data.finals[0];
+    if (!final) return falha(404, "final_inexistente");
+    const grupo = groups(data).find((g) => members(g).some((b) => b.id === p.get("grupo")));
+    if (!grupo) return falha(404, "grupo_inexistente");
+    const instants = (p.get("instantes") ?? "").split(",").filter(Boolean).map(Number);
+    if (!instants.length || instants.length > MAX_QUADROS || !instants.every((t) => Number.isFinite(t) && t >= 0 && t < grupo.dur)) return falha(400, "instantes_invalidos", { duracao: +grupo.dur.toFixed(3) });
+    try {
+      const r = await this.exports.scene(project, user, final.id, grupo.id);
+      if ("exportacao" in r) {
+        const e = r.exportacao;
+        if (e.status === "failed") return falha(502, "cena_falhou");
+        return Response.json({ status: "montando", feitos: e.step, total: e.total, aviso: "A cena está sendo montada no servidor. Chame de novo em uns 20 s." }, { status: 202 });
+      }
+      // Os segundos do grupo, na velocidade do Final: o tempo do trecho.
+      const rate = finalRate(final);
+      const noTrecho = instants.map((t) => Math.min(+(t / rate).toFixed(3), Math.max(0, r.duracao - 0.04)));
+      const res = await this.exports.inspect(r.trecho, "/quadros", noTrecho.join(","));
+      return new Response(res.body, { headers: { "content-type": "image/jpeg", "content-length": res.headers.get("content-length")!, "cache-control": "private, no-store" } });
+    } catch (err) {
+      if (err instanceof InputError) return falha(400, "cena_invalida", { motivo: err.message });
+      return conteinerFalhou("Cena", err);
+    }
   }
 
   /** Quadros de um arquivo, lado a lado, os silêncios ou a fala dele: o que o agente usa para decidir. */
