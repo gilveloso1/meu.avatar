@@ -448,33 +448,50 @@ export function exportWork(project, finalId, pick) {
   const all = versions(project, finalId, gs);
   const chosen = (pick ?? all.map((_, i) => i)).filter((i) => all[i]);
   const { width: largura, height: altura } = output(final);
-  const tipo = { video: "video", image: "imagem", audio: "audio" };
-  const camada = { 0: "base", 1: "cobertura", audio: "audio" };
   const trechos = [];
   const seen = new Map();
   const trecho = (g) => {
     if (!seen.has(g)) {
       seen.set(g, trechos.length);
-      const tl = timeline([g], finalRate(final));
-      trechos.push({
-        duracao: +tl.duration.toFixed(3),
-        itens: tl.items.map((i) => ({
-          tipo: tipo[i.block.kind],
-          camada: camada[i.layer],
-          src: i.block.src,
-          entra: +i.start.toFixed(3),
-          dura: +i.len.toFixed(3),
-          corte: +i.tin.toFixed(3),
-          volume: sounds(i.block) ? i.block.vol : 0,
-          velocidade: +i.speed.toFixed(4),
-          ...(i.block.code ? { codigo: codeHtml(i.block.code) } : {}),
-          ...(i.block.frame && i.block.kind !== "audio" ? { quadro: { ...i.block.frame, ...(i.block.frame.keys ? { keys: i.block.frame.keys.map((k) => ({ ...k, t: k.t / i.rate })) } : {}) } } : {}),
-        })),
-      });
+      trechos.push(segmentOf(g, final));
     }
     return seen.get(g);
   };
   return { largura, altura, trechos, versoes: chosen.map((i) => ({ nome: versionName(i), trechos: all[i].map(trecho) })) };
+}
+
+/**
+ * Uma cena só, montada como na exportação (o mesmo trecho, com o tamanho e a velocidade do Final), para ver
+ * quadros dela sem exportar o vídeo inteiro (ver_cena). Sem versões: o trecho é o resultado.
+ */
+export function sceneWork(project, finalId, groupId) {
+  const final = project.finals.find((f) => f.id === finalId);
+  const g = groupIndex(groups(project)).get(groupId);
+  if (!final || !g) return null;
+  const { width: largura, height: altura } = output(final);
+  return { largura, altura, trechos: [segmentOf(g, final)], versoes: [] };
+}
+
+/** O trecho de um grupo: cada elemento com a camada, o tempo e o corte, na velocidade do Final. */
+function segmentOf(g, final) {
+  const tipo = { video: "video", image: "imagem", audio: "audio" };
+  const camada = { 0: "base", 1: "cobertura", audio: "audio" };
+  const tl = timeline([g], finalRate(final));
+  return {
+    duracao: +tl.duration.toFixed(3),
+    itens: tl.items.map((i) => ({
+      tipo: tipo[i.block.kind],
+      camada: camada[i.layer],
+      src: i.block.src,
+      entra: +i.start.toFixed(3),
+      dura: +i.len.toFixed(3),
+      corte: +i.tin.toFixed(3),
+      volume: sounds(i.block) ? i.block.vol : 0,
+      velocidade: +i.speed.toFixed(4),
+      ...(i.block.code ? { codigo: codeHtml(i.block.code) } : {}),
+      ...(i.block.frame && i.block.kind !== "audio" ? { quadro: { ...i.block.frame, ...(i.block.frame.keys ? { keys: i.block.frame.keys.map((k) => ({ ...k, t: k.t / i.rate })) } : {}) } } : {}),
+    })),
+  };
 }
 
 /* ---------- Edição (funções puras: devolvem um projeto novo) ---------- */

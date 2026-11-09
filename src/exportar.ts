@@ -13,7 +13,7 @@
  * vez por causa do claim do banco.
  */
 import type { ExportRunner } from "./exportando";
-import { type ExportWork, exportWork } from "./canvas/modelo.js";
+import { type ExportWork, exportWork, sceneWork } from "./canvas/modelo.js";
 import type { Db, ExportRow, Project, ProjectFile } from "./db";
 import type { Conta } from "./permissoes";
 import { ligado, SleepyContainer } from "./conteiner";
@@ -37,6 +37,8 @@ const ANIMATION_VERSION = "1";
 const SEGMENT_VERSION = "5";
 /** Um passo que ficou sem resposta (Worker caiu) pode ser retomado depois disso. */
 const STALE_MS = 15 * 60 * 1000;
+/** Depois disso, a cena que falhou (ver_cena) pode ser montada de novo. */
+const SCENE_RETRY_MS = 10 * 60 * 1000;
 const MAX_TRIES = 3;
 /** Quanto o agendamento trabalha por rodada. */
 const CRON_BUDGET_MS = 45_000;
@@ -227,6 +229,37 @@ export class Exports {
       console.error("Projeto ilegível na exportação", project.id, err);
     }
     if (!work?.versoes.length) throw new InputError(ERROS.exportarSemVersao);
+    return this.run(project, await this.plan(project, conta, work, now), now);
+  }
+
+  /**
+   * Uma cena montada como na exportação, para ver quadros dela (ver_cena): o trecho já feito vem pronto
+   * (`trecho`, a chave no R2); senão começa (ou segue) a montagem dele, que a exportação depois reaproveita.
+   */
+  async scene(project: Project, conta: Conta, finalId: string, groupId: string, now = new Date()): Promise<{ trecho: string; duracao: number } | { exportacao: ExportRow }> {
+    if (!this.api) throw new InputError(ERROS.exportarIndisponivel);
+    let work: ExportWork | null = null;
+    try {
+      work = sceneWork(JSON.parse(project.data), finalId, groupId);
+    } catch (err) {
+      console.error("Projeto ilegível na cena", project.id, err);
+    }
+    if (!work) throw new InputError(ERROS.exportarSemVersao);
+    const plan = await this.plan(project, conta, work, now);
+    const t = plan.trechos[0]!;
+    if (await this.media.head(t.chave)) return { trecho: t.chave, duracao: work.trechos[0]!.duracao };
+    // A mesma cena que falhou há pouco não começa de novo a cada pergunta: quem pede vê a falha.
+    const falhou = (await this.db.runningExports(project.id, new Date(now.getTime() - SCENE_RETRY_MS).toISOString())).find((r) => r.status === "failed" && (JSON.parse(r.plan) as ExportPlan).trechos.some((o) => o.chave === t.chave) && !(JSON.parse(r.plan) as ExportPlan).versoes.length);
+    if (falhou) return { exportacao: falhou };
+    let row: ExportRow | null = await this.run(project, plan, now);
+    // Sem o Durable Object (os testes), cada pergunta dá um passo, como o acompanhar.
+    if (!this.runner && row.status === "running") row = (await this.advance(row.id)) ?? row;
+    if (row.status === "done") return { trecho: t.chave, duracao: work.trechos[0]!.duracao };
+    return { exportacao: row };
+  }
+
+  /** O plano: as animações a renderizar, os trechos com os arquivos conferidos e as versões. */
+  private async plan(project: Project, conta: Conta, work: ExportWork, now: Date): Promise<ExportPlan> {
     // O rascunho não tem arquivo: marca o lugar de um vídeo que ainda não foi feito.
     if (work.trechos.some((t) => t.itens.some((i) => !i.src && i.codigo === undefined))) throw new InputError(ERROS.exportarRascunho);
     const animacoes: NonNullable<ExportPlan["animacoes"]> = [];
@@ -244,16 +277,21 @@ export class Exports {
         t.itens[n] = { ...resto, tipo: "video", src: `${ANIMACAO}${chave}`, volume: 0 };
       }
     }
-    const id = crypto.randomUUID();
     const trechos: ExportPlan["trechos"] = [];
     for (const t of work.trechos) trechos.push(await this.segmentPlan(project, conta, work.largura, work.altura, t));
     const versoes: ExportPlan["versoes"] = [];
     for (const v of work.versoes) versoes.push(await this.versionPlan(v, trechos, now));
-    const plan: ExportPlan = { animacoes, trechos, versoes };
+    return { animacoes, trechos, versoes };
+  }
+
+  /** Guarda o plano e põe para andar. */
+  private async run(project: Project, plan: ExportPlan, now: Date): Promise<ExportRow> {
+    const { animacoes = [], trechos, versoes } = plan;
+    const id = crypto.randomUUID();
     // A mesma exportação já andando (dois cliques, o agente e a tela juntos): segue a que existe. Duas iguais
     // ao mesmo tempo fazem cada cena duas vezes, porque nenhuma vê a da outra pronta.
-    const igual = (p: ExportPlan) => JSON.stringify(p.versoes.map((v) => [v.nome, v.chave])) === JSON.stringify(versoes.map((v) => [v.nome, v.chave]));
-    const andando = (await this.db.runningExports(project.id)).find((r) => igual(JSON.parse(r.plan) as ExportPlan));
+    const assinatura = (p: ExportPlan) => JSON.stringify([p.versoes.map((v) => [v.nome, v.chave]), p.trechos.map((t) => t.chave)]);
+    const andando = (await this.db.runningExports(project.id)).find((r) => assinatura(JSON.parse(r.plan) as ExportPlan) === assinatura(plan));
     if (andando) {
       if (this.runner) await this.runner.start(andando.id);
       return andando;
@@ -387,7 +425,8 @@ export class Exports {
   }
 
   private async segmentDone(plan: ExportPlan, index: number): Promise<boolean> {
-    const needed = plan.versoes.some((v) => v.tamanho === undefined && v.trechos.includes(index));
+    // Sem versões (a cena do ver_cena), o trecho é o resultado.
+    const needed = !plan.versoes.length || plan.versoes.some((v) => v.tamanho === undefined && v.trechos.includes(index));
     return !needed || (await this.media.head(plan.trechos[index]!.chave)) !== null;
   }
 

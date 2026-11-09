@@ -758,13 +758,19 @@ export class Db {
   }
 
   /** A última exportação do projeto, para a tela retomar ou mostrar ao abrir. */
-  /** As exportações do projeto que ainda andam, da mais nova à mais antiga. */
-  async runningExports(projectId: string): Promise<ExportRow[]> {
-    return (await this.d1.prepare("SELECT * FROM exports WHERE project_id = ? AND status = 'running' ORDER BY created_at DESC").bind(projectId).all<ExportRow>()).results;
+  /** As exportações do projeto que ainda andam ou que falharam desde `failedSince`, da mais nova à mais antiga. */
+  async runningExports(projectId: string, failedSince?: string): Promise<ExportRow[]> {
+    const sql = failedSince
+      ? "SELECT * FROM exports WHERE project_id = ? AND (status = 'running' OR (status = 'failed' AND created_at > ?)) ORDER BY created_at DESC"
+      : "SELECT * FROM exports WHERE project_id = ? AND status = 'running' ORDER BY created_at DESC";
+    const q = this.d1.prepare(sql);
+    return (await (failedSince ? q.bind(projectId, failedSince) : q.bind(projectId)).all<ExportRow>()).results;
   }
 
-  async latestExport(projectId: string): Promise<ExportRow | null> {
-    return this.d1.prepare("SELECT * FROM exports WHERE project_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1").bind(projectId).first<ExportRow>();
+  /** A última exportação do projeto; com `versoes`, só as que fazem vídeo (não a cena do ver_cena). */
+  async latestExport(projectId: string, versoes = false): Promise<ExportRow | null> {
+    const so = versoes ? " AND json_array_length(plan, '$.versoes') > 0" : "";
+    return this.d1.prepare(`SELECT * FROM exports WHERE project_id = ?${so} ORDER BY created_at DESC, rowid DESC LIMIT 1`).bind(projectId).first<ExportRow>();
   }
 
   /** Pega o próximo passo numa instrução só: dois pedidos juntos não fazem o mesmo trabalho. */

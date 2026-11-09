@@ -313,8 +313,10 @@ export class FakeExportApi implements ExportApi {
     return new Response(new TextEncoder().encode(`trecho${this.segments.length}`), { headers: { "content-length": "7" } });
   }
   silences = { duracao: 10, silencios: [[3, 4]], som: true };
-  async inspect(path: string, body: ReadableStream) {
+  inspected: { path: string; instants?: string }[] = [];
+  async inspect(path: string, body: ReadableStream, _size?: number, instants?: string) {
     await new Response(body).arrayBuffer();
+    this.inspected.push({ path, instants });
     if (this.fail) throw new Error(this.fail);
     const out = new TextEncoder().encode(path === "/silencios" ? JSON.stringify(this.silences) : path === "/audio" ? "mp3" : "jpg");
     return new Response(out, { headers: { "content-length": String(out.byteLength) } });

@@ -802,7 +802,7 @@ ${error ? snackbar(error) : ""}`;
     try {
       data = JSON.parse(project.data);
     } catch {}
-    const latest = await this.db.latestExport(project.id);
+    const latest = await this.db.latestExport(project.id, true);
     const config = {
       videos,
       animacao: ANIMACAO_SRC,
