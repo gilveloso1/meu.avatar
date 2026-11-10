@@ -4,6 +4,84 @@ O que falta fazer no meu.avatar, em ordem. Cada item vira um PR próprio, com a
 sua migration quando precisar. Ao terminar um item, tire-o daqui (ou marque o
 que ficou para depois) no mesmo PR.
 
+## Prioridade: auditoria de 10/11/2026
+
+O que a leitura do projeto inteiro achou e ficou para decidir ou fazer (o que era certo já foi
+corrigido no mesmo PR). Vem antes do resto, nesta ordem.
+
+### 1. Pode quebrar ou custar dinheiro
+
+1. **Confirmação do `gerar_*` reaproveitável** (`src/api.ts`, onde o código é calculado): o código
+   não tem segredo, prazo nem uso único; o mesmo "sim" gera e cobra quantas vezes for reenviado.
+   Guardar a simulação (com o custo e um prazo de 15 a 30 min) e consumir ao gerar, com teste do reenvio.
+2. **Fila do agendamento sem prazo** (`openVideos`, `src/db.ts`): confere só os 10 vídeos abertos
+   mais antigos; dez presos (job que o provedor esqueceu, imagem "Gerando", preparo do Aleph)
+   bloqueiam os mais novos. Filtrar os que o `sync` não confere, rodar pela última conferência e
+   falhar o aberto há horas. O HeyGen pronto sem endereço do vídeo também volta a "pendente" para sempre.
+3. **Webhook e agendamento no mesmo vídeo** (`sync`, `src/studio.ts`): os dois podem fechar o vídeo
+   ao mesmo tempo e tratar o áudio duas vezes. Gravar o término só se ainda estava aberto.
+4. **Estimativas que não batem com `docs/modelos/`**: Aleph por segundo (uns US$ 5,80 em 20 s)
+   contra US$ 1,40 fixo por pedido no doc; Wan Livre sem o mínimo de 5 s cobrado; fala contando o
+   texto digitado, não o traduzido das emoções.
+5. **Omni**: o prompt do 1.2 (`omniPrompt`, `src/structures/omni.ts`) é o formato que o doc do
+   modelo registra como falho no 1.2; e o Google passa o 1.1 para o 1.2 em **03/12/2026**: tirar
+   `OMNI_11` antes dessa data.
+6. **Listas cortadas em 100** (`ContaDb.videos`): `/videos`, a página do modelo e a biblioteca do
+   canvas mostram só os 100 mais novos, sem paginação, e o contador diz "100" (`docs/layout.md`, item 11).
+7. **Voz do avatar em M4A ou OGG**: o avatar aceita, o HeyGen direto recusa ao gerar (só MP3 e WAV,
+   32 MB); o mesmo com vídeo WebM. Recusar ao salvar ou só oferecer o que o modelo aceita.
+8. **Links sem token**: `/baixar/...mp3` liga o contêiner e grava no R2 no primeiro pedido (a regra
+   é "só lê") e vale para conta suspensa; `/envio/<código>` aceita dois envios simultâneos; bilhete
+   de envio não usado fica em `envios/` para sempre (falta a regra de expiração no R2).
+9. **`listar_arquivos` do MCP** mostra na descrição todos os modelos, inclusive os de teste, a
+   qualquer conta com API. Tirar a lista e apontar para o `listar_modelos`.
+10. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
+    `docs/operacao.md` dizem 20. Escolher um.
+11. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
+    clonada do Fish nem o vídeo de origem; e a voz clonada é gravada antes da validação (sobra voz órfã).
+
+### 2. Telas (aprovadas: mudar só com o sim do dono)
+
+- FAB, chip de filtro e barra de busca com medidas diferentes das do `CLAUDE.md` (48, 36 e 44 px
+  contra 56, 32 e 56).
+- No diálogo "Salvar no avatar", a linha "N ativos" fica escondida no computador (`.vrow__support`).
+- Dois formatos de dinheiro: "US$ 1.23" (custo estimado) e "US$ 1,23" (painel).
+- Componentes copiados: card de linhas (4 cópias de `detailsCard`), página de confirmação de apagar
+  (3), campo de busca (3), cabeçalho de lista dentro do `videoLibrary`.
+- Detalhes da lista com `role="row"` sem tabela; o editor de fala não segura o limite de caracteres.
+- Canvas: cada tecla é uma entrada no desfazer (100 no máximo); a prévia ignora a velocidade do
+  Final nas animações e na prévia de grupo.
+
+### 3. Ineficiente
+
+- Agendamento: 13 idas ao banco por minuto mesmo sem fila (`scheduled`, `src/index.ts`); juntar a
+  leitura das filas e passar os `failStale*` e o `deleteOldExports` para cada 5 a 15 min.
+- Lista de modelos do OpenRouter buscada a cada pedido (4 buscas no `listar_modelos`); catálogo da
+  HeyGen renovado dentro do pedido de uma página. Cache com prazo curto e renovação no agendamento.
+- `tokenUser` grava a cada chamada da API; o `listar_arquivos` conta ativos de todo avatar só para ter o nome.
+- Uns 155 KB de CSS e script embutidos em toda página, sem cache; a conferência de 20 s baixa a página inteira.
+- API: o arquivo inteiro lido do R2 só para a duração (`duration`), `legendar` repetindo a
+  transcrição por bloco, envio por `url` com 2 a 3 cópias na memória.
+- Canvas: o player é recriado a cada quadro de um corte, e o projeto é reagrupado a cada
+  movimento do mouse (`snap`, `playhead`).
+
+### 4. Talvez não seja mais necessário
+
+- `prototipos/acao-na-bolsa/` (scripts com caminhos de um computador, não rodam) e
+  `prototipos/canvas/` (com `CONFIG.amostra`, `#reset` e `M.sample` no script de produção).
+- Pipeline do Aleph 2 (quadros-chave, composição): é o que a Direção manda não construir, e custa
+  4 instruções por minuto no agendamento. Manter como teste ou descartar.
+- Sobras: campos de imagem e vídeo do formulário que nenhuma tela mostra (`fieldHtml`), parâmetros
+  sem uso em seis funções do site, CSS sempre sobrescrito (`.player__controls`, `.quick-edit` base),
+  `ERROS.vozFalhou` e `ERROS.ativoSalvar`, `base64` escrita quatro vezes, `Db.recentVideos` só nos
+  testes, campos opcionais das exportações antigas (`src/exportar.ts`, sem uso depois de 17/11/2026).
+- `README.md` descreve o projeto de 25/10 (só o Wan); o `npm run gerar` grava em `saida/` (a regra
+  é `temp/`); `.npmrc` e `allowScripts` sem explicação.
+- CI: conferir que `src/site/canvas.ts` está em dia, `py_compile` em `tools/`, `node --check` no
+  contêiner de render e a paridade das 13 fontes (`src/render.ts` e `container/render/servidor.mjs`).
+- Imagens: `RUN chmod` à parte nos dois Dockerfiles (deve dobrar o ffmpeg na imagem); a base da
+  imagem de render sem digest fixo.
+
 ## Direção (29/10/2026)
 
 Gere aqui, edite aqui, publique aqui. Os vídeos vêm de APIs prontas (sem
@@ -14,7 +92,7 @@ ou fazendo anúncios no estilo UGC para marcas DTC. Ver "Direção" no `CLAUDE.m
 a anterior e será revista com o dono por essa direção.
 
 **Canvas de edição** (ver [canvas.md](canvas.md)): no ar para o administrador, com a
-exportação de até 50 versões. Falta abrir para todos, depois de definir o limite de uso e o
+exportação de até 48 versões. Falta abrir para todos, depois de definir o limite de uso e o
 custo do contêiner por pessoa. A timeline embaixo do canvas saiu dos planos (05/11/2026).
 
 **Agentes editando projetos** (ver [api.md](api.md)): a meta é um agente fazer uma edição de
@@ -60,7 +138,7 @@ Também no ar (04/11/2026), a **animação como código** (PRs 69 a 83; ver [can
 O `renderizar_html` fica para quem precisa do arquivo.
 
 Com isso o agente faz pelo MCP a pesquisa, o roteiro, a estrutura com rascunhos, os cortes, a
-legenda e os gráficos. Ainda não faz música, nem gera os vídeos (a pessoa gera no site).
+legenda e os gráficos, e gera os vídeos, as imagens e os áudios (`gerar_*`). Ainda não faz música.
 
 O primeiro projeto feito do zero só pelo MCP (Proposta do Lara Resende, 02/11/2026) chegou à
 estrutura completa com rascunhos e animações, e mostrou o que falta: a avaliação inteira do agente
@@ -171,8 +249,7 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
 No ar em <https://meuavatar.ia.br> (e no workers.dev). O que já funciona e
 **não deve ser desfeito**:
 
-- **Wan 3.0 pelo OpenRouter** como modelo padrão (`VIDEO_MODEL` no
-  `wrangler.jsonc`), com o formulário em partes: estilo, fala, instruções e
+- **Wan 3.0 pelo OpenRouter** como modelo padrão (`src/structures/wan.ts`), com o formulário em partes: estilo, fala, instruções e
   idioma (`src/prompt.ts`, explicado em `docs/prompt.md`).
 - **Tratamento do áudio no contêiner** (`src/audio.ts`, `container/`): todo
   vídeo pronto passa pela receita "E2" (recupera os picos, realce de voz por
@@ -268,9 +345,6 @@ caminho para mandar uma voz pronta e o modelo sincronizar a boca.
   prompt de sistema (ver o guia de prompt do modelo antes de reaproveitar o
   do Wan), a montagem do pedido e se o áudio passa pelo contêiner (decidir
   medindo). Começa com `access: "admin"`.
-- **Custo do Seedance**: ele cobra por tokens de vídeo, não por segundo; a
-  regra de custo das estruturas (`CostRule`) hoje só conhece preço por
-  segundo.
 - Testes para cada comportamento novo (`test/`, com a API falsa).
 
 ## 2. Trocar avatar

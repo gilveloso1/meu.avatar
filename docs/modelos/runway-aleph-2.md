@@ -3,7 +3,7 @@
 **Estrutura `aleph` (`src/structures/aleph.ts`), só para o administrador,
 desde 29/10/2026**, com a receita do terceiro teste e a conferência do fundo
 (abaixo). Como funciona por dentro: `docs/operacao.md`, "Troca de avatar pelo
-Aleph 2". Ainda não gerou nenhum vídeo pelo site.
+Aleph 2". O primeiro vídeo pelo site saiu em 29/10/2026 (abaixo).
 
 
 Pedido pelo OpenRouter (conferido em 28/10/2026, pelas recusas, que não

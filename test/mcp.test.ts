@@ -254,6 +254,10 @@ describe("ferramentas", () => {
     expect(dados<{ src: string }>(ok).src).toContain(`/projetos/${id}/arquivos/`);
     expect(dados<{ arquivos: { nome: string }[] }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["arquivos"] })).arquivos[0]!.nome).toBe("camada ação.webm");
     expect((await ferramenta("enviar_arquivo", { projeto: id, nome: "x", tipo: "video/webm", base64: "@@@" })).isError).toBe(true);
+    // Sem arquivo nenhum: o erro diz isso, não "grande demais"; sem nome, o arquivo não se chama "undefined".
+    expect(dados<{ erro: string }>(await ferramenta("enviar_arquivo", { projeto: id })).erro).toBe("arquivo_obrigatorio");
+    await ferramenta("enviar_arquivo", { projeto: id, tipo: "video/webm", base64: btoa("webm") });
+    expect(dados<{ arquivos: { nome: string }[] }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["arquivos"] })).arquivos.map((f) => f.nome)).not.toContain("undefined");
   });
 
   it("WebM sem som entra sem a camada de áudio; com som, ligado a ela", async () => {
@@ -482,6 +486,8 @@ describe("gerar_imagem", () => {
       [{ descricao: "cena", referencias: ["/videos/00000000-0000-4000-8000-000000000000.png"] }, "arquivo_indisponivel"],
       [{ descricao: "cena", referencias: [`/videos/${VIDEO}.mp4`] }, "referencia_tipo_invalido"],
       [{ descricao: "cena", formato: "7:3" }, "pedido_invalido"],
+      // O 4K está na lista do modelo, mas não tem preço conhecido: recusado já na simulação.
+      [{ descricao: "cena", resolucao: "4K" }, "pedido_invalido"],
       [{ descricao: "cena", final: "outro" }, "final_inexistente"],
     ];
     for (const [args, erro] of casos) {

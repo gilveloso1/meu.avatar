@@ -1,6 +1,6 @@
 /**
  * Wan 3.0 livre (alibaba/wan-3.0): o mesmo modelo do Wan, com tudo o que ele aceita no OpenRouter,
- * para o agente (gerar_video_wan do MCP). A cena é escrita inteira por quem pede, com a fala
+ * para o agente (gerar_video com modelo "wan-livre", no MCP). A cena é escrita inteira por quem pede, com a fala
  * dentro dela se houver; o pedido pode levar o primeiro e o último quadro (imagem para vídeo) ou
  * imagens de referência (referência para vídeo), som ou não, e a semente. Fica como versão do Wan
  * (a mesma página e a mesma lista no site) e só para o administrador, enquanto em teste.
@@ -12,7 +12,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
-import { CAMPOS, num, txt, voz } from "./agente";
+import { CAMPOS, num, txt } from "./agente";
 import { options, WAN } from "./wan";
 
 export const MAX_WAN_SCENE = 2000;
@@ -100,7 +100,7 @@ export const WAN_LIVRE: Structure = {
     const sound = values("som") !== "nao";
     if (values("semente") && !(/^\d{1,10}$/.test(values("semente")) && Number(values("semente")) < 2 ** 32)) throw new InputError(ERROS.semente);
     const seed = values("semente") ? Number(values("semente")) : undefined;
-    // "referencia" (o gerar_video_wan com referencias): a foto é a primeira referência; senão, o primeiro quadro.
+    // "referencia" (o gerar_video com referencias): a foto é a primeira referência; senão, o primeiro quadro.
     const reference = values("foto") === "referencia";
     return {
       request: { prompt: scene, duration, resolution, aspect_ratio: aspectRatio, generate_audio: sound, ...(seed !== undefined ? { seed } : {}) },

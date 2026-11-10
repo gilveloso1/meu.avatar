@@ -31,6 +31,13 @@ class Handler(BaseHTTPRequestHandler):
         self.responder(404, b"nao encontrado", "text/plain")
 
     def do_POST(self):
+        # Passou do prazo: responde o motivo, em vez de fechar a conexão sem resposta.
+        try:
+            self.atender()
+        except subprocess.TimeoutExpired:
+            self.responder(500, b"passou do prazo", "text/plain")
+
+    def atender(self):
         comando = VIDEO.get(self.path) or JSON.get(self.path) or ENTRADA.get(self.path)
         if not comando:
             return self.responder(404, b"nao encontrado", "text/plain")

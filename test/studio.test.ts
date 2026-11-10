@@ -95,6 +95,29 @@ describe("acesso", () => {
   });
 });
 
+describe("agendamento", () => {
+  it("um vídeo que falha ao baixar não para a conferência dos outros", async () => {
+    const api = new FakeVideoApi();
+    await post(api, PEDIDO);
+    await post(api, { ...PEDIDO, fala: "Promoção de verão" });
+    api.finish("job-1", { status: "completed" });
+    api.finish("job-2", { status: "completed" });
+    const baixar = api.download.bind(api);
+    let primeiro = true;
+    api.download = async (job) => {
+      if (primeiro) {
+        primeiro = false;
+        throw new Error("download caiu");
+      }
+      return baixar(job);
+    };
+    const feitos = await createStudio({ ...env, SITE_URL: SITE }, { api, audio: null }).syncOpen();
+    expect(feitos.map((v) => v.status)).toEqual(["completed"]);
+    // O que falhou continua aberto e fecha na rodada seguinte.
+    expect((await createStudio({ ...env, SITE_URL: SITE }, { api, audio: null }).syncOpen()).map((v) => v.status)).toEqual(["completed"]);
+  });
+});
+
 describe("telas", () => {
   it("a busca da tela inicial filtra os modelos pelo nome", async () => {
     const page = await (await get("/?q=wan")).text();

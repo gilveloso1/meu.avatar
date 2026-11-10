@@ -74,6 +74,9 @@ export class Player {
       }
       // Mostra o primeiro quadro assim que ele chega (antes de tocar).
       el.addEventListener(k === "image" ? "load" : "loadeddata", () => this.show(), { once: true });
+      // Parado: mostra o quadro novo assim que o navegador terminar de buscar. Um ouvinte só por
+      // arquivo (um a cada seek se acumulava ao arrastar o controle).
+      if (k !== "image") el.addEventListener("seeked", () => !this.playing && this.show());
       el.src = i.block.draft ? draftCard(i.block) : i.block.src;
       if (k !== "audio") this.stage.append(el);
       return { ...i, el, active: false };
@@ -122,8 +125,6 @@ export class Player {
       if (!this.playing) i.el.pause(), (i.active = false);
     }
     this.show();
-    // Parado: mostra o quadro novo assim que o navegador terminar de buscar.
-    if (!this.playing) for (const i of this.items) i.el.addEventListener?.("seeked", () => this.show(), { once: true });
     this.onTick(this.t, this.duration);
   }
 

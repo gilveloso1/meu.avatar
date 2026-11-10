@@ -15,7 +15,7 @@ import { speechSeconds } from "./heygen";
 import type { FishVoice } from "../fish";
 import { MAX_CLONE_NAME, NEW_CLONE, SOURCES } from "./heygen-direta";
 import { type Built, type Field, InputError, type Lists, type Option, type Structure, type VoiceOption } from "./types";
-import { CAMPOS, num, txt, voz } from "./agente";
+import { txt, voz } from "./agente";
 
 /** O ElevenLabs v4 aceita 10.000 caracteres por pedido; a metade basta para vídeo curto. */
 export const MAX_SPEECH = 5000;

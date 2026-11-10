@@ -221,6 +221,21 @@ describe("comandos", () => {
     expect((await api(`/api/v1/projetos/${id}/limpar`, admin, {})).status).toBe(200);
     const res = await api(`/api/v1/projetos/${id}/limpar`, admin, { apagar: true });
     expect([res.status, await res.json()]).toEqual([409, { erro: "exportando" }]);
+    // Uma exportação mais nova, já pronta, não libera: a antiga ainda anda.
+    const depois = new Date(Date.now() + 1000).toISOString();
+    await env.DB.prepare("INSERT INTO exports (id, project_id, status, total, plan, created_at, expires_at) VALUES ('e2', ?, 'done', 1, '{}', ?, ?)").bind(id, depois, depois).run();
+    expect((await api(`/api/v1/projetos/${id}/limpar`, admin, { apagar: true })).status).toBe(409);
+  });
+
+  it("limpar arquivos apaga mais de cem de uma vez", async () => {
+    const { id } = await novo();
+    const agora = new Date().toISOString();
+    const antes = (await env.DB.prepare("SELECT COUNT(*) AS n FROM project_files WHERE project_id = ?").bind(id).first<number>("n"))!;
+    await env.DB.batch(Array.from({ length: 150 }, (_, i) => env.DB.prepare("INSERT INTO project_files (id, project_id, key, name, type, size, created_at) VALUES (?, ?, ?, 'sobra.png', 'image/png', 1, ?)").bind(`sobra-${id}-${i}`, id, `projetos/${id}/sobra-${i}`, agora)));
+    const res = await api(`/api/v1/projetos/${id}/limpar`, admin, { apagar: true });
+    expect(res.status).toBe(200);
+    expect((await res.json<{ arquivos: unknown[] }>()).arquivos.length).toBe(antes + 150);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM project_files WHERE project_id = ?").bind(id).first("n")).toBe(0);
   });
 
   it("a resposta traz só o que o lote mudou, sem repetir a fala dos rascunhos", async () => {
@@ -461,6 +476,7 @@ describe("edição fina", () => {
     const r = await lote(id, v.revisao, [{ tipo: "enquadrar", bloco: a, encaixe: "desfocar", girar: 90, espelharH: true, recorte: { topo: 0.1 }, chaves: [{ t: 0, zoom: 1 }, { t: 2, zoom: 1.5, focoY: 0.3 }] }]);
     expect(bloco(r, a).frame).toEqual({ fit: "blur", rotate: 90, flipH: true, crop: { l: 0, t: 0.1, r: 0, b: 0 }, keys: [{ t: 0, z: 1, x: 0.5, y: 0.5 }, { t: 2, z: 1.5, x: 0.5, y: 0.3 }] });
     expect(await (await comandos(id, r.revisao, [{ tipo: "enquadrar", bloco: a, zoom: 0.5 }])).json()).toEqual({ erro: "enquadramento_invalido", comando: 0 });
+    expect(await (await comandos(id, r.revisao, [{ tipo: "enquadrar", bloco: a, chaves: [null] }])).json()).toEqual({ erro: "enquadramento_invalido", comando: 0 });
   });
 
   it("zoom no rosto usa o ponto achado; sem ele, recusa", async () => {

@@ -191,15 +191,17 @@ export default {
       await vigiaConteineres(env)().catch((err) => console.error("Alarme de contêiner falhou", err));
     }
     const studio = createStudio(env);
+    // Cada etapa por si: o erro de uma (um download que falha, por exemplo) não para as seguintes.
+    const etapa = (nome: string, fazer: () => Promise<unknown>) => fazer().catch((err) => console.error(`Agendamento: ${nome} falhou`, err));
     // A troca de avatar pelo Aleph 2 prepara um vídeo e o envia; depois, os da fila.
-    await studio.prepareNext();
+    await etapa("preparo", () => studio.prepareNext());
     // O HeyGen pela API direta com voz clonada: pede os vídeos cuja voz ficou pronta.
-    await studio.voiceNext();
-    await studio.syncOpen();
+    await etapa("voz", () => studio.voiceNext());
+    await etapa("conferência", () => studio.syncOpen());
     // Depois de buscar os prontos, trata o áudio de um vídeo da fila e faz uma edição rápida pedida.
-    await studio.treatNextAudio();
-    await studio.editNext();
+    await etapa("áudio", () => studio.treatNextAudio());
+    await etapa("edição", () => studio.editNext());
     // A exportação anda pela tela; o que ela deixou pela metade termina aqui.
-    await createExports(env).next();
+    await etapa("exportação", () => createExports(env).next());
   },
 } satisfies ExportedHandler<Env>;

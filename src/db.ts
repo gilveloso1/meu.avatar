@@ -556,10 +556,10 @@ export class Db {
           `SELECT t.*, (SELECT x.face FROM avatar_assets x WHERE x.id = t.cover) AS cover_face FROM (
              SELECT a.*, (SELECT COUNT(*) FROM avatar_assets x WHERE x.avatar_id = a.id) AS assets,
                COALESCE(a.photo_asset, (SELECT x.id FROM avatar_assets x WHERE x.avatar_id = a.id AND x.kind = 'imagem' ORDER BY x.created_at LIMIT 1)) AS cover
-             FROM avatars a WHERE a.user_id = ? AND a.name LIKE ?
+             FROM avatars a WHERE a.user_id = ? AND a.name LIKE ? ESCAPE '\\'
            ) t ORDER BY t.updated_at DESC`,
         )
-        .bind(userId, `%${q}%`)
+        .bind(userId, like(q))
         .all<Avatar>()
     ).results;
   }
@@ -718,11 +718,10 @@ export class Db {
 
   /** Os projetos da pessoa, o editado por último primeiro; q filtra pelo nome. */
   async projectsByUser(userId: number, q = "", limit = 200): Promise<Project[]> {
-    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     return (
       await this.d1
         .prepare("SELECT * FROM projects WHERE user_id = ? AND name LIKE ? ESCAPE '\\' ORDER BY updated_at DESC, rowid DESC LIMIT ?")
-        .bind(userId, like, limit)
+        .bind(userId, like(q), limit)
         .all<Project>()
     ).results;
   }
@@ -822,10 +821,14 @@ export class Db {
 
   /** Apaga esses arquivos do projeto no banco e devolve as chaves deles no R2 (para apagar lá também). */
   async deleteProjectFiles(projectId: string, ids: string[]): Promise<string[]> {
-    if (!ids.length) return [];
-    const marks = ids.map(() => "?").join(", ");
-    const keys = (await this.d1.prepare(`SELECT key FROM project_files WHERE project_id = ? AND id IN (${marks})`).bind(projectId, ...ids).all<{ key: string }>()).results.map((r) => r.key);
-    await this.d1.prepare(`DELETE FROM project_files WHERE project_id = ? AND id IN (${marks})`).bind(projectId, ...ids).run();
+    const keys: string[] = [];
+    // Em partes: o D1 aceita até 100 valores por instrução.
+    for (let i = 0; i < ids.length; i += 90) {
+      const parte = ids.slice(i, i + 90);
+      const marks = parte.map(() => "?").join(", ");
+      keys.push(...(await this.d1.prepare(`SELECT key FROM project_files WHERE project_id = ? AND id IN (${marks})`).bind(projectId, ...parte).all<{ key: string }>()).results.map((r) => r.key));
+      await this.d1.prepare(`DELETE FROM project_files WHERE project_id = ? AND id IN (${marks})`).bind(projectId, ...parte).run();
+    }
     return keys;
   }
 

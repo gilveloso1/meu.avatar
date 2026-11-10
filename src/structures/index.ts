@@ -61,7 +61,6 @@ export function videoPlatform(video: Video): Platform {
   }
 }
 
-/** A estrutura pode ser vista e usada por quem tem esse papel? */
 /** A conta pode gerar com a estrutura: a liberada para todos, ou a em teste com "usar:modelo:teste". */
 export function canUse(structure: Structure, conta: Conta): boolean {
   return pode(conta, structure.access === "all" ? "usar:modelo" : "usar:modelo:teste");
@@ -97,11 +96,3 @@ export function fixedCost(structure: Structure, model: VideoModel): number {
   return (rule.extra ?? 0) + (rule.extraSku ? Number(prices(structure, model)[rule.extraSku] ?? 0) : 0);
 }
 
-/** O menor preço por segundo do modelo, para o cartão de escolha. */
-export function lowestPrice(model: VideoModel): number | undefined {
-  const prices = Object.entries(model.pricing_skus ?? {})
-    .filter(([sku]) => sku.startsWith("duration_seconds"))
-    .map(([, value]) => Number(value))
-    .filter((n) => n > 0);
-  return prices.length ? Math.min(...prices) : undefined;
-}

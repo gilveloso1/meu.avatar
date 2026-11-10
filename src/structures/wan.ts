@@ -8,7 +8,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { buildPrompt, cleanSpeech, LANGUAGES, languageById, MAX_EXTRA, MAX_SPEECH, STYLES, styleById, WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
-import { CAMPOS, num, txt, voz } from "./agente";
+import { CAMPOS, num, txt } from "./agente";
 
 export const WAN: Structure = {
   id: "wan",

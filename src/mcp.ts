@@ -459,14 +459,15 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
     case "enviar_arquivo": {
       if (typeof a.url === "string" && a.url) return baixar(a, chama, `${site}/arquivos`);
       const conteudo = typeof a.base64 === "string" ? a.base64 : "";
-      if (!conteudo || conteudo.length > MAX_BASE64) return Promise.resolve(Response.json({ erro: "arquivo_grande_demais" }, { status: 413 }));
+      if (!conteudo) return Promise.resolve(Response.json({ erro: "arquivo_obrigatorio" }, { status: 400 }));
+      if (conteudo.length > MAX_BASE64) return Promise.resolve(Response.json({ erro: "arquivo_grande_demais" }, { status: 413 }));
       let bytes: Uint8Array;
       try {
         bytes = Uint8Array.from(atob(conteudo), (c) => c.charCodeAt(0));
       } catch {
         return Promise.resolve(Response.json({ erro: "base64_invalido" }, { status: 400 }));
       }
-      return chama("POST", `${site}/arquivos`, bytes, { "content-type": String(a.tipo), "x-nome": seguro(a.nome) });
+      return chama("POST", `${site}/arquivos`, bytes, { "content-type": typeof a.tipo === "string" ? a.tipo : "", "x-nome": seguro(typeof a.nome === "string" && a.nome ? a.nome : "arquivo") });
     }
     default:
       return null;
