@@ -237,8 +237,27 @@ meia e nove!". **Os dois falharam em 40 s, sem custo**, com "Video generation fa
 - Não houve controle com o pedido antigo exato no mesmo horário (só dois pedidos autorizados):
   não dá para separar o formato de uma queda do provedor naquele minuto.
 
-O que falta testar, nesta ordem: o antigo exato como controle; o antigo exato com as instruções
-logo depois da frase do estilo Selfie (a frase que passou 5 de 5 fica inteira).
+**Controle e `task` (22:07 UTC, os dois ao mesmo tempo, 4 s, 360p, a mesma foto e a mesma fala):**
+
+| Pedido | Job | Resultado |
+|---|---|---|
+| O antigo exato (`buildPrompt` com o estilo Selfie, sem instruções), sem `task` | `gen-vid-1794348441-4oDFD2mLaxrclUBFwtvZ` | **Pronto**, US$ 0,0927 (vídeo só no ambiente de teste) |
+| O do código (`omniPrompt` com as instruções), com `provider.options["google-ai-studio"].task = "image_to_video"` | `gen-vid-1794348441-QkOCuYXN6pKh3bB8wq1J` | Falhou |
+
+- O provedor estava no ar: **a falha é do formato do pedido**, não de uma queda. O antigo exato
+  passou de novo (6 de 6 desde 07/11).
+- O `task` não resolveu. Não dá para saber se o OpenRouter repassou a opção (a resposta não
+  diz, e o nome do provedor nas opções, `google-ai-studio`, é o da página do provedor, sem
+  confirmação): o resultado vale como "não ajudou", não como "o parâmetro não serve".
+- Pesquisa do dia (só os resumos da busca; as páginas não abrem deste ambiente): o Omni barra
+  rosto que pareça de pessoa real também na imagem enviada, com relatos de falso positivo em
+  avatar próprio e de recusas sem motivo no fórum do Google. Combina com o que se vê aqui: o que
+  passa é a frase que manda animar a pessoa da foto parada, de frente, falando calma.
+
+Gasto do dia: US$ 0,09 (quatro pedidos, um pronto).
+
+O que falta testar: o antigo exato com as instruções logo depois da frase do estilo Selfie (a
+frase que passa fica inteira; é o `buildPrompt` com `extra`, o caminho do Wan).
 
 ## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
 
