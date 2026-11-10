@@ -23,6 +23,14 @@ const IMAGE_TOKENS: Record<string, number> = { "1K": 1300, "2K": 2000 };
 export const IMAGE_GUIDE = "Photorealistic photo. No text, captions, logos added or watermarks on the image.";
 /** Com foto de referência: a pessoa e o que a descrição não muda ficam como nela. */
 export const IMAGE_REFERENCE_GUIDE = "Follow the reference image: keep the same person (face, hair, clothes) and everything the description does not change.";
+/**
+ * Com várias referências (só o gerar_imagem do MCP manda): a descrição diz o que vem de cada uma,
+ * pela ordem ("imagem 1", "imagem 2"), e o que vem delas fica igual.
+ */
+export const IMAGE_REFERENCES_GUIDE =
+  "Use the reference images in the order given (image 1, image 2, and so on) as the description says: keep each person (face, hair, clothes), product and place taken from them as it is in its image.";
+/** Até quantas imagens de referência vão num pedido. */
+export const MAX_IMAGE_REFERENCES = 6;
 
 export const NANO_BANANA: Structure = {
   id: "nano-banana",
@@ -83,7 +91,10 @@ export const NANO_BANANA: Structure = {
     if (description.length > MAX_IMAGE_DESCRIPTION) throw new InputError(ERROS.descricaoLonga(MAX_IMAGE_DESCRIPTION));
     const resolution = values("resolucao");
     const aspectRatio = values("formato");
-    const prompt = [description, IMAGE_GUIDE, hasImage ? IMAGE_REFERENCE_GUIDE : ""].filter(Boolean).join(" ");
+    // Quantas referências vão (o gerar_imagem do MCP diz; o formulário do site manda uma só).
+    const count = Number(values("referencias")) || 1;
+    const guide = hasImage ? (count > 1 ? IMAGE_REFERENCES_GUIDE : IMAGE_REFERENCE_GUIDE) : "";
+    const prompt = [description, IMAGE_GUIDE, guide].filter(Boolean).join(" ");
     return {
       request: { prompt, resolution, aspect_ratio: aspectRatio },
       image: hasImage ? "reference" : null,

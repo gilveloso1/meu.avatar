@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
 import { Db } from "../src/db";
 import { call, callFish, cookie, FakeExportApi, FakeFishApi, FakeHeyGenApi, FakeRenderApi, FakeVideoApi, memberCookie, postForm, SITE, webmBytes } from "./helpers";
+import { IMAGE_REFERENCE_GUIDE, IMAGE_REFERENCES_GUIDE } from "../src/structures/imagem";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
 
@@ -332,6 +333,41 @@ describe("gerar_imagem", () => {
     expect(editado.isError).toBe(false);
     const { canvas } = dados<{ canvas: { blocks: { kind: string; src: string; tout: number }[] } }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["canvas"] }));
     expect(canvas.blocks[0]).toMatchObject({ kind: "image", src: imagem.src, tout: 2 });
+  });
+
+  it("junta várias referências na ordem, com a guia para mais de uma; recusa mais de 6", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Várias" }));
+    const fontes: string[] = [];
+    for (const descricao of ["a pessoa", "o produto", "a cozinha"]) {
+      const { imagem } = dados<{ imagem: { src: string } }>(await comApi(api, "gerar_imagem", { projeto: id, descricao }));
+      fontes.push(imagem.src);
+    }
+    const r = await comApi(api, "gerar_imagem", { projeto: id, descricao: "a pessoa da imagem 1 segura o produto da imagem 2 na cozinha da imagem 3", referencia: fontes[0], referencias: fontes.slice(1) });
+    expect(r.isError).toBeFalsy();
+    const pedido = api.images[3]!;
+    expect(pedido.input_references).toHaveLength(3);
+    const urls = pedido.input_references!.map((ref) => ("image_url" in ref ? ref.image_url.url : ""));
+    expect(urls.every(Boolean)).toBe(true);
+    expect(new Set(urls).size).toBe(3);
+    expect(pedido.prompt).toContain(IMAGE_REFERENCES_GUIDE);
+    expect(pedido.prompt).not.toContain(IMAGE_REFERENCE_GUIDE);
+
+    // Só referencias, sem referencia: a primeira é a foto.
+    await comApi(api, "gerar_imagem", { projeto: id, descricao: "as duas juntas", referencias: fontes.slice(0, 2) });
+    expect(api.images[4]!.input_references).toHaveLength(2);
+
+    // Uma só, em referencias: a guia de uma referência.
+    await comApi(api, "gerar_imagem", { projeto: id, descricao: "a mesma", referencias: [fontes[0]] });
+    expect(api.images[5]!.input_references).toHaveLength(1);
+    expect(api.images[5]!.prompt).toContain(IMAGE_REFERENCE_GUIDE);
+
+    const demais = await comApi(api, "gerar_imagem", { projeto: id, descricao: "cena", referencia: fontes[0], referencias: Array(6).fill(fontes[1]) });
+    expect(demais.isError).toBe(true);
+    expect(demais.content[0]!.text).toContain("referencias_demais");
+    const quebrada = await comApi(api, "gerar_imagem", { projeto: id, descricao: "cena", referencias: [fontes[0], "/videos/00000000-0000-4000-8000-000000000000.png"] });
+    expect(quebrada.content[0]!.text).toContain("arquivo_indisponivel");
+    expect(api.images).toHaveLength(6);
   });
 
   it("imagem não entra como vídeo, nem vídeo como imagem", async () => {

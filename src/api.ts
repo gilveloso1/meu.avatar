@@ -15,7 +15,7 @@ import { mp4Duration } from "./mp4";
 import { canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, STRUCTURES, structureById } from "./structures";
 import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
-import { NANO_BANANA } from "./structures/imagem";
+import { MAX_IMAGE_REFERENCES, NANO_BANANA } from "./structures/imagem";
 import { FISH } from "./structures/voz";
 import { criarEnvio, MAX_ATIVO, MAX_AVATAR_DESCRIPTION, receberAtivo, uso } from "./ativos";
 import { MEDIA_TYPES, mediaType } from "./arquivos";
@@ -689,24 +689,28 @@ export class Api {
     if (typeof body?.final === "string" && !final) return falha(400, "final_inexistente");
     const formato = typeof body?.formato === "string" ? body.formato : final ? output(final).format : "9:16";
     const resolucao = typeof body?.resolucao === "string" ? body.resolucao : "1K";
-    let image: File | null = null;
-    if (body?.referencia !== undefined) {
+    // referencia (uma) e referencias (várias, na ordem): juntas, a primeira vai como a foto.
+    const fontes: unknown[] = [...(body?.referencia !== undefined ? [body.referencia] : []), ...(Array.isArray(body?.referencias) ? body.referencias : body?.referencias !== undefined ? [body.referencias] : [])];
+    if (fontes.length > MAX_IMAGE_REFERENCES) return falha(400, "referencias_demais", { maximo: MAX_IMAGE_REFERENCES });
+    const imagens: File[] = [];
+    for (const fonte of fontes) {
       let key: string;
       try {
-        key = await this.exports.source(project, user, body.referencia);
+        key = await this.exports.source(project, user, fonte);
       } catch (err) {
-        if (err instanceof InputError) return falha(404, "arquivo_indisponivel");
+        if (err instanceof InputError) return falha(404, "arquivo_indisponivel", { referencia: fonte });
         throw err;
       }
       const object = await this.media.get(key);
       const type = object?.httpMetadata?.contentType ?? "";
-      if (!object) return falha(404, "arquivo_indisponivel");
-      if (!/^image\/(jpeg|png|webp)$/.test(type)) return falha(400, "referencia_nao_e_imagem");
-      image = new File([await object.arrayBuffer()], "referencia", { type });
+      if (!object) return falha(404, "arquivo_indisponivel", { referencia: fonte });
+      if (!/^image\/(jpeg|png|webp)$/.test(type)) return falha(400, "referencia_nao_e_imagem", { referencia: fonte });
+      imagens.push(new File([await object.arrayBuffer()], "referencia", { type }));
     }
-    const values = (name: string) => ({ descricao, resolucao, formato })[name] ?? "";
+    const [image = null, ...references] = imagens;
+    const values = (name: string) => ({ descricao, resolucao, formato, referencias: String(imagens.length) })[name] ?? "";
     try {
-      const v = await this.studio.waitImage(await this.studio.create({ structure: NANO_BANANA, values, image, user }));
+      const v = await this.studio.waitImage(await this.studio.create({ structure: NANO_BANANA, values, image, references, user }));
       if (v.status !== "completed" || !v.video_key) return falha(502, "imagem_falhou", { id: v.id });
       const src = `/videos/${v.id}.${v.video_key.split(".").pop()}`;
       const resposta: Record<string, unknown> = { imagem: { id: v.id, src, resolucao: v.resolution, formato: v.aspect_ratio, custo: v.cost } };
