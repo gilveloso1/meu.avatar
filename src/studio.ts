@@ -74,10 +74,10 @@ export const AUDIO_TIMEOUT_MS = 20 * 60_000;
 /** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
 /**
  * Vídeo aberto há mais tempo que isso vira falha (src/db.ts, failStaleOpen): o provedor esqueceu
- * o job ou o preparo nunca andou. Folgado: o 720p do Wan leva uns 10 min, e falhar um vídeo que
- * ainda ficaria pronto perde o que ele custou.
+ * o job ou o preparo nunca andou. Uma hora, escolhida pelo dono (10/11/2026): o 720p do Wan leva
+ * uns 10 min. A tela oferece "Refazer".
  */
-export const OPEN_TIMEOUT_MS = 6 * 60 * 60_000;
+export const OPEN_TIMEOUT_MS = 60 * 60_000;
 
 /** Imagem que não voltou nesse tempo vira falha (src/db.ts, failStaleImages). */
 export const IMAGE_TIMEOUT_MS = 5 * 60_000;
