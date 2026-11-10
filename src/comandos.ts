@@ -785,7 +785,9 @@ async function enquadrar(project: CanvasProject, c: Comando, ctx: Contexto, falh
   };
   if (Array.isArray(c.chaves)) {
     if (!c.chaves.length || c.chaves.length > MAX_CHAVES) throw falha("enquadramento_invalido");
-    frame.keys = (c.chaves as Record<string, unknown>[]).map((k) => {
+    frame.keys = (c.chaves as unknown[]).map((bruto) => {
+      if (!bruto || typeof bruto !== "object") throw falha("enquadramento_invalido");
+      const k = bruto as Record<string, unknown>;
       const t = numero(k.t);
       // Negativo: um movimento que começou no bloco anterior continua neste.
       if (t === null) throw falha("enquadramento_invalido");

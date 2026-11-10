@@ -122,3 +122,28 @@ describe("renomear ativo do avatar", () => {
     expect(await a.nome()).toBe("principal.png");
   });
 });
+
+describe("de onde a página do vídeo foi aberta (?de=)", () => {
+  it("só aceita caminho do próprio site, e nunca sai cru na página", async () => {
+    const session = await cookie();
+    const id = await video("gil@exemplo.com");
+    const abrir = async (de: string) => (await get(`/video/${id}?de=${encodeURIComponent(de)}`, session)).text();
+    // Sai do atributo e põe um script: fica como caminho, com as aspas e os sinais trocados.
+    const script = await abrir('/"><script src="https://cdn.jsdelivr.net/gh/x/y/z.js"></script>');
+    expect(script).not.toContain('"><script src="https://cdn.jsdelivr.net/gh/');
+    // O navegador lê a barra invertida como barra e joga fora o tab: os dois iriam para outro site.
+    for (const de of ["/\\evil.example", "/\t/evil.example", "//evil.example", "https://evil.example"]) {
+      const page = await abrir(de);
+      expect(page).not.toContain("evil.example");
+      expect(page).toContain('data-back="/modelo/wan"');
+    }
+    expect(await abrir("/painel/atividade?periodo=7")).toContain('data-back="/painel/atividade?periodo=7"');
+  });
+
+  it("o script de fora só vem da pasta fixa do detector de rosto", async () => {
+    const res = await get("/videos", await cookie());
+    const csp = res.headers.get("content-security-policy") ?? "";
+    expect(csp).toContain("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@");
+    expect(csp).not.toMatch(/script-src[^;]* https:\/\/cdn\.jsdelivr\.net(?= |;)/);
+  });
+});

@@ -58,9 +58,9 @@ const REFRESH_SECONDS = 20;
 
 /** Ícones usados (Material Symbols); a fonte só baixa esses. */
 const ICONS = [
-  "account_balance_wallet", "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today",
+  "add", "animation", "apps", "arrow_back", "arrow_drop_down", "arrow_drop_up", "aspect_ratio", "auto_awesome", "bookmark_add", "calendar_today",
   "check", "check_circle", "checkroom", "chevron_left", "chevron_right", "close", "cloud", "content_copy", "content_cut", "content_paste", "control_point_duplicate",
-  "crop_square", "date_range", "delete", "download", "drag_indicator", "edit", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit",
+  "crop_square", "delete", "download", "drag_indicator", "edit", "edit_note", "error", "face", "fit_screen", "flag", "flowchart", "folder_open", "fullscreen", "fullscreen_exit",
   "gesture", "graphic_eq", "grid_view", "group", "hd", "history", "hourglass_top", "image", "info", "key", "layers", "link", "link_off", "lock", "logout", "memory", "mic", "monitor_heart",
   "monitoring", "more_horiz", "more_vert", "movie", "music_note", "notes", "palette", "pause", "payments", "person", "person_add", "photo_library", "play_arrow", "play_circle",
   "record_voice_over", "redo", "refresh", "remove", "replay", "schedule", "search", "send", "space_dashboard", "speed", "star", "sticky_note_2", "swap_vert", "switch_account",
@@ -1152,8 +1152,8 @@ ${error ? snackbar(error) : ""}`;
   private async renameVideo(request: Request, user: User, id: string): Promise<Response> {
     const { name, form } = await nameFrom(request);
     if (!(await this.db.conta(user.id).renameVideo(id, name || null))) return new Response("não encontrado", { status: 404 });
-    const from = String(form.get("de") ?? "");
-    return nameSaved(request, `/video/${id}${/^\/(?!\/)/.test(from) ? `?de=${encodeURIComponent(from)}` : ""}`);
+    const from = sitePath(String(form.get("de") ?? ""));
+    return nameSaved(request, `/video/${id}${from ? `?de=${encodeURIComponent(from)}` : ""}`);
   }
 
   /** Onde está o rosto (JSON), para a prévia da edição rápida mirar o zoom. */
@@ -1227,8 +1227,8 @@ ${error ? snackbar(error) : ""}`;
     const mine = v.user_id === user.id;
     const avatars = await this.db.avatarsByUser(user.id);
     // De onde a pessoa veio (só caminhos do próprio site): a seta e o X voltam para lá.
-    const from = url.searchParams.get("de") ?? "";
-    const back = /^\/(?!\/)/.test(from) ? from : `/modelo/${structure.id}`;
+    const from = sitePath(url.searchParams.get("de") ?? "") ?? "";
+    const back = from || `/modelo/${structure.id}`;
     const showOriginal = url.searchParams.has("original");
     const status = cardStatus(v);
     const quick = mine && canQuickEdit(v, structure);
@@ -3097,7 +3097,7 @@ function brand(href: string, label?: string): string {
 function topAppBar(bar: Exclude<Bar, false>): string {
   if ("back" in bar) {
     return `<header class="top-app-bar" data-app-bar>
-  <a class="icon-button interactive" href="${bar.back}" aria-label="Voltar para Modelos" title="Voltar para Modelos"><span class="icon">arrow_back</span></a>
+  <a class="icon-button interactive" href="${esc(bar.back)}" aria-label="Voltar" title="Voltar"><span class="icon">arrow_back</span></a>
   <h1 class="top-app-bar__title top-app-bar__title--page">${esc(bar.title)}</h1>
   <div class="top-app-bar__actions">${bar.actions ?? ""}${accountActions(bar.user)}</div>
 </header>`;
@@ -3596,6 +3596,8 @@ const SCRIPT = `(() => {
     if (at >= 0 && at < ids.length - 1) { next.href = link(ids[at + 1]); next.hidden = false; }
     addEventListener("keydown", (e) => {
       if (e.target.closest && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      // Com o diálogo "Salvar no avatar" aberto, o Esc só fecha o diálogo.
+      if (document.querySelector("dialog[open]")) return;
       if (e.key === "ArrowLeft" && !prev.hidden) location.href = prev.href;
       if (e.key === "ArrowRight" && !next.hidden) location.href = next.href;
       if (e.key === "Escape" && !document.querySelector("details[data-menu][open]")) location.href = viewer.dataset.back;
@@ -4519,6 +4521,21 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * O caminho de volta (?de=), só se for do próprio site: lido como o navegador lê (a barra invertida
+ * vale por barra, o tab some), tem de continuar na mesma origem. Senão, null.
+ */
+function sitePath(from: string): string | null {
+  if (!from.startsWith("/")) return null;
+  const base = "https://site.invalid";
+  try {
+    const url = new URL(from, base);
+    return url.origin === base ? url.pathname + url.search : null;
+  } catch {
+    return null;
+  }
+}
+
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
@@ -4588,8 +4605,9 @@ function animationFrame(): Response {
 function csp(nonce: string, extra: CspExtra = {}): string {
   return [
     "default-src 'none'",
-    // O detector de rosto (MEDIAPIPE): o módulo e o carregador do WebAssembly vêm do jsDelivr.
-    `script-src 'nonce-${nonce}' https://cdn.jsdelivr.net 'wasm-unsafe-eval'`,
+    // O detector de rosto (MEDIAPIPE): o módulo e o carregador do WebAssembly vêm do jsDelivr, só
+    // da pasta da versão fixa (o jsDelivr inteiro serviria o script de qualquer um).
+    `script-src 'nonce-${nonce}' ${MEDIAPIPE}/ 'wasm-unsafe-eval'`,
     "style-src 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
     `img-src 'self' blob:${extra.img ? ` ${extra.img}` : ""}`,

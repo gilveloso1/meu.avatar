@@ -299,7 +299,6 @@ export class Api {
     return "erro" in f ? falha(400, f.erro) : Response.json(await listar(this.db, user, f, url));
   }
 
-  /** Os avatares da pessoa com os ativos, para entrar num projeto como os vídeos. */
   /**
    * As animações em código já feitas nos projetos da pessoa, para o próximo agente partir de uma
    * delas: do mesmo projeto, dos projetos que usam um avatar (pelos vídeos e ativos dele) ou pela
@@ -474,7 +473,8 @@ export class Api {
     const semUso = (await this.db.projectFiles(project.id)).filter((f) => !usados.has(`/projetos/${project.id}/arquivos/${f.id}`));
     const lista = { arquivos: semUso.map((f) => ({ id: f.id, nome: f.name, tipo: f.type, tamanho: f.size })), tamanho: semUso.reduce((t, f) => t + f.size, 0) };
     if (body?.apagar !== true) return Response.json(lista);
-    if ((await this.db.latestExport(project.id))?.status === "running") return falha(409, "exportando");
+    // Qualquer exportação andando, não só a última: uma mais antiga ainda pode precisar do arquivo.
+    if ((await this.db.runningExports(project.id)).length) return falha(409, "exportando");
     const keys = await this.db.deleteProjectFiles(project.id, semUso.map((f) => f.id));
     if (keys.length) await this.media.delete(keys);
     return Response.json({ ...lista, apagados: true });
@@ -505,7 +505,6 @@ export class Api {
     }
   }
 
-  /** O WebM no projeto, com os erros do render em códigos para o agente. */
   /**
    * As vozes do HeyGen Avatar para o gerar_video: as prontas (o catálogo da HeyGen, com busca,
    * idioma e gênero, como o menu de vozes do site) e as clonadas da pessoa, com as dos avatares.

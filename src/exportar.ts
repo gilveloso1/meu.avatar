@@ -412,7 +412,10 @@ export class Exports {
     if (exported?.[1] === project.id) {
       const row = await this.db.exportById(exported[2]!);
       const version = row?.project_id === project.id && row.status === "done" ? (JSON.parse(row.plan) as ExportPlan).versoes[Number(exported[3])] : undefined;
-      if (version) return exported[4] === "mp3" ? this.sound(version) : version.chave;
+      if (version && exported[4] === "mp3") return this.sound(version);
+      // O arquivo some do R2 depois do prazo: diz que expirou, em vez de o contêiner falhar sem ele.
+      if (version && !(await this.media.head(version.chave))) throw new InputError(ERROS.exportarExpirou);
+      if (version) return version.chave;
     }
     const asset = /^\/avatares\/([0-9a-f-]{36})\/arquivos\/([0-9a-f-]{36})$/.exec(path);
     if (asset) {

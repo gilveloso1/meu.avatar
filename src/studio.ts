@@ -969,7 +969,14 @@ export class Studio {
     const images = STRUCTURES.filter(madeAtOnce).map((s) => s.id);
     await this.db.failStaleImages(images, new Date(now.getTime() - IMAGE_TIMEOUT_MS).toISOString(), now.toISOString());
     const done: Video[] = [];
-    for (const video of await this.db.openVideos(limit)) done.push(await this.sync(video));
+    // Um por um: o vídeo que falha ao baixar ou guardar fica para a próxima rodada, sem parar os outros.
+    for (const video of await this.db.openVideos(limit)) {
+      try {
+        done.push(await this.sync(video));
+      } catch (err) {
+        console.error(`Conferência do vídeo ${video.id} falhou`, err);
+      }
+    }
     return done;
   }
 

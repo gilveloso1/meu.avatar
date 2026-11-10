@@ -120,10 +120,6 @@ export function cleanSpeech(speech: string): string {
     .trim();
 }
 
-export function countWords(text: string): number {
-  return text.split(/\s+/).filter(Boolean).length;
-}
-
 export function styleById(id: string): Style | undefined {
   return STYLES.find((s) => s.id === id);
 }

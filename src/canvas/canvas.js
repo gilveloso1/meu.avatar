@@ -292,8 +292,9 @@ function step(from, to) {
   if (!from.length) return;
   to.push(project);
   project = from.pop();
-  render();
+  // Antes de desenhar: um erro na tela não deixa o desfeito sem salvar.
   scheduleSave();
+  render();
 }
 
 /* ---------- desenho ---------- */
@@ -392,6 +393,8 @@ let chromeHtml = null;
 let wiresHtml = null;
 
 function render({ side = true } = {}) {
+  // O bloco escolhido sumiu (desfazer, ou a API tirou): fica sem seleção, em vez de quebrar o painel.
+  if (sel.type === "block" && !project.blocks.some((b) => b.id === sel.id)) sel = { type: null };
   const gs = M.groups(project);
   const idx = M.groupIndex(gs);
   const pf = previewFinal();
@@ -429,7 +432,7 @@ function render({ side = true } = {}) {
           else m.style.backgroundImage = `url("${u}")`;
         });
       // O vídeo mostra o próprio som numa faixa embaixo, na cor dele.
-      if (b.kind === "video")
+      if (b.kind === "video" && b.audio !== "none")
         thumb({ kind: "audio", src: b.src, dur: b.dur }).then((u) => {
           if (u && el.fonte === fonte) setWave($(".blk__wave", el), b.id, u);
         });
@@ -649,7 +652,7 @@ function renderSide(gs) {
       h += `<section class="viewer__section"><h3 class="viewer__title">Parâmetros</h3>${Object.entries(b.code.params)
         .map(([k, v]) => field(`f-param-${k}`, esc(k), String(v), `data-param="${esc(k)}" maxlength="500"`))
         .join("")}</section>`;
-    else
+    else if (b.kind !== "image")
       h += `<div class="text-field"><div class="fields-row">${field("f-tin", "Começa em (s)", b.tin.toFixed(1), 'type="number" step="0.1" min="0"')}${field("f-tout", "Termina em (s)", b.tout.toFixed(1), `type="number" step="0.1" max="${b.dur.toFixed(1)}"`)}</div></div>`;
     if (b.kind === "video" && !M.linked(b))
       h += `<section class="viewer__section"><h3 class="viewer__title">Som</h3>${b.audio === "none" ? `<p class="sheet-hint">Este vídeo não tem som.</p>` : `<p class="sheet-hint">O som deste vídeo está desvinculado.</p><button class="button button--outlined interactive" type="button" data-act="relink"><span class="icon">link</span>Vincular ao áudio</button>`}</section>`;
@@ -1250,7 +1253,7 @@ function fit() {
   applyView();
 }
 
-/* ---------- exportar (no site: o servidor monta; a tela chama um passo depois do outro) ---------- */
+/* ---------- exportar (no site: o servidor monta e dá os passos; a tela só acompanha) ---------- */
 
 let exportHidden = false;
 let exportNow = null;
@@ -1681,7 +1684,8 @@ vp.addEventListener("pointerdown", (e) => {
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeMenu();
-  if (e.target.closest("input, textarea, [popover]")) return;
+  // Com um diálogo aberto, as teclas são dele: nada de apagar ou desfazer o que está atrás.
+  if (e.target.closest("input, textarea, [popover]") || document.querySelector("dialog[open]")) return;
   const mod = e.ctrlKey || e.metaKey;
   if ((e.key === "Delete" || e.key === "Backspace") && sel.type) removeSelection();
   else if (mod && e.key.toLowerCase() === "z") step(e.shiftKey ? redo : undo, e.shiftKey ? undo : redo);
@@ -1698,5 +1702,5 @@ window.addEventListener("keydown", (e) => {
 applyView();
 render();
 requestAnimationFrame(fit);
-if (CONFIG.exportacao?.status === "running") followExport(CONFIG.exportacao).catch(() => toast(CONFIG.erros?.exportar ?? ""));
+if (CONFIG.exportacao?.status === "running") followExport(CONFIG.exportacao).catch(() => failExport(CONFIG.erros?.exportar));
 window.canvasDebug = { get project() { return project; }, get view() { return view; } };

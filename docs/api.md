@@ -1,8 +1,8 @@
 # API dos projetos
 
-Para um agente editar um projeto do canvas com o mesmo modelo da tela, sem navegador. Só o
-administrador, como o canvas; cada projeto é só de quem o criou. O código está em
-`src/api.ts` e `src/comandos.ts`. O servidor MCP e a transcrição vêm depois, por cima disto.
+Para um agente editar um projeto do canvas com o mesmo modelo da tela, sem navegador. Só a
+conta com a permissão `usar:api`; cada projeto é só de quem o criou. O código está em
+`src/api.ts` e `src/comandos.ts`; o servidor MCP (`src/mcp.ts`) fica por cima disto.
 
 ## Decisões
 
@@ -13,7 +13,7 @@ administrador, como o canvas; cada projeto é só de quem o criou. O código est
   `enquadrar` e `tempo` no `container/exportar.py`. Mudou um, mude o outro.
 - **Token, não sessão.** `Authorization: Bearer ma_...`. O banco guarda só o hash
   (`api_tokens`). O token abre `/api/v1/`, o arquivo de cada vídeo e de cada ativo (para baixar) e as rotas de arquivos e de exportação de um
-  projeto; não abre páginas, não apaga projeto, não salva JSON cru e não gera vídeo.
+  projeto; não abre páginas, não apaga projeto e não salva JSON cru. Gerar (vídeo, imagem, áudio) é em dois passos, com a confirmação (ver "Gerar", abaixo).
 - **Sem tela de tokens por enquanto**: só há o administrador. Ela entra quando a API
   abrir para outras contas.
 - **Revisão.** `projects.revision` sobe a cada mudança. Quem salva diz de qual revisão
@@ -40,7 +40,7 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - **Clientes antigos** (`initialize`, até 2025-11-25) seguem funcionando no mesmo endereço. Por
   padrão, até o SDK v2 ainda conecta assim.
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
-- Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `criar_avatar`, `editar_avatar`, `enviar_ativo`, `listar_vozes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
+- Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `criar_avatar`, `editar_avatar`, `enviar_ativo`, `listar_vozes`, `listar_animacoes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_cena` (a cena montada, com todas as camadas, em imagem), `inspecionar_animacao` (texto; imagem só com
   `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `listar_modelos`,
   `gerar_video` e `acompanhar_video`, `gerar_imagem` (devolve a imagem para o agente olhar), `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,

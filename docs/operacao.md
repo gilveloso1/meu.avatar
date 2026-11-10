@@ -47,9 +47,9 @@ O contêiner não tem acesso à internet (`enableInternet = false`).
 
 ## Edição rápida
 
-Botão "Edição rápida" no vídeo pronto das estruturas com `quickEdit` (hoje só
-o HeyGen). O botão abre a **prévia**, no próprio navegador e sem gerar
-arquivo: o script baixa o vídeo, acha os silêncios no áudio (Web Audio, pico
+Aba "Edição rápida" no vídeo pronto das estruturas com `quickEdit` (hoje o
+HeyGen, o Seedance e o Aleph). O "Gerar prévia" faz a **prévia**, no próprio navegador e sem gerar
+arquivo (abrir a aba não analisa nada): o script baixa o vídeo, acha os silêncios no áudio (Web Audio, pico
 a cada 10 ms) e toca o vídeo sem as pausas, com o zoom de cada trecho (um
 `scale` no vídeo). Pausas (curtas, médias, longas) e câmera (parada, zoom,
 close) mudam a prévia na hora, com uma linha explicando a opção escolhida; as
@@ -106,9 +106,10 @@ na altura): os olhos ficam na mesma posição da tela no aberto, no médio e no
 close, e o corte não faz a linha dos olhos pular. Pedir um instante qualquer do vídeo
 obrigava o ffmpeg a decodificar desde o quadro-chave anterior (o HeyGen põe
 um a cada 10 s): eram 67 s no contêiner; só com os quadros-chave, 3,8 s. A
-prévia pede o rosto (`GET /videos/<id>/rosto`) junto com o vídeo; na primeira
-vez o Worker manda o MP4 ao contêiner (`POST /rosto`, com a sua própria vez,
-para não esperar uma edição) e guarda o resultado na coluna `face`. A edição
+prévia pede o rosto guardado (`GET /videos/<id>/rosto`, coluna `face`) junto com o vídeo; sem
+rosto guardado, quem procura é o navegador (MediaPipe), que guarda o resultado no site. O servidor
+não procura (ligava o contêiner por cada arquivo novo): o `POST /rosto` do contêiner fica para o
+`rosto` do agente. A edição
 leva esse rosto no plano; sem ele, o `editar.py` acha sozinho. Sem rosto
 achado, amplia em torno de onde os olhos costumam ficar (centro, a 22% da
 altura).
@@ -148,8 +149,8 @@ todas em 0,16 s, ficaram entre 0,17 e 0,34 s; 11 cortes e 6 trocas de câmera,
 em vez de uma troca a cada corte; 40,2 s → 36,1 s.
 
 Parte da versão com o áudio tratado, se houver. O editado fica em
-`videos/<id>.editado.mp4`; o player passa a mostrar o editado, com "Ver
-original" ao lado, e o botão continua lá para refazer com outras escolhas. Se
+`videos/<id>.editado.mp4`; o player passa a mostrar o editado, com Original | Editado
+na aba, e o "Editar de novo" refaz com outras escolhas. Se
 falhar, o motivo aparece em "Detalhes".
 Uma edição que passa de 20 minutos vira falha.
 

@@ -60,7 +60,7 @@ Também no ar (04/11/2026), a **animação como código** (PRs 69 a 83; ver [can
 O `renderizar_html` fica para quem precisa do arquivo.
 
 Com isso o agente faz pelo MCP a pesquisa, o roteiro, a estrutura com rascunhos, os cortes, a
-legenda e os gráficos. Ainda não faz música, nem gera os vídeos (a pessoa gera no site).
+legenda e os gráficos, e gera os vídeos, as imagens e os áudios (`gerar_*`). Ainda não faz música.
 
 O primeiro projeto feito do zero só pelo MCP (Proposta do Lara Resende, 02/11/2026) chegou à
 estrutura completa com rascunhos e animações, e mostrou o que falta: a avaliação inteira do agente
@@ -171,8 +171,7 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
 No ar em <https://meuavatar.ia.br> (e no workers.dev). O que já funciona e
 **não deve ser desfeito**:
 
-- **Wan 3.0 pelo OpenRouter** como modelo padrão (`VIDEO_MODEL` no
-  `wrangler.jsonc`), com o formulário em partes: estilo, fala, instruções e
+- **Wan 3.0 pelo OpenRouter** como modelo padrão (`src/structures/wan.ts`), com o formulário em partes: estilo, fala, instruções e
   idioma (`src/prompt.ts`, explicado em `docs/prompt.md`).
 - **Tratamento do áudio no contêiner** (`src/audio.ts`, `container/`): todo
   vídeo pronto passa pela receita "E2" (recupera os picos, realce de voz por
@@ -268,9 +267,6 @@ caminho para mandar uma voz pronta e o modelo sincronizar a boca.
   prompt de sistema (ver o guia de prompt do modelo antes de reaproveitar o
   do Wan), a montagem do pedido e se o áudio passa pelo contêiner (decidir
   medindo). Começa com `access: "admin"`.
-- **Custo do Seedance**: ele cobra por tokens de vídeo, não por segundo; a
-  regra de custo das estruturas (`CostRule`) hoje só conhece preço por
-  segundo.
 - Testes para cada comportamento novo (`test/`, com a API falsa).
 
 ## 2. Trocar avatar

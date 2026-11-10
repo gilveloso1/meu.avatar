@@ -1,7 +1,8 @@
 # Gemini Nano Banana 2.1 (`google/gemini-nano-banana-2.1`)
 
 Modelo de imagem usado para trocar o rosto nos quadros-chave do
-[Runway Aleph 2](runway-aleph-2.md). Em teste pelo terminal, sem estrutura.
+[Runway Aleph 2](runway-aleph-2.md) e, no site, o modelo de imagem
+(estrutura `nano-banana`, `src/structures/imagem.ts`).
 
 Como chamar:
 

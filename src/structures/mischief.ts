@@ -49,7 +49,7 @@ export const MISCHIEF: Structure = {
   // Os mesmos SKUs do Grok: centavos por segundo de cada resolução.
   prices: GROK.prices,
 
-  sections(model: VideoModel | null, d) {
+  sections(model: VideoModel | null) {
     const durations = model?.supported_durations ?? [5];
     const resolutions = model?.supported_resolutions ?? ["720p"];
     const ratios = model?.supported_aspect_ratios ?? ["16:9"];

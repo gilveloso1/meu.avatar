@@ -12,7 +12,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
-import { CAMPOS, num, txt, voz } from "./agente";
+import { CAMPOS, txt } from "./agente";
 import { options } from "./wan";
 
 export const MAX_IMAGE_DESCRIPTION = 2000;
@@ -103,6 +103,8 @@ export const NANO_BANANA: Structure = {
     if (!description) throw new InputError(ERROS.descricao);
     if (description.length > MAX_IMAGE_DESCRIPTION) throw new InputError(ERROS.descricaoLonga(MAX_IMAGE_DESCRIPTION));
     const resolution = values("resolucao");
+    // Só as resoluções com preço conhecido: outra (o 4K que o modelo lista) sairia sem custo estimado.
+    if (resolution && !(resolution in IMAGE_TOKENS)) throw new InputError(ERROS.ajustesNaoAceitos);
     const aspectRatio = values("formato");
     // Quantas referências vão (o gerar_imagem do MCP diz; o formulário do site manda uma só).
     const count = Number(values("referencias")) || 1;

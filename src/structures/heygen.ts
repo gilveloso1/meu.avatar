@@ -14,7 +14,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Option, type Structure, type VoiceOption } from "./types";
-import { CAMPOS, num, txt, voz } from "./agente";
+import { CAMPOS, txt, voz } from "./agente";
 import { options } from "./wan";
 
 export const MAX_SCRIPT = 1500;

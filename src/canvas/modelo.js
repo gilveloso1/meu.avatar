@@ -1,6 +1,6 @@
 /**
  * O que o canvas significa, tirado só da posição dos blocos e das linhas.
- * Os dois protótipos (código próprio e tldraw) usam estas mesmas funções.
+ * A tela (canvas.js), o servidor (src/comandos.ts) e os testes usam estas mesmas funções.
  *
  * Projeto: { blocks, finals, edges }
  *   bloco: { id, kind: "video" | "image" | "audio", name, src, dur, tin, tout,
