@@ -52,6 +52,9 @@ describe("pastas dos ativos", () => {
     // O contador conta os arquivos, não as pastas.
     expect(lista).toContain('<span class="pane__count" data-library-count>1</span>');
     expect(lista).toContain('type="button" data-folder-new');
+    // O diálogo de apagar só diz quantos itens a pasta tem (o script põe o número) e dá as opções.
+    expect(lista).toContain('data-with-items="Apagar os itens também?"');
+    expect(lista).toMatch(/name="itens" value="manter"[^>]*>Apagar pasta<[\s\S]{0,200}name="itens" value="apagar" hidden>/);
     expect(lista).not.toContain('class="crumbs"');
     // Os rótulos dos diálogos não usam data-rename: é o atributo do campo Nome (o script o trata como formulário).
     expect(lista).not.toMatch(/<(?:h2|button)[^>]* data-rename/);

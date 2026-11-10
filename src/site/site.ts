@@ -2406,7 +2406,7 @@ function folderLead(avatar: Avatar, assets: AvatarAsset[], folders: Folder[], cu
       </dialog>
       <dialog class="dialog" id="pasta-apagar" aria-labelledby="pasta-apagar-titulo">
         <h2 class="dialog__title" id="pasta-apagar-titulo">Apagar a pasta?</h2>
-        <p class="dialog__text" data-with-items="Quer apagar junto os itens da pasta? Se não, eles voltam para a lista de ativos." data-empty="A pasta está vazia.">A pasta está vazia.</p>
+        <p class="dialog__text" data-with-items="Apagar os itens também?" data-empty="A pasta está vazia.">A pasta está vazia.</p>
         <form method="post" action="" id="pasta-apagar-form"></form>
         <div class="dialog__actions">
           <button class="button button--text interactive dialog__start" type="submit" form="pasta-apagar-fechar">Cancelar</button>
