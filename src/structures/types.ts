@@ -118,6 +118,8 @@ export interface Built {
   request: Omit<VideoRequest, "model" | "callback_url" | "frame_images" | "input_references">;
   /** Como a foto vai para o modelo: primeiro quadro ou referência. */
   image: "first_frame" | "reference" | null;
+  /** A imagem do último quadro (NewVideoInput.lastFrame), se houver, vai como `last_frame`. */
+  lastFrame?: boolean;
   /** O vídeo enviado vai como referência (só o Seedance 2 em diante aceita). */
   video?: boolean;
   /**

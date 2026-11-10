@@ -17,6 +17,7 @@ import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
 import { MAX_IMAGE_REFERENCES, NANO_BANANA } from "./structures/imagem";
 import { FISH } from "./structures/voz";
+import { MAX_WAN_REFERENCES, WAN_LIVRE } from "./structures/wan-livre";
 import { criarEnvio, MAX_ATIVO, MAX_AVATAR_DESCRIPTION, receberAtivo, uso } from "./ativos";
 import { MEDIA_TYPES, mediaType } from "./arquivos";
 import { base64, ForbiddenError, type Studio } from "./studio";
@@ -58,6 +59,8 @@ const assetSrc = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`
 
 /** Os modelos de fala que a conta usa, para o agente saber o que pôr em modelo. */
 const falas = (user: User) => STRUCTURES.filter((s) => makesAudio(s) && canUse(s, user)).map((s) => ({ id: s.id, nome: s.name }));
+/** Os tipos de foto que os modelos recebem. */
+const FOTO = /^image\/(jpeg|png|webp)$/;
 const falha = (status: number, erro: string, extra: Record<string, unknown> = {}) => Response.json({ erro, ...extra }, { status });
 
 /** O contêiner não respondeu nem nas novas tentativas (src/conteiner.ts): o agente tenta mais tarde. */
@@ -260,7 +263,7 @@ export class Api {
     if (path === "/api/v1/audios") return post ? this.generateAudio(request, user) : falha(405, "metodo_invalido");
     const video = /^\/api\/v1\/videos\/([0-9a-f-]{36})$/.exec(path);
     if (video) return post ? falha(405, "metodo_invalido") : this.followVideo(user, video[1]!);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video|cena))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video|wan|cena))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
@@ -270,6 +273,7 @@ export class Api {
     if (m[2] === "animacao") return post ? falha(405, "metodo_invalido") : this.inspectCode(project, url);
     if (m[2] === "imagem") return post ? this.generateImage(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "video") return post ? this.generateVideo(request, user, project) : falha(405, "metodo_invalido");
+    if (m[2] === "wan") return post ? this.generateWan(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "cena") return post ? falha(405, "metodo_invalido") : this.scene(user, project, url);
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(","), url));
@@ -600,22 +604,8 @@ export class Api {
     if (texto("audio") && !direta) return falha(400, "audio_indisponivel");
     if (!texto("audio") && !texto("fala").trim()) return falha(400, "fala_obrigatoria");
 
-    /** O arquivo de um src do projeto, se for de um desses tipos. */
-    const arquivo = async (src: string, tipos: RegExp, nome: string): Promise<File | Response> => {
-      let key: string;
-      try {
-        key = await this.exports.source(project, user, src);
-      } catch (err) {
-        if (err instanceof InputError) return falha(404, "arquivo_indisponivel", { src });
-        throw err;
-      }
-      const object = await this.media.get(key);
-      const type = object?.httpMetadata?.contentType ?? "";
-      if (!object) return falha(404, "arquivo_indisponivel", { src });
-      if (!tipos.test(type)) return falha(400, `${nome}_tipo_invalido`, { tipo: type });
-      return new File([await object.arrayBuffer()], nome, { type });
-    };
-    const image = await arquivo(texto("foto"), /^image\/(jpeg|png|webp)$/, "foto");
+    const arquivo = (src: string, tipos: RegExp, nome: string) => this.projectFile(project, user, src, tipos, nome);
+    const image = await arquivo(texto("foto"), FOTO, "foto");
     if (image instanceof Response) return image;
     const audio = texto("audio") ? await arquivo(texto("audio"), /^audio\/(mpeg|mp3|wav|x-wav|wave)$/, "audio") : null;
     if (audio instanceof Response) return audio;
@@ -650,6 +640,81 @@ export class Api {
     } catch (err) {
       if (err instanceof ForbiddenError) return falha(404, "nao_encontrado");
       // Voz que não existe, fala longa, formato fora do modelo: a frase diz o que fazer.
+      if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
+      throw err;
+    }
+  }
+
+  /** O arquivo de um src do projeto, se for de um desses tipos; senão, a resposta de erro. */
+  private async projectFile(project: Project, user: User, src: string, tipos: RegExp, nome: string): Promise<File | Response> {
+    let key: string;
+    try {
+      key = await this.exports.source(project, user, src);
+    } catch (err) {
+      if (err instanceof InputError) return falha(404, "arquivo_indisponivel", { src });
+      throw err;
+    }
+    const object = await this.media.get(key);
+    const type = object?.httpMetadata?.contentType ?? "";
+    if (!object) return falha(404, "arquivo_indisponivel", { src });
+    if (!tipos.test(type)) return falha(400, `${nome}_tipo_invalido`, { tipo: type });
+    return new File([await object.arrayBuffer()], nome, { type });
+  }
+
+  /**
+   * Gera um vídeo com o Wan 3.0 e tudo o que ele aceita (gerar_video_wan): a cena escrita inteira,
+   * primeiro e último quadro ou imagens de referência (não os dois: com quadros, o OpenRouter
+   * ignora as referências), som ou não, semente, duração, resolução e formato.
+   */
+  private async generateWan(request: Request, user: User, project: Project): Promise<Response> {
+    if (!this.studio) return falha(503, "criacao_pausada");
+    if (!canUse(WAN_LIVRE, user)) return falha(404, "nao_encontrado");
+    if (!this.studio.canGenerateWith(WAN_LIVRE)) return falha(503, "criacao_pausada");
+    const body = await json(request);
+    const texto = (k: string) => (typeof body?.[k] === "string" ? (body[k] as string) : "");
+    if (!texto("cena").trim()) return falha(400, "cena_obrigatoria");
+    const data = JSON.parse(project.data) as CanvasProject;
+    const final = texto("final") ? data.finals.find((f) => f.id === body!.final) : data.finals[0];
+    if (texto("final") && !final) return falha(400, "final_inexistente");
+    const referencias = Array.isArray(body?.referencias) ? (body.referencias as unknown[]).filter((r): r is string => typeof r === "string" && r !== "") : [];
+    if ((texto("foto") || texto("ultimoQuadro")) && referencias.length) return falha(400, "quadros_ou_referencias");
+    if (referencias.length > MAX_WAN_REFERENCES) return falha(400, "referencias_demais", { maximo: MAX_WAN_REFERENCES });
+    if (body?.semente !== undefined && !(Number.isInteger(body.semente) && (body.semente as number) >= 0 && (body.semente as number) < 2 ** 32)) return falha(400, "semente_invalida");
+
+    const imagens: File[] = [];
+    for (const src of referencias) {
+      const f = await this.projectFile(project, user, src, FOTO, "referencia");
+      if (f instanceof Response) return f;
+      imagens.push(f);
+    }
+    const foto = texto("foto") ? await this.projectFile(project, user, texto("foto"), FOTO, "foto") : null;
+    if (foto instanceof Response) return foto;
+    const ultimo = texto("ultimoQuadro") ? await this.projectFile(project, user, texto("ultimoQuadro"), FOTO, "ultimoQuadro") : null;
+    if (ultimo instanceof Response) return ultimo;
+    const [primeira = null, ...references] = imagens;
+
+    const fields: Record<string, string> = {
+      cena: texto("cena"),
+      foto: primeira ? "referencia" : "quadro",
+      som: body?.som === false ? "nao" : "sim",
+      semente: body?.semente !== undefined ? String(body.semente) : "",
+      duracao: body?.duracao !== undefined ? String(body.duracao) : "5",
+      resolucao: texto("resolucao") || "720p",
+      formato: texto("formato") || (final ? output(final).format : "9:16"),
+    };
+    const values = (name: string) => fields[name] ?? "";
+    const avatar = /^\/avatares\/([0-9a-f-]{36})\/arquivos\//.exec(texto("foto") || referencias[0] || "")?.[1] ?? null;
+    try {
+      const v = await this.studio.create({ structure: WAN_LIVRE, values, image: foto ?? primeira, references, lastFrame: ultimo, avatarId: avatar, user });
+      if (v.status === "failed") return falha(502, "video_falhou", { id: v.id });
+      const custo = estimate(WAN_LIVRE, await this.studio.modelOf(WAN_LIVRE), values);
+      return Response.json(
+        { video: { id: v.id, status: v.status, duracao: v.duration, custoEstimado: custo !== undefined ? +custo.toFixed(2) : null, resolucao: v.resolution, formato: v.aspect_ratio } },
+        { status: 201 },
+      );
+    } catch (err) {
+      if (err instanceof ForbiddenError) return falha(404, "nao_encontrado");
+      // Duração, resolução ou formato fora do modelo, cena longa: a frase diz o que fazer.
       if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
       throw err;
     }

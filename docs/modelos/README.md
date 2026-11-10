@@ -25,6 +25,7 @@ caminho no R2).
 | Modelo | Uso | Estado | Estrutura |
 |---|---|---|---|
 | [Wan 3.0](wan-3.0.md) (`alibaba/wan-3.0`) | Avatar falando, a partir da foto e da fala | No ar | `wan.ts` |
+| [Wan 3.0 livre](wan-3.0.md#wan-30-livre-wan-livrets-10112026) (`alibaba/wan-3.0`) | Cena livre para o agente: texto, primeiro e último quadro, referências, som, semente | Em teste, só o administrador; sem teste real ainda | `wan-livre.ts` |
 | [HeyGen Avatar IV](heygen-avatar-iv.md) (`heygen/avatar-iv`) | Avatar falando, voz pronta da HeyGen | Em teste. A API direta da HeyGen sai mais barata (US$ 0,0385/s, contra US$ 0,05/s) e aceita áudio próprio e voz clonada | `heygen.ts` |
 | [Seedance 2.0](seedance-2.0.md) (`bytedance/seedance-2.0`) | Trocar avatar (vídeo + foto) | **Bloqueado** para vídeo com rosto realista | `seedance.ts` |
 | [Runway Aleph 2](runway-aleph-2.md) (`runway/aleph-2`) | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | Em teste: a receita do terceiro teste troca o avatar e mantém o áudio. Cobrou US$ 1,40 por pedido até 20 s, mais ≈ US$ 0,22 de imagens | `aleph.ts` |

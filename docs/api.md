@@ -43,9 +43,9 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `criar_avatar`, `editar_avatar`, `enviar_ativo`, `listar_vozes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_cena` (a cena montada, com todas as camadas, em imagem), `inspecionar_animacao` (texto; imagem só com
   `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `gerar_imagem` (devolve
-  a imagem para o agente olhar), `gerar_video` e `acompanhar_video`, `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
+  a imagem para o agente olhar), `gerar_video`, `gerar_video_wan` e `acompanhar_video`, `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
   `exportar` e `acompanhar_exportacao`, mais `listar_ferramentas` e `usar_ferramenta`. Não apagam projeto. Só `gerar_imagem` (uns US$ 0,04 por
-  imagem em 1K), `gerar_video` e `gerar_audio` gastam créditos de modelo.
+  imagem em 1K), `gerar_video`, `gerar_video_wan` e `gerar_audio` gastam créditos de modelo.
 - **Gerar vídeo** (desde 08/11/2026): `gerar_video` faz o avatar falar com o HeyGen Avatar, o
   mesmo modelo e a mesma plataforma do site (a config `plataforma.heygen`; no ar, a API direta, a
   US$ 0,0385 por segundo). Recebe a foto (src de imagem: ativo, arquivo do projeto ou imagem
@@ -56,6 +56,18 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   instruções do servidor pedem ao agente que mostre o texto, a voz e o custo à pessoa e só gere
   com o sim dela. Rotas: `POST /api/v1/projetos/<id>/video`, `GET /api/v1/videos/<id>` e
   `GET /api/v1/vozes`.
+- **Wan 3.0 com tudo** (desde 10/11/2026): `gerar_video_wan` (`POST /api/v1/projetos/<id>/wan`,
+  estrutura `wan-livre.ts`, versão "Livre" do Wan, só o administrador) gera com o Wan 3.0 o que o
+  `gerar_video` não faz. `{cena, foto?, ultimoQuadro?, referencias?, som?, semente?, duracao?,
+  resolucao?, formato?, final?}`: a `cena` é o prompt inteiro (a fala entre aspas, com o idioma);
+  `foto` e `ultimoQuadro` são o primeiro e o último quadro (imagem para vídeo) e `referencias`, até
+  4 imagens que guiam a cena (referência para vídeo). Quadros e referências não vão juntos
+  (`quadros_ou_referencias`): com os dois, o OpenRouter trata como imagem para vídeo. `som: false`
+  tira o som (e o tratamento de áudio); `duracao` de 2 a 30 s (padrão 5), `resolucao` 480p, 720p
+  (padrão) ou 1080p, `formato` o do Final. Responde como o `gerar_video`, com o custo estimado
+  (US$ 0,05, 0,10 ou 0,20 por segundo); segue no `acompanhar_video`. Erros: `cena_obrigatoria`,
+  `quadros_ou_referencias`, `referencias_demais`, `semente_invalida`, `arquivo_indisponivel`,
+  `foto_tipo_invalido` (e `referencia_`, `ultimoQuadro_`), `final_inexistente`, `pedido_invalido`.
 - **Avatares** (desde 08/11/2026): `criar_avatar` (nome e descrição), `editar_avatar` (nome,
   descrição e qual ativo enviado é a foto principal ou a voz para clonagem; `""` tira) e
   `enviar_ativo`, que põe um arquivo nos ativos de um avatar sem base64 (o agente não conseguia

@@ -446,6 +446,20 @@ describe("tratamento do áudio", () => {
     return { api, studio };
   }
 
+  it("o Wan 3.0 livre sem som não entra na fila; com som, entra", async () => {
+    for (const [som, esperado] of [["nao", null], ["sim", "pending"]] as const) {
+      await env.DB.prepare("DELETE FROM videos").run();
+      const api = new FakeVideoApi();
+      const audio = new FakeAudioApi();
+      await post(api, { cena: "a câmera se aproxima devagar", som, duracao: "5", resolucao: "480p", formato: "9:16" }, "wan-livre", audio);
+      expect(api.submitted[0]).toMatchObject({ generate_audio: som === "sim" });
+      api.finish("job-1", { status: "completed", usage: { cost: 0.25 } });
+      await createStudio({ ...env, SITE_URL: SITE }, { api, audio }).syncOpen();
+      const [video] = await new Db(env.DB).recentVideos();
+      expect(video).toMatchObject({ structure: "wan-livre", status: "completed", audio_status: esperado });
+    }
+  });
+
   it("o vídeo pronto entra na fila; o agendamento trata e guarda a versão tratada ao lado do original", async () => {
     const audio = new FakeAudioApi();
     const { api, studio } = await prontoParaTratar(audio);

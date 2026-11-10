@@ -11,11 +11,12 @@ import { SEEDANCE } from "./seedance";
 import type { CostRule, Structure, Values } from "./types";
 import { ELEVENLABS, FISH } from "./voz";
 import { WAN } from "./wan";
+import { WAN_LIVRE } from "./wan-livre";
 
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, HEYGEN_AVATAR, GROK, OMNI, OMNI_11, SEEDANCE, ALEPH, NANO_BANANA, ELEVENLABS, FISH];
+export const STRUCTURES: Structure[] = [WAN, WAN_LIVRE, HEYGEN_AVATAR, GROK, OMNI, OMNI_11, SEEDANCE, ALEPH, NANO_BANANA, ELEVENLABS, FISH];
 
 /** As versões do mesmo modelo (a principal primeiro); sem versões, só ela. */
 export function familyOf(structure: Structure): Structure[] {
