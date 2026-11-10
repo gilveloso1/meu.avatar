@@ -12,6 +12,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
+import { CAMPOS, num, txt, voz } from "./agente";
 import { options } from "./wan";
 
 export const MAX_IMAGE_DESCRIPTION = 2000;
@@ -39,6 +40,18 @@ export const NANO_BANANA: Structure = {
   summary: "Cria a imagem inicial do vídeo, com ou sem foto de referência.",
   icon: "image",
   access: "admin",
+  agent: {
+    use: "Gera uma imagem fotorrealista (o esboço de uma cena, a foto de um avatar numa cena nova), com ou sem imagens de referência; sai na hora e volta para você conferir.",
+    fields: {
+      descricao: `A cena: quem aparece, onde, a luz e o enquadramento. Até ${MAX_IMAGE_DESCRIPTION} caracteres. Obrigatória.`,
+      referencias: `Até ${MAX_IMAGE_REFERENCES} src de imagem, na ordem (imagem 1, imagem 2...): a foto de um ativo, um arquivo do projeto ou outra imagem gerada; diga na descrição o que vem de cada uma. Com uma, a pessoa e o que a descrição não muda seguem ela.`,
+      resolucao: CAMPOS.resolucao,
+      formato: CAMPOS.formato,
+    },
+    required: ["descricao"],
+    maxReferences: MAX_IMAGE_REFERENCES,
+    values: (a) => ({ descricao: txt(a, "descricao"), referencias: String(Array.isArray(a.referencias) ? a.referencias.length : 0), resolucao: txt(a, "resolucao"), formato: txt(a, "formato") }),
+  },
   output: "image",
   treatAudio: false,
   quickEdit: false,

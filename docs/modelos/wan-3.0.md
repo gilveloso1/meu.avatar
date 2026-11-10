@@ -6,7 +6,7 @@ trata o áudio. Medições em `docs/prompt.md` e `docs/backlog.md`.
 ## Wan 3.0 livre (`wan-livre.ts`, 10/11/2026)
 
 Em teste, só para o administrador: o mesmo modelo com tudo o que o OpenRouter aceita dele, para o
-agente (`gerar_video_wan` do MCP) e como versão "Livre" na página do Wan. A cena é o prompt inteiro,
+agente (`gerar_video {modelo: "wan-livre"}` do MCP) e como versão "Livre" na página do Wan. A cena é o prompt inteiro,
 sem o molde do `src/prompt.ts`.
 
 - **Texto para vídeo**: só a cena.

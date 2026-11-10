@@ -42,32 +42,49 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
 - Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `criar_avatar`, `editar_avatar`, `enviar_ativo`, `listar_vozes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_cena` (a cena montada, com todas as camadas, em imagem), `inspecionar_animacao` (texto; imagem só com
-  `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `gerar_imagem` (devolve
-  a imagem para o agente olhar), `gerar_video`, `gerar_video_wan` e `acompanhar_video`, `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
-  `exportar` e `acompanhar_exportacao`, mais `listar_ferramentas` e `usar_ferramenta`. Não apagam projeto. Só `gerar_imagem` (uns US$ 0,04 por
-  imagem em 1K), `gerar_video`, `gerar_video_wan` e `gerar_audio` gastam créditos de modelo.
-- **Gerar vídeo** (desde 08/11/2026): `gerar_video` faz o avatar falar com o HeyGen Avatar, o
-  mesmo modelo e a mesma plataforma do site (a config `plataforma.heygen`; no ar, a API direta, a
-  US$ 0,0385 por segundo). Recebe a foto (src de imagem: ativo, arquivo do projeto ou imagem
-  gerada), a fala e a voz de `listar_vozes` (pronta ou clonada, com a voz dos avatares), ou um
-  áudio no lugar das duas (só na API direta); expressividade, movimento, resolução e formato (o do
-  Final, sem isso). Responde na hora com o id, a duração e o custo estimados; o vídeo leva minutos,
-  e `acompanhar_video` diz gerando, pronto (com o src e o `usar` do `adicionar`) ou falhou. As
-  instruções do servidor pedem ao agente que mostre o texto, a voz e o custo à pessoa e só gere
-  com o sim dela. Rotas: `POST /api/v1/projetos/<id>/video`, `GET /api/v1/videos/<id>` e
-  `GET /api/v1/vozes`.
-- **Wan 3.0 com tudo** (desde 10/11/2026): `gerar_video_wan` (`POST /api/v1/projetos/<id>/wan`,
-  estrutura `wan-livre.ts`, versão "Livre" do Wan, só o administrador) gera com o Wan 3.0 o que o
-  `gerar_video` não faz. `{cena, foto?, ultimoQuadro?, referencias?, som?, semente?, duracao?,
-  resolucao?, formato?, final?}`: a `cena` é o prompt inteiro (a fala entre aspas, com o idioma);
-  `foto` e `ultimoQuadro` são o primeiro e o último quadro (imagem para vídeo) e `referencias`, até
-  4 imagens que guiam a cena (referência para vídeo). Quadros e referências não vão juntos
-  (`quadros_ou_referencias`): com os dois, o OpenRouter trata como imagem para vídeo. `som: false`
-  tira o som (e o tratamento de áudio); `duracao` de 2 a 30 s (padrão 5), `resolucao` 480p, 720p
-  (padrão) ou 1080p, `formato` o do Final. Responde como o `gerar_video`, com o custo estimado
-  (US$ 0,05, 0,10 ou 0,20 por segundo); segue no `acompanhar_video`. Erros: `cena_obrigatoria`,
-  `quadros_ou_referencias`, `referencias_demais`, `semente_invalida`, `arquivo_indisponivel`,
-  `foto_tipo_invalido` (e `referencia_`, `ultimoQuadro_`), `final_inexistente`, `pedido_invalido`.
+  `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `listar_modelos`,
+  `gerar_video` e `acompanhar_video`, `gerar_imagem` (devolve a imagem para o agente olhar), `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
+  `exportar` e `acompanhar_exportacao`, mais `listar_ferramentas` e `usar_ferramenta`. Não apagam projeto. Só `gerar_video`, `gerar_imagem` e
+  `gerar_audio` gastam créditos de modelo, e só na segunda chamada (ver "Gerar", abaixo).
+- **Gerar** (desde 10/11/2026; antes, uma ferramenta por modelo): três ferramentas, uma por tipo de
+  arquivo, e todas pedem o `modelo`, **sem padrão**: `gerar_video` (`POST /api/v1/projetos/<id>/video`),
+  `gerar_imagem` (`POST /api/v1/projetos/<id>/imagem`) e `gerar_audio` (`POST /api/v1/audios`).
+  - **`listar_modelos`** (`GET /api/v1/modelos?tipo=video|imagem|audio`) diz os modelos que a conta
+    pode usar (os em teste só com `usar:modelo:teste`): `{id, nome, tipo, usar, campos, obrigatorios,
+    duracoes?, resolucoes?, formatos?, preco: {por: segundo|caractere|imagem, dolares}}`. O `usar` é
+    quando escolher o modelo; `campos`, o que cada campo é nele. Quem descreve é a própria estrutura
+    (`agent` em `src/structures/`, com `values`, que leva os campos ao formulário do site); modelo
+    novo com `agent` aparece sozinho, sem mexer no MCP. Hoje: `wan`, `wan-livre`, `heygen`, `grok`,
+    `mischief`, `omni` (vídeo), `nano-banana` (imagem), `elevenlabs` e `fish` (áudio). O Seedance e o
+    Aleph (troca de avatar) ficam só no site.
+  - **Dois passos.** Sem `confirmacao`, a chamada só simula: confere tudo como o site (campos,
+    arquivos, o que o modelo aceita) sem gastar nem guardar, e responde `{simulacao: true, modelo,
+    custoEstimado, duracao?, resolucao?, formato?, confirmacao, proximo}`. O agente mostra à pessoa o
+    modelo, o pedido e o custo e, com o sim dela, chama de novo com os mesmos campos e a
+    `confirmacao`. O código é um resumo do pedido (conta, tipo, projeto, modelo e campos): qualquer
+    campo diferente dá `confirmacao_invalida` (409) e pede outra simulação.
+  - **Campos** (cada modelo aceita os seus, ver `listar_modelos`): vídeo `cena` (a cena, o movimento
+    ou os gestos), `fala`, `voz` (de `listar_vozes` com o mesmo modelo), `idioma`, `estilo`, `foto`
+    (primeiro quadro), `ultimoQuadro`, `referencias` (imagens que guiam, nunca com quadros:
+    `quadros_ou_referencias`), `audio` (a fala pronta: de `gerar_audio` ou o som de uma exportação),
+    `som`, `semente`, `expressividade`, `consentimento`, `duracao`, `resolucao`, `formato`; imagem
+    `descricao` e `referencias`; áudio `texto`, `voz` e `consentimento`. Os arquivos são `src` do
+    projeto. O que faltar de duração, resolução, formato, estilo, idioma e expressividade fica com o
+    padrão do formulário do site (o formato, com o do Final: `final`, ou o primeiro; sem Final, 9:16).
+  - **Respostas**: vídeo `{video: {id, modelo, status, duracaoEstimada, custoEstimado, resolucao,
+    formato}}` e o `acompanhar_video` (`GET /api/v1/videos/<id>`) diz gerando, pronto (com o src e o
+    `usar` do `adicionar`) ou falhou; imagem `{imagem: {id, src, modelo, resolucao, formato, custo}}`,
+    na hora, com a `previa` em base64 que o MCP mostra; áudio `{audio: {id, src, duracao, custo, modelo,
+    voz, clonada?}, usar: {audio}}`, na hora.
+  - **Erros**: `modelo_obrigatorio` (com os `modelos`), `modelo_inexistente` (404, idem),
+    `campo_nao_aceito` (com os `aceitos`; também o `audio` onde o modelo, na plataforma em uso, não
+    recebe áudio), `campo_obrigatorio`, `quadros_ou_referencias`, `referencias_demais` (com o
+    `maximo`), `arquivo_indisponivel`, `<campo>_tipo_invalido`, `final_inexistente`,
+    `confirmacao_invalida` (409), `pedido_invalido` (com o `motivo`, a frase do site),
+    `video_falhou`, `imagem_falhou`, `audio_falhou` (502) e `criacao_pausada` (503). Conta sem nenhum
+    modelo do tipo: 404.
+  - `listar_vozes` (`GET /api/v1/vozes?modelo=`) também pede o modelo: `heygen`, `fish` ou
+    `elevenlabs`; sem ele, `modelo_obrigatorio` com os que têm voz.
 - **Avatares** (desde 08/11/2026): `criar_avatar` (nome e descrição), `editar_avatar` (nome,
   descrição e qual ativo enviado é a foto principal ou a voz para clonagem; `""` tira) e
   `enviar_ativo`, que põe um arquivo nos ativos de um avatar sem base64 (o agente não conseguia
@@ -87,16 +104,12 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   API) e o dono do avatar; aceita só os tipos de `MEDIA_TYPES` e o tamanho máximo (imagem 10 MB,
   vídeo e áudio 50 MB), sem CORS. Vencido, usado, de outra conta ou inexistente: `envio_invalido` (404).
 - **Gerar áudio** (desde 08/11/2026): `gerar_audio` faz uma fala (MP3) com um modelo de fala, o
-  mesmo do site: `modelo` `fish` (padrão, uns US$ 0,002 por minuto) ou `elevenlabs`. Recebe o
-  `texto`, com as emoções em inglês entre colchetes (a lista vai na descrição da ferramenta), e a
-  `voz` de `listar_vozes` com o mesmo `modelo`: pronta ou, no Fish, clonada (as da pessoa e a de
-  cada avatar com gravação; a do avatar pede `consentimento: true` no primeiro uso). Clonar uma voz
-  nova com uma gravação ainda é só no site. Responde na hora, com o áudio pronto:
-  `{audio: {id, src, duracao, custo, modelo, voz, clonada?}, usar: {audio}}`; o `usar` vai no
-  `adicionar` e o `src` é o `audio` do `gerar_video`. Rotas: `POST /api/v1/audios` e
-  `GET /api/v1/vozes?modelo=`. Erros: `modelo_inexistente` (404, com os `modelos` da conta),
-  `texto_obrigatorio`, `voz_obrigatoria`, `pedido_invalido` (com `motivo`), `audio_falhou` (502) e
-  `criacao_pausada` (503).
+  mesmo do site: `fish` (uns US$ 0,002 por minuto) ou `elevenlabs`, nos dois passos de "Gerar". O
+  `texto` leva as emoções em inglês entre colchetes (a lista vai na descrição da ferramenta); a `voz`
+  é de `listar_vozes` com o mesmo `modelo`: pronta ou, no Fish, clonada (as da pessoa e a de cada
+  avatar com gravação; a do avatar pede `consentimento: true` no primeiro uso). Clonar uma voz nova
+  com uma gravação ainda é só no site. O `usar` vai no `adicionar` e o `src` é o `audio` do
+  `gerar_video`.
 
 ```bash
 claude mcp add --transport http meu-avatar https://meuavatar.ia.br/mcp --header "Authorization: Bearer ma_..."
@@ -128,7 +141,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida: `{duracao, silencios, som}`; arquivo sem faixa de áudio (como o WebM do render) vem com `som: false` e nenhum silêncio |
 | `POST /api/v1/projetos/<id>/html` `{nome, html, duracao, final?}` | Faz um WebM transparente do HTML e o guarda nos arquivos do projeto: `{arquivo: {id, nome, tipo, src}, largura, altura}` |
 | `POST /api/v1/projetos/<id>/legenda` `{grupo, revisao, bloco?, simular?, palavras?, semTexto?, fontes?, estilo?, final?, nome?}` | Legenda palavra a palavra do grupo, como animação em código por cima dele (com `bloco`, troca o código e o tempo de uma legenda que já existe). Responde como os comandos, com `legenda: {palavras, trechos}`; com `simular`, só `{duracao, palavras, trechos}`, sem mexer no projeto |
-| `POST /api/v1/projetos/<id>/imagem` `{descricao, referencia?, referencias?, resolucao?, formato?, final?, previa?}` | Gera uma imagem com o Nano Banana 2.1 (gasta créditos) e responde na hora: `{imagem: {id, src, resolucao, formato, custo}}`; com `previa: true`, também `previa` (a imagem em base64) e `previaTipo`. `formato` padrão: o do Final (`final`, ou o primeiro); `resolucao`: `1K` (padrão) ou `2K`. `referencia` é o `src` de uma imagem (ativo, arquivo do projeto ou outra imagem gerada): a pessoa e o que a descrição não muda seguem ela. `referencias` é uma lista de `src` (até 6, com a `referencia` contando e vindo antes), na ordem em que vão ao modelo: a descrição diz o que vem de cada uma ("imagem 1", "imagem 2"), para juntar a pessoa de uma com o produto ou o lugar de outra. A imagem também fica na lista do modelo no site. Erros: `descricao_obrigatoria`, `arquivo_indisponivel` e `referencia_nao_e_imagem` (com a `referencia` que falhou), `referencias_demais` (com o `maximo`), `final_inexistente`, `pedido_invalido` (com `motivo`, como formato que o modelo não aceita), `imagem_falhou` (502, com o `id`) e `criacao_pausada` (503, sem a chave) |
+| `POST /api/v1/projetos/<id>/imagem` `{modelo, descricao, referencias?, resolucao?, formato?, final?, previa?, confirmacao?}` | Gera uma imagem (ver "Gerar": dois passos, modelo obrigatório). `referencias` é uma lista de `src` (até 6 no Nano Banana), na ordem em que vão ao modelo: a descrição diz o que vem de cada uma ("imagem 1", "imagem 2"); com uma, a pessoa e o que a descrição não muda seguem ela. Com `previa: true`, a resposta traz a imagem em base64 (`previa`, `previaTipo`). A imagem também fica na lista do modelo no site |
 | `POST /api/v1/projetos/<id>/limpar` `{apagar?}` | Os arquivos do projeto que nenhum bloco usa: `{arquivos: [{id, nome, tipo, tamanho}], tamanho}`. Com `apagar: true`, apaga de vez (do banco e do R2); durante uma exportação, `409 exportando` |
 | `GET /api/v1/projetos/<id>/transcricao?src=` | A fala com o tempo de cada palavra: `{idioma, duracao, texto, palavras: [{palavra, inicio, fim}]}` |
 

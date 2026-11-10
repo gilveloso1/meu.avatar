@@ -12,6 +12,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
+import { CAMPOS, num, txt, voz } from "./agente";
 import { options, WAN } from "./wan";
 
 export const MAX_WAN_SCENE = 2000;
@@ -27,6 +28,31 @@ export const WAN_LIVRE: Structure = {
   summary: "A cena escrita inteira, com quadros, referências, som e semente.",
   icon: "movie",
   access: "admin",
+  agent: {
+    use: "A cena escrita inteira (com a fala entre aspas e o idioma, se alguém fala; a voz sai do modelo): só texto, entre um primeiro e um último quadro ou a partir de referências, com ou sem som, 2 a 30 s.",
+    fields: {
+      cena: "O prompt inteiro: quem aparece, o que faz, a câmera, a luz e a fala entre aspas com o idioma. Até 2.000 caracteres. Obrigatória.",
+      foto: `${CAMPOS.foto} Opcional.`,
+      ultimoQuadro: "src da imagem do último quadro: o vídeo termina nela. Opcional.",
+      referencias: `Até ${MAX_WAN_REFERENCES} src de imagem que guiam a cena (a pessoa, o produto, o lugar), sem virar quadro; diga na cena o que vem de cada uma. Não vai com foto nem ultimoQuadro.`,
+      som: "false para sair sem som (para pôr outro áudio por cima). Padrão: com som.",
+      semente: "Inteiro, para repetir um resultado parecido. Opcional.",
+      duracao: CAMPOS.duracao,
+      resolucao: CAMPOS.resolucao,
+      formato: CAMPOS.formato,
+    },
+    required: ["cena"],
+    maxReferences: MAX_WAN_REFERENCES,
+    values: (a) => ({
+      cena: txt(a, "cena"),
+      foto: Array.isArray(a.referencias) && a.referencias.length ? "referencia" : "quadro",
+      som: a.som === false ? "nao" : "sim",
+      semente: num(a, "semente"),
+      duracao: num(a, "duracao"),
+      resolucao: txt(a, "resolucao"),
+      formato: txt(a, "formato"),
+    }),
+  },
   treatAudio: true,
   quickEdit: false,
   wordsPerSecond: WORDS_PER_SECOND,
@@ -72,7 +98,8 @@ export const WAN_LIVRE: Structure = {
     const resolution = values("resolucao");
     const aspectRatio = values("formato");
     const sound = values("som") !== "nao";
-    const seed = /^\d{1,10}$/.test(values("semente")) ? Number(values("semente")) : undefined;
+    if (values("semente") && !(/^\d{1,10}$/.test(values("semente")) && Number(values("semente")) < 2 ** 32)) throw new InputError(ERROS.semente);
+    const seed = values("semente") ? Number(values("semente")) : undefined;
     // "referencia" (o gerar_video_wan com referencias): a foto é a primeira referência; senão, o primeiro quadro.
     const reference = values("foto") === "referencia";
     return {

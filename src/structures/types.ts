@@ -181,8 +181,32 @@ export interface Lists {
   newClones?: string[];
 }
 
+/** Os campos que o agente manda no gerar_video, gerar_imagem ou gerar_audio, como vieram. */
+export type AgentArgs = Record<string, unknown>;
+
+/**
+ * Como o agente usa o modelo pelo MCP: aparece no listar_modelos e gera pelo gerar_* do tipo dele.
+ * Sem isto, o modelo fica só no site. Os arquivos (foto, ultimoQuadro, referencias, audio) a API
+ * busca e confere; aqui só os campos de texto viram os valores do formulário, e o que faltar fica
+ * com o padrão do próprio formulário (`sections`).
+ */
+export interface AgentSpec {
+  /** Quando usar, numa frase: o agente escolhe por ela e conta à pessoa. */
+  use: string;
+  /** Cada campo do gerar_* que o modelo aceita e o que ele é neste modelo. */
+  fields: Record<string, string>;
+  /** Os campos sem os quais não há pedido. */
+  required: string[];
+  /** Até quantas imagens em `referencias`, se o modelo aceita. */
+  maxReferences?: number;
+  /** Os valores do formulário a partir dos campos do agente. */
+  values(a: AgentArgs, lists: Lists): Record<string, string>;
+}
+
 export interface Structure {
   id: string;
+  /** Como o agente usa o modelo pelo MCP; sem isto, só no site. */
+  agent?: AgentSpec;
   /** Plataforma da estrutura; sem isto, o OpenRouter. */
   platform?: Platform;
   /** Nome no cartão e no título da página. */

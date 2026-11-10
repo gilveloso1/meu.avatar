@@ -12,12 +12,10 @@ import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video } from ".
 import { type Exports } from "./exportar";
 import { mp3Duration } from "./mp3";
 import { mp4Duration } from "./mp4";
-import { canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, STRUCTURES, structureById } from "./structures";
+import { canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, prices, STRUCTURES, type Structure, structureById } from "./structures";
+import { sha256 } from "./auth";
 import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
-import { MAX_IMAGE_REFERENCES, NANO_BANANA } from "./structures/imagem";
-import { FISH } from "./structures/voz";
-import { MAX_WAN_REFERENCES, WAN_LIVRE } from "./structures/wan-livre";
 import { criarEnvio, MAX_ATIVO, MAX_AVATAR_DESCRIPTION, receberAtivo, uso } from "./ativos";
 import { MEDIA_TYPES, mediaType } from "./arquivos";
 import { base64, ForbiddenError, type Studio } from "./studio";
@@ -59,6 +57,19 @@ const assetSrc = (a: AvatarAsset) => `/avatares/${a.avatar_id}/arquivos/${a.id}`
 
 /** Os modelos de fala que a conta usa, para o agente saber o que pôr em modelo. */
 const falas = (user: User) => STRUCTURES.filter((s) => makesAudio(s) && canUse(s, user)).map((s) => ({ id: s.id, nome: s.name }));
+/** O que cada gerar_* faz: o tipo de arquivo que o modelo devolve. */
+type Tipo = "video" | "imagem" | "audio";
+const TIPOS: Tipo[] = ["video", "imagem", "audio"];
+const tipoDe = (s: Structure): Tipo => (makesImage(s) ? "imagem" : makesAudio(s) ? "audio" : "video");
+/** Os modelos do agente: os que têm descritor e a conta pode usar, de um tipo ou de todos. */
+const modelosDoAgente = (user: User, tipo?: Tipo) => STRUCTURES.filter((s) => s.agent && canUse(s, user) && (!tipo || tipoDe(s) === tipo));
+/** Os campos do pedido que não são do modelo (nem entram no código de confirmação). */
+const CAMPOS_DO_PEDIDO = ["modelo", "confirmacao", "final", "previa"];
+/** Os campos que, sem valor do agente, ficam com o padrão do formulário do site. */
+const PADRAO = ["duracao", "resolucao", "formato", "estilo", "idioma", "expressividade"];
+/** Como o modelo cobra: por segundo do vídeo, por caractere do texto ou por imagem. */
+const COBRANCA = (s: Structure) => ("characters" in s.cost.seconds ? "caractere" : "fixed" in s.cost.seconds ? "imagem" : "segundo");
+
 /** Os tipos de foto que os modelos recebem. */
 const FOTO = /^image\/(jpeg|png|webp)$/;
 const falha = (status: number, erro: string, extra: Record<string, unknown> = {}) => Response.json({ erro, ...extra }, { status });
@@ -260,10 +271,11 @@ export class Api {
     if (path === "/api/v1/animacoes" && !post) return this.animations(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
     if (path === "/api/v1/vozes" && !post) return this.voices(user, url);
-    if (path === "/api/v1/audios") return post ? this.generateAudio(request, user) : falha(405, "metodo_invalido");
+    if (path === "/api/v1/modelos") return post ? falha(405, "metodo_invalido") : this.models(user, url);
+    if (path === "/api/v1/audios") return post ? this.generate("audio", request, user, null) : falha(405, "metodo_invalido");
     const video = /^\/api\/v1\/videos\/([0-9a-f-]{36})$/.exec(path);
     if (video) return post ? falha(405, "metodo_invalido") : this.followVideo(user, video[1]!);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video|wan|cena))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video|cena))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
@@ -271,9 +283,8 @@ export class Api {
     if (m[2] === "legenda") return post ? this.caption(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "limpar") return post ? this.cleanFiles(request, project) : falha(405, "metodo_invalido");
     if (m[2] === "animacao") return post ? falha(405, "metodo_invalido") : this.inspectCode(project, url);
-    if (m[2] === "imagem") return post ? this.generateImage(request, user, project) : falha(405, "metodo_invalido");
-    if (m[2] === "video") return post ? this.generateVideo(request, user, project) : falha(405, "metodo_invalido");
-    if (m[2] === "wan") return post ? this.generateWan(request, user, project) : falha(405, "metodo_invalido");
+    if (m[2] === "imagem") return post ? this.generate("imagem", request, user, project) : falha(405, "metodo_invalido");
+    if (m[2] === "video") return post ? this.generate("video", request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "cena") return post ? falha(405, "metodo_invalido") : this.scene(user, project, url);
     if (m[2]) return post ? falha(405, "metodo_invalido") : this.inspect(user, project, m[2], url);
     return post ? falha(405, "metodo_invalido") : Response.json(await this.view(project, (url.searchParams.get("incluir") ?? "").split(","), url));
@@ -501,7 +512,10 @@ export class Api {
    */
   private async voices(user: User, url: URL): Promise<Response> {
     const modelo = url.searchParams.get("modelo") ?? "";
-    if (modelo && modelo !== HEYGEN_AVATAR.id) return this.speechVoices(user, url, modelo);
+    // Sem modelo padrão: as vozes são de um modelo, o mesmo que vai no gerar_video ou no gerar_audio.
+    const comVoz = STRUCTURES.filter((x) => x.agent?.fields.voz && canUse(x, user)).map((x) => x.id);
+    if (!modelo) return falha(400, "modelo_obrigatorio", { modelos: comVoz });
+    if (modelo !== HEYGEN_AVATAR.id) return this.speechVoices(user, url, modelo);
     if (!this.studio || !canUse(HEYGEN_AVATAR, user)) return falha(404, "nao_encontrado");
     const structure = await this.studio.resolve(HEYGEN_AVATAR);
     const lists = await this.studio.lists(structure, user.id);
@@ -543,103 +557,157 @@ export class Api {
   }
 
   /**
-   * Gera um áudio com um modelo de fala (gerar_audio; gasta créditos, bem pouco), como o formulário
-   * do modelo no site: o texto, com as emoções em inglês entre colchetes, lido por uma voz pronta ou
-   * clonada de listar_vozes. O áudio sai na hora: a resposta já traz o src, que vai no adicionar
-   * {audio} e no gerar_video {audio}.
+   * Os modelos que o agente usa (listar_modelos): os que têm descritor (`agent`, src/structures/) e a
+   * conta pode usar, de um tipo ou de todos. Cada um diz quando usar, os campos que aceita e, do
+   * formulário do site, as durações, resoluções e formatos, com o preço.
    */
-  private async generateAudio(request: Request, user: User): Promise<Response> {
-    const body = await json(request);
-    const texto = (k: string) => (typeof body?.[k] === "string" ? (body[k] as string) : "");
-    const structure = structureById(texto("modelo") || FISH.id);
-    if (!structure || !makesAudio(structure) || !canUse(structure, user)) return falha(404, "modelo_inexistente", { modelos: falas(user) });
-    if (!this.studio?.canGenerateWith(structure)) return falha(503, "criacao_pausada");
-    if (!texto("texto").trim()) return falha(400, "texto_obrigatorio");
-    if (!texto("voz")) return falha(400, "voz_obrigatoria");
-    const { lists } = await this.studio.speechVoices(structure, user.id);
-    // Uma clonada da lista vai como "Voz clonada"; o resto, como voz pronta (a estrutura confere).
-    const clonada = !!lists.clones?.some((c) => c.value === texto("voz"));
-    const fields: Record<string, string> = {
-      fonte: clonada ? "clonada" : "pronta",
-      voz: clonada ? "" : texto("voz"),
-      clone: clonada ? texto("voz") : "",
-      consentimento: body?.consentimento === true ? "sim" : "",
-      texto: texto("texto"),
-    };
-    const values = (name: string) => fields[name] ?? "";
-    try {
-      const v = await this.studio.waitImage(await this.studio.create({ structure, values, user }));
-      if (v.status !== "completed" || !v.video_key) return falha(502, "audio_falhou", { id: v.id });
-      const settings = JSON.parse(v.settings ?? "{}") as Record<string, string>;
-      return Response.json(
-        { audio: { id: v.id, src: `/videos/${v.id}.mp3`, duracao: await this.duration(v), custo: v.cost, modelo: structure.id, voz: settings.voice ?? null, ...(settings.source === "clonada" ? { clonada: true } : {}) }, usar: { audio: v.id } },
-        { status: 201 },
-      );
-    } catch (err) {
-      if (err instanceof ForbiddenError) return falha(404, "nao_encontrado");
-      // Voz que não existe, texto longo, consentimento que falta: a frase diz o que fazer.
-      if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
-      throw err;
+  private async models(user: User, url: URL): Promise<Response> {
+    const tipo = url.searchParams.get("tipo") ?? "";
+    if (tipo && !TIPOS.includes(tipo as Tipo)) return falha(400, "tipo_invalido", { tipos: TIPOS });
+    const lista = [];
+    for (const s of modelosDoAgente(user, (tipo as Tipo) || undefined)) {
+      const opcoes: Record<string, unknown> = {};
+      try {
+        const resolved = this.studio ? await this.studio.resolve(s) : s;
+        const model = resolved.platform === "heygen" ? HEYGEN_MODEL : this.studio ? await this.studio.modelOf(resolved) : null;
+        const fields = resolved.sections(model, { duration: 5, resolution: "720p", aspectRatio: "9:16" }).flatMap((x) => x.fields);
+        const op = (name: string) => {
+          const f = fields.find((x) => x.name === name);
+          return f && (f.kind === "select" || f.kind === "segmented") ? f.options.map((o) => o.value) : undefined;
+        };
+        const nomes: Record<string, string> = { duracao: "duracoes", resolucao: "resolucoes", formato: "formatos" };
+        for (const [campo, nome] of Object.entries(nomes)) if (s.agent!.fields[campo] && op(campo)) opcoes[nome] = op(campo);
+        if (model) opcoes.preco = { por: COBRANCA(resolved), dolares: prices(resolved, model) };
+      } catch (err) {
+        // Sem a lista do provedor, o modelo aparece sem as opções; o pedido confere de novo.
+        console.error("Opções do modelo indisponíveis", s.id, err);
+      }
+      lista.push({ id: s.id, nome: s.name, tipo: tipoDe(s), usar: s.agent!.use, campos: s.agent!.fields, obrigatorios: s.agent!.required, ...opcoes });
     }
+    return Response.json({ modelos: lista });
   }
 
   /**
-   * Gera um vídeo com o HeyGen Avatar (gasta créditos), como o formulário do modelo no site: a foto
-   * é qualquer src de imagem que o projeto aceita (a foto de um ativo, um arquivo do projeto, uma
-   * imagem gerada); a fala é o texto lido por uma voz de listar_vozes, ou um áudio (Meu áudio). O
-   * formato padrão é o do Final. O vídeo leva minutos: a resposta traz o id para o acompanhar_video.
+   * Gera com o modelo escolhido (gerar_video, gerar_imagem, gerar_audio), em dois passos, para a
+   * pessoa ver o custo antes: sem `confirmacao`, só simula (confere tudo pela estrutura, como o
+   * site, sem gastar) e devolve o custo estimado e o código de confirmação; com o código, gera. O
+   * código vale para o mesmo pedido: qualquer campo diferente pede outra simulação. Não há modelo
+   * padrão. Os arquivos (foto, ultimoQuadro, referencias, audio) são src do projeto.
    */
-  private async generateVideo(request: Request, user: User, project: Project): Promise<Response> {
+  private async generate(tipo: Tipo, request: Request, user: User, project: Project | null): Promise<Response> {
+    const body = ((await json(request)) ?? {}) as Record<string, unknown>;
+    const texto = (k: string) => (typeof body[k] === "string" ? (body[k] as string) : "");
+    const modelos = modelosDoAgente(user, tipo).map((s) => s.id);
+    // Conta sem nenhum modelo do tipo: nada existe, como a página de um modelo em teste.
+    if (!modelos.length) return falha(404, "nao_encontrado");
+    if (!texto("modelo")) return falha(400, "modelo_obrigatorio", { modelos });
+    const structure = structureById(texto("modelo"));
+    if (!structure?.agent || !canUse(structure, user) || tipoDe(structure) !== tipo) return falha(404, "modelo_inexistente", { modelos });
+    const spec = structure.agent;
     if (!this.studio) return falha(503, "criacao_pausada");
-    if (!canUse(HEYGEN_AVATAR, user)) return falha(404, "nao_encontrado");
-    const structure = await this.studio.resolve(HEYGEN_AVATAR);
-    if (!this.studio.canGenerateWith(structure)) return falha(503, "criacao_pausada");
-    const body = await json(request);
-    const texto = (k: string) => (typeof body?.[k] === "string" ? (body[k] as string) : "");
-    const data = JSON.parse(project.data) as CanvasProject;
-    const final = texto("final") ? data.finals.find((f) => f.id === body!.final) : data.finals[0];
-    if (texto("final") && !final) return falha(400, "final_inexistente");
-    if (!texto("foto")) return falha(400, "foto_obrigatoria");
-    const direta = structure.platform === "heygen";
-    if (texto("audio") && !direta) return falha(400, "audio_indisponivel");
-    if (!texto("audio") && !texto("fala").trim()) return falha(400, "fala_obrigatoria");
+    const resolved = await this.studio.resolve(structure);
+    if (!this.studio.canGenerateWith(resolved)) return falha(503, "criacao_pausada");
 
-    const arquivo = (src: string, tipos: RegExp, nome: string) => this.projectFile(project, user, src, tipos, nome);
-    const image = await arquivo(texto("foto"), FOTO, "foto");
-    if (image instanceof Response) return image;
-    const audio = texto("audio") ? await arquivo(texto("audio"), /^audio\/(mpeg|mp3|wav|x-wav|wave)$/, "audio") : null;
+    const pedido = Object.fromEntries(Object.entries(body).filter(([k, v]) => !CAMPOS_DO_PEDIDO.includes(k) && v !== undefined && v !== null && !(typeof v === "string" && !v.trim())));
+    // O áudio próprio só vai onde o formulário do modelo, na plataforma em uso, tem o campo.
+    const direta = resolved.platform === "heygen";
+    const model = direta ? HEYGEN_MODEL : await this.studio.modelOf(resolved);
+    const lists = await this.studio.lists(resolved, user.id);
+    const formulario = resolved.sections(model, { duration: 5, resolution: "720p", aspectRatio: texto("formato") || "9:16" }, lists).flatMap((s) => s.fields);
+    const recusados = Object.keys(pedido).filter((k) => !(k in spec.fields) || (k === "audio" && !formulario.some((f) => f.kind === "audio")));
+    if (recusados.length) return falha(400, "campo_nao_aceito", { campos: recusados, aceitos: Object.keys(spec.fields) });
+    const faltam = spec.required.filter((k) => !(k in pedido));
+    if (faltam.length) return falha(400, "campo_obrigatorio", { campos: faltam });
+
+    let formato = texto("formato");
+    if (project) {
+      const data = JSON.parse(project.data) as CanvasProject;
+      const final = texto("final") ? data.finals.find((f) => f.id === body.final) : data.finals[0];
+      if (texto("final") && !final) return falha(400, "final_inexistente");
+      // Sem Final, o formato padrão dos projetos (9:16).
+      formato ||= final ? output(final).format : "9:16";
+    }
+
+    // Os arquivos: a foto (ou a primeira referência) vai como imagem; o resto, como o modelo pede.
+    const referencias = Array.isArray(pedido.referencias) ? (pedido.referencias as unknown[]).filter((r): r is string => typeof r === "string" && r !== "") : [];
+    if (referencias.length && (texto("foto") || texto("ultimoQuadro"))) return falha(400, "quadros_ou_referencias");
+    if (spec.maxReferences && referencias.length > spec.maxReferences) return falha(400, "referencias_demais", { maximo: spec.maxReferences });
+    const arquivo = async (src: string, tipos: RegExp, nome: string) => (src && project ? this.projectFile(project, user, src, tipos, nome) : null);
+    const imagens: File[] = [];
+    for (const src of referencias) {
+      const f = await arquivo(src, FOTO, "referencia");
+      if (f instanceof Response) return f;
+      if (f) imagens.push(f);
+    }
+    const foto = await arquivo(texto("foto"), FOTO, "foto");
+    if (foto instanceof Response) return foto;
+    const ultimo = await arquivo(texto("ultimoQuadro"), FOTO, "ultimoQuadro");
+    if (ultimo instanceof Response) return ultimo;
+    const audio = await arquivo(texto("audio"), /^audio\/(mpeg|mp3|wav|x-wav|wave)$/, "audio");
     if (audio instanceof Response) return audio;
+    const [primeira = null, ...references] = imagens;
 
-    // A voz: com áudio, nenhuma; uma clonada da lista vai como "Voz clonada"; o resto, como voz pronta.
-    const lists = await this.studio.lists(structure, user.id);
-    const voz = texto("voz");
-    const clonada = !audio && !!lists.clones?.some((c) => c.value === voz);
-    const formato = texto("formato") || (final ? output(final).format : "9:16");
-    const fields: Record<string, string> = {
-      fonte: audio ? "audio" : clonada ? "clonada" : "pronta",
-      voz: clonada ? "" : voz,
-      clone: clonada ? voz : "",
-      consentimento: body?.consentimento === true ? "sim" : "",
-      fala: texto("fala"),
-      expressividade: texto("expressividade") || "low",
-      movimento: texto("movimento"),
-      resolucao: texto("resolucao") || "720p",
-      formato,
-    };
-    const values = (name: string) => fields[name] ?? "";
-    const avatar = /^\/avatares\/([0-9a-f-]{36})\/arquivos\//.exec(texto("foto"))?.[1] ?? null;
+    // Os campos de texto viram o formulário; o que faltar fica com o padrão do formulário do site.
+    const valores = spec.values({ ...pedido, ...(formato ? { formato } : {}) }, lists);
+    const padroes = Object.fromEntries(
+      resolved
+        .sections(model, { duration: 5, resolution: "720p", aspectRatio: formato || "9:16" }, lists)
+        .flatMap((s) => s.fields)
+        .filter((f) => PADRAO.includes(f.name) && "value" in f)
+        .map((f) => [f.name, (f as { value: string }).value]),
+    );
+    const values = (name: string) => valores[name] || padroes[name] || "";
+    const avatar = /^\/avatares\/([0-9a-f-]{36})\/arquivos\//.exec(texto("foto") || referencias[0] || "")?.[1] ?? null;
+    const input = { structure: resolved, values, image: foto ?? primeira, references, lastFrame: ultimo, audio, avatarId: avatar, user };
+    const codigo = (await sha256(JSON.stringify([user.id, tipo, project?.id ?? null, texto("modelo"), texto("final"), Object.keys(pedido).sort().map((k) => [k, pedido[k]])]))).slice(0, 12);
+
     try {
-      const v = await this.studio.create({ structure, values, image, audio, avatarId: avatar, user });
-      if (v.status === "failed") return falha(502, "video_falhou", { id: v.id });
-      // A API direta tem o próprio preço (HEYGEN_MODEL), como no formulário do site.
-      const custo = estimate(structure, direta ? HEYGEN_MODEL : await this.studio.modelOf(structure), values);
-      return Response.json(
-        { video: { id: v.id, status: v.status, duracaoEstimada: v.duration || null, custoEstimado: custo !== undefined ? +custo.toFixed(2) : null, resolucao: v.resolution, formato: v.aspect_ratio } },
-        { status: 201 },
-      );
+      if (body.confirmacao === undefined) {
+        const { built } = await this.studio.check(input);
+        const custo = estimate(resolved, model, values);
+        const r = built.record;
+        return Response.json({
+          simulacao: true,
+          modelo: structure.id,
+          custoEstimado: custo !== undefined ? +custo.toFixed(4) : null,
+          ...(tipo === "video" ? { duracao: r.duration || null, resolucao: r.resolution, formato: r.aspect_ratio } : tipo === "imagem" ? { resolucao: r.resolution, formato: r.aspect_ratio } : {}),
+          confirmacao: codigo,
+          proximo: "Mostre o modelo, o pedido e o custo à pessoa. Com o sim dela, chame de novo com os mesmos campos e confirmacao; sem o sim, não gere.",
+        });
+      }
+      if (body.confirmacao !== codigo) return falha(409, "confirmacao_invalida", { motivo: "O código vale para o mesmo pedido: simule de novo (sem confirmacao) e confirme com a pessoa." });
+
+      const v = await this.studio.create(input);
+      if (tipo === "video") {
+        if (v.status === "failed") return falha(502, "video_falhou", { id: v.id });
+        const custo = estimate(resolved, model, values);
+        return Response.json(
+          { video: { id: v.id, modelo: structure.id, status: v.status, duracaoEstimada: v.duration || null, custoEstimado: custo !== undefined ? +custo.toFixed(2) : null, resolucao: v.resolution, formato: v.aspect_ratio } },
+          { status: 201 },
+        );
+      }
+      const pronto = await this.studio.waitImage(v);
+      if (pronto.status !== "completed" || !pronto.video_key) return falha(502, tipo === "imagem" ? "imagem_falhou" : "audio_falhou", { id: pronto.id });
+      const src = `/videos/${pronto.id}.${pronto.video_key.split(".").pop()}`;
+      if (tipo === "audio") {
+        const settings = JSON.parse(pronto.settings ?? "{}") as Record<string, string>;
+        return Response.json(
+          { audio: { id: pronto.id, src, duracao: await this.duration(pronto), custo: pronto.cost, modelo: structure.id, voz: settings.voice ?? null, ...(settings.source === "clonada" ? { clonada: true } : {}) }, usar: { audio: pronto.id } },
+          { status: 201 },
+        );
+      }
+      const resposta: Record<string, unknown> = { imagem: { id: pronto.id, src, modelo: structure.id, resolucao: pronto.resolution, formato: pronto.aspect_ratio, custo: pronto.cost } };
+      if (body.previa === true) {
+        const file = await this.media.get(pronto.video_key);
+        if (file) {
+          resposta.previa = base64(await file.arrayBuffer());
+          resposta.previaTipo = file.httpMetadata?.contentType ?? "image/png";
+        }
+      }
+      return Response.json(resposta, { status: 201 });
     } catch (err) {
       if (err instanceof ForbiddenError) return falha(404, "nao_encontrado");
-      // Voz que não existe, fala longa, formato fora do modelo: a frase diz o que fazer.
+      // Voz que não existe, texto longo, duração ou formato fora do modelo: a frase diz o que fazer.
       if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
       throw err;
     }
@@ -661,65 +729,6 @@ export class Api {
     return new File([await object.arrayBuffer()], nome, { type });
   }
 
-  /**
-   * Gera um vídeo com o Wan 3.0 e tudo o que ele aceita (gerar_video_wan): a cena escrita inteira,
-   * primeiro e último quadro ou imagens de referência (não os dois: com quadros, o OpenRouter
-   * ignora as referências), som ou não, semente, duração, resolução e formato.
-   */
-  private async generateWan(request: Request, user: User, project: Project): Promise<Response> {
-    if (!this.studio) return falha(503, "criacao_pausada");
-    if (!canUse(WAN_LIVRE, user)) return falha(404, "nao_encontrado");
-    if (!this.studio.canGenerateWith(WAN_LIVRE)) return falha(503, "criacao_pausada");
-    const body = await json(request);
-    const texto = (k: string) => (typeof body?.[k] === "string" ? (body[k] as string) : "");
-    if (!texto("cena").trim()) return falha(400, "cena_obrigatoria");
-    const data = JSON.parse(project.data) as CanvasProject;
-    const final = texto("final") ? data.finals.find((f) => f.id === body!.final) : data.finals[0];
-    if (texto("final") && !final) return falha(400, "final_inexistente");
-    const referencias = Array.isArray(body?.referencias) ? (body.referencias as unknown[]).filter((r): r is string => typeof r === "string" && r !== "") : [];
-    if ((texto("foto") || texto("ultimoQuadro")) && referencias.length) return falha(400, "quadros_ou_referencias");
-    if (referencias.length > MAX_WAN_REFERENCES) return falha(400, "referencias_demais", { maximo: MAX_WAN_REFERENCES });
-    if (body?.semente !== undefined && !(Number.isInteger(body.semente) && (body.semente as number) >= 0 && (body.semente as number) < 2 ** 32)) return falha(400, "semente_invalida");
-
-    const imagens: File[] = [];
-    for (const src of referencias) {
-      const f = await this.projectFile(project, user, src, FOTO, "referencia");
-      if (f instanceof Response) return f;
-      imagens.push(f);
-    }
-    const foto = texto("foto") ? await this.projectFile(project, user, texto("foto"), FOTO, "foto") : null;
-    if (foto instanceof Response) return foto;
-    const ultimo = texto("ultimoQuadro") ? await this.projectFile(project, user, texto("ultimoQuadro"), FOTO, "ultimoQuadro") : null;
-    if (ultimo instanceof Response) return ultimo;
-    const [primeira = null, ...references] = imagens;
-
-    const fields: Record<string, string> = {
-      cena: texto("cena"),
-      foto: primeira ? "referencia" : "quadro",
-      som: body?.som === false ? "nao" : "sim",
-      semente: body?.semente !== undefined ? String(body.semente) : "",
-      duracao: body?.duracao !== undefined ? String(body.duracao) : "5",
-      resolucao: texto("resolucao") || "720p",
-      formato: texto("formato") || (final ? output(final).format : "9:16"),
-    };
-    const values = (name: string) => fields[name] ?? "";
-    const avatar = /^\/avatares\/([0-9a-f-]{36})\/arquivos\//.exec(texto("foto") || referencias[0] || "")?.[1] ?? null;
-    try {
-      const v = await this.studio.create({ structure: WAN_LIVRE, values, image: foto ?? primeira, references, lastFrame: ultimo, avatarId: avatar, user });
-      if (v.status === "failed") return falha(502, "video_falhou", { id: v.id });
-      const custo = estimate(WAN_LIVRE, await this.studio.modelOf(WAN_LIVRE), values);
-      return Response.json(
-        { video: { id: v.id, status: v.status, duracao: v.duration, custoEstimado: custo !== undefined ? +custo.toFixed(2) : null, resolucao: v.resolution, formato: v.aspect_ratio } },
-        { status: 201 },
-      );
-    } catch (err) {
-      if (err instanceof ForbiddenError) return falha(404, "nao_encontrado");
-      // Duração, resolução ou formato fora do modelo, cena longa: a frase diz o que fazer.
-      if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
-      throw err;
-    }
-  }
-
   /** O andamento de um vídeo gerado (acompanhar_video): consulta o provedor e, pronto, traz o src. */
   private async followVideo(user: User, id: string): Promise<Response> {
     const found = await this.db.conta(user.id).video(id);
@@ -736,63 +745,6 @@ export class Api {
       ...(tratando ? { audio: "tratando" } : {}),
       custo: v.cost,
     });
-  }
-
-  /**
-   * Gera uma imagem com o modelo de imagem (gasta créditos) para entrar no projeto com
-   * adicionar {imagem}. O formato padrão é o do Final; a referência é qualquer src que o projeto
-   * aceita (ativo, arquivo do projeto, outra imagem gerada), desde que seja imagem. Com
-   * `previa`, a resposta traz a imagem em base64, que o MCP mostra ao agente.
-   */
-  private async generateImage(request: Request, user: User, project: Project): Promise<Response> {
-    if (!this.studio?.canGenerate) return falha(503, "criacao_pausada");
-    const body = await json(request);
-    const descricao = typeof body?.descricao === "string" ? body.descricao : "";
-    if (!descricao.trim()) return falha(400, "descricao_obrigatoria");
-    const data = JSON.parse(project.data) as CanvasProject;
-    const final = typeof body?.final === "string" ? data.finals.find((f) => f.id === body.final) : data.finals[0];
-    if (typeof body?.final === "string" && !final) return falha(400, "final_inexistente");
-    const formato = typeof body?.formato === "string" ? body.formato : final ? output(final).format : "9:16";
-    const resolucao = typeof body?.resolucao === "string" ? body.resolucao : "1K";
-    // referencia (uma) e referencias (várias, na ordem): juntas, a primeira vai como a foto.
-    const fontes: unknown[] = [...(body?.referencia !== undefined ? [body.referencia] : []), ...(Array.isArray(body?.referencias) ? body.referencias : body?.referencias !== undefined ? [body.referencias] : [])];
-    if (fontes.length > MAX_IMAGE_REFERENCES) return falha(400, "referencias_demais", { maximo: MAX_IMAGE_REFERENCES });
-    const imagens: File[] = [];
-    for (const fonte of fontes) {
-      let key: string;
-      try {
-        key = await this.exports.source(project, user, fonte);
-      } catch (err) {
-        if (err instanceof InputError) return falha(404, "arquivo_indisponivel", { referencia: fonte });
-        throw err;
-      }
-      const object = await this.media.get(key);
-      const type = object?.httpMetadata?.contentType ?? "";
-      if (!object) return falha(404, "arquivo_indisponivel", { referencia: fonte });
-      if (!/^image\/(jpeg|png|webp)$/.test(type)) return falha(400, "referencia_nao_e_imagem", { referencia: fonte });
-      imagens.push(new File([await object.arrayBuffer()], "referencia", { type }));
-    }
-    const [image = null, ...references] = imagens;
-    const values = (name: string) => ({ descricao, resolucao, formato, referencias: String(imagens.length) })[name] ?? "";
-    try {
-      const v = await this.studio.waitImage(await this.studio.create({ structure: NANO_BANANA, values, image, references, user }));
-      if (v.status !== "completed" || !v.video_key) return falha(502, "imagem_falhou", { id: v.id });
-      const src = `/videos/${v.id}.${v.video_key.split(".").pop()}`;
-      const resposta: Record<string, unknown> = { imagem: { id: v.id, src, resolucao: v.resolution, formato: v.aspect_ratio, custo: v.cost } };
-      if (body?.previa === true) {
-        const file = await this.media.get(v.video_key);
-        if (file) {
-          resposta.previa = base64(await file.arrayBuffer());
-          resposta.previaTipo = file.httpMetadata?.contentType ?? "image/png";
-        }
-      }
-      return Response.json(resposta, { status: 201 });
-    } catch (err) {
-      if (err instanceof ForbiddenError) return falha(404, "nao_encontrado");
-      // Formato ou resolução que o modelo não aceita, descrição longa: a frase diz o que fazer.
-      if (err instanceof InputError) return falha(400, "pedido_invalido", { motivo: err.message });
-      throw err;
-    }
   }
 
   private async render(project: Project, c: { nome: string; html: string; duracao: number; final?: string }, extra: Record<string, unknown> = {}): Promise<Response> {

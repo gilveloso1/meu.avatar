@@ -24,6 +24,16 @@ const rpc = async (method: string, params: Record<string, unknown> = {}, exporte
 const legado = async (method: string, params: unknown = {}) => (await (await post({ jsonrpc: "2.0", id: 1, method, params })).json()) as { result: any; error?: { code: number } };
 const ferramenta = async (name: string, args: unknown = {}, exporter: FakeExportApi | null = null, renderer: FakeRenderApi | null = null) => (await rpc("tools/call", { name, arguments: args }, exporter, renderer)).result as Result;
 const dados = <T>(r: Result) => JSON.parse(r.content[0]!.text!) as T;
+type Chamar = (name: string, args: Record<string, unknown>) => Promise<Result>;
+/** Os dois passos do gerar_*: simula, pega o código e gera. Se a simulação recusar, devolve a recusa. */
+async function gerando(chamar: Chamar, name: string, args: Record<string, unknown>): Promise<Result> {
+  const sim = await chamar(name, args);
+  if (sim.isError) return sim;
+  return chamar(name, { ...args, confirmacao: dados<{ confirmacao: string }>(sim).confirmacao });
+}
+/** Uma imagem gerada (Nano Banana), para servir de foto. */
+const imagemGerada = async (chamar: Chamar, projeto: string, descricao = "uma cena") =>
+  dados<{ imagem: { id: string; src: string } }>(await gerando(chamar, "gerar_imagem", { modelo: "nano-banana", projeto, descricao })).imagem;
 
 beforeEach(async () => {
   await cookie();
@@ -144,7 +154,7 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "criar_avatar", "editar_avatar", "enviar_ativo", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "ver_cena", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "gerar_imagem", "gerar_video", "gerar_video_wan", "gerar_audio", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao", "listar_ferramentas", "usar_ferramenta"]);
+    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "criar_avatar", "editar_avatar", "enviar_ativo", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "ver_cena", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "listar_modelos", "gerar_video", "gerar_imagem", "gerar_audio", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao", "listar_ferramentas", "usar_ferramenta"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
   });
 });
@@ -270,7 +280,7 @@ describe("ferramentas publicadas depois de conectar", () => {
     // Curta: a do editar_projeto tem milhares de caracteres.
     expect(Math.max(...ferramentas.map((f) => f.descricao.length))).toBeLessThanOrEqual(240);
     const uma = dados<{ nome: string; descricao: string; parametros: { required: string[] } }>(await ferramenta("listar_ferramentas", { nome: "gerar_audio" }));
-    expect(uma.parametros.required).toEqual(["texto", "voz"]);
+    expect(uma.parametros.required).toEqual(["modelo", "texto", "voz"]);
     expect(uma.descricao.length).toBeGreaterThan(240);
     expect(dados<{ ferramentas: { nome: string }[] }>(await ferramenta("listar_ferramentas", { busca: "avatar" })).ferramentas.map((f) => f.nome)).toContain("criar_avatar");
     expect((await ferramenta("listar_ferramentas", { nome: "nao_existe" })).isError).toBe(true);
@@ -304,6 +314,89 @@ describe("ferramentas publicadas depois de conectar", () => {
   });
 });
 
+describe("listar_modelos e os dois passos do gerar_*", () => {
+  const comApi = async (api: FakeVideoApi, name: string, args: unknown, code = "ma_admin") => {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
+    const res = await call(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: `Bearer ${code}`, ...CABECALHOS("tools/call", name) } }), api);
+    return ((await res.json()) as { result: Result }).result;
+  };
+  type Modelo = { id: string; tipo: string; usar: string; campos: Record<string, string>; obrigatorios: string[]; duracoes?: string[]; formatos?: string[]; preco?: { por: string; dolares: Record<string, string> } };
+
+  it("lista os modelos de cada tipo, com quando usar, os campos, as opções e o preço; sem modelo padrão", async () => {
+    const api = new FakeVideoApi();
+    const { modelos } = dados<{ modelos: Modelo[] }>(await comApi(api, "listar_modelos", {}));
+    expect(modelos.map((m) => [m.id, m.tipo])).toEqual([
+      ["wan", "video"], ["wan-livre", "video"], ["heygen", "video"], ["grok", "video"], ["mischief", "video"], ["omni", "video"],
+      ["nano-banana", "imagem"], ["elevenlabs", "audio"], ["fish", "audio"],
+    ]);
+    const mischief = modelos.find((m) => m.id === "mischief")!;
+    expect(mischief).toMatchObject({ duracoes: ["3", "5"], formatos: ["16:9"], obrigatorios: ["cena", "foto"], preco: { por: "segundo", dolares: { "480p": "0.005", "720p": "0.01" } } });
+    expect(mischief.usar).toContain("16:9");
+    expect(Object.keys(mischief.campos)).toEqual(["cena", "foto", "duracao", "resolucao", "formato"]);
+    expect(modelos.find((m) => m.id === "fish")!.preco!.por).toBe("caractere");
+    const { modelos: imagens } = dados<{ modelos: Modelo[] }>(await comApi(api, "listar_modelos", { tipo: "imagem" }));
+    expect(imagens.map((m) => m.id)).toEqual(["nano-banana"]);
+    expect((await comApi(api, "listar_modelos", { tipo: "musica" })).content[0]!.text).toContain("tipo_invalido");
+    // As vozes também são de um modelo: sem ele, a lista dos que têm voz.
+    const semModelo = await comApi(api, "listar_vozes", {});
+    expect(semModelo.isError).toBe(true);
+    expect(semModelo.content[0]!.text).toContain("modelo_obrigatorio");
+  });
+
+  it("sem confirmacao, só simula: confere, mostra o custo e não gasta; o código só vale para o mesmo pedido", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Dois passos" }));
+    const foto = (await imagemGerada((n, x) => comApi(api, n, x), id)).src;
+    const antes = (await new Db(env.DB).recentVideos()).length;
+    const pedido = { modelo: "mischief", projeto: id, cena: "a câmera se aproxima do frasco", foto, formato: "16:9" };
+    const sim = await comApi(api, "gerar_video", pedido);
+    expect(sim.isError).toBeFalsy();
+    const simulacao = dados<{ simulacao: boolean; custoEstimado: number; duracao: number; resolucao: string; formato: string; confirmacao: string; proximo: string }>(sim);
+    // Sem duração nem resolução, as do formulário do site: 5 s em 720p.
+    expect(simulacao).toMatchObject({ simulacao: true, custoEstimado: 0.05, duracao: 5, resolucao: "720p", formato: "16:9" });
+    expect(simulacao.proximo).toContain("sim dela");
+    expect(api.submitted).toHaveLength(0);
+    expect(await new Db(env.DB).recentVideos()).toHaveLength(antes);
+
+    // O código de outro pedido (outra cena) não gera.
+    const outro = await comApi(api, "gerar_video", { ...pedido, cena: "outra cena", confirmacao: simulacao.confirmacao });
+    expect(outro.isError).toBe(true);
+    expect(outro.content[0]!.text).toContain("confirmacao_invalida");
+    expect(api.submitted).toHaveLength(0);
+
+    const r = await comApi(api, "gerar_video", { ...pedido, confirmacao: simulacao.confirmacao });
+    expect(dados<{ video: { modelo: string; custoEstimado: number } }>(r).video).toMatchObject({ modelo: "mischief", custoEstimado: 0.05 });
+    expect(api.submitted[0]).toMatchObject({ model: "tbc/mischief-1", duration: 5, resolution: "720p", aspect_ratio: "16:9", generate_audio: false });
+
+    // No formato do Final (9:16), o mischief recusa já na simulação.
+    const vertical = await comApi(api, "gerar_video", { ...pedido, formato: undefined });
+    expect(vertical.isError).toBe(true);
+    expect(vertical.content[0]!.text).toContain("pedido_invalido");
+    // Campo que o modelo não aceita: diz quais aceita.
+    const fala = await comApi(api, "gerar_video", { ...pedido, fala: "Oi" });
+    expect(fala.content[0]!.text).toContain("campo_nao_aceito");
+    expect(api.submitted).toHaveLength(1);
+  });
+
+  it("conta comum com a API: só os modelos liberados para todos, e modelo em teste não existe; com a permissão, existe", async () => {
+    await memberCookie();
+    const permissoes = (p: string[]) => env.DB.prepare("UPDATE users SET permissoes = ? WHERE email = 'membro@exemplo.com'").bind(JSON.stringify(p)).run();
+    await permissoes(["usar:api", "usar:canvas"]);
+    const code = await token("membro@exemplo.com", "ma_membro");
+    const lista = (await (await call(new Request(`${SITE}/api/v1/modelos`, { headers: { authorization: `Bearer ${code}` } }))).json()) as { modelos: { id: string }[] };
+    expect(lista.modelos.map((m) => m.id)).toEqual(["wan"]);
+    const { id } = (await (await call(new Request(`${SITE}/api/v1/projetos`, { method: "POST", body: JSON.stringify({ nome: "Dela" }), headers: { authorization: `Bearer ${code}` } }))).json()) as { id: string };
+    const api = new FakeVideoApi();
+    const res = await call(new Request(`${SITE}/api/v1/projetos/${id}/video`, { method: "POST", body: JSON.stringify({ modelo: "mischief", cena: "c", foto: "/x.png" }), headers: { authorization: `Bearer ${code}` } }), api);
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { erro: string; modelos: string[] })).toEqual({ erro: "modelo_inexistente", modelos: ["wan"] });
+    expect(api.submitted).toHaveLength(0);
+    await permissoes(["usar:api", "usar:canvas", "usar:modelo:teste"]);
+    const comTeste = (await (await call(new Request(`${SITE}/api/v1/modelos?tipo=video`, { headers: { authorization: `Bearer ${code}` } }))).json()) as { modelos: { id: string }[] };
+    expect(comTeste.modelos.map((m) => m.id)).toContain("mischief");
+  });
+});
+
 describe("gerar_imagem", () => {
   /** A ferramenta com um OpenRouter falso guardado, para ver o pedido de imagem. */
   const comApi = async (api: FakeVideoApi, name: string, args: unknown) => {
@@ -315,7 +408,7 @@ describe("gerar_imagem", () => {
   it("gera no formato do projeto, devolve a imagem para o agente olhar e ela entra com adicionar {imagem}", async () => {
     const api = new FakeVideoApi();
     const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Esboço" }));
-    const r = await comApi(api, "gerar_imagem", { projeto: id, descricao: "mulher na cozinha com um sérum roxo" });
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_imagem", { modelo: "nano-banana", projeto: id, descricao: "mulher na cozinha com um sérum roxo" });
     expect(r.isError).toBeFalsy();
     const { imagem } = dados<{ imagem: { id: string; src: string; formato: string; resolucao: string; custo: number } }>(r);
     expect(imagem).toMatchObject({ src: `/videos/${imagem.id}.png`, formato: "9:16", resolucao: "1K", custo: 0.039 });
@@ -325,7 +418,7 @@ describe("gerar_imagem", () => {
     expect(api.images[0]!.input_references).toBeUndefined();
 
     // Outra, partindo da primeira: ela vai como referência.
-    await comApi(api, "gerar_imagem", { projeto: id, descricao: "a mesma cena, sorrindo mais", referencia: imagem.src, formato: "1:1" });
+    await gerando((n, x) => comApi(api, n, x), "gerar_imagem", { modelo: "nano-banana", projeto: id, descricao: "a mesma cena, sorrindo mais", referencias: [imagem.src], formato: "1:1" });
     expect(api.images[1]!.input_references).toHaveLength(1);
     expect(api.images[1]!.aspect_ratio).toBe("1:1");
 
@@ -340,10 +433,10 @@ describe("gerar_imagem", () => {
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Várias" }));
     const fontes: string[] = [];
     for (const descricao of ["a pessoa", "o produto", "a cozinha"]) {
-      const { imagem } = dados<{ imagem: { src: string } }>(await comApi(api, "gerar_imagem", { projeto: id, descricao }));
-      fontes.push(imagem.src);
+      fontes.push((await imagemGerada((n, x) => comApi(api, n, x), id, descricao)).src);
     }
-    const r = await comApi(api, "gerar_imagem", { projeto: id, descricao: "a pessoa da imagem 1 segura o produto da imagem 2 na cozinha da imagem 3", referencia: fontes[0], referencias: fontes.slice(1) });
+    const gera = (args: Record<string, unknown>) => gerando((n, x) => comApi(api, n, x), "gerar_imagem", { modelo: "nano-banana", projeto: id, ...args });
+    const r = await gera({ descricao: "a pessoa da imagem 1 segura o produto da imagem 2 na cozinha da imagem 3", referencias: fontes });
     expect(r.isError).toBeFalsy();
     const pedido = api.images[3]!;
     expect(pedido.input_references).toHaveLength(3);
@@ -353,26 +446,26 @@ describe("gerar_imagem", () => {
     expect(pedido.prompt).toContain(IMAGE_REFERENCES_GUIDE);
     expect(pedido.prompt).not.toContain(IMAGE_REFERENCE_GUIDE);
 
-    // Só referencias, sem referencia: a primeira é a foto.
-    await comApi(api, "gerar_imagem", { projeto: id, descricao: "as duas juntas", referencias: fontes.slice(0, 2) });
+    // Duas: a primeira vai como a foto, a outra depois.
+    await gera({ descricao: "as duas juntas", referencias: fontes.slice(0, 2) });
     expect(api.images[4]!.input_references).toHaveLength(2);
 
     // Uma só, em referencias: a guia de uma referência.
-    await comApi(api, "gerar_imagem", { projeto: id, descricao: "a mesma", referencias: [fontes[0]] });
+    await gera({ descricao: "a mesma", referencias: [fontes[0]] });
     expect(api.images[5]!.input_references).toHaveLength(1);
     expect(api.images[5]!.prompt).toContain(IMAGE_REFERENCE_GUIDE);
 
-    const demais = await comApi(api, "gerar_imagem", { projeto: id, descricao: "cena", referencia: fontes[0], referencias: Array(6).fill(fontes[1]) });
+    const demais = await gera({ descricao: "cena", referencias: Array(7).fill(fontes[1]) });
     expect(demais.isError).toBe(true);
     expect(demais.content[0]!.text).toContain("referencias_demais");
-    const quebrada = await comApi(api, "gerar_imagem", { projeto: id, descricao: "cena", referencias: [fontes[0], "/videos/00000000-0000-4000-8000-000000000000.png"] });
+    const quebrada = await gera({ descricao: "cena", referencias: [fontes[0], "/videos/00000000-0000-4000-8000-000000000000.png"] });
     expect(quebrada.content[0]!.text).toContain("arquivo_indisponivel");
     expect(api.images).toHaveLength(6);
   });
 
   it("imagem não entra como vídeo, nem vídeo como imagem", async () => {
     const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "A" }));
-    const { imagem } = dados<{ imagem: { id: string } }>(await ferramenta("gerar_imagem", { projeto: id, descricao: "uma cena" }));
+    const imagem = await imagemGerada(ferramenta, id);
     for (const comando of [{ tipo: "adicionar", video: imagem.id, dur: 2 }, { tipo: "adicionar", imagem: VIDEO }]) {
       const r = await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [comando] });
       expect(r.isError).toBe(true);
@@ -385,26 +478,26 @@ describe("gerar_imagem", () => {
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "A" }));
     const api = new FakeVideoApi();
     const casos: [Record<string, unknown>, string][] = [
-      [{ descricao: " " }, "descricao_obrigatoria"],
-      [{ descricao: "cena", referencia: "/videos/00000000-0000-4000-8000-000000000000.png" }, "arquivo_indisponivel"],
-      [{ descricao: "cena", referencia: `/videos/${VIDEO}.mp4` }, "referencia_nao_e_imagem"],
+      [{ descricao: " " }, "campo_obrigatorio"],
+      [{ descricao: "cena", referencias: ["/videos/00000000-0000-4000-8000-000000000000.png"] }, "arquivo_indisponivel"],
+      [{ descricao: "cena", referencias: [`/videos/${VIDEO}.mp4`] }, "referencia_tipo_invalido"],
       [{ descricao: "cena", formato: "7:3" }, "pedido_invalido"],
       [{ descricao: "cena", final: "outro" }, "final_inexistente"],
     ];
     for (const [args, erro] of casos) {
-      const r = await comApi(api, "gerar_imagem", { projeto: id, ...args });
+      const r = await gerando((n, x) => comApi(api, n, x), "gerar_imagem", { modelo: "nano-banana", projeto: id, ...args });
       expect(r.isError).toBe(true);
       expect(r.content[0]!.text).toContain(erro);
     }
     expect(api.images).toHaveLength(0);
     api.failImage = "OpenRouter respondeu HTTP 500";
-    const r = await comApi(api, "gerar_imagem", { projeto: id, descricao: "cena" });
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_imagem", { modelo: "nano-banana", projeto: id, descricao: "cena" });
     expect(r.content[0]!.text).toContain("imagem_falhou");
     expect(r.content[0]!.text).not.toContain("HTTP 500");
   });
 });
 
-describe("gerar_video_wan", () => {
+describe("gerar_video com o Wan 3.0 livre", () => {
   /** A ferramenta com um OpenRouter falso guardado, para ver o pedido de vídeo. */
   const comApi = async (api: FakeVideoApi, name: string, args: unknown) => {
     const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
@@ -413,17 +506,17 @@ describe("gerar_video_wan", () => {
   };
   const imagens = async (api: FakeVideoApi, id: string, n: number) => {
     const fontes: string[] = [];
-    for (let i = 0; i < n; i++) fontes.push(dados<{ imagem: { src: string } }>(await comApi(api, "gerar_imagem", { projeto: id, descricao: `imagem ${i}` })).imagem.src);
+    for (let i = 0; i < n; i++) fontes.push((await imagemGerada((name, x) => comApi(api, name, x), id, `imagem ${i}`)).src);
     return fontes;
   };
 
   it("só texto: a cena inteira vai como prompt, com som, no formato do Final, e o vídeo segue no acompanhar_video", async () => {
     const api = new FakeVideoApi();
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Wan" }));
-    const r = await comApi(api, "gerar_video_wan", { projeto: id, cena: 'Mulher na cozinha olha para a câmera e diz em português: "Oi, gente!"', duracao: 8, semente: 42 });
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "wan-livre", projeto: id, cena: 'Mulher na cozinha olha para a câmera e diz em português: "Oi, gente!"', duracao: 8, semente: 42 });
     expect(r.isError).toBeFalsy();
-    const { video } = dados<{ video: { id: string; custoEstimado: number; duracao: number; formato: string } }>(r);
-    expect(video).toMatchObject({ custoEstimado: 0.8, duracao: 8, formato: "9:16" });
+    const { video } = dados<{ video: { id: string; custoEstimado: number; duracaoEstimada: number; formato: string } }>(r);
+    expect(video).toMatchObject({ custoEstimado: 0.8, duracaoEstimada: 8, formato: "9:16" });
     expect(api.submitted[0]).toMatchObject({ model: "alibaba/wan-3.0", prompt: 'Mulher na cozinha olha para a câmera e diz em português: "Oi, gente!"', duration: 8, resolution: "720p", aspect_ratio: "9:16", generate_audio: true, seed: 42 });
     expect(api.submitted[0]!.frame_images).toBeUndefined();
     expect(api.submitted[0]!.input_references).toBeUndefined();
@@ -434,7 +527,7 @@ describe("gerar_video_wan", () => {
     const api = new FakeVideoApi();
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Wan" }));
     const [a, b] = await imagens(api, id, 2);
-    const r = await comApi(api, "gerar_video_wan", { projeto: id, cena: "a câmera se aproxima devagar", foto: a, ultimoQuadro: b, som: false, resolucao: "480p", formato: "16:9" });
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "wan-livre", projeto: id, cena: "a câmera se aproxima devagar", foto: a, ultimoQuadro: b, som: false, resolucao: "480p", formato: "16:9" });
     expect(r.isError).toBeFalsy();
     const pedido = api.submitted[0]!;
     expect(pedido.frame_images!.map((f) => f.frame_type)).toEqual(["first_frame", "last_frame"]);
@@ -449,7 +542,7 @@ describe("gerar_video_wan", () => {
     const api = new FakeVideoApi();
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Wan" }));
     const fontes = await imagens(api, id, 3);
-    const r = await comApi(api, "gerar_video_wan", { projeto: id, cena: "a pessoa da imagem 1 mostra o produto da imagem 2 no lugar da imagem 3", referencias: fontes });
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "wan-livre", projeto: id, cena: "a pessoa da imagem 1 mostra o produto da imagem 2 no lugar da imagem 3", referencias: fontes });
     expect(r.isError).toBeFalsy();
     expect(api.submitted[0]!.input_references).toHaveLength(3);
     expect(api.submitted[0]!.frame_images).toBeUndefined();
@@ -461,18 +554,18 @@ describe("gerar_video_wan", () => {
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Wan" }));
     const [a] = await imagens(api, id, 1);
     const casos: [Record<string, unknown>, string][] = [
-      [{ cena: " " }, "cena_obrigatoria"],
+      [{ cena: " " }, "campo_obrigatorio"],
       [{ cena: "c", foto: a, referencias: [a] }, "quadros_ou_referencias"],
       [{ cena: "c", ultimoQuadro: a, referencias: [a] }, "quadros_ou_referencias"],
       [{ cena: "c", referencias: Array(5).fill(a) }, "referencias_demais"],
-      [{ cena: "c", semente: -1 }, "semente_invalida"],
+      [{ cena: "c", semente: -1 }, "pedido_invalido"],
       [{ cena: "c", foto: `/videos/${VIDEO}.mp4` }, "foto_tipo_invalido"],
       [{ cena: "c", referencias: ["/videos/00000000-0000-4000-8000-000000000000.png"] }, "arquivo_indisponivel"],
       [{ cena: "c", duracao: 31 }, "pedido_invalido"],
       [{ cena: "c", final: "outro" }, "final_inexistente"],
     ];
     for (const [args, erro] of casos) {
-      const r = await comApi(api, "gerar_video_wan", { projeto: id, ...args });
+      const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "wan-livre", projeto: id, ...args });
       expect(r.isError).toBe(true);
       expect(r.content[0]!.text).toContain(erro);
     }
@@ -490,18 +583,17 @@ describe("gerar_video", () => {
   /** Um projeto e uma foto gerada para animar. */
   const preparar = async () => {
     const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Vídeo" }));
-    const { imagem } = dados<{ imagem: { src: string } }>(await ferramenta("gerar_imagem", { projeto: id, descricao: "mulher sorrindo" }));
-    return { id, revisao, foto: imagem.src };
+    return { id, revisao, foto: (await imagemGerada(ferramenta, id, "mulher sorrindo")).src };
   };
 
   it("lista as vozes, gera pela HeyGen direta no formato do projeto, acompanha e o vídeo pronto entra no projeto", async () => {
     await new Db(env.DB).setPlatform("heygen");
     const heygen = new FakeHeyGenApi();
     const { id, revisao, foto } = await preparar();
-    const vozes = dados<{ prontas: { id: string; nome: string; idioma: string; genero: string }[]; clonadas: unknown[] }>(await comHeyGen(heygen, "listar_vozes", { genero: "feminina" }));
+    const vozes = dados<{ prontas: { id: string; nome: string; idioma: string; genero: string }[]; clonadas: unknown[] }>(await comHeyGen(heygen, "listar_vozes", { modelo: "heygen", genero: "feminina" }));
     expect(vozes.prontas).toEqual([{ id: "voz-ana|pt-BR", nome: "Ana", idioma: "Português", genero: "feminina" }]);
 
-    const r = await comHeyGen(heygen, "gerar_video", { projeto: id, foto, fala: "Oi, gente! Hoje eu vou mostrar o meu sérum favorito.", voz: vozes.prontas[0]!.id });
+    const r = await gerando((n, x) => comHeyGen(heygen, n, x), "gerar_video", { modelo: "heygen", projeto: id, foto, fala: "Oi, gente! Hoje eu vou mostrar o meu sérum favorito.", voz: vozes.prontas[0]!.id });
     expect(r.isError).toBeFalsy();
     const { video } = dados<{ video: { id: string; status: string; formato: string; custoEstimado: number; duracaoEstimada: number } }>(r);
     expect(video).toMatchObject({ formato: "9:16" });
@@ -518,21 +610,24 @@ describe("gerar_video", () => {
     expect((await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", ...pronto.usar }] })).isError).toBe(false);
   });
 
-  it("recusa sem foto, sem fala, foto que não é imagem, voz que não existe e áudio pelo OpenRouter, sem pedir vídeo", async () => {
+  it("recusa sem modelo, sem foto, sem fala, foto que não é imagem, voz que não existe e áudio pelo OpenRouter, sem pedir vídeo", async () => {
     await env.MIDIA.put(`videos/${VIDEO}.mp4`, new Uint8Array([1, 2, 3]), { httpMetadata: { contentType: "video/mp4" } });
     const heygen = new FakeHeyGenApi();
     const { id, foto } = await preparar();
     const casos: [Record<string, unknown>, string][] = [
-      [{ fala: "Oi", voz: "voz-ana|pt-BR" }, "foto_obrigatoria"],
-      [{ foto, voz: "voz-ana|pt-BR" }, "fala_obrigatoria"],
+      [{ modelo: undefined, foto, fala: "Oi", voz: "voz-ana|pt-BR" }, "modelo_obrigatorio"],
+      [{ modelo: "nano-banana", foto, fala: "Oi", voz: "voz-ana|pt-BR" }, "modelo_inexistente"],
+      [{ fala: "Oi", voz: "voz-ana|pt-BR" }, "campo_obrigatorio"],
+      [{ foto, voz: "voz-ana|pt-BR" }, "pedido_invalido"],
+      [{ foto, fala: "Oi", voz: "voz-ana|pt-BR", duracao: 5 }, "campo_nao_aceito"],
       [{ foto: `/videos/${VIDEO}.mp4`, fala: "Oi", voz: "voz-ana|pt-BR" }, "foto_tipo_invalido"],
       [{ foto, fala: "Oi", voz: "nao-existe" }, "pedido_invalido"],
       [{ foto, fala: "Oi", voz: "voz-ana|pt-BR", final: "outro" }, "final_inexistente"],
       // Pelo OpenRouter (a plataforma padrão dos testes), o áudio próprio não existe.
-      [{ foto, audio: `/videos/${VIDEO}.mp4` }, "audio_indisponivel"],
+      [{ foto, audio: `/videos/${VIDEO}.mp4` }, "campo_nao_aceito"],
     ];
     for (const [args, erro] of casos) {
-      const r = await comHeyGen(heygen, "gerar_video", { projeto: id, ...args });
+      const r = await gerando((n, x) => comHeyGen(heygen, n, x), "gerar_video", { modelo: "heygen", projeto: id, ...args });
       expect(r.isError).toBe(true);
       expect(r.content[0]!.text).toContain(erro);
     }
@@ -555,11 +650,13 @@ describe("gerar_video", () => {
       return `/projetos/${projeto}/exportacoes/${eid}/0.mp3`;
     };
     const alheio = await exportacao(outro);
-    const recusado = await comHeyGen(heygen, "gerar_video", { projeto: id, foto, audio: alheio }, "ma_admin", fake);
+    const viaHeyGen: Chamar = (n, x) => comHeyGen(heygen, n, x, "ma_admin", fake);
+    const recusado = await gerando(viaHeyGen, "gerar_video", { modelo: "heygen", projeto: id, foto, audio: alheio });
     expect([recusado.isError, recusado.content[0]!.text]).toEqual([true, expect.stringContaining("arquivo_indisponivel")]);
-    const r = await comHeyGen(heygen, "gerar_video", { projeto: id, foto, audio: await exportacao(id) }, "ma_admin", fake);
+    const r = await gerando(viaHeyGen, "gerar_video", { modelo: "heygen", projeto: id, foto, audio: await exportacao(id) });
     expect(r.isError).toBeFalsy();
-    expect(fake.inspected.map((i) => i.path)).toEqual(["/som"]);
+    // Na simulação e na geração: só o som desta exportação.
+    expect([...new Set(fake.inspected.map((i) => i.path))]).toEqual(["/som"]);
     expect(heygen.videos).toHaveLength(1);
   });
 
@@ -588,7 +685,8 @@ describe("gerar_audio", () => {
     const vozes = dados<{ prontas: { id: string; nome: string; idioma: string; genero: string }[] }>(await comFish(api, fish, "listar_vozes", { modelo: "fish", genero: "masculina", idioma: "Brasil" }));
     expect(vozes.prontas).toEqual([{ id: "fish-caio", nome: "Caio", idioma: "Português (Brasil)", genero: "masculina" }]);
 
-    const r = await comFish(api, fish, "gerar_audio", { texto: "[risada] Olha que legal!", voz: "fish-caio" });
+    const viaFish: Chamar = (n, x) => comFish(api, fish, n, x, heygen);
+    const r = await gerando(viaFish, "gerar_audio", { modelo: "fish", texto: "[risada] Olha que legal!", voz: "fish-caio" });
     expect(r.isError).toBeFalsy();
     const { audio, usar } = dados<{ audio: { id: string; src: string; modelo: string; voz: string; custo: number; duracao: number }; usar: { audio: string } }>(r);
     expect(audio).toMatchObject({ src: `/videos/${audio.id}.mp3`, modelo: "fish", voz: "Caio" });
@@ -599,8 +697,8 @@ describe("gerar_audio", () => {
     const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Fala" }));
     expect((await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", ...usar }] })).isError).toBe(false);
     // A fala vira o áudio do avatar no gerar_video (Meu áudio, HeyGen direta).
-    const { imagem } = dados<{ imagem: { src: string } }>(await comFish(api, fish, "gerar_imagem", { projeto: id, descricao: "touro sorrindo" }));
-    const v = await comFish(api, fish, "gerar_video", { projeto: id, foto: imagem.src, audio: audio.src }, heygen);
+    const imagem = await imagemGerada(viaFish, id, "touro sorrindo");
+    const v = await gerando(viaFish, "gerar_video", { modelo: "heygen", projeto: id, foto: imagem.src, audio: audio.src });
     expect(v.isError).toBeFalsy();
     expect(heygen.assets.find((a) => a.type === "audio/mpeg")).toBeDefined();
     expect(heygen.videos[0]!.audio_asset_id).toBeDefined();
@@ -614,36 +712,38 @@ describe("gerar_audio", () => {
     const { clonadas } = dados<{ clonadas: { id: string; nome: string; clonarNoPrimeiroUso?: boolean }[] }>(await comFish(api, fish, "listar_vozes", { modelo: "fish" }));
     expect(clonadas).toEqual([{ id: `avatar:${avatar}`, nome: "Voz de Urso", clonarNoPrimeiroUso: true }]);
 
-    const sem = await comFish(api, fish, "gerar_audio", { texto: "Bom dia, turma!", voz: `avatar:${avatar}` });
+    const viaFish: Chamar = (n, x) => comFish(api, fish, n, x);
+    const sem = await gerando(viaFish, "gerar_audio", { modelo: "fish", texto: "Bom dia, turma!", voz: `avatar:${avatar}` });
     expect(sem.isError).toBe(true);
     expect(sem.content[0]!.text).toContain("pedido_invalido");
-    const r = await comFish(api, fish, "gerar_audio", { texto: "Bom dia, turma!", voz: `avatar:${avatar}`, consentimento: true });
+    const r = await gerando(viaFish, "gerar_audio", { modelo: "fish", texto: "Bom dia, turma!", voz: `avatar:${avatar}`, consentimento: true });
     expect(dados<{ audio: { voz: string; clonada: boolean } }>(r).audio).toMatchObject({ voz: "Voz de Urso", clonada: true });
     expect(api.speeches[0]!.voice).toBeUndefined();
     expect(new TextDecoder().decode(api.speeches[0]!.reference!.bytes)).toBe("voz-do-urso");
     // Da segunda vez, sem consentimento.
-    expect((await comFish(api, fish, "gerar_audio", { texto: "De novo.", voz: `avatar:${avatar}` })).isError).toBeFalsy();
+    expect((await gerando(viaFish, "gerar_audio", { modelo: "fish", texto: "De novo.", voz: `avatar:${avatar}` })).isError).toBeFalsy();
   });
 
-  it("ElevenLabs pelo modelo; recusa modelo que não fala, sem texto, sem voz e voz que o modelo não tem, sem gastar", async () => {
+  it("ElevenLabs pelo modelo; recusa sem modelo, modelo que não fala, sem texto, sem voz e voz que o modelo não tem, sem gastar", async () => {
     const api = new FakeVideoApi(), fish = new FakeFishApi();
     const { prontas } = dados<{ prontas: { id: string }[] }>(await comFish(api, fish, "listar_vozes", { modelo: "elevenlabs", busca: "sarah" }));
     expect(prontas.map((v) => v.id)).toEqual(["sarah"]);
     const casos: [Record<string, unknown>, string][] = [
+      [{ texto: "Oi", voz: "sarah" }, "modelo_obrigatorio"],
       [{ modelo: "wan", texto: "Oi", voz: "sarah" }, "modelo_inexistente"],
-      [{ texto: " ", voz: "fish-caio" }, "texto_obrigatorio"],
-      [{ texto: "Oi" }, "voz_obrigatoria"],
+      [{ modelo: "fish", texto: " ", voz: "fish-caio" }, "campo_obrigatorio"],
+      [{ modelo: "fish", texto: "Oi" }, "campo_obrigatorio"],
       [{ modelo: "elevenlabs", texto: "Oi", voz: "fish-caio" }, "pedido_invalido"],
-      [{ texto: "[risada]", voz: "fish-caio" }, "pedido_invalido"],
+      [{ modelo: "fish", texto: "[risada]", voz: "fish-caio" }, "pedido_invalido"],
     ];
     for (const [args, erro] of casos) {
-      const r = await comFish(api, fish, "gerar_audio", args);
+      const r = await gerando((n, x) => comFish(api, fish, n, x), "gerar_audio", args);
       expect(r.isError).toBe(true);
       expect(r.content[0]!.text).toContain(erro);
     }
     expect((await comFish(api, fish, "listar_vozes", { modelo: "wan" })).content[0]!.text).toContain("modelo_inexistente");
     expect(api.speeches).toHaveLength(0);
-    const r = await comFish(api, fish, "gerar_audio", { modelo: "elevenlabs", texto: "Oi, gente!", voz: "sarah" });
+    const r = await gerando((n, x) => comFish(api, fish, n, x), "gerar_audio", { modelo: "elevenlabs", texto: "Oi, gente!", voz: "sarah" });
     expect(dados<{ audio: { modelo: string } }>(r).audio.modelo).toBe("elevenlabs");
     expect(api.speeches[0]).toMatchObject({ model: "elevenlabs/eleven-v4", voice: "sarah" });
   });
@@ -651,7 +751,7 @@ describe("gerar_audio", () => {
   it("conta comum sem os modelos de fala não lista nem gera", async () => {
     await memberCookie();
     const code = await token("membro@exemplo.com", "ma_membro");
-    const res = await call(new Request(`${SITE}/api/v1/audios`, { method: "POST", body: JSON.stringify({ texto: "Oi", voz: "fish-caio" }), headers: { authorization: `Bearer ${code}` } }));
+    const res = await call(new Request(`${SITE}/api/v1/audios`, { method: "POST", body: JSON.stringify({ modelo: "fish", texto: "Oi", voz: "fish-caio" }), headers: { authorization: `Bearer ${code}` } }));
     expect(res.status).toBe(404);
   });
 });

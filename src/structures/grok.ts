@@ -15,6 +15,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
+import { CAMPOS, num, txt, voz } from "./agente";
 import { options } from "./wan";
 
 export const MAX_GROK_MOTION = 1000;
@@ -38,6 +39,18 @@ export const GROK: Structure = {
   summary: "Anima a foto com o movimento que você descreve, sem fala.",
   icon: "animation",
   access: "admin",
+  agent: {
+    use: "Anima a foto com o movimento descrito, sem fala (o vídeo vem com som de ambiente): cenas em que o avatar só reage. Vertical ou horizontal, 1 a 15 s.",
+    fields: {
+      cena: `O movimento: o que acontece no vídeo, sem fala. Até ${MAX_GROK_MOTION} caracteres. Obrigatório.`,
+      foto: `${CAMPOS.foto} Obrigatória.`,
+      duracao: CAMPOS.duracao,
+      resolucao: CAMPOS.resolucao,
+      formato: CAMPOS.formato,
+    },
+    required: ["cena", "foto"],
+    values: (a) => ({ movimento: txt(a, "cena"), duracao: num(a, "duracao"), resolucao: txt(a, "resolucao"), formato: txt(a, "formato") }),
+  },
   // Sem fala para tratar nem pausas para cortar.
   treatAudio: false,
   quickEdit: false,
