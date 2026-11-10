@@ -11,9 +11,11 @@ corrigido no mesmo PR). Vem antes do resto, nesta ordem.
 
 ### 1. Pode quebrar ou custar dinheiro
 
-1. **Omni**: o prompt do 1.2 (`omniPrompt`, `src/structures/omni.ts`) é o formato que o doc do
-   modelo registra como falho no 1.2; e o Google passa o 1.1 para o 1.2 em **03/12/2026**: tirar
-   `OMNI_11` antes dessa data.
+1. **Omni 1.1**: o Google passa o 1.1 para o 1.2 em **03/12/2026**: tirar `OMNI_11` antes dessa
+   data (os vídeos dele ficam com a estrutura gravada). O 1.2 já tem os dois usos que o modelo
+   aceita (com fala, a selfie sem instruções; sem fala, a cena sem pessoa; ver
+   [modelos/gemini-omni-1.2-flash.md](modelos/gemini-omni-1.2-flash.md)); falta testar a cena com
+   a foto de um produto e uma segunda foto de avatar.
 2. **Listas cortadas em 100** (`ContaDb.videos`): `/videos`, a página do modelo e a biblioteca do
    canvas mostram só os 100 mais novos, sem paginação, e o contador diz "100" (`docs/layout.md`, item 11).
 3. **Voz do avatar em M4A ou OGG**: o avatar aceita, o HeyGen direto recusa ao gerar (só MP3 e WAV,

@@ -79,6 +79,7 @@ export const ERROS = {
   fala: campo("Escreva a fala do vídeo."),
   textoFala: campo("Escreva o texto que a voz lê."),
   instrucoes: campo("Escreva as instruções da cena."),
+  cenaComFala: campo("Com fala, deixe a cena vazia."),
   falaLonga: (max: number) => campo(`Encurte a fala para até ${max} caracteres.`),
   movimento: campo("Descreva o movimento do avatar."),
   movimentoLongo: (max: number) => campo(`Encurte o movimento para até ${max} caracteres.`),

@@ -1,8 +1,10 @@
 # Gemini Omni 1.2 Flash (`google/gemini-omni-1.2-flash`): avatar falando, clipes curtos
 
 **Estrutura `omni` (`src/structures/omni.ts`), só para o administrador, desde 07/11/2026.**
-Ainda sem nenhum vídeo gerado. Uso pretendido: avatar falando a partir da foto e da fala,
-com a voz e a boca saindo do modelo (como o [Wan 3.0](wan-3.0.md)), em clipes de até 15 s.
+Dois usos desde 10/11/2026, em clipes de até 15 s: o avatar da foto falando, parado e de frente
+(a voz e a boca saem do modelo, como no [Wan 3.0](wan-3.0.md)), e a cena sem pessoa, pelas
+instruções de quem usa. Com a foto de uma pessoa, o 1.2 recusa instruções livres (ver os testes
+de 10/11/2026).
 
 A estrutura começou no 1.1 (`google/gemini-omni-1.1-flash`) e passou para o 1.2 no mesmo
 dia: o Google avisa que, **a partir de 03/12/2026, todo pedido ao 1.1 vai para o 1.2** e é
@@ -218,6 +220,85 @@ vídeo `87fdc2b3-ef9b-450e-9cfa-cf3168f52278`. 720×1280, 4 s; rosto, óculos e 
 da foto, um plano só, gesticulando; a fala sai inteira (a transcrição escreve "8,5" para
 "oito e meia"), sem silêncio sobrando. Áudio −20,4 LUFS, pico −3,0 dBFS.
 
+## Teste de 10/11/2026: o formato do código ainda falha
+
+Pelo terminal (`npm run gerar`), a mesma foto da Marina, 4 s, 360p, 9:16, os dois pedidos ao
+mesmo tempo (21:58 UTC), instruções em português ("Apresentadora num estúdio, fala com confiança
+olhando para a câmera e gesticula com as mãos.") e a fala "O resultado sai hoje, entre oito e
+meia e nove!". **Os dois falharam em 40 s, sem custo**, com "Video generation failed":
+
+| Pedido | Job | Resultado |
+|---|---|---|
+| O do código (`omniPrompt`): instruções, `OMNI_SINGLE_SHOT`, a fala citada e a orientação de qualidade | `gen-vid-1794347889-EPgFEyoduDBjz2wVNzZg` | Falhou |
+| O mesmo, com "The person in the photo starts from the position in the photo, in the same place and framing. No cuts." antes das instruções, no lugar do `OMNI_SINGLE_SHOT` | `gen-vid-1794347889-ECAzcd0Wt0jDK2szGHNA` | Falhou |
+
+- O formato que está no código continua falhando, três dias depois do lançamento: não era só a
+  instabilidade dos primeiros dias.
+- Citar a pessoa da foto e a posição de partida numa frase nova, sem o resto da frase do estilo
+  Selfie, não bastou (uma tentativa).
+- Não houve controle com o pedido antigo exato no mesmo horário (só dois pedidos autorizados):
+  não dá para separar o formato de uma queda do provedor naquele minuto.
+
+**Controle e `task` (22:07 UTC, os dois ao mesmo tempo, 4 s, 360p, a mesma foto e a mesma fala):**
+
+| Pedido | Job | Resultado |
+|---|---|---|
+| O antigo exato (`buildPrompt` com o estilo Selfie, sem instruções), sem `task` | `gen-vid-1794348441-4oDFD2mLaxrclUBFwtvZ` | **Pronto**, US$ 0,0927 (vídeo só no ambiente de teste) |
+| O do código (`omniPrompt` com as instruções), com `provider.options["google-ai-studio"].task = "image_to_video"` | `gen-vid-1794348441-QkOCuYXN6pKh3bB8wq1J` | Falhou |
+
+- O provedor estava no ar: **a falha é do formato do pedido**, não de uma queda. O antigo exato
+  passou de novo (6 de 6 desde 07/11).
+- O `task` não resolveu. Não dá para saber se o OpenRouter repassou a opção (a resposta não
+  diz, e o nome do provedor nas opções, `google-ai-studio`, é o da página do provedor, sem
+  confirmação): o resultado vale como "não ajudou", não como "o parâmetro não serve".
+- Pesquisa do dia (só os resumos da busca; as páginas não abrem deste ambiente): o Omni barra
+  rosto que pareça de pessoa real também na imagem enviada, com relatos de falso positivo em
+  avatar próprio e de recusas sem motivo no fórum do Google. Combina com o que se vê aqui: o que
+  passa é a frase que manda animar a pessoa da foto parada, de frente, falando calma.
+
+Gasto do dia: US$ 0,09 (quatro pedidos, um pronto).
+
+**O antigo com as instruções depois da frase do Selfie (22:10 UTC, 4 s, 360p):** falhou, sem
+custo (`gen-vid-1794348600-VFqhHGdMmqJwaOBjHm7q`). Era o `buildPrompt` com `extra` (o caminho do
+Wan): a frase do Selfie inteira, depois "Apresentadora num estúdio, fala com confiança olhando
+para a câmera e gesticula com as mãos.", a fala citada e a orientação de qualidade. Uma tentativa
+só, três minutos depois do controle que passou.
+
+**Conclusão de 10/11/2026:** no 1.2, com esta foto, só passa o pedido da selfie parada, sem
+nenhuma instrução de quem usa (6 de 6). Qualquer pedido com as instruções falhou: no lugar da
+frase do Selfie, depois dela, com `task`, com outra frase citando a foto (0 de 4 no dia; em
+07/11, 2 de 17). Não se sabe se o que derruba é o conteúdo destas instruções (apresentadora,
+gesticular, que contraria "mantém a posição") ou qualquer texto a mais.
+
+**Sem pessoa no pedido (22:12 UTC, 4 s, 360p, 9:16):** o formato do código (`omniPrompt` sem
+fala), **sem foto** e com instruções livres em português só de objeto ("Um frasco de perfume de
+vidro sobre uma mesa de mármore, com luz suave de janela. A câmera se aproxima devagar do
+frasco."): **pronto de primeira**, US$ 0,0927 (`gen-vid-1794348736-XJNSSle7MH953L77SRDl`, vídeo só
+no ambiente de teste). 360×640, 4 s, com som; o quadro do meio mostra o frasco sobre o mármore
+com a luz da janela, como pedido.
+
+O formato do código não é o problema em si: com instruções livres e sem pessoa, passou. O que
+falha é **instruções livres com a foto de uma pessoa realista**, o que aponta para o filtro de
+rosto do Google (ver a pesquisa acima), não para o texto. Uma amostra só, e mudaram duas coisas
+de uma vez (sem foto e sem pessoa no texto): falta separar foto de objeto de texto sem pessoa.
+Gasto do dia: US$ 0,19 (seis pedidos, dois prontos).
+
+**Decisão do dono (10/11/2026), no código no mesmo dia:** o 1.2 passa a ter dois usos, pelo
+campo "Idioma da fala" (`omniVersion` com `split`, `src/structures/omni.ts`):
+
+- **Com fala** (um idioma): o avatar da foto fala o texto, parado e olhando para a câmera. O
+  pedido é o do estilo Selfie do Wan, exato (`omniTalkPrompt`), sem o campo Instruções: é o que
+  passou 6 de 6. Foto e texto obrigatórios. Para o agente, `cena` com `fala` é recusada
+  (`ERROS.cenaComFala`).
+- **Sem fala: cena sem pessoa**: as Instruções (obrigatórias) descrevem a cena de produto, objeto
+  ou cenário; o pedido é o `omniPrompt` sem fala, o que passou no teste do frasco. A foto é
+  opcional e vai como primeiro quadro.
+- A 1.1 (`omni-11`) segue com o formulário antigo (instruções com a pessoa) até sair.
+
+Falta testar: a cena sem pessoa **com foto** (do produto) e uma segunda foto de avatar na
+selfie (todos os testes usaram a mesma). O site não tem como saber se a foto da cena tem uma
+pessoa: se tiver, o pedido deve falhar no provedor, sem custo.
+
 ## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
 
 Fontes: a página do Omni no Google (ai.google.dev/gemini-api/docs/omni) e o notebook oficial
@@ -242,5 +323,6 @@ legenda queimada). O que o Google diz e muda o pedido:
 
 ## Próximo passo
 
-Gerar um vídeo com fala e instruções (sem a orientação de voz do Wan) e um sem fala; medir o
-áudio de novo e decidir o tratamento (`treatAudio`); depois, liberar para todos (`access: "all"`).
+Gerar pelo site um vídeo com fala e uma cena sem pessoa com a foto de um produto; medir o áudio
+da fala e decidir o tratamento (`treatAudio`); tirar a `omni-11` antes de 03/12/2026; depois,
+liberar para todos (`access: "all"`).
