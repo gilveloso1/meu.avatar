@@ -51,6 +51,8 @@ export interface Video {
   prep_status: PrepStatus | null;
   prep_error: string | null;
   prep_started_at: string | null;
+  /** Última conferência do agendamento no provedor (openVideos). */
+  checked_at: string | null;
   /** O avatar usado para gerar (null com arquivo solto). */
   avatar_id: string | null;
   /** O nome dado pela pessoa (Renomear); null: as telas mostram a fala. */
@@ -404,13 +406,41 @@ export class Db {
     await this.d1.prepare("UPDATE avatar_assets SET face = ? WHERE id = ?").bind(face, id).run();
   }
 
-  /** Os mais antigos primeiro: são os que mais devem estar prontos. */
-  async openVideos(limit = 10): Promise<Video[]> {
+  /**
+   * Os vídeos abertos que o provedor ainda pode fechar (com job, fora da composição: os outros
+   * abertos andam por outras filas), do conferido há mais tempo ao mais recente; o nunca conferido
+   * conta pela criação. Já marca a conferência, na mesma instrução: presos no começo da fila não
+   * seguram os mais novos, que entram na rodada seguinte.
+   */
+  async openVideos(limit = 10, nowIso = new Date().toISOString()): Promise<Video[]> {
+    const marks = OPEN_STATUSES.map(() => "?").join(", ");
+    const { results } = await this.d1
+      .prepare(
+        `UPDATE videos SET checked_at = ? WHERE id IN (
+           SELECT id FROM videos
+           WHERE status IN (${marks}) AND job_id IS NOT NULL AND (prep_status IS NULL OR prep_status NOT IN ('compose', 'composing'))
+           ORDER BY COALESCE(checked_at, created_at), created_at LIMIT ?
+         ) RETURNING *`,
+      )
+      .bind(nowIso, ...OPEN_STATUSES, limit)
+      .all<Video>();
+    return results.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  /**
+   * Vídeo aberto desde antes de `beforeIso` (o provedor esqueceu o job, ou o preparo nunca andou):
+   * vira falha e sai de todas as filas. Devolve os que falharam.
+   */
+  async failStaleOpen(beforeIso: string, nowIso: string): Promise<Video[]> {
     const marks = OPEN_STATUSES.map(() => "?").join(", ");
     return (
       await this.d1
-        .prepare(`SELECT * FROM videos WHERE status IN (${marks}) ORDER BY created_at LIMIT ?`)
-        .bind(...OPEN_STATUSES, limit)
+        .prepare(
+          `UPDATE videos SET status = 'failed', error = ?, updated_at = ?,
+             prep_status = CASE WHEN prep_status IN ('pending', 'processing', 'voz', 'compose', 'composing') THEN 'failed' ELSE prep_status END
+           WHERE status IN (${marks}) AND created_at < ? RETURNING *`,
+        )
+        .bind(ERROS.videoDemorou, nowIso, ...OPEN_STATUSES, beforeIso)
         .all<Video>()
     ).results;
   }

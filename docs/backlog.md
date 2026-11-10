@@ -11,31 +11,27 @@ corrigido no mesmo PR). Vem antes do resto, nesta ordem.
 
 ### 1. Pode quebrar ou custar dinheiro
 
-1. **Fila do agendamento sem prazo** (`openVideos`, `src/db.ts`): confere só os 10 vídeos abertos
-   mais antigos; dez presos (job que o provedor esqueceu, imagem "Gerando", preparo do Aleph)
-   bloqueiam os mais novos. Filtrar os que o `sync` não confere, rodar pela última conferência e
-   falhar o aberto há horas. O HeyGen pronto sem endereço do vídeo também volta a "pendente" para sempre.
-2. **Webhook e agendamento no mesmo vídeo** (`sync`, `src/studio.ts`): os dois podem fechar o vídeo
+1. **Webhook e agendamento no mesmo vídeo** (`sync`, `src/studio.ts`): os dois podem fechar o vídeo
    ao mesmo tempo e tratar o áudio duas vezes. Gravar o término só se ainda estava aberto.
-3. **Estimativas que não batem com `docs/modelos/`**: Aleph por segundo (uns US$ 5,80 em 20 s)
+2. **Estimativas que não batem com `docs/modelos/`**: Aleph por segundo (uns US$ 5,80 em 20 s)
    contra US$ 1,40 fixo por pedido no doc; Wan Livre sem o mínimo de 5 s cobrado; fala contando o
    texto digitado, não o traduzido das emoções.
-4. **Omni**: o prompt do 1.2 (`omniPrompt`, `src/structures/omni.ts`) é o formato que o doc do
+3. **Omni**: o prompt do 1.2 (`omniPrompt`, `src/structures/omni.ts`) é o formato que o doc do
    modelo registra como falho no 1.2; e o Google passa o 1.1 para o 1.2 em **03/12/2026**: tirar
    `OMNI_11` antes dessa data.
-5. **Listas cortadas em 100** (`ContaDb.videos`): `/videos`, a página do modelo e a biblioteca do
+4. **Listas cortadas em 100** (`ContaDb.videos`): `/videos`, a página do modelo e a biblioteca do
    canvas mostram só os 100 mais novos, sem paginação, e o contador diz "100" (`docs/layout.md`, item 11).
-6. **Voz do avatar em M4A ou OGG**: o avatar aceita, o HeyGen direto recusa ao gerar (só MP3 e WAV,
+5. **Voz do avatar em M4A ou OGG**: o avatar aceita, o HeyGen direto recusa ao gerar (só MP3 e WAV,
    32 MB); o mesmo com vídeo WebM. Recusar ao salvar ou só oferecer o que o modelo aceita.
-7. **Links sem token**: `/baixar/...mp3` liga o contêiner e grava no R2 no primeiro pedido (a regra
+6. **Links sem token**: `/baixar/...mp3` liga o contêiner e grava no R2 no primeiro pedido (a regra
    é "só lê") e vale para conta suspensa; `/envio/<código>` aceita dois envios simultâneos; bilhete
    de envio não usado fica em `envios/` para sempre (falta a regra de expiração no R2).
-8. **`listar_arquivos` do MCP** mostra na descrição todos os modelos, inclusive os de teste, a
+7. **`listar_arquivos` do MCP** mostra na descrição todos os modelos, inclusive os de teste, a
    qualquer conta com API. Tirar a lista e apontar para o `listar_modelos`.
-9. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
+8. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
    `docs/operacao.md` dizem 20. Escolher um.
-10. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
-    clonada do Fish nem o vídeo de origem; e a voz clonada é gravada antes da validação (sobra voz órfã).
+9. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
+   clonada do Fish nem o vídeo de origem; e a voz clonada é gravada antes da validação (sobra voz órfã).
 
 ### 2. Telas (aprovadas: mudar só com o sim do dono)
 

@@ -73,6 +73,7 @@ export const ERROS = {
   ajustesNaoAceitos: erro("Este modelo não aceita esses ajustes.", "Mude os ajustes e gere de novo."),
   vozesIndisponiveis: erro("Não foi possível carregar as vozes.", "Tente mais tarde."),
   videoFalhou: erro("Não foi possível gerar o vídeo.", "Toque em Refazer para tentar de novo."),
+  videoDemorou: erro("O vídeo demorou demais para ficar pronto.", "Toque em Refazer para tentar de novo."),
   imagemFalhou: erro("Não foi possível gerar a imagem.", "Toque em Refazer para tentar de novo."),
   audioGeradoFalhou: erro("Não foi possível gerar o áudio.", "Toque em Refazer para tentar de novo."),
   fala: campo("Escreva a fala do vídeo."),
