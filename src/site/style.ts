@@ -518,6 +518,9 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 -8px -8px 0; }
 .pager__range { margin-right: 12px; font: var(--md-sys-typescale-body-small); letter-spacing: 0.025rem; color: var(--md-sys-color-on-surface-variant); }
 .pager .icon-button[aria-disabled="true"] { opacity: 0.38; }
+/* No fim de uma lista (videoLibrary), fora de card: sem a margem negativa do pé do card. */
+.library > .pager { margin: 16px 0 0; }
+.pager__progress { flex: 1; max-width: 160px; margin-right: 12px; }
 /* Rótulos das linhas nunca quebram (docs/layout.md, item 9): o valor longo encolhe com reticências. */
 .dash .qe-result__label { flex: none; white-space: nowrap; }
 .dash .qe-result__value { flex: 1; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -167,7 +167,11 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   conectados (cards pequenos, médios, grandes e Detalhes, uma linha por vídeo
   com colunas); chips de filtro por status, chip de ordem e chip "Agrupar por
   data" (desligado por padrão). Tudo no navegador, sem recarregar, e guardado
-  no `localStorage` por lista (`lista-<modelo>`, `lista-videos`). Miniatura só
+  no `localStorage` por lista (`lista-<modelo>`, `lista-videos`). A lista vem em páginas de 60
+  (`LIST_PAGE`, pedido de 10/11/2026): no fim, a paginação do painel (`pager`: "61–120 de 150" e as
+  setas), que troca a página sem recarregar (o que está escrito no painel fica) e leva a página no
+  endereço (`?pagina=`); o contador do título é o total, e filtro, ordem e agrupamento valem para a
+  página aberta. Miniatura só
   baixa quando aparece na tela e enquadra o rosto (`videos.face`; sem rosto, o terço de
   cima). Quem acha o rosto é o navegador de quem vê (MediaPipe, `data-face-find`), uma vez por
   arquivo, e guarda no site; a prévia da Edição rápida também. O servidor não procura (ligava o

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Db, type User } from "../src/db";
 import { ERROS } from "../src/erros";
 import { createStudio } from "../src/index";
+import { LIST_PAGE } from "../src/site/site";
 import { OPEN_TIMEOUT_MS } from "../src/studio";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
 import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, SPEECH_LEAD, STYLES } from "../src/prompt";
@@ -177,6 +178,57 @@ describe("telas", () => {
     expect(page).toContain('href="/modelo/wan"');
     expect(page).not.toContain('href="/modelo/heygen"');
     expect(await (await get("/?q=nada")).text()).toContain("Nenhum modelo encontrado");
+  });
+
+  it("as listas vêm em páginas, com o total no contador e a paginação no fim", async () => {
+    await get("/");
+    const db = new Db(env.DB);
+    const user = (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin'").first<{ id: number }>())!.id;
+    const TOTAL = LIST_PAGE + 5;
+    for (let i = 0; i < TOTAL; i++) {
+      const id = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+      await db.insertVideo({ id, prompt: i % 2 ? "Promoção de verão" : "Oi, gente", model: WAN.id, duration: 5, resolution: "480p", aspect_ratio: "9:16", image_key: null, user_id: user, request_prompt: "x", style: "selfie", language: "pt-BR", extra: null, structure: "wan", settings: null, avatar_id: null }, new Date(Date.UTC(2026, 10, 1, 0, i)));
+    }
+    const cards = (html: string) => [...html.matchAll(/class="frame interactive" href="\/video\/([0-9a-f-]+)\?de=([^"]+)"/g)].map((m) => [m[1], decodeURIComponent(m[2]!)]);
+    const ultimo = `00000000-0000-4000-8000-${String(TOTAL - 1).padStart(12, "0")}`;
+
+    // /videos: a primeira página tem os mais novos; o contador diz o total, não o que a página mostra.
+    const um = await (await get("/videos")).text();
+    expect(cards(um)).toHaveLength(LIST_PAGE);
+    expect(cards(um)[0]).toEqual([ultimo, "/videos"]);
+    expect(um).toContain(`data-library-count data-total="${TOTAL}">${TOTAL}</span>`);
+    expect(um).toContain(`<span class="pager__range">1–${LIST_PAGE} de ${TOTAL}</span>`);
+    expect(um).toContain('href="/videos?pagina=2" aria-label="Próxima página"');
+    expect(um).toMatch(/<span class="icon-button" aria-disabled="true" aria-label="Página anterior">/);
+
+    // A segunda tem o resto, e voltar de um vídeo dela cai nela.
+    const dois = await (await get("/videos?pagina=2")).text();
+    expect(cards(dois)).toHaveLength(5);
+    expect(cards(dois).at(-1)).toEqual(["00000000-0000-4000-8000-000000000000", "/videos?pagina=2"]);
+    expect(dois).toContain(`<span class="pager__range">${LIST_PAGE + 1}–${TOTAL} de ${TOTAL}</span>`);
+    expect(dois).toContain('href="/videos?pagina=1" aria-label="Página anterior"');
+    // Página além da última (ou inválida): a última (ou a primeira), nunca uma lista vazia.
+    expect(cards(await (await get("/videos?pagina=99")).text())).toHaveLength(5);
+    expect(cards(await (await get("/videos?pagina=abc")).text())).toHaveLength(LIST_PAGE);
+
+    // A busca conta só o que achou, e a paginação leva a busca junto.
+    const busca = await (await get("/videos?q=ver%C3%A3o&pagina=1")).text();
+    const achados = Math.floor(TOTAL / 2);
+    expect(busca).toContain(`data-total="${achados}"`);
+    expect(busca).not.toContain('class="pager"');
+    await env.DB.prepare("UPDATE videos SET prompt = 'Promoção de verão'").run();
+    expect(await (await get("/videos?q=ver%C3%A3o")).text()).toContain('href="/videos?q=ver%C3%A3o&pagina=2"');
+
+    // A página do modelo, igual: o endereço de volta leva a página.
+    const modelo = await (await get("/modelo/wan?pagina=2")).text();
+    expect(cards(modelo)).toHaveLength(5);
+    expect(cards(modelo)[0]![1]).toBe("/modelo/wan?pagina=2");
+    expect(modelo).toContain('href="/modelo/wan?pagina=1" aria-label="Página anterior"');
+    expect(modelo).toContain(`data-total="${TOTAL}"`);
+    expect(cards(await (await get("/modelo/wan")).text())[0]).toEqual([ultimo, "/modelo/wan"]);
+    // Lista que cabe numa página não tem paginação.
+    await env.DB.prepare("DELETE FROM videos WHERE id > ?").bind(`00000000-0000-4000-8000-${String(LIST_PAGE - 1).padStart(12, "0")}`).run();
+    expect(await (await get("/videos")).text()).not.toContain('class="pager"');
   });
 
   it("a página de vídeos junta os modelos na mesma lista da página do modelo, com busca pela fala, e abre na página do vídeo", async () => {

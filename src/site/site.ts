@@ -234,7 +234,7 @@ export class Site {
       // "Refazer" volta com os ajustes, o avatar e os arquivos do vídeo; "Usar para gerar" traz um resultado pronto.
       const redo = await this.redo(structure, url.searchParams.get("refazer"), user);
       const use = url.searchParams.get("usar");
-      return this.modelPage(user, structure, redo?.values, undefined, redo?.picks ?? (use ? { avatar: "", assets: [use] } : undefined));
+      return this.modelPage(user, structure, redo?.values, undefined, redo?.picks ?? (use ? { avatar: "", assets: [use] } : undefined), url);
     }
 
     // A página do vídeo: o player ocupa a tela, com as informações numa folha lateral.
@@ -798,9 +798,9 @@ ${error ? snackbar(error) : ""}`;
 
   /** O canvas de um projeto, com os vídeos prontos de quem usa e o que já estava salvo. */
   private async canvasPage(user: User, project: Project): Promise<Response> {
-    const usable = STRUCTURES.filter((s) => canUse(s, user));
-    const videos = (await this.db.conta(user.id).videos(usable.map((s) => s.id)))
-      .filter((v) => v.status === "completed" && v.video_key)
+    // Só os vídeos prontos (imagem e áudio não são vídeo; os que falharam não entram): os 100 mais novos.
+    const usable = STRUCTURES.filter((s) => canUse(s, user) && !madeAtOnce(s));
+    const videos = (await this.db.conta(user.id).ready(usable.map((s) => s.id), 0, 100))
       .map((v) => ({
         id: v.id,
         name: v.name ?? (v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo"),
@@ -970,7 +970,8 @@ ${CANVAS_BODY}
     // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
     const only = url.searchParams.get("modelo") ?? "";
     const usable = STRUCTURES.filter((s) => canUse(s, user) && !madeAtOnce(s) && (!only || (s.family ?? s.id) === only));
-    const videos = await this.db.conta(user.id).videos(usable.map((s) => s.id), q);
+    const list = await this.db.conta(user.id).videos(usable.map((s) => s.id), q, pageNumber(url), LIST_PAGE);
+    const videos = list.items;
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // A mesma lista da página do modelo (filtro, ordem, vista e agrupamento no navegador); a busca pela fala fica no servidor.
     const from = `/videos${url.search}`;
@@ -980,6 +981,7 @@ ${CANVAS_BODY}
     key: only ? `videos-${only}` : "videos",
     from,
     title: only && usable[0] ? `Vídeos · ${usable[0].name}` : "Vídeos",
+    pages: { total: list.total, page: list.page, from: withoutPage(url) },
     heading: "h1",
     intro: only ? "Os vídeos que você gerou com este modelo." : "Todos os vídeos que você gerou.",
     action: fab("add", "Novo vídeo", { href: "/" }),
@@ -1000,7 +1002,7 @@ ${CANVAS_BODY}
    * A página do modelo: a configuração do vídeo à esquerda (com o botão de gerar no fim)
    * e, no centro, os vídeos do modelo (videoLibrary). Tocar num vídeo abre /video/<id>.
    */
-  private async modelPage(user: User, structure: Structure, values?: Values, error?: string, picks?: AssetPicks): Promise<Response> {
+  private async modelPage(user: User, structure: Structure, values?: Values, error?: string, picks?: AssetPicks, url?: URL): Promise<Response> {
     const { model, error: modelError } = await this.tryModel(structure);
     // Sem a chave da plataforma: no computador, nenhum aviso; no ar, um aviso na língua de quem usa.
     const canGenerate = this.studio.canGenerateWith(structure);
@@ -1022,7 +1024,9 @@ ${CANVAS_BODY}
     const seconds = "field" in structure.cost.seconds ? `${value(structure.cost.seconds.field)} s` : "—";
     const image = makesImage(structure), audio = makesAudio(structure);
     // As versões do mesmo modelo dividem a lista.
-    const videos = await this.db.conta(user.id).videos(familyOf(structure).filter((s) => canUse(s, user)).map((s) => s.id));
+    // A lista vem uma página por vez (?pagina=); depois de gerar ou de um erro, a primeira.
+    const list = await this.db.conta(user.id).videos(familyOf(structure).filter((s) => canUse(s, user)).map((s) => s.id), "", url ? pageNumber(url) : 1, LIST_PAGE);
+    const videos = list.items;
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // Os ativos abrem o painel, depois das seções que vêm antes (o "Uso"); o resto (a fala
     // inclusive) segue as seções da estrutura. O modelo aceita o que os campos dele pedem.
@@ -1070,7 +1074,8 @@ ${CANVAS_BODY}
       ${banner ? `<p class="banner" role="status"><span class="icon">error</span>${esc(banner)}</p>` : ""}
       ${videoLibrary(videos, {
         key: structure.id,
-        from: `/modelo/${structure.id}`,
+        from: `/modelo/${structure.id}${list.page > 1 ? `?pagina=${list.page}` : ""}`,
+        pages: { total: list.total, page: list.page, from: url ? withoutPage(url) : `/modelo/${structure.id}` },
         title: image ? "Imagens" : audio ? "Áudios" : "Vídeos",
         empty: emptyState(
           image ? "image" : audio ? "record_voice_over" : "videocam",
@@ -1848,6 +1853,19 @@ interface LibraryOptions {
   image?: boolean;
   /** Lista de áudios (os modelos de fala). */
   audio?: boolean;
+  /** A lista vem uma página por vez: quantos são ao todo, a página e o endereço sem ela. */
+  pages?: { total: number; page: number; from: string };
+}
+
+/** Quantos vídeos cabem numa página das listas (`videoLibrary`). */
+export const LIST_PAGE = 60;
+/** A página pedida (?pagina=), de 1 em diante. */
+const pageNumber = (url: URL) => Math.max(1, Math.floor(Number(url.searchParams.get("pagina")) || 1));
+/** O endereço sem a página, para a paginação pôr a dela. */
+function withoutPage(url: URL): string {
+  const q = new URLSearchParams(url.search);
+  q.delete("pagina");
+  return `${url.pathname}${q.size ? `?${q}` : ""}`;
 }
 
 /** Título, contagem e texto de uma tela de lista; `action` é o botão principal (fab). */
@@ -2066,6 +2084,9 @@ function library<T>(o: {
   filters: readonly { kind: string | null; label: string }[];
   columns: string;
   noMatch: string;
+  /** Lista em páginas: o total de itens (o contador) e a paginação, no fim. */
+  total?: number;
+  pager?: string;
 }): string {
   if (!o.items.length) return `<div class="library"><div class="library__head">${o.head("")}${o.action ? `<div class="library__end">${o.action}</div>` : ""}</div>${o.empty}</div>`;
   const chips = o.filters
@@ -2086,7 +2107,7 @@ function library<T>(o: {
       </section>`;
   return `<div class="library" data-library="${esc(o.key)}" data-view="m" data-grouped="false">
       <div class="library__head">
-        ${o.head(String(o.items.length))}
+        ${o.head(String(o.total ?? o.items.length))}
         <div class="library__end"><div class="segmented-button library__sizes" role="group" aria-label="Vista">${views}</div>${o.action ?? ""}</div>
       </div>
       <div class="chip-set library__tools" role="toolbar" aria-label="Filtrar e ordenar">
@@ -2098,6 +2119,7 @@ function library<T>(o: {
       <div class="vrows__head" role="row" aria-hidden="true">${o.columns}</div>
       <p class="library__empty" data-library-empty hidden>${esc(o.noMatch)}</p>
       <div class="library__groups" data-groups>${[...groups].map(section).join("")}</div>
+      ${o.pager ?? ""}
     </div>`;
 }
 
@@ -2141,7 +2163,7 @@ function nameSaved(request: Request, back: string): Response {
 function videoLibrary(videos: Video[], o: LibraryOptions): string {
   const h = o.heading ?? "h2";
   const head = (count: string) => {
-    const title = `<${h} class="${o.intro ? "page__headline" : "library__title"}">${esc(o.title)} <span class="pane__count"${count === "" ? "" : " data-library-count"}>${count || 0}</span></${h}>`;
+    const title = `<${h} class="${o.intro ? "page__headline" : "library__title"}">${esc(o.title)} <span class="pane__count"${count === "" ? "" : ` data-library-count data-total="${count}"`}>${count || 0}</span></${h}>`;
     return o.intro ? `<div>${title}<p class="page__intro">${esc(o.intro)}</p></div>` : title;
   };
   const dragRef = (v: Video, structure: Structure) => (o.mine !== undefined && v.user_id === o.mine && v.status === "completed" && v.video_key ? ` data-ref="${esc(JSON.stringify(generatedPick(v, structure)))}"` : "");
@@ -2152,6 +2174,8 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
     action: o.action,
     empty: o.empty,
     items: videos,
+    total: o.pages?.total,
+    pager: o.pages ? pager(o.pages.total, o.pages.page, o.pages.from, LIST_PAGE) : "",
     date: (v) => v.created_at,
     filters: FILTERS,
     noMatch: o.image ? "Nenhuma imagem com esse filtro." : o.audio ? "Nenhum áudio com esse filtro." : "Nenhum vídeo com esse filtro.",
@@ -2715,19 +2739,20 @@ const PANEL_PAGE = 15;
 /**
  * A paginação de uma lista, no pé do card (a das tabelas de dados do Material): "16–30 de 65" e as
  * setas de anterior e próxima, links com ?pagina= sobre o endereço da aba (que já leva o período).
+ * A mesma no fim das listas de vídeos (`videoLibrary`), com `size` itens por página.
  */
-function pager(total: number, page: number, from: string): string {
-  if (total <= PANEL_PAGE) return "";
-  const last = Math.ceil(total / PANEL_PAGE);
+function pager(total: number, page: number, from: string, size = PANEL_PAGE): string {
+  if (total <= size) return "";
+  const last = Math.ceil(total / size);
   const current = Math.min(page, last);
-  const first = (current - 1) * PANEL_PAGE + 1;
+  const first = (current - 1) * size + 1;
   const href = (n: number) => `${from}${from.includes("?") ? "&" : "?"}pagina=${n}`;
   const arrow = (n: number, icon: string, label: string) =>
     n >= 1 && n <= last
       ? `<a class="icon-button interactive" href="${href(n)}" aria-label="${label}" title="${label}"><span class="icon">${icon}</span></a>`
       : `<span class="icon-button" aria-disabled="true" aria-label="${label}"><span class="icon">${icon}</span></span>`;
   return `<nav class="pager" aria-label="Páginas">
-      <span class="pager__range">${count(first)}–${count(Math.min(current * PANEL_PAGE, total))} de ${count(total)}</span>
+      <span class="pager__range">${count(first)}–${count(Math.min(current * size, total))} de ${count(total)}</span>
       ${arrow(current - 1, "chevron_left", "Página anterior")}${arrow(current + 1, "chevron_right", "Próxima página")}
     </nav>`;
 }
@@ -3502,8 +3527,8 @@ const SCRIPT = `(() => {
   }
 
   // Lista de vídeos do modelo: filtro por status, ordem (grupos e itens) e vista (cards ou detalhes).
-  const lib = document.querySelector("[data-library]");
-  if (lib && lib.querySelector("[data-groups]")) {
+  const initLibrary = (lib) => {
+    if (!lib || !lib.querySelector("[data-groups]")) return;
     const groups = lib.querySelector("[data-groups]"), count = lib.querySelector("[data-library-count]"), empty = lib.querySelector("[data-library-empty]");
     const apply = () => {
       const kind = lib.querySelector("[data-filter][aria-pressed=true]").dataset.filter;
@@ -3513,7 +3538,8 @@ const SCRIPT = `(() => {
         for (const list of g.querySelectorAll("[data-items]")) for (const it of list.children) { const show = !kind || it.dataset.kind === kind; it.hidden = !show; if (show) n++; }
         g.hidden = n === 0; total += n / 2;
       }
-      count.textContent = total; empty.hidden = total > 0;
+      // Sem filtro, o contador é o da lista inteira (todas as páginas); com filtro, o que a página mostra.
+      count.textContent = kind ? total : count.dataset.total || total; empty.hidden = total > 0;
     };
     for (const c of lib.querySelectorAll("[data-filter]")) c.addEventListener("click", () => {
       for (const o of lib.querySelectorAll("[data-filter]")) o.setAttribute("aria-pressed", String(o === c));
@@ -3555,7 +3581,29 @@ const SCRIPT = `(() => {
       if (saved.grouped) grouping.click();
     }
     lib.addEventListener("click", (e) => { if (e.target.closest("[data-view], [data-filter], [data-sort], [data-group-toggle]")) save(); });
-  }
+    // Trocar de página sem recarregar: o que está escrito no painel fica. Se a busca falhar, o link segue.
+    lib.addEventListener("click", async (e) => {
+      const a = e.target.closest(".pager a");
+      if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+      e.preventDefault();
+      if (lib.dataset.loading) return;
+      lib.dataset.loading = "1";
+      lib.querySelector(".pager").insertAdjacentHTML("afterbegin", '<span class="linear-progress pager__progress" role="progressbar" aria-label="Carregando"></span>');
+      try {
+        const res = await fetch(a.href, { headers: { accept: "text/html" } });
+        if (!res.ok) throw new Error(String(res.status));
+        const next = new DOMParser().parseFromString(await res.text(), "text/html").querySelector("[data-library]");
+        if (!next) throw new Error("lista");
+        const fresh = document.importNode(next, true);
+        lib.replaceWith(fresh);
+        history.replaceState(null, "", a.href);
+        initLibrary(fresh);
+        if (window.mdThumbs) window.mdThumbs(fresh);
+        fresh.scrollIntoView({ block: "start" });
+      } catch { location.href = a.href; }
+    });
+  };
+  initLibrary(document.querySelector("[data-library]"));
 
   // Abrir um vídeo da lista: guarda a ordem que está na tela (com filtro e ordem) para o anterior e o próximo.
   document.addEventListener("click", (e) => {

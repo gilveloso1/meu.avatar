@@ -1107,15 +1107,22 @@ export class ContaDb {
     return r.meta.changes > 0;
   }
 
-  /** Os vídeos das estruturas, os mais novos primeiro; com `q`, só os que têm o trecho na fala ou no nome. */
-  async videos(structures: string[], q = "", limit = 100): Promise<Video[]> {
-    if (!structures.length) return [];
-    return (
-      await this.d1
-        .prepare(`SELECT * FROM videos WHERE user_id = ?1 AND structure IN (${structures.map((_, i) => `?${i + 4}`).join(", ")}) AND (prompt LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\') ORDER BY created_at DESC, rowid DESC LIMIT ?3`)
-        .bind(this.userId, like(q), limit, ...structures)
-        .all<Video>()
-    ).results;
+  /**
+   * Os vídeos das estruturas, os mais novos primeiro, uma página por vez; com `q`, só os que têm o
+   * trecho na fala ou no nome. `total` conta todos, e a página além da última vira a última.
+   */
+  async videos(structures: string[], q = "", page = 1, size = 100): Promise<{ items: Video[]; total: number; page: number }> {
+    if (!structures.length) return { items: [], total: 0, page: 1 };
+    // Os modelos entram a partir de `first`: a contagem não tem o tamanho nem o começo da página.
+    const rest = (first: number) => `structure IN (${structures.map((_, i) => `?${i + first}`).join(", ")}) AND (prompt LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\')`;
+    const count = await this.d1.prepare(`SELECT COUNT(*) AS n FROM videos WHERE user_id = ?1 AND ${rest(3)}`).bind(this.userId, like(q), ...structures).first<{ n: number }>();
+    const total = count?.n ?? 0;
+    const current = Math.min(Math.max(1, Math.floor(page) || 1), Math.max(1, Math.ceil(total / size)));
+    const { results } = await this.d1
+      .prepare(`SELECT * FROM videos WHERE user_id = ?1 AND ${rest(5)} ORDER BY created_at DESC, rowid DESC LIMIT ?3 OFFSET ?4`)
+      .bind(this.userId, like(q), size, (current - 1) * size, ...structures)
+      .all<Video>();
+    return { items: results, total, page: current };
   }
 
   /**
