@@ -164,7 +164,9 @@ Para não repetir a prateleira do quarto teste, cada quadro com o rosto trocado
 
 A estimativa do formulário arredonda a duração para cima (5,5 s → 6 s); nos
 testes, o Aleph cobrou 5 s por 5,5 s (US$ 1,40). O custo real vem do
-OpenRouter.
+OpenRouter. Desde 10/11/2026 a estimativa segue o que foi cobrado: no máximo 5 s
+(`billed: { max: 5 }` no `aleph.ts`), mais as imagens. Se um teste mostrar cobrança por
+segundo, tirar o teto.
 
 ## Vídeos maiores: inteiro ou em trechos (29/10/2026)
 

@@ -9,7 +9,7 @@ import { estimateCost, validate, verifySignature } from "../src/openrouter";
 import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, SPEECH_LEAD, STYLES } from "../src/prompt";
 import { planParts, RULES } from "../src/quickedit";
 import { mp4Duration } from "../src/mp4";
-import { estimate } from "../src/structures";
+import { billedSeconds, estimate, structureById } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
 import { GROK, GROK_GUIDE } from "../src/structures/grok";
@@ -151,6 +151,23 @@ describe("agendamento", () => {
     api.finish(velho!.job_id!, { status: "completed" });
     expect((await createStudio({ ...env, SITE_URL: SITE }, { api, audio: null }).syncOpen(10, new Date(agora))).map((v) => v.id)).toEqual([novo!.id]);
     expect((await new Db(env.DB).videoById(velho!.id))!.status).toBe("failed");
+  });
+});
+
+describe("custo estimado contra o que o provedor cobra", () => {
+  it("o Wan cobra no mínimo 5 s: o vídeo de 3 s custa o de 5", () => {
+    for (const id of ["wan", "wan-livre"]) {
+      const custo = (duracao: string, resolucao = "480p") => estimate(structureById(id)!, WAN, (n) => ({ duracao, resolucao })[n] ?? "");
+      expect(custo("3")).toBeCloseTo(0.25);
+      expect(custo("5")).toBeCloseTo(0.25);
+      expect(custo("6")).toBeCloseTo(0.3);
+      expect(custo("4", "720p")).toBeCloseTo(0.5);
+    }
+  });
+
+  it("sem regra de cobrança, os segundos são os do vídeo", () => {
+    expect(billedSeconds(GROK.cost, 3)).toBe(3);
+    expect(billedSeconds(OMNI.cost, 15)).toBe(15);
   });
 });
 
@@ -1262,6 +1279,9 @@ describe("Aleph 2", () => {
     expect(ALEPH.cost.extra).toBeCloseTo(0.2);
     const page = await (await get("/modelo/aleph")).text();
     expect(page).toContain("&quot;extra&quot;:0.2");
+    // O que o Aleph cobrou nos testes: 5 s (US$ 1,40) de 5,5 a 20,4 s; abaixo disso, por segundo.
+    expect(page).toContain("&quot;billed&quot;:{&quot;max&quot;:5}");
+    expect([3, 5, 6, 20].map((s) => billedSeconds(ALEPH.cost, s) * 0.28 + ALEPH.cost.extra!)).toEqual([0.84 + 0.2, 1.4 + 0.2, 1.4 + 0.2, 1.4 + 0.2].map((n) => expect.closeTo(n)));
   });
 
   it("o formulário abre com o uso e pede o vídeo e a foto, sem resolução nem formato", async () => {

@@ -1012,6 +1012,7 @@ ${CANVAS_BODY}
       prices: model ? prices(structure, model) : {},
       sku: structure.cost.sku,
       seconds: structure.cost.seconds,
+      billed: structure.cost.billed ?? {},
       rate: structure.wordsPerSecond,
       durations: model?.supported_durations ?? null,
       extra: model ? fixedCost(structure, model) : (structure.cost.extra ?? 0),
@@ -3734,7 +3735,10 @@ const SCRIPT = `(() => {
       for (const e of f.querySelectorAll("[data-seconds]")) e.textContent = s ? (fixed ? "" : "≈ ") + s + " s" : "—";
       // Fala: o preço é por caractere do texto; a de poucas palavras custa menos de um centavo.
       const chars = cfg.seconds.characters ? val(cfg.seconds.characters).replace(/\\s+/g, " ").trim().length : 0;
-      const total = cfg.seconds.characters ? price * chars : price && s ? price * s + cfg.extra : 0;
+      // O provedor pode cobrar mais ou menos segundos que os do vídeo (cfg.billed: mínimo e teto).
+      const lim = cfg.billed || {};
+      const billed = Math.min(Math.max(s, lim.min || 0), lim.max || Infinity);
+      const total = cfg.seconds.characters ? price * chars : price && s ? price * billed + cfg.extra : 0;
       for (const e of f.querySelectorAll("[data-cost]")) e.textContent = total > 0 ? (total < 0.005 ? "< US$ 0.01" : "US$ " + total.toFixed(2)) : "—";
       if (!speech || speech.disabled) {
         // Sem fala escrita (troca de avatar, ou o áudio enviado no lugar dela): nada de contador.

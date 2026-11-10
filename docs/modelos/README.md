@@ -20,6 +20,26 @@ resultado (com a mensagem do provedor, se falhou), o custo real e o próximo
 passo. Vídeos de teste não vão para o repositório; diga onde estão (id no D1 ou
 caminho no R2).
 
+## Estimativa contra o custo real (revisão de 10/11/2026)
+
+A estimativa do site (`cost` de cada estrutura, `estimate` em `src/structures/index.ts`) conferida,
+modelo por modelo, com o custo gravado nos vídeos prontos (banco do site) e com a lista de preços
+do OpenRouter do dia. Quando o provedor cobra segundos diferentes dos do vídeo, a regra diz
+(`billed`: mínimo e teto). Refazer a conferência depois de cada teste novo.
+
+| Modelo | Estimativa | Custo real | Resultado |
+|---|---|---|---|
+| Wan 3.0 e Wan 3.0 livre | preço da lista por segundo (US$ 0,05 em 480p, 0,10 em 720p), **mínimo de 5 s** | US$ 0,0425/s em 480p e 0,085 em 720p; 3 s e 4 s cobrados como 5 s | Corrigido: faltava o mínimo de 5 s (3 s em 480p saía US$ 0,15; cobra US$ 0,21). A estimativa segue uns 15% acima do real, porque o desconto depende de por onde o OpenRouter manda o pedido |
+| Runway Aleph 2 | preço da lista por segundo, **no máximo 5 s**, mais US$ 0,20 de imagens | US$ 1,40 por pedido de 5,5 a 20,4 s, mais ≈ US$ 0,22 de imagens (US$ 1,62 a 1,66 no site) | Corrigido: 20 s saía US$ 5,80; agora US$ 1,60. A lista ainda diz por segundo: conferir a cada teste |
+| ElevenLabs v4 e Fish Audio Drama 3 | preço da lista por caractere do **texto enviado** (emoções em inglês, juntas) | o site grava preço × caracteres enviados (a resposta do provedor não traz o custo) | Corrigido: a estimativa contava o texto digitado. O preço do Fish na lista subiu de US$ 0,000002 para 0,00001 por caractere em 10/11/2026 (os áudios gerados até a madrugada desse dia foram gravados pelo preço antigo); o site lê a lista, então acompanha |
+| HeyGen Avatar IV (OpenRouter) | US$ 0,05/s, pela duração estimada da fala | US$ 0,047 a 0,055/s da duração estimada | Bate; a diferença é a duração real da fala |
+| HeyGen Avatar IV (API direta) | US$ 0,0385/s, pela fala ou pelo áudio enviado | o site grava US$ 0,0385 × a duração que a HeyGen devolve (não lê a cobrança) | Bate com a regra; a cobrança de verdade só no painel da HeyGen |
+| Grok Imagine Video 1.5 Lite | preço da lista por segundo mais a foto | US$ 0,09 por 4 s em 480p | Bate |
+| mischief 1 | preço da lista por segundo | US$ 0,015 por 3 s em 480p | Bate |
+| Gemini Omni 1.2 Flash e 1.1 | preço da lista por segundo, por resolução | US$ 0,556 por 8 s (1.2) e 0,4054 por 4 s (1.1), em 720p | Bate |
+| Nano Banana 2.1 | tokens da imagem × preço (US$ 0,039 em 1K, 0,06 em 2K) | média de US$ 0,0398 em 1K (108 imagens) e 0,0555 em 2K (115) | Bate em 1K; em 2K a estimativa sai uns 8% acima |
+| Seedance 2.0 | tokens do vídeo × preço | sem vídeo pronto (bloqueado) | Sem como conferir |
+
 ## Resumo
 
 | Modelo | Uso | Estado | Estrutura |
@@ -38,5 +58,5 @@ caminho no R2).
 | `bytedance-seed/seedream-5-0-flash` | Esboço inicial | Descartado para esboço com referência: manteve a pessoa do print em vez do avatar (ver [gemini-nano-banana-2.1.md](gemini-nano-banana-2.1.md)) | — |
 | `qwen/qwen-image-2.1-turbo` | Esboço inicial | Opção barata (US$ 0,018): manteve o rosto, mas copiou o gesto da foto e sai em 576×1024 (ver [gemini-nano-banana-2.1.md](gemini-nano-banana-2.1.md)) | — |
 | [ElevenLabs v4](elevenlabs-v4.md) (`elevenlabs/eleven-v4`) | Fala a partir do texto (o áudio vira o vídeo no HeyGen, como Meu áudio) | Em teste: estrutura só para o administrador desde 08/11/2026, 21 vozes prontas, US$ 0,00008 por caractere (uns US$ 0,07 por minuto). Sem voz clonada pelo OpenRouter | `voz.ts` |
-| [Fish Audio Drama 3](fish-audio-drama-3.md) (`fish-audio/drama-3`) | Fala a partir do texto, com direção de atuação | Em teste: estrutura só para o administrador desde 08/11/2026, com as vozes oficiais do Fish (português do Brasil e de Portugal, inglês e espanhol, lidas do Fish); US$ 0,000002 por caractere (uns US$ 0,002 por minuto). Voz clonada no ar desde 08/11/2026 (a gravação vai em cada pedido) | `voz.ts` |
+| [Fish Audio Drama 3](fish-audio-drama-3.md) (`fish-audio/drama-3`) | Fala a partir do texto, com direção de atuação | Em teste: estrutura só para o administrador desde 08/11/2026, com as vozes oficiais do Fish (português do Brasil e de Portugal, inglês e espanhol, lidas do Fish); US$ 0,00001 por caractere na lista de 10/11/2026 (era 0,000002 nos testes de 08 a 10/11; uns US$ 0,01 por minuto). Voz clonada no ar desde 08/11/2026 (a gravação vai em cada pedido) | `voz.ts` |
 | [Higgsfield Genjutsu](higgsfield-genjutsu.md) (fora do OpenRouter) | Trocar avatar | Não testado | — |

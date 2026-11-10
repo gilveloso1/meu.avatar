@@ -11,24 +11,21 @@ corrigido no mesmo PR). Vem antes do resto, nesta ordem.
 
 ### 1. Pode quebrar ou custar dinheiro
 
-1. **Estimativas que não batem com `docs/modelos/`**: Aleph por segundo (uns US$ 5,80 em 20 s)
-   contra US$ 1,40 fixo por pedido no doc; Wan Livre sem o mínimo de 5 s cobrado; fala contando o
-   texto digitado, não o traduzido das emoções.
-2. **Omni**: o prompt do 1.2 (`omniPrompt`, `src/structures/omni.ts`) é o formato que o doc do
+1. **Omni**: o prompt do 1.2 (`omniPrompt`, `src/structures/omni.ts`) é o formato que o doc do
    modelo registra como falho no 1.2; e o Google passa o 1.1 para o 1.2 em **03/12/2026**: tirar
    `OMNI_11` antes dessa data.
-3. **Listas cortadas em 100** (`ContaDb.videos`): `/videos`, a página do modelo e a biblioteca do
+2. **Listas cortadas em 100** (`ContaDb.videos`): `/videos`, a página do modelo e a biblioteca do
    canvas mostram só os 100 mais novos, sem paginação, e o contador diz "100" (`docs/layout.md`, item 11).
-4. **Voz do avatar em M4A ou OGG**: o avatar aceita, o HeyGen direto recusa ao gerar (só MP3 e WAV,
+3. **Voz do avatar em M4A ou OGG**: o avatar aceita, o HeyGen direto recusa ao gerar (só MP3 e WAV,
    32 MB); o mesmo com vídeo WebM. Recusar ao salvar ou só oferecer o que o modelo aceita.
-5. **Links sem token**: `/baixar/...mp3` liga o contêiner e grava no R2 no primeiro pedido (a regra
+4. **Links sem token**: `/baixar/...mp3` liga o contêiner e grava no R2 no primeiro pedido (a regra
    é "só lê") e vale para conta suspensa; `/envio/<código>` aceita dois envios simultâneos; bilhete
    de envio não usado fica em `envios/` para sempre (falta a regra de expiração no R2).
-6. **`listar_arquivos` do MCP** mostra na descrição todos os modelos, inclusive os de teste, a
+5. **`listar_arquivos` do MCP** mostra na descrição todos os modelos, inclusive os de teste, a
    qualquer conta com API. Tirar a lista e apontar para o `listar_modelos`.
-7. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
+6. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
    `docs/operacao.md` dizem 20. Escolher um.
-8. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
+7. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
    clonada do Fish nem o vídeo de origem; e a voz clonada é gravada antes da validação (sobra voz órfã).
 
 ### 2. Telas (aprovadas: mudar só com o sim do dono)
@@ -234,6 +231,15 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    para o administrador testar; ver abaixo)
 3. Voz gerada à parte e avatar falante (em andamento: o ElevenLabs gera a fala e o HeyGen
    anima a foto com ela; ver "Vozes dos personagens", acima)
+4. **Seedance: corrigir o 2.0 e adicionar o 2.5, para os vídeos permitidos** (pedido de
+   10/11/2026). Hoje a estrutura (`src/structures/seedance.ts`) só tem o uso "Trocar avatar", que a
+   ByteDance recusa (rosto que pareça real, na foto ou no vídeo; ver
+   [modelos/seedance-2.0.md](modelos/seedance-2.0.md)): o card do modelo só leva a um pedido que
+   falha. Trocar por usos que o provedor aceita (sem rosto realista na entrada: cenário, objeto,
+   personagem estilizado), sem contornar o filtro, e pôr o Seedance 2.5 (`bytedance/seedance-2.5`,
+   de 4 a 30 s) como versão do mesmo modelo, com a mesma regra. Conferir a estimativa de custo
+   (por tokens) no primeiro vídeo pronto: é o único modelo sem custo real para comparar
+   ([modelos/README.md](modelos/README.md)).
 
 ## Onde estamos (25/10/2026)
 

@@ -8,8 +8,10 @@ Como chamar: `POST /api/v1/audio/speech` do OpenRouter com `model`, `input`, `vo
 de uma voz da biblioteca do Fish) e `response_format: "mp3"`. O modelo não lista vozes no OpenRouter
 (`supported_voices` vazio).
 
-- **Preço:** US$ 0,000002 por caractere (US$ 2 por milhão), uns US$ 0,002 por minuto de fala em
-  português: cerca de 40 vezes menos que o ElevenLabs.
+- **Preço:** US$ 0,000002 por caractere (US$ 2 por milhão) nos testes de 08/11 à madrugada de 10/11/2026, uns
+  US$ 0,002 por minuto de fala em português. Mais tarde em 10/11/2026 a lista do OpenRouter passou a dizer
+  US$ 0,00001 (US$ 10 por milhão, uns US$ 0,01 por minuto): 8 vezes menos que o ElevenLabs, não
+  mais 40. O site lê a lista a cada pedido, então a estimativa e o custo gravado acompanham.
 - **Vozes:** a biblioteca do Fish é aberta (qualquer pessoa publica uma voz), e as mais usadas em
   português imitam gente famosa (políticos, apresentadores, personagens) ou trazem a descrição errada
   (uma "voz masculina" que era de mulher). Por isso o site só usa as **vozes oficiais**, as da conta

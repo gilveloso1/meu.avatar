@@ -6,7 +6,7 @@ import { fishLanguage } from "../src/fish";
 import { mp3Duration } from "../src/mp3";
 import { resetVoiceCache } from "../src/studio";
 import { estimate } from "../src/structures";
-import { ELEVENLABS, elevenVoices, EMOTIONS, FISH, fishVoices, MAX_SPEECH, PREVIEW_TEXT, speechText, spokenText } from "../src/structures/voz";
+import { ELEVENLABS, elevenVoices, EMOTIONS, FISH, fishVoices, MAX_SPEECH, PREVIEW_TEXT, speechCost, speechText, spokenText } from "../src/structures/voz";
 import { call, callFish, cookie, dono, ELEVEN_MODEL, FakeFishApi, FakeHeyGenApi, FISH_MODEL, FakeVideoApi, memberCookie, mp3, postForm, SITE } from "./helpers";
 
 const TEXTO = "[excited] Gente, eu preciso contar uma coisa! Olha a diferença na minha pele.";
@@ -77,6 +77,11 @@ describe("ElevenLabs v4 (fala)", () => {
     expect(elevenVoices(null)).toEqual([]);
     expect(estimate(ELEVENLABS, ELEVEN_MODEL, (n) => ({ texto: "  dez letras  ", voz: "sarah" })[n] ?? "")).toBeCloseTo(0.00008 * 10);
     expect(estimate(ELEVENLABS, ELEVEN_MODEL, () => "")).toBeUndefined();
+    // Conta o texto como vai para o modelo: a emoção em inglês e as seguidas num colchete só.
+    const comEmocao = "[animação] [alegria] Oi, tudo bem?";
+    expect(speechText(comEmocao)).toBe("[excited, happy] Oi, tudo bem?");
+    expect(estimate(ELEVENLABS, ELEVEN_MODEL, (n) => ({ texto: comEmocao })[n] ?? "")).toBeCloseTo(0.00008 * "[excited, happy] Oi, tudo bem?".length);
+    expect(estimate(ELEVENLABS, ELEVEN_MODEL, (n) => ({ texto: comEmocao })[n] ?? "")).toBeCloseTo(speechCost(ELEVEN_MODEL, comEmocao)!);
   });
 
   it("o formulário tem a voz, o texto e o botão de gerar áudio, sem Adicionar ativo", async () => {
