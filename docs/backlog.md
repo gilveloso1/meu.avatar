@@ -16,18 +16,16 @@ corrigido no mesmo PR). Vem antes do resto, nesta ordem.
    aceita (com fala, a selfie sem instruções; sem fala, a cena sem pessoa; ver
    [modelos/gemini-omni-1.2-flash.md](modelos/gemini-omni-1.2-flash.md)); falta testar a cena com
    a foto de um produto e uma segunda foto de avatar.
-2. **Listas cortadas em 100** (`ContaDb.videos`): `/videos`, a página do modelo e a biblioteca do
-   canvas mostram só os 100 mais novos, sem paginação, e o contador diz "100" (`docs/layout.md`, item 11).
-3. **Voz do avatar em M4A ou OGG**: o avatar aceita, o HeyGen direto recusa ao gerar (só MP3 e WAV,
+2. **Voz do avatar em M4A ou OGG**: o avatar aceita, o HeyGen direto recusa ao gerar (só MP3 e WAV,
    32 MB); o mesmo com vídeo WebM. Recusar ao salvar ou só oferecer o que o modelo aceita.
-4. **Links sem token**: `/baixar/...mp3` liga o contêiner e grava no R2 no primeiro pedido (a regra
+3. **Links sem token**: `/baixar/...mp3` liga o contêiner e grava no R2 no primeiro pedido (a regra
    é "só lê") e vale para conta suspensa; `/envio/<código>` aceita dois envios simultâneos; bilhete
    de envio não usado fica em `envios/` para sempre (falta a regra de expiração no R2).
-5. **`listar_arquivos` do MCP** mostra na descrição todos os modelos, inclusive os de teste, a
+4. **`listar_arquivos` do MCP** mostra na descrição todos os modelos, inclusive os de teste, a
    qualquer conta com API. Tirar a lista e apontar para o `listar_modelos`.
-6. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
+5. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
    `docs/operacao.md` dizem 20. Escolher um.
-7. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
+6. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
    clonada do Fish nem o vídeo de origem; e a voz clonada é gravada antes da validação (sobra voz órfã).
 
 ### 2. Telas (aprovadas: mudar só com o sim do dono)
@@ -242,6 +240,10 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    de 4 a 30 s) como versão do mesmo modelo, com a mesma regra. Conferir a estimativa de custo
    (por tokens) no primeiro vídeo pronto: é o único modelo sem custo real para comparar
    ([modelos/README.md](modelos/README.md)).
+5. **Pastas para guardar os ativos** (pedido de 10/11/2026): organizar em pastas, movendo o item
+   (arrastar) ou pelo menu dele. A combinar com o dono antes de montar: o que entra em pasta (os
+   ativos dos avatares, o que foi gerado, ou os dois), onde as pastas aparecem (a lista de vídeos e
+   a de ativos são telas aprovadas) e se há pasta dentro de pasta.
 
 ## Onde estamos (25/10/2026)
 
@@ -434,6 +436,8 @@ Fora da ordem acima, pedido pelo dono: uma página com os números do site, só 
 
 - **Canvas**: o "Seus vídeos" da tela só lista vídeos gerados; os ativos de avatar entram pela
   API e aparecem na prévia, mas a tela ainda não tem onde escolhê-los.
+- **Canvas**: o "Seus vídeos" mostra os 100 vídeos prontos mais novos (desde 10/11/2026 só vídeos:
+  antes, imagens, áudios e falhas ocupavam o lugar deles). Falta a paginação ali, como nas listas.
 - **Canvas**: velocidade e enquadramento ainda não têm campos nos Ajustes (só pela API, a prévia
   mostra), e o fundo desfocado da prévia não acompanha o zoom (o da exportação, sim).
 

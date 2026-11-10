@@ -254,7 +254,7 @@ describe("ContaDb", () => {
     const { dona, outra, video } = await cena();
     const alheia = db().conta(outra.id);
     expect(await alheia.video(video.id)).toBeNull();
-    expect(await alheia.videos(["wan"])).toHaveLength(0);
+    expect(await alheia.videos(["wan"])).toMatchObject({ items: [], total: 0 });
     expect(await alheia.ready(["wan"])).toHaveLength(0);
     expect((await alheia.countByStructure()).size).toBe(0);
     expect(await alheia.lastExtraByAvatar(["wan"])).toEqual(new Map());
@@ -263,7 +263,7 @@ describe("ContaDb", () => {
     expect((await alheia.videoAvatars([video.id])).size).toBe(0);
     const propria = db().conta(dona.id);
     expect(await propria.video(video.id)).not.toBeNull();
-    expect(await propria.videos(["wan"])).toHaveLength(1);
+    expect(await propria.videos(["wan"])).toMatchObject({ total: 1, page: 1, items: [{ id: video.id }] });
     expect(await propria.ready(["wan"])).toHaveLength(1);
     expect((await propria.countByStructure()).get("wan")).toBe(1);
     expect(await propria.readyVideos(["wan"], { limite: 10, q: "ninguém mais" })).toHaveLength(1);
