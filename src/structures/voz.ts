@@ -15,6 +15,7 @@ import { speechSeconds } from "./heygen";
 import type { FishVoice } from "../fish";
 import { MAX_CLONE_NAME, NEW_CLONE, SOURCES } from "./heygen-direta";
 import { type Built, type Field, InputError, type Lists, type Option, type Structure, type VoiceOption } from "./types";
+import { CAMPOS, num, txt, voz } from "./agente";
 
 /** O ElevenLabs v4 aceita 10.000 caracteres por pedido; a metade basta para vídeo curto. */
 export const MAX_SPEECH = 5000;
@@ -107,6 +108,8 @@ interface SpeechModel {
   voices(model: VideoModel | null, lists?: Lists): VoiceOption[];
   /** Clona voz (Voz pronta | Voz clonada, como a HeyGen direta); a gravação vai em cada pedido. */
   clone?: boolean;
+  /** Quando o agente usa este modelo (listar_modelos). */
+  use: string;
 }
 
 /** A fonte da voz nos modelos que clonam: a mesma escolha da HeyGen, sem o "Meu áudio". */
@@ -123,6 +126,16 @@ export function speechStructure(o: SpeechModel): Structure {
     icon: "record_voice_over",
     access: "admin",
     output: "audio",
+    agent: {
+      use: o.use,
+      fields: {
+        texto: `O que a voz lê, até ${MAX_SPEECH} caracteres. Emoções entre colchetes, em inglês, antes do trecho: ${EMOTIONS.map((e) => `[${e.value}]`).join(", ")}; duas seguidas, como [whispers, laughs]. Obrigatório.`,
+        voz: `Id de uma voz de listar_vozes {modelo: "${o.id}"}${o.clone ? " (pronta ou clonada, como a de um avatar)" : ""}. Obrigatória.`,
+        ...(o.clone ? { consentimento: "true quando a pessoa confirmou que a voz é dela ou que tem autorização: a voz de um avatar no primeiro uso." } : {}),
+      },
+      required: ["texto", "voz"],
+      values: (a, lists) => ({ ...voz(a, lists), texto: txt(a, "texto") }),
+    },
     treatAudio: false,
     quickEdit: false,
     wordsPerSecond: WORDS_PER_SECOND,
@@ -252,6 +265,7 @@ export const ELEVENLABS = speechStructure({
   name: "ElevenLabs v4",
   model: "elevenlabs/eleven-v4",
   summary: "Transforma o texto em fala, com direção de atuação.",
+  use: "Fala com um pouco mais de qualidade e direção de atuação (uns US$ 0,08 por minuto); só vozes prontas.",
   voices: elevenVoices,
 });
 
@@ -282,6 +296,7 @@ export const FISH = speechStructure({
   name: "Fish Audio",
   model: "fish-audio/drama-3",
   summary: "Transforma o texto em fala, com vozes em português, inglês e espanhol.",
+  use: "Fala barata (uns US$ 0,002 por minuto), vozes prontas em português, inglês e espanhol ou a voz clonada de um avatar (como a de um personagem).",
   // As vozes vêm do catálogo do Fish (Studio.lists), já em VoiceOption.
   voices: (_model, lists) => lists?.voices ?? [],
   clone: true,

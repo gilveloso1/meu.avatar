@@ -303,8 +303,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 ## Modelos: uma estrutura para cada
 
 - Cada modelo de vídeo é uma estrutura em `src/structures/` (hoje `wan.ts`, `wan-livre.ts` (o Wan 3.0
-  com tudo o que aceita, para o `gerar_video_wan` do MCP; versão "Livre" do Wan, só o administrador),
-  `heygen.ts`, `grok.ts` (cena sem fala), `imagem.ts` (Nano Banana: imagem, não vídeo, com `output: "image"`; fica na tabela e nas telas dos vídeos, gerada pela API de imagens fora do pedido, num Durable Object com alarme (`src/imagens.ts`), para não ficar presa se o navegador sair da página e fora da aba Vídeos; o agente acha as imagens no `listar_arquivos` (`tipo: imagem`), gera pelo `gerar_imagem` do MCP e põe no canvas com `adicionar {imagem}`), `voz.ts` (modelos de fala, hoje o ElevenLabs v4 e o Fish Audio Drama 3, este só com as vozes oficiais do Fish (`src/fish.ts`, lidas do Fish e guardadas por um dia, como o catálogo da HeyGen) e com a Voz clonada no molde da HeyGen (a gravação vai em cada pedido; `voices.provider = 'fish'`): áudio, com `output: "audio"`, pelo mesmo caminho da imagem e com a mesma página; o menu de vozes é o do HeyGen, por `?modelo=`, e o áudio entra no HeyGen como "Meu áudio" pelo "Adicionar ativo"; o agente gera pelo `gerar_audio` do MCP (vozes de `listar_vozes` com `modelo`), acha no `listar_arquivos` (`tipo: audio`) e põe no canvas com `adicionar {audio}` ou no `gerar_video {audio}`), `seedance.ts` e `aleph.ts`; os dois últimos com o campo Uso, hoje só a troca de avatar): campos do formulário, prompt de sistema, montagem do pedido,
+  com tudo o que aceita, para o agente; versão "Livre" do Wan, só o administrador),
+  `heygen.ts`, `grok.ts` (cena sem fala), `mischief.ts` (cena sem fala nem som, só 16:9, o mais barato), `imagem.ts` (Nano Banana: imagem, não vídeo, com `output: "image"`; fica na tabela e nas telas dos vídeos, gerada pela API de imagens fora do pedido, num Durable Object com alarme (`src/imagens.ts`), para não ficar presa se o navegador sair da página e fora da aba Vídeos; o agente acha as imagens no `listar_arquivos` (`tipo: imagem`), gera pelo `gerar_imagem` do MCP e põe no canvas com `adicionar {imagem}`), `voz.ts` (modelos de fala, hoje o ElevenLabs v4 e o Fish Audio Drama 3, este só com as vozes oficiais do Fish (`src/fish.ts`, lidas do Fish e guardadas por um dia, como o catálogo da HeyGen) e com a Voz clonada no molde da HeyGen (a gravação vai em cada pedido; `voices.provider = 'fish'`): áudio, com `output: "audio"`, pelo mesmo caminho da imagem e com a mesma página; o menu de vozes é o do HeyGen, por `?modelo=`, e o áudio entra no HeyGen como "Meu áudio" pelo "Adicionar ativo"; o agente gera pelo `gerar_audio` do MCP (vozes de `listar_vozes` com `modelo`), acha no `listar_arquivos` (`tipo: audio`) e põe no canvas com `adicionar {audio}` ou no `gerar_video {audio}`), `seedance.ts` e `aleph.ts`; os dois últimos com o campo Uso, hoje só a troca de avatar): campos do formulário, prompt de sistema, montagem do pedido,
   regra de custo, se o áudio passa pelo contêiner e se o vídeo pronto tem o
   botão "Edição rápida" (`quickEdit`, `container/editar.py`). A tela inicial tem um card
   por modelo e uma aba com os vídeos de todos (`/videos`). As telas estão em
@@ -312,6 +312,10 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
 - Cada vídeo guarda a estrutura que o gerou (`videos.structure`) e as
   configurações próprias dela (`videos.settings`, JSON).
 - Modelo novo é estrutura nova, sem mexer nas outras. O Wan fica como está.
+- O agente usa os modelos pelo MCP sem ferramenta por modelo: `listar_modelos` e um `gerar_*` por tipo
+  (vídeo, imagem, áudio), com `modelo` obrigatório (sem padrão) e em dois passos (simula e mostra o
+  custo; só gera com a `confirmacao`, depois do sim da pessoa). Quem descreve o modelo para o agente é
+  a estrutura (`agent`: quando usar, campos e `values`); sem `agent`, o modelo fica só no site.
   Estrutura em teste usa `access: "admin"` (só o administrador vê).
 
 ## OpenRouter

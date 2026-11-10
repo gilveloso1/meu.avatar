@@ -39,6 +39,11 @@ No ar em 08/11/2026 (PRs 122 a 124): o agente **gera vídeo** com o HeyGen Avata
 da Edição rápida é achado no navegador** (MediaPipe), sem o contêiner; o servidor só procura no
 `rosto` do agente.
 
+No ar em 10/11/2026 (PRs 139 e 140): o agente usa **todos os modelos sem ferramenta por modelo**
+(`listar_modelos` e um `gerar_*` por tipo, com `modelo` obrigatório e em dois passos: simula e mostra
+o custo, e só gera com a confirmação da pessoa; ver "Gerar" em [api.md](api.md)); entram o Wan 3.0
+livre (quadros, referências, som e semente) e o mischief 1 (o vídeo mais barato, só 16:9).
+
 Também no ar (04/11/2026), a **animação como código** (PRs 69 a 83; ver [canvas.md](canvas.md) e
 [api.md](api.md)): o projeto guarda o HTML da animação, não o WebM, e só renderiza na exportação.
 

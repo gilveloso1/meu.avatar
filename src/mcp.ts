@@ -25,7 +25,7 @@ export const CACHE = { ttlMs: 5 * 60_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Depois de editar, olhe os avisos novos em mudou: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Para ver como uma cena sai, com todas as camadas, use ver_cena, sem exportar. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Exportar usa o contêiner, sem créditos de modelo. Gerar vídeo e imagem gastam créditos. Vídeo: gerar_video faz o avatar falar com o HeyGen Avatar (uns US$ 0,04 por segundo de fala); antes, mostre à pessoa o texto, a voz (de listar_vozes) e o custo, e só gere com o sim dela. O vídeo leva minutos: acompanhe com acompanhar_video e, pronto, ponha no projeto com adicionar {video}. Para a cena que o avatar falando não resolve (sem foto, câmera e movimento livres, do primeiro ao último quadro, a partir de referências, sem som), use gerar_video_wan, com a mesma confirmação de cena e custo. Imagem: gerar_imagem gasta créditos (uns US$ 0,04 em 1K) e devolve a imagem para você olhar antes de usar; se não ficou boa, refaça com outra descrição ou com ela mesma como referencia. Para juntar a pessoa de uma imagem com o produto ou o lugar de outras, mande todas em referencias e diga na descrição o que vem de cada uma (imagem 1, imagem 2...). Ela entra no projeto com adicionar {imagem}. Fala sem vídeo: gerar_audio faz o MP3 na hora (Fish Audio, centavos por minuto; vozes de listar_vozes com modelo: "fish", inclusive a de um avatar); antes, mostre à pessoa o texto e a voz. Ela entra no projeto com adicionar {audio} ou vira a fala do gerar_video {audio}. Ferramenta nova: se uma ferramenta citada aqui, numa descrição ou pela pessoa não estiver na sua lista, ela foi publicada depois que você conectou; veja listar_ferramentas e chame com usar_ferramenta, sem pedir para reconectar.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Depois de editar, olhe os avisos novos em mudou: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Para ver como uma cena sai, com todas as camadas, use ver_cena, sem exportar. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Exportar usa o contêiner, sem créditos de modelo. Gerar vídeo, imagem e áudio gasta créditos e não tem modelo padrão: veja em listar_modelos quando usar cada um, os campos e o preço, e escolha o modelo com a pessoa. Todo gerar_video, gerar_imagem e gerar_audio é em dois passos: a primeira chamada, sem confirmacao, só simula e devolve o custo e o código; mostre à pessoa o modelo, o pedido (texto, voz, duração, formato) e o custo, e só com o sim dela chame de novo com os mesmos campos e a confirmacao. Pedido mudou, simule de novo. As vozes de um modelo vêm de listar_vozes com o mesmo modelo. O vídeo leva minutos: acompanhe com acompanhar_video e, pronto, ponha no projeto com adicionar {video}. A imagem volta para você olhar antes de usar e entra com adicionar {imagem}; o áudio entra com adicionar {audio} ou vira a fala do gerar_video {audio}. Ferramenta nova: se uma ferramenta citada aqui, numa descrição ou pela pessoa não estiver na sua lista, ela foi publicada depois que você conectou; veja listar_ferramentas e chame com usar_ferramenta, sem pedir para reconectar.`;
 
 const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro e diz em comando a posição do que falhou, a partir de 0. Cada um tem "tipo":
 adicionar {video|arquivo|ativo|imagem|audio, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos} (imagem: o id de gerar_imagem; a imagem fica na tela de inicio a fim, 3 s sem fim; audio: o id de um áudio gerado, de listar_arquivos; depois encadeia som com som e imagem ou vídeo com imagem ou vídeo: falas de áudio em sequência formam a base de um grupo só de som)
@@ -62,6 +62,13 @@ const texto = (descricao: string) => ({ type: "string", description: descricao }
 const objeto = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
 const projeto = texto("Id do projeto.");
 const src = texto('Endereço do arquivo: o src de um item de listar_arquivos (vídeo, imagem ou áudio), o src de um ativo de listar_avatares, um arquivo de ver_projeto (incluir: arquivos) ou o href de uma exportação pronta.');
+
+/** Os dois passos de toda ferramenta que gasta créditos: simular, perguntar à pessoa, gerar. */
+const DOIS_PASSOS =
+  "Dois passos: sem confirmacao, só simula (confere o pedido e devolve o custo estimado e o código de confirmacao, sem gastar); mostre à pessoa o modelo, o pedido e o custo e, só com o sim dela, chame de novo com os mesmos campos e a confirmacao. Os campos que o modelo aceita estão em listar_modelos.";
+const MODELO = (tipo: string) => texto(`Id de um modelo de listar_modelos {tipo: "${tipo}"}, escolhido com a pessoa. Sem padrão.`);
+const CONFIRMACAO = texto("O código da simulação, depois do sim da pessoa. Sem isso, a chamada só simula.");
+const CONSENTIMENTO = { type: "boolean", description: "true quando a pessoa confirmou que a voz é dela ou que tem autorização: a voz de um avatar no primeiro uso." };
 
 const FERRAMENTAS = [
   {
@@ -108,14 +115,17 @@ const FERRAMENTAS = [
   },
   {
     name: "listar_vozes",
-    description: "Vozes para o gerar_video (sem modelo: as do HeyGen Avatar) ou para o gerar_audio (modelo: \"fish\" ou \"elevenlabs\"): as prontas, português primeiro, e as clonadas da conta, com a voz de cada avatar que tem gravação (o ElevenLabs não clona). O id de uma delas vai em voz. Uma clonada com clonarNoPrimeiroUso ainda será clonada: o gerar_video e o gerar_audio pedem consentimento: true.",
-    inputSchema: objeto({
-      modelo: texto('"fish" ou "elevenlabs" para as vozes do gerar_audio; sem isso, as do gerar_video.'),
-      busca: texto("Parte do nome da voz."),
-      idioma: texto('Parte do idioma, como "Português" ou "Multilíngue".'),
-      genero: texto('"feminina" ou "masculina".'),
-      limite: { type: "integer", description: "Quantas prontas, de 1 a 100; sem isso, 30." },
-    }),
+    description: "Vozes de um modelo que fala (os que têm o campo voz em listar_modelos): as prontas, português primeiro, e as clonadas da conta, com a voz de cada avatar que tem gravação (onde o modelo clona). O id de uma delas vai em voz, no gerar_video ou no gerar_audio com o mesmo modelo. Uma clonada com clonarNoPrimeiroUso ainda será clonada: o pedido leva consentimento: true.",
+    inputSchema: objeto(
+      {
+        modelo: texto("Id do modelo, de listar_modelos."),
+        busca: texto("Parte do nome da voz."),
+        idioma: texto('Parte do idioma, como "Português" ou "Multilíngue".'),
+        genero: texto('"feminina" ou "masculina".'),
+        limite: { type: "integer", description: "Quantas prontas, de 1 a 100; sem isso, 30." },
+      },
+      ["modelo"],
+    ),
   },
   {
     name: "listar_animacoes",
@@ -187,76 +197,69 @@ const FERRAMENTAS = [
     ),
   },
   {
-    name: "gerar_imagem",
+    name: "listar_modelos",
     description:
-      "Gera uma imagem com o Nano Banana 2.1 (gasta créditos: uns US$ 0,04 em 1K, 0,06 em 2K) e devolve o id, o src e a própria imagem, para você conferir antes de usar. Ponha no projeto com adicionar {imagem: id} (ou trocar). Com referencia, a pessoa e o que a descrição não muda seguem aquela imagem: a foto de um ativo, um arquivo do projeto ou outra imagem gerada (para ajustar a anterior). Para juntar várias (a pessoa de uma, o produto de outra, o lugar de uma terceira), mande referencias, até 6, e diga na descrição o que vem de cada uma pela ordem (imagem 1, imagem 2...). Fica também na lista do modelo no site.",
-    inputSchema: objeto(
-      {
-        projeto,
-        descricao: texto("A cena: quem aparece, onde, a luz e o enquadramento. Até 2.000 caracteres."),
-        referencia: texto('src de uma imagem: a foto de um ativo de listar_avatares, um arquivo do projeto ou o src de outra imagem gerada ("/videos/<id>.png").'),
-        referencias: { type: "array", items: { type: "string" }, maxItems: 6, description: "Vários src de imagem (como referencia), até 6, na ordem: a primeira é a imagem 1 da descrição. Com referencia junto, ela vem antes." },
-        resolucao: texto('"1K" (padrão) ou "2K".'),
-        formato: texto('Como "9:16" ou "16:9"; sem isso, o do Final.'),
-        final: texto("Id do Final cujo formato vale; sem isso, o primeiro."),
-      },
-      ["projeto", "descricao"],
-    ),
+      "Os modelos que geram vídeo, imagem e áudio, os que a conta pode usar: para cada um, quando usar, os campos que aceita (e o que cada um é nele), os obrigatórios, as durações, resoluções e formatos e o preço. Leia antes de gerar e escolha com a pessoa: não há modelo padrão.",
+    inputSchema: objeto({ tipo: texto('"video", "imagem" ou "audio"; sem isso, todos.') }),
   },
   {
     name: "gerar_video",
-    description:
-      "Gera um vídeo do avatar falando com o HeyGen Avatar, o mesmo do site (gasta créditos: uns US$ 0,04 por segundo de fala; a resposta traz o custo estimado). Confirme antes com a pessoa o texto, a voz e o custo. A foto anima e a voz lê a fala; ou, com audio, o áudio é a fala. Leva alguns minutos: a resposta traz o id para o acompanhar_video. Fica também na lista do modelo no site.",
+    description: `Gera um vídeo com o modelo escolhido (gasta créditos). ${DOIS_PASSOS} O vídeo leva minutos: a resposta traz o id para o acompanhar_video. Fica também na lista do modelo no site.`,
     inputSchema: objeto(
       {
+        modelo: MODELO("video"),
         projeto,
-        foto: texto('src da foto do avatar (jpeg, png ou webp): a foto de um ativo de listar_avatares, um arquivo do projeto ou uma imagem gerada ("/videos/<id>.png").'),
-        fala: texto("O texto que a voz lê, até 1.500 caracteres. A duração do vídeo segue a fala."),
-        voz: texto("Id de uma voz de listar_vozes (pronta ou clonada). Obrigatória com fala."),
-        audio: texto("src de um áudio (mp3 ou wav) que é a fala, no lugar de fala e voz. Serve o som de uma exportação deste projeto (som em acompanhar_exportacao): a fala montada no canvas."),
-        consentimento: { type: "boolean", description: "true quando a pessoa confirmou que a voz é dela ou que tem autorização: pedido para clonar a voz de um avatar no primeiro uso." },
-        expressividade: texto('"low" (padrão), "medium" ou "high": a energia da cabeça e do rosto.'),
-        movimento: texto("Gestos que o avatar faz enquanto fala, até 500 caracteres. Opcional."),
-        resolucao: texto('"720p" (padrão) ou "1080p".'),
-        formato: texto('Como "9:16" ou "16:9"; sem isso, o do Final.'),
+        cena: texto("A cena, o movimento ou os gestos, conforme o modelo (listar_modelos)."),
+        fala: texto("O que a pessoa fala."),
+        voz: texto("Id de uma voz de listar_vozes com o mesmo modelo."),
+        idioma: texto('Idioma da fala: "pt-BR", "en-US" ou "es".'),
+        estilo: texto("Estilo do prompt pronto, nos modelos que têm."),
+        foto: texto('src da imagem do primeiro quadro: a foto de um ativo de listar_avatares, um arquivo do projeto ou uma imagem gerada ("/videos/<id>.png").'),
+        ultimoQuadro: texto("src da imagem do último quadro."),
+        referencias: { type: "array", items: { type: "string" }, description: "src de imagens que guiam a cena, sem virar quadro. Não vão com foto nem ultimoQuadro." },
+        audio: texto("src de um áudio (mp3 ou wav) que é a fala: um de gerar_audio ou o som de uma exportação deste projeto."),
+        som: { type: "boolean", description: "false para sair sem som." },
+        semente: { type: "integer", description: "Para repetir um resultado parecido." },
+        expressividade: texto('"low", "medium" ou "high".'),
+        consentimento: CONSENTIMENTO,
+        duracao: { type: "integer", description: "Segundos, um dos aceitos pelo modelo." },
+        resolucao: texto("Uma das resoluções do modelo."),
+        formato: texto("Um dos formatos do modelo; sem isso, o do Final."),
         final: texto("Id do Final cujo formato vale; sem isso, o primeiro."),
+        confirmacao: CONFIRMACAO,
       },
-      ["projeto", "foto"],
+      ["modelo", "projeto"],
     ),
   },
   {
-    name: "gerar_video_wan",
-    description:
-      "Gera um vídeo com o Wan 3.0, com tudo o que ele aceita (gasta créditos: uns US$ 0,05 por segundo em 480p, 0,10 em 720p e 0,20 em 1080p; a resposta traz o custo estimado). Confirme antes com a pessoa a cena e o custo. Serve para a cena que o gerar_video não faz: sem foto (só texto), com movimento e câmera livres, entre um primeiro e um último quadro, a partir de referências, com ou sem som. A cena é o prompt inteiro: quem aparece, o que faz, a câmera, a luz e, se alguém fala, a fala entre aspas com o idioma (a voz sai do próprio modelo, tratada depois). Use foto e ultimoQuadro (imagem para vídeo) ou referencias (a pessoa, o produto e o lugar guiam a cena), nunca os dois. Leva alguns minutos: acompanhe com acompanhar_video. Fica também na lista do Wan no site.",
+    name: "gerar_imagem",
+    description: `Gera uma imagem com o modelo escolhido (gasta créditos) e devolve o id, o src e a própria imagem, para você conferir antes de usar. ${DOIS_PASSOS} Ponha no projeto com adicionar {imagem: id} (ou trocar); se não ficou boa, refaça com outra descrição ou com ela mesma em referencias. Fica também na lista do modelo no site.`,
     inputSchema: objeto(
       {
+        modelo: MODELO("imagem"),
         projeto,
-        cena: texto("O prompt inteiro: quem aparece, o que faz, a câmera, a luz e a fala entre aspas, com o idioma. Até 2.000 caracteres."),
-        foto: texto('src da imagem do primeiro quadro (jpeg, png ou webp): a foto de um ativo de listar_avatares, um arquivo do projeto ou uma imagem gerada ("/videos/<id>.png"). Opcional.'),
-        ultimoQuadro: texto("src da imagem do último quadro: o vídeo termina nela. Opcional; com foto, o vídeo vai de uma à outra."),
-        referencias: { type: "array", items: { type: "string" }, maxItems: 4, description: "Até 4 src de imagem que guiam a cena (a pessoa, o produto, o lugar), sem virar quadro; diga na cena o que vem de cada uma. Não vai com foto nem ultimoQuadro." },
-        som: { type: "boolean", description: "false para o vídeo sair sem som (só imagem, para pôr outro áudio por cima). Padrão: com som." },
-        semente: { type: "integer", description: "Para repetir um resultado parecido: a mesma semente com o mesmo pedido. Opcional." },
-        duracao: { type: "integer", description: "Segundos, de 2 a 30. Padrão: 5." },
-        resolucao: texto('"480p", "720p" (padrão) ou "1080p".'),
-        formato: texto('"16:9", "4:3", "1:1", "3:4" ou "9:16"; sem isso, o do Final.'),
+        descricao: texto("A cena: quem aparece, onde, a luz e o enquadramento."),
+        referencias: { type: "array", items: { type: "string" }, description: 'src de imagens, na ordem (imagem 1, imagem 2...): a foto de um ativo, um arquivo do projeto ou outra imagem gerada ("/videos/<id>.png"); diga na descrição o que vem de cada uma.' },
+        resolucao: texto("Uma das resoluções do modelo."),
+        formato: texto("Um dos formatos do modelo; sem isso, o do Final."),
         final: texto("Id do Final cujo formato vale; sem isso, o primeiro."),
+        confirmacao: CONFIRMACAO,
       },
-      ["projeto", "cena"],
+      ["modelo", "projeto", "descricao"],
     ),
   },
   {
     name: "gerar_audio",
-    description:
-      "Gera uma fala (MP3) com um modelo de fala, o mesmo do site, e devolve o id, o src, a duração e o custo: sai na hora. Gasta créditos, bem pouco: o Fish Audio (padrão) uns US$ 0,002 por minuto de fala; o ElevenLabs, uns US$ 0,08 por minuto, com um pouco mais de qualidade. Confirme antes com a pessoa o texto e a voz. A voz é uma de listar_vozes com o mesmo modelo: pronta ou clonada (no Fish, a voz de um avatar, como a de um personagem). Ponha a fala no projeto com adicionar {audio: id} ou faça o avatar falar com ela no gerar_video {audio: src}. Fica também na lista do modelo no site.",
+    description: `Gera uma fala (MP3) com o modelo de fala escolhido (gasta créditos, bem pouco) e devolve o id, o src, a duração e o custo: sai na hora. ${DOIS_PASSOS} Ponha a fala no projeto com adicionar {audio: id} ou faça o avatar falar com ela no gerar_video {audio: src}. Fica também na lista do modelo no site.`,
     inputSchema: objeto(
       {
-        texto: texto(`O que a voz lê, até 5.000 caracteres. Emoções entre colchetes, em inglês, antes do trecho: ${EMOTIONS.map((e) => `[${e.value}]`).join(", ")}; duas seguidas, como [whispers, laughs].`),
+        modelo: MODELO("audio"),
+        texto: texto(`O que a voz lê. Emoções entre colchetes, em inglês, antes do trecho: ${EMOTIONS.map((e) => `[${e.value}]`).join(", ")}; duas seguidas, como [whispers, laughs].`),
         voz: texto("Id de uma voz de listar_vozes com o mesmo modelo (pronta ou clonada)."),
-        modelo: texto('"fish" (padrão) ou "elevenlabs".'),
-        consentimento: { type: "boolean", description: "true quando a pessoa confirmou que a voz é dela ou que tem autorização: pedido para a voz de um avatar no primeiro uso." },
+        consentimento: CONSENTIMENTO,
+        confirmacao: CONFIRMACAO,
       },
-      ["texto", "voz"],
+      ["modelo", "texto", "voz"],
     ),
   },
   {
@@ -432,15 +435,15 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
     case "ver_silencios":
       return chama("GET", `${p}/silencios?src=${seguro(a.src)}`);
     case "gerar_imagem":
-      return chama("POST", `${p}/imagem`, json({ descricao: a.descricao, referencia: a.referencia, referencias: a.referencias, resolucao: a.resolucao, formato: a.formato, final: a.final, previa: true }));
+      return chama("POST", `${p}/imagem`, json({ ...semProjeto(a), previa: true }));
     case "listar_vozes":
       return chama("GET", `/api/v1/vozes?${new URLSearchParams(Object.entries({ modelo: a.modelo, q: a.busca, idioma: a.idioma, genero: a.genero, limite: a.limite }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "gerar_video":
-      return chama("POST", `${p}/video`, json({ foto: a.foto, fala: a.fala, voz: a.voz, audio: a.audio, consentimento: a.consentimento, expressividade: a.expressividade, movimento: a.movimento, resolucao: a.resolucao, formato: a.formato, final: a.final }));
-    case "gerar_video_wan":
-      return chama("POST", `${p}/wan`, json({ cena: a.cena, foto: a.foto, ultimoQuadro: a.ultimoQuadro, referencias: a.referencias, som: a.som, semente: a.semente, duracao: a.duracao, resolucao: a.resolucao, formato: a.formato, final: a.final }));
+      return chama("POST", `${p}/video`, json(semProjeto(a)));
     case "gerar_audio":
-      return chama("POST", "/api/v1/audios", json({ modelo: a.modelo, texto: a.texto, voz: a.voz, consentimento: a.consentimento }));
+      return chama("POST", "/api/v1/audios", json(a));
+    case "listar_modelos":
+      return chama("GET", `/api/v1/modelos${typeof a.tipo === "string" && a.tipo ? `?tipo=${seguro(a.tipo)}` : ""}`);
     case "acompanhar_video":
       return chama("GET", `/api/v1/videos/${seguro(a.video)}`);
     case "renderizar_html":
@@ -468,6 +471,12 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
     default:
       return null;
   }
+}
+
+/** Os campos do gerar_* sem o projeto, que vai no caminho; o resto passa como veio. */
+function semProjeto(a: Args): Args {
+  const { projeto: _projeto, ...resto } = a;
+  return resto;
 }
 
 /** A resposta da rota vira resultado da ferramenta; recusa é erro da ferramenta, não do protocolo. */

@@ -17,7 +17,8 @@
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { cleanSpeech, type Language, LANGUAGES, languageById, MAX_EXTRA, qualityGuide, SPEECH_LEAD, WORDS_PER_SECOND } from "../prompt";
-import { InputError, type Structure } from "./types";
+import { CAMPOS, num, txt } from "./agente";
+import { type AgentSpec, InputError, type Structure } from "./types";
 import { options } from "./wan";
 
 /** Fala curta: o modelo faz no máximo 15 s (cerca de 39 palavras). */
@@ -71,8 +72,32 @@ function defaultDuration(durations: number[], preferred: number): number {
  * página); a 1.1 fica no seletor Versão enquanto a 1.2 estiver instável (o Google passa a 1.1
  * para a 1.2 em 03/12/2026). Durações e preços vêm de cada modelo no OpenRouter.
  */
+/** O Omni para o agente: só a versão principal (a 1.1 sai em 03/12/2026). */
+const OMNI_AGENT: AgentSpec = {
+  use: "O avatar da foto fala o texto (voz e boca do próprio modelo) ou só faz a cena, sem fala; clipes de 3 a 15 s, só 9:16 e 16:9.",
+  fields: {
+    cena: `A cena e o estilo: onde está, o que faz, a câmera. Até ${MAX_EXTRA} caracteres. Obrigatória.`,
+    fala: `Só o que a pessoa fala, sem aspas, até ${MAX_OMNI_SPEECH} caracteres. Sem fala, só a cena.`,
+    idioma: '"pt-BR" (padrão), "en-US" ou "es", com fala.',
+    foto: `${CAMPOS.foto} Obrigatória.`,
+    duracao: CAMPOS.duracao,
+    resolucao: CAMPOS.resolucao,
+    formato: CAMPOS.formato,
+  },
+  required: ["cena", "foto"],
+  values: (a) => ({
+    instrucoes: txt(a, "cena"),
+    idioma: txt(a, "fala").trim() ? txt(a, "idioma") : NO_SPEECH,
+    fala: txt(a, "fala"),
+    duracao: num(a, "duracao"),
+    resolucao: txt(a, "resolucao"),
+    formato: txt(a, "formato"),
+  }),
+};
+
 function omniVersion(v: { id: string; version: string; family?: string }): Structure {
   return {
+  ...(v.family ? {} : { agent: OMNI_AGENT }),
   id: v.id,
   family: v.family,
   version: v.version,

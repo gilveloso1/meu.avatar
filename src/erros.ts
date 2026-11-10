@@ -83,6 +83,7 @@ export const ERROS = {
   movimentoLongo: (max: number) => campo(`Encurte o movimento para até ${max} caracteres.`),
   descricao: campo("Descreva a cena da imagem."),
   cena: campo("Descreva a cena do vídeo."),
+  semente: campo("Use uma semente inteira, de zero para cima."),
   cenaLonga: (max: number) => campo(`Encurte a cena para até ${max} caracteres.`),
   descricaoLonga: (max: number) => campo(`Encurte a descrição para até ${max} caracteres.`),
   instrucoesLongas: (max: number) => campo(`Encurte as instruções para até ${max} caracteres.`),

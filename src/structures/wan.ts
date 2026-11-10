@@ -8,6 +8,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { buildPrompt, cleanSpeech, LANGUAGES, languageById, MAX_EXTRA, MAX_SPEECH, STYLES, styleById, WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Structure } from "./types";
+import { CAMPOS, num, txt, voz } from "./agente";
 
 export const WAN: Structure = {
   id: "wan",
@@ -16,6 +17,21 @@ export const WAN: Structure = {
   summary: "A cena, a voz e a boca saem juntas do modelo, a partir da foto e da fala. O áudio passa pelo tratamento depois.",
   icon: "movie",
   access: "all",
+  agent: {
+    use: "O avatar da foto fala o texto com a voz e a boca do próprio modelo (a voz não se escolhe), no prompt pronto do site: escolha o estilo. O áudio é tratado depois.",
+    fields: {
+      fala: "Só o que a pessoa fala, sem aspas. Obrigatória.",
+      idioma: '"pt-BR", "en-US" ou "es". Padrão: pt-BR.',
+      estilo: '"selfie" (padrão), "apresentador" ou "review" (UGC de produto).',
+      cena: "Opcional: algo a mais sobre a cena, além do estilo.",
+      foto: `${CAMPOS.foto} Opcional.`,
+      duracao: CAMPOS.duracao,
+      resolucao: CAMPOS.resolucao,
+      formato: CAMPOS.formato,
+    },
+    required: ["fala"],
+    values: (a) => ({ fala: txt(a, "fala"), idioma: txt(a, "idioma"), estilo: txt(a, "estilo"), instrucoes: txt(a, "cena"), duracao: num(a, "duracao"), resolucao: txt(a, "resolucao"), formato: txt(a, "formato") }),
+  },
   treatAudio: true,
   quickEdit: false,
   wordsPerSecond: WORDS_PER_SECOND,

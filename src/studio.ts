@@ -423,6 +423,45 @@ export class Studio {
   }
 
   /**
+   * Confere o pedido como o create, sem gastar nem guardar nada: a simulação do gerar_* do agente,
+   * que mostra o custo antes. Os arquivos, os campos pela estrutura e o que o modelo aceita; lança
+   * InputError ou ForbiddenError como o create. Devolve o modelo (para o custo) e o pedido montado.
+   */
+  async check(input: NewVideoInput): Promise<{ model: VideoModel; built: Built }> {
+    const { structure } = input;
+    if (!canUse(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
+    for (const f of [input.image, input.lastFrame, ...(input.references ?? [])]) {
+      if (!f || f.size === 0) continue;
+      if (!IMAGE_TYPES[f.type]) throw new InputError(ERROS.fotoTipo);
+      if (f.size > MAX_IMAGE_BYTES) throw new InputError(ERROS.fotoTamanho);
+    }
+    const hasImage = !!input.image && input.image.size > 0;
+    if (structure.platform === "heygen") {
+      if (!this.heygen) throw new InputError(ERROS.criacaoPausada);
+      const built = structure.build(input.values, hasImage, HEYGEN_MODEL, null, await this.lists(structure, input.user.id));
+      if (built.heygen?.source === "audio") checkAudio(input.audio, ERROS.audioFala);
+      return { model: HEYGEN_MODEL, built };
+    }
+    this.requireApi();
+    const model = await this.modelOf(structure);
+    const lists = makesAudio(structure) ? await this.lists(structure, input.user.id) : {};
+    const built = structure.build(input.values, hasImage, model, null, lists);
+    if (madeAtOnce(structure)) return { model, built };
+    const request: VideoRequest = { model: structure.model, ...built.request };
+    const frames: NonNullable<VideoRequest["frame_images"]> = [];
+    const url = { type: "image_url" as const, image_url: { url: "" } };
+    if (built.image === "first_frame" && hasImage) frames.push({ ...url, frame_type: "first_frame" });
+    if (built.lastFrame && input.lastFrame && input.lastFrame.size > 0) frames.push({ ...url, frame_type: "last_frame" });
+    if (frames.length) request.frame_images = frames;
+    const errors = validate(model, request);
+    if (errors.length) {
+      console.error(`Não suportado por ${structure.model}: ${errors.join("; ")}`);
+      throw new InputError(ERROS.ajustesNaoAceitos);
+    }
+    return { model, built };
+  }
+
+  /**
    * Faz a imagem ou a fala registrada por create e guarda no R2. O pedido sai da própria linha.
    * Só uma vez: a linha que não está mais "Gerando" (ou já tem arquivo) fica como está.
    */

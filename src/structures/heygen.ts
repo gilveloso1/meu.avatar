@@ -14,6 +14,7 @@ import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
 import { InputError, type Option, type Structure, type VoiceOption } from "./types";
+import { CAMPOS, num, txt, voz } from "./agente";
 import { options } from "./wan";
 
 export const MAX_SCRIPT = 1500;
@@ -50,6 +51,22 @@ export const HEYGEN_AVATAR: Structure = {
   summary: "Anima a foto falando o texto com uma voz pronta da HeyGen. A duração segue a fala.",
   icon: "record_voice_over",
   access: "admin",
+  agent: {
+    use: "O avatar da foto fala o texto com uma voz de listar_vozes (pronta ou clonada, como a de um avatar) ou fala um áudio pronto; boca sincronizada, a duração segue a fala.",
+    fields: {
+      foto: `${CAMPOS.foto} Obrigatória.`,
+      fala: "O texto que a voz lê, até 1.500 caracteres. Obrigatória sem audio.",
+      voz: "Id de uma voz de listar_vozes {modelo: \"heygen\"}. Obrigatória com fala.",
+      audio: "src de um áudio (mp3 ou wav) que é a fala, no lugar de fala e voz: um de gerar_audio ou o som de uma exportação deste projeto.",
+      consentimento: "true quando a pessoa confirmou que a voz é dela ou que tem autorização: a voz de um avatar no primeiro uso.",
+      expressividade: '"low" (padrão), "medium" ou "high": a energia da cabeça e do rosto.',
+      cena: "Gestos que o avatar faz enquanto fala, até 500 caracteres. Opcional.",
+      resolucao: CAMPOS.resolucao,
+      formato: CAMPOS.formato,
+    },
+    required: ["foto"],
+    values: (a, lists) => ({ ...voz(a, lists, !!txt(a, "audio")), fala: txt(a, "fala"), expressividade: txt(a, "expressividade"), movimento: txt(a, "cena"), resolucao: txt(a, "resolucao"), formato: txt(a, "formato") }),
+  },
   // A voz vem pronta do texto para fala: sem o chiado do Wan, não passa pelo contêiner.
   treatAudio: false,
   quickEdit: true,
