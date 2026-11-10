@@ -65,9 +65,9 @@ const src = texto('Endereço do arquivo: o src de um item de listar_arquivos (v�
 
 /** Os dois passos de toda ferramenta que gasta créditos: simular, perguntar à pessoa, gerar. */
 const DOIS_PASSOS =
-  "Dois passos: sem confirmacao, só simula (confere o pedido e devolve o custo estimado e o código de confirmacao, sem gastar); mostre à pessoa o modelo, o pedido e o custo e, só com o sim dela, chame de novo com os mesmos campos e a confirmacao. Os campos que o modelo aceita estão em listar_modelos.";
+  "Dois passos: sem confirmacao, só simula (confere o pedido e devolve o custo estimado e o código de confirmacao, sem gastar); mostre à pessoa o modelo, o pedido e o custo e, só com o sim dela, chame de novo com os mesmos campos e a confirmacao. O código gera uma vez só e vale por 20 min: para gerar de novo ou depois do prazo, simule e pergunte outra vez. Os campos que o modelo aceita estão em listar_modelos.";
 const MODELO = (tipo: string) => texto(`Id de um modelo de listar_modelos {tipo: "${tipo}"}, escolhido com a pessoa. Sem padrão.`);
-const CONFIRMACAO = texto("O código da simulação, depois do sim da pessoa. Sem isso, a chamada só simula.");
+const CONFIRMACAO = texto("O código da simulação, depois do sim da pessoa (uso único, 20 min). Sem isso, a chamada só simula.");
 const CONSENTIMENTO = { type: "boolean", description: "true quando a pessoa confirmou que a voz é dela ou que tem autorização: a voz de um avatar no primeiro uso." };
 
 const FERRAMENTAS = [

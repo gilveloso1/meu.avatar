@@ -13,7 +13,7 @@ import { type Exports } from "./exportar";
 import { mp3Duration } from "./mp3";
 import { mp4Duration } from "./mp4";
 import { canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, prices, STRUCTURES, type Structure, structureById } from "./structures";
-import { sha256 } from "./auth";
+import { randomToken, sha256 } from "./auth";
 import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
 import { criarEnvio, MAX_ATIVO, MAX_AVATAR_DESCRIPTION, receberAtivo, uso } from "./ativos";
@@ -65,6 +65,8 @@ const tipoDe = (s: Structure): Tipo => (makesImage(s) ? "imagem" : makesAudio(s)
 const modelosDoAgente = (user: User, tipo?: Tipo) => STRUCTURES.filter((s) => s.agent && canUse(s, user) && (!tipo || tipoDe(s) === tipo));
 /** Os campos do pedido que não são do modelo (nem entram no código de confirmação). */
 const CAMPOS_DO_PEDIDO = ["modelo", "confirmacao", "final", "previa"];
+/** Por quanto tempo o sim da pessoa vale depois da simulação de um gerar_*. */
+export const SIMULACAO_MIN = 20;
 /** Os campos que, sem valor do agente, ficam com o padrão do formulário do site. */
 const PADRAO = ["duracao", "resolucao", "formato", "estilo", "idioma", "expressividade"];
 /** Como o modelo cobra: por segundo do vídeo, por caractere do texto ou por imagem. */
@@ -590,7 +592,9 @@ export class Api {
    * Gera com o modelo escolhido (gerar_video, gerar_imagem, gerar_audio), em dois passos, para a
    * pessoa ver o custo antes: sem `confirmacao`, só simula (confere tudo pela estrutura, como o
    * site, sem gastar) e devolve o custo estimado e o código de confirmação; com o código, gera. O
-   * código vale para o mesmo pedido: qualquer campo diferente pede outra simulação. Não há modelo
+   * código é sorteado e fica guardado (só o hash) com o pedido e o custo: vale para o mesmo
+   * pedido, uma vez, por SIMULACAO_MIN minutos e enquanto o custo for o que a pessoa viu;
+   * qualquer campo diferente, o reenvio ou o prazo vencido pedem outra simulação. Não há modelo
    * padrão. Os arquivos (foto, ultimoQuadro, referencias, audio) são src do projeto.
    */
   private async generate(tipo: Tipo, request: Request, user: User, project: Project | null): Promise<Response> {
@@ -658,23 +662,33 @@ export class Api {
     const values = (name: string) => valores[name] || padroes[name] || "";
     const avatar = /^\/avatares\/([0-9a-f-]{36})\/arquivos\//.exec(texto("foto") || referencias[0] || "")?.[1] ?? null;
     const input = { structure: resolved, values, image: foto ?? primeira, references, lastFrame: ultimo, audio, avatarId: avatar, user };
-    const codigo = (await sha256(JSON.stringify([user.id, tipo, project?.id ?? null, texto("modelo"), texto("final"), Object.keys(pedido).sort().map((k) => [k, pedido[k]])]))).slice(0, 12);
+    const resumo = await sha256(JSON.stringify([user.id, tipo, project?.id ?? null, texto("modelo"), texto("final"), Object.keys(pedido).sort().map((k) => [k, pedido[k]])]));
+    const centavos = (custo: number | undefined) => (custo !== undefined ? +custo.toFixed(4) : null);
 
     try {
       if (body.confirmacao === undefined) {
         const { built } = await this.studio.check(input);
         const custo = estimate(resolved, model, values);
         const r = built.record;
+        const codigo = randomToken().slice(0, 16);
+        const agora = Date.now();
+        await this.db.addSimulacao(await sha256(codigo), user.id, resumo, centavos(custo), new Date(agora).toISOString(), new Date(agora + SIMULACAO_MIN * 60_000).toISOString());
         return Response.json({
           simulacao: true,
           modelo: structure.id,
-          custoEstimado: custo !== undefined ? +custo.toFixed(4) : null,
+          custoEstimado: centavos(custo),
           ...(tipo === "video" ? { duracao: r.duration || null, resolucao: r.resolution, formato: r.aspect_ratio } : tipo === "imagem" ? { resolucao: r.resolution, formato: r.aspect_ratio } : {}),
           confirmacao: codigo,
-          proximo: "Mostre o modelo, o pedido e o custo à pessoa. Com o sim dela, chame de novo com os mesmos campos e confirmacao; sem o sim, não gere.",
+          validade: `${SIMULACAO_MIN} min`,
+          proximo: "Mostre o modelo, o pedido e o custo à pessoa. Com o sim dela, chame de novo com os mesmos campos e confirmacao; sem o sim, não gere. O código gera uma vez só.",
         });
       }
-      if (body.confirmacao !== codigo) return falha(409, "confirmacao_invalida", { motivo: "O código vale para o mesmo pedido: simule de novo (sem confirmacao) e confirme com a pessoa." });
+      // O código sai do banco aqui, antes de gerar: reenviado, não gera nem cobra de novo.
+      const simulada = typeof body.confirmacao === "string" && body.confirmacao ? await this.db.useSimulacao(await sha256(body.confirmacao), user.id, resumo, new Date().toISOString()) : null;
+      const invalida = (motivo: string) => falha(409, "confirmacao_invalida", { motivo });
+      if (!simulada) return invalida(`O código vale para o mesmo pedido, uma vez, por ${SIMULACAO_MIN} min: simule de novo (sem confirmacao) e confirme com a pessoa.`);
+      // O preço mudou depois do sim: a pessoa vê o custo novo antes de gerar.
+      if (simulada.custo !== centavos(estimate(resolved, model, values))) return invalida("O custo mudou desde a simulação: simule de novo (sem confirmacao) e confirme com a pessoa.");
 
       const v = await this.studio.create(input);
       if (tipo === "video") {
