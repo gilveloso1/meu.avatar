@@ -1,8 +1,10 @@
 # Gemini Omni 1.2 Flash (`google/gemini-omni-1.2-flash`): avatar falando, clipes curtos
 
 **Estrutura `omni` (`src/structures/omni.ts`), só para o administrador, desde 07/11/2026.**
-Ainda sem nenhum vídeo gerado. Uso pretendido: avatar falando a partir da foto e da fala,
-com a voz e a boca saindo do modelo (como o [Wan 3.0](wan-3.0.md)), em clipes de até 15 s.
+Dois usos desde 10/11/2026, em clipes de até 15 s: o avatar da foto falando, parado e de frente
+(a voz e a boca saem do modelo, como no [Wan 3.0](wan-3.0.md)), e a cena sem pessoa, pelas
+instruções de quem usa. Com a foto de uma pessoa, o 1.2 recusa instruções livres (ver os testes
+de 10/11/2026).
 
 A estrutura começou no 1.1 (`google/gemini-omni-1.1-flash`) e passou para o 1.2 no mesmo
 dia: o Google avisa que, **a partir de 03/12/2026, todo pedido ao 1.1 vai para o 1.2** e é
@@ -281,10 +283,21 @@ rosto do Google (ver a pesquisa acima), não para o texto. Uma amostra só, e mu
 de uma vez (sem foto e sem pessoa no texto): falta separar foto de objeto de texto sem pessoa.
 Gasto do dia: US$ 0,19 (seis pedidos, dois prontos).
 
-A decisão é do dono. Os caminhos: fixar o Omni com pessoa na selfie parada (sem o campo
-Instruções); abrir no Omni o uso sem pessoa (cena de produto ou de objeto, por texto ou por
-foto), onde as instruções livres passam; seguir testando (cada teste pede autorização); ou deixar
-o modelo de lado até o Google estabilizar.
+**Decisão do dono (10/11/2026), no código no mesmo dia:** o 1.2 passa a ter dois usos, pelo
+campo "Idioma da fala" (`omniVersion` com `split`, `src/structures/omni.ts`):
+
+- **Com fala** (um idioma): o avatar da foto fala o texto, parado e olhando para a câmera. O
+  pedido é o do estilo Selfie do Wan, exato (`omniTalkPrompt`), sem o campo Instruções: é o que
+  passou 6 de 6. Foto e texto obrigatórios. Para o agente, `cena` com `fala` é recusada
+  (`ERROS.cenaComFala`).
+- **Sem fala: cena sem pessoa**: as Instruções (obrigatórias) descrevem a cena de produto, objeto
+  ou cenário; o pedido é o `omniPrompt` sem fala, o que passou no teste do frasco. A foto é
+  opcional e vai como primeiro quadro.
+- A 1.1 (`omni-11`) segue com o formulário antigo (instruções com a pessoa) até sair.
+
+Falta testar: a cena sem pessoa **com foto** (do produto) e uma segunda foto de avatar na
+selfie (todos os testes usaram a mesma). O site não tem como saber se a foto da cena tem uma
+pessoa: se tiver, o pedido deve falhar no provedor, sem custo.
 
 ## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
 
@@ -310,5 +323,6 @@ legenda queimada). O que o Google diz e muda o pedido:
 
 ## Próximo passo
 
-Gerar um vídeo com fala e instruções (sem a orientação de voz do Wan) e um sem fala; medir o
-áudio de novo e decidir o tratamento (`treatAudio`); depois, liberar para todos (`access: "all"`).
+Gerar pelo site um vídeo com fala e uma cena sem pessoa com a foto de um produto; medir o áudio
+da fala e decidir o tratamento (`treatAudio`); tirar a `omni-11` antes de 03/12/2026; depois,
+liberar para todos (`access: "all"`).

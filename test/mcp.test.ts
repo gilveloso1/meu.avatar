@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
 import { Db } from "../src/db";
+import { ERROS } from "../src/erros";
 import { call, callFish, cookie, FakeExportApi, FakeFishApi, FakeHeyGenApi, FakeRenderApi, FakeVideoApi, memberCookie, postForm, SITE, webmBytes } from "./helpers";
 import { IMAGE_REFERENCE_GUIDE, IMAGE_REFERENCES_GUIDE } from "../src/structures/imagem";
 
@@ -345,6 +346,31 @@ describe("listar_modelos e os dois passos do gerar_*", () => {
     const semModelo = await comApi(api, "listar_vozes", {});
     expect(semModelo.isError).toBe(true);
     expect(semModelo.content[0]!.text).toContain("modelo_obrigatorio");
+  });
+
+  it("o Omni tem dois usos: com fala pede a foto e recusa a cena; sem fala, a cena sem pessoa sai só do texto", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Omni" }));
+    const foto = (await imagemGerada((n, x) => comApi(api, n, x), id)).src;
+    const omni = dados<{ modelos: { id: string; usar: string; obrigatorios: string[] }[] }>(await comApi(api, "listar_modelos", { tipo: "video" })).modelos.find((m) => m.id === "omni")!;
+    expect(omni.usar).toContain("sem pessoas");
+    expect(omni.obrigatorios).toEqual([]);
+    const pedir = (args: Record<string, unknown>) => comApi(api, "gerar_video", { modelo: "omni", projeto: id, ...args });
+    const recusa = async (args: Record<string, unknown>, frase: string) => {
+      const r = await pedir(args);
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain(frase);
+    };
+    await recusa({ fala: "Oi, gente!", cena: "num estúdio, gesticulando", foto }, ERROS.cenaComFala);
+    await recusa({ fala: "Oi, gente!" }, ERROS.foto);
+    await recusa({}, ERROS.instrucoes);
+    expect(dados<{ simulacao: boolean }>(await pedir({ fala: "Oi, gente!", foto })).simulacao).toBe(true);
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "omni", projeto: id, cena: "um frasco de perfume sobre o mármore, a câmera se aproxima" });
+    expect(r.isError).toBeFalsy();
+    const pedido = api.submitted.at(-1)!;
+    expect(pedido.model).toBe("google/gemini-omni-1.2-flash");
+    expect(pedido.frame_images).toBeUndefined();
+    expect(pedido.prompt).toContain("um frasco de perfume");
   });
 
   it("a confirmação vence, não vale para um código inventado nem quando o custo mudou", async () => {

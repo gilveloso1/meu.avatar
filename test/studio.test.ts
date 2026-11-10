@@ -14,7 +14,7 @@ import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
 import { GROK, GROK_GUIDE } from "../src/structures/grok";
 import { MISCHIEF, MISCHIEF_GUIDE } from "../src/structures/mischief";
-import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_11, OMNI_SILENT, OMNI_SILENT_GUIDE, OMNI_SINGLE_SHOT } from "../src/structures/omni";
+import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_11, OMNI_SILENT, OMNI_SILENT_GUIDE, OMNI_SINGLE_SHOT, omniTalkPrompt } from "../src/structures/omni";
 import { IMAGE_GUIDE, IMAGE_REFERENCE_GUIDE, NANO_BANANA } from "../src/structures/imagem";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
 import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_11_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, dono, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
@@ -863,15 +863,21 @@ describe("Gemini Omni 1.2 Flash", () => {
     expect(estimate(OMNI, OMNI_MODEL, valores("4K", "15"))).toBeCloseTo(3.12768);
   });
 
-  it("o formulário pede instruções (obrigatórias), idioma com Sem fala, texto, foto e vídeo, sem estilo", async () => {
+  it("o formulário tem o idioma com 'Sem fala: cena sem pessoa', o texto (com fala) ou as instruções (sem fala), a foto opcional e o vídeo", async () => {
     const page = await (await get("/modelo/omni")).text();
     expect(page).not.toContain('name="estilo"');
-    expect(page).toMatch(/<textarea [^>]*name="instrucoes" rows="1" required maxlength="500"[^>]*data-per-avatar/);
-    expect(page).toContain(`<option value="${NO_SPEECH}" data-divider>Sem fala</option>`);
-    // O texto só aparece com um idioma escolhido.
-    expect(page).toMatch(/data-show-if="[^"]*idioma[^"]*"[\s\S]{0,400}name="fala"|name="fala"[\s\S]{0,400}data-show-if="[^"]*idioma/);
+    expect(page).toContain(`<option value="${NO_SPEECH}" data-divider>Sem fala: cena sem pessoa</option>`);
+    // O texto só aparece com um idioma; as instruções, só sem fala (e não voltam por avatar).
+    const bloco = (campo: string) => new RegExp(`data-show-if="([^"]*)"[^>]*>\\s*<div class="text-field">\\s*<textarea [^>]*name="${campo}"`).exec(page)?.[1] ?? "";
+    expect(bloco("fala")).toContain("pt-BR");
+    expect(bloco("fala")).not.toContain(NO_SPEECH);
+    expect(bloco("instrucoes")).toContain(NO_SPEECH);
+    expect(bloco("instrucoes")).not.toContain("pt-BR");
+    expect(page).not.toMatch(/<textarea [^>]*data-per-avatar/);
     expect(page).toMatch(new RegExp(`<textarea [^>]*name="fala" rows="1" required maxlength="${MAX_OMNI_SPEECH}"`));
+    // A foto não é obrigatória no navegador: a cena sem pessoa sai só do texto.
     expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
+    expect(page).not.toMatch(/<input [^>]*type="file" name="imagem"[^>]* required/);
     expect(page).toContain('<option value="8" selected>8 s</option>');
     expect(page).toContain('<option value="15">15 s</option>');
     expect(page).not.toContain('<option value="16"');
@@ -883,63 +889,79 @@ describe("Gemini Omni 1.2 Flash", () => {
     expect(ordem).toEqual(["360p", "720p", "1080p", "4K"]);
   });
 
-  it("manda as instruções e a fala, a foto como primeiro quadro e com áudio", async () => {
+  it("com fala, manda o pedido da selfie (o que o 1.2 aceita com pessoa), sem instruções, e a foto como primeiro quadro", async () => {
     const api = new FakeVideoApi();
-    const res = await post(api, { ...PEDIDO_OMNI, instrucoes: `  ${CENA} `, imagem: foto() }, "omni");
+    // As instruções escondidas não vão no formulário.
+    const res = await post(api, { ...PEDIDO_OMNI, instrucoes: "", imagem: foto() }, "omni");
     expect(res.status).toBe(303);
 
     const [req] = api.submitted;
     expect(req).toMatchObject({ model: "google/gemini-omni-1.2-flash", duration: 8, resolution: "720p", aspect_ratio: "9:16", generate_audio: true });
-    // O pedido longo: as instruções no lugar do estilo, a fala citada e a orientação do Wan.
-    expect(req!.prompt).toBe(`${CENA}\n${OMNI_SINGLE_SHOT}\n${SPEECH_LEAD} "${FALA}"\n\n${qualityGuide(LANGUAGES[0]!)}`);
-    expect(req!.prompt).not.toContain("Selfie");
+    expect(req!.prompt).toBe(omniTalkPrompt(FALA, LANGUAGES[0]!));
+    expect(req!.prompt).toBe(`${STYLES.find((s) => s.id === "selfie")!.direction}\n${SPEECH_LEAD} "${FALA}"\n\n${qualityGuide(LANGUAGES[0]!)}`);
+    expect(req!.prompt).not.toContain(OMNI_SINGLE_SHOT);
     expect(req!.frame_images![0]).toMatchObject({ frame_type: "first_frame" });
     expect(req!.input_references).toBeUndefined();
 
     const [video] = await new Db(env.DB).recentVideos();
-    expect(video).toMatchObject({ structure: "omni", prompt: FALA, style: null, language: "pt-BR", extra: CENA, duration: 8, request_prompt: req!.prompt });
+    expect(video).toMatchObject({ structure: "omni", prompt: FALA, style: null, language: "pt-BR", extra: null, duration: 8, request_prompt: req!.prompt });
     const detalhes = await (await get(`/video/${video!.id}`, undefined, api)).text();
-    expect(detalhes).toContain(`<h2 class="viewer__title">Instruções</h2><div class="viewer__card"><p class="viewer__text">${CENA}</p>`);
-    expect(detalhes).not.toContain("Estilo");
-    // Refazer volta com as instruções.
-    expect(await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text()).toContain(CENA);
+    expect(detalhes).not.toContain('<h2 class="viewer__title">Instruções</h2>');
+    expect(await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text()).toContain(FALA);
   });
 
-  it("com Sem fala, manda só as instruções e o avatar não fala", async () => {
+  it("sem fala, a cena sem pessoa sai das instruções, com ou sem foto", async () => {
     const api = new FakeVideoApi();
-    // O texto escondido não vai no formulário; se vier, é ignorado.
-    const res = await post(api, { ...PEDIDO_OMNI, idioma: NO_SPEECH, fala: FALA, imagem: foto() }, "omni");
+    // O texto escondido não vai no formulário; se vier, é ignorado. Sem foto: só o texto.
+    const res = await post(api, { ...PEDIDO_OMNI, idioma: NO_SPEECH, fala: FALA, instrucoes: `  ${CENA} ` }, "omni");
     expect(res.status).toBe(303);
     const [req] = api.submitted;
     expect(req!.prompt).toBe(`${CENA}\n${OMNI_SINGLE_SHOT}\n${OMNI_SILENT}\n\n${OMNI_SILENT_GUIDE}`);
+    expect(req!.frame_images).toBeUndefined();
     const [video] = await new Db(env.DB).recentVideos();
-    expect(video).toMatchObject({ prompt: "", language: NO_SPEECH, extra: CENA });
-    expect(await (await get(`/video/${video!.id}`, undefined, api)).text()).toContain("Sem fala");
-    expect(await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text()).toContain(`<option value="${NO_SPEECH}" selected data-divider>`);
+    expect(video).toMatchObject({ prompt: "", language: NO_SPEECH, extra: CENA, image_key: null });
+    const detalhes = await (await get(`/video/${video!.id}`, undefined, api)).text();
+    expect(detalhes).toContain("Sem fala");
+    expect(detalhes).toContain(`<h2 class="viewer__title">Instruções</h2><div class="viewer__card"><p class="viewer__text">${CENA}</p>`);
+    const refazer = await (await get(`/modelo/omni?refazer=${video!.id}`, undefined, api)).text();
+    expect(refazer).toContain(`<option value="${NO_SPEECH}" selected data-divider>`);
+    expect(refazer).toContain(CENA);
+
+    // Com a foto (do produto), ela é o primeiro quadro.
+    expect((await post(api, { ...PEDIDO_OMNI, idioma: NO_SPEECH, imagem: foto() }, "omni")).status).toBe(303);
+    expect(api.submitted[1]!.frame_images![0]).toMatchObject({ frame_type: "first_frame" });
   });
 
-  it("ao escolher o avatar, as instruções voltam com as últimas usadas com ele", async () => {
+  it("na 1.1, as instruções seguem com a pessoa e voltam com as últimas usadas com o avatar", async () => {
     const api = new FakeVideoApi();
-    await post(api, { ...PEDIDO_OMNI, imagem: foto() }, "omni");
+    await post(api, { ...PEDIDO_OMNI, imagem: foto() }, "omni-11");
+    expect(api.submitted[0]!.prompt).toBe(`${CENA}\n${OMNI_SINGLE_SHOT}\n${SPEECH_LEAD} "${FALA}"\n\n${qualityGuide(LANGUAGES[0]!)}`);
+    // Sem foto, a 1.1 recusa mesmo sem fala.
+    const semFoto = await post(api, { ...PEDIDO_OMNI, idioma: NO_SPEECH }, "omni-11");
+    expect(semFoto.status).toBe(400);
+    expect(await semFoto.text()).toContain(ERROS.foto);
     const db = new Db(env.DB);
     const admin = (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin'").first<{ id: number }>())!;
     const avatar = await db.insertAvatar({ id: crypto.randomUUID(), user_id: admin.id, name: "Marina" });
     await env.DB.prepare("UPDATE videos SET avatar_id = ?").bind(avatar.id).run();
-    const page = await (await get("/modelo/omni", undefined, api)).text();
+    const page = await (await get("/modelo/omni-11", undefined, api)).text();
     expect(page).toContain(`data-avatar-pick="${avatar.id}"`);
     expect(page).toContain(`data-avatar-text="${CENA}"`);
+    expect(page).toContain(`<option value="${NO_SPEECH}" data-divider>Sem fala</option>`);
     // As do Wan não voltam: só o campo marcado com perAvatar.
     expect(await (await get("/modelo/wan", undefined, api)).text()).not.toContain("data-avatar-text");
   });
 
-  it("recusa sem instruções, idioma sem fala, sem foto, fala longa e duração fora do modelo", async () => {
+  it("recusa a fala sem texto ou sem foto, a cena com fala, a cena vazia, a fala longa e a duração fora do modelo", async () => {
     const api = new FakeVideoApi();
+    const FALANDO = { ...PEDIDO_OMNI, instrucoes: "" };
     const casos: [Record<string, string | File>, string][] = [
-      [{ ...PEDIDO_OMNI, instrucoes: " ", imagem: foto() }, ERROS.instrucoes],
-      [{ ...PEDIDO_OMNI, fala: " ", imagem: foto() }, ERROS.fala],
-      [PEDIDO_OMNI, ERROS.foto],
-      [{ ...PEDIDO_OMNI, imagem: foto(), fala: "a".repeat(MAX_OMNI_SPEECH + 1) }, ERROS.falaLonga(MAX_OMNI_SPEECH)],
-      [{ ...PEDIDO_OMNI, imagem: foto(), duracao: "16" }, ERROS.ajustesNaoAceitos],
+      [{ ...FALANDO, fala: " ", imagem: foto() }, ERROS.fala],
+      [FALANDO, ERROS.foto],
+      [{ ...PEDIDO_OMNI, imagem: foto() }, ERROS.cenaComFala],
+      [{ ...FALANDO, idioma: NO_SPEECH, instrucoes: " " }, ERROS.instrucoes],
+      [{ ...FALANDO, imagem: foto(), fala: "a".repeat(MAX_OMNI_SPEECH + 1) }, ERROS.falaLonga(MAX_OMNI_SPEECH)],
+      [{ ...FALANDO, imagem: foto(), duracao: "16" }, ERROS.ajustesNaoAceitos],
     ];
     for (const [fields, erro] of casos) {
       const res = await post(api, fields, "omni");

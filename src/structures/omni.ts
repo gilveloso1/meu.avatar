@@ -1,10 +1,13 @@
 /**
- * Gemini Omni 1.2 Flash (google/gemini-omni-1.2-flash): o avatar da foto fala o texto, com a
- * voz e a boca saindo juntas do modelo, ou só faz a cena, sem fala (clipes curtos). Sem estilo
- * fixo: a cena e o estilo vêm das instruções, que são obrigatórias e voltam preenchidas com
- * as últimas usadas com o avatar. A orientação de som e imagem do Wan fica (ver `omniPrompt`).
- * Testes e custo em docs/modelos/gemini-omni-1.2-flash.md. O 1.1 sai em 03/12/2026 (o
- * Google passa os pedidos dele para o 1.2), por isso a estrutura já nasce no 1.2.
+ * Gemini Omni 1.2 Flash (google/gemini-omni-1.2-flash), clipes curtos, em dois usos, pelo que o
+ * modelo aceitou nos testes (docs/modelos/gemini-omni-1.2-flash.md, 10/11/2026):
+ * - Com fala: o avatar da foto fala o texto, com a voz e a boca saindo juntas do modelo, parado e
+ *   olhando para a câmera. É o pedido do estilo Selfie do Wan, sem instruções de quem usa: com a
+ *   foto de uma pessoa, qualquer instrução a mais derrubou o pedido (`omniTalkPrompt`).
+ * - Sem fala: uma cena sem pessoa (produto, objeto, cenário), pelas instruções de quem usa, com
+ *   ou sem foto (`omniPrompt`).
+ * O 1.1 mantém o formulário antigo (instruções com a pessoa) até sair, em 03/12/2026, quando o
+ * Google passa os pedidos dele para o 1.2.
  *
  * Pelo OpenRouter (conferido em 07/11/2026): foto como primeiro quadro (`frame_images`),
  * 3 a 15 s, 360p, 720p, 1080p e 4K, só 16:9 e 9:16; só há preço com áudio.
@@ -16,9 +19,9 @@
  */
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
-import { cleanSpeech, type Language, LANGUAGES, languageById, MAX_EXTRA, qualityGuide, SPEECH_LEAD, WORDS_PER_SECOND } from "../prompt";
+import { buildPrompt, cleanSpeech, type Language, LANGUAGES, languageById, MAX_EXTRA, qualityGuide, SPEECH_LEAD, styleById, WORDS_PER_SECOND } from "../prompt";
 import { CAMPOS, num, txt } from "./agente";
-import { type AgentSpec, InputError, type Structure } from "./types";
+import { type AgentSpec, type Field, InputError, type Structure } from "./types";
 import { options } from "./wan";
 
 /** Fala curta: o modelo faz no máximo 15 s (cerca de 39 palavras). */
@@ -42,18 +45,26 @@ export const OMNI_SILENT_GUIDE = [
 ].join("\n");
 
 /**
- * O prompt longo, o único formato que o Omni 1.2 aceitou com constância nos testes de
- * 07/11/2026 (docs/modelos/gemini-omni-1.2-flash.md): o do Wan, com as instruções de quem usa
- * no lugar do estilo. Com fala: a fala citada (`SPEECH_LEAD`) e a orientação de qualidade
- * (`qualityGuide`: voz, sincronia, idioma, imagem, nada de texto na tela). Sem fala: o aviso
- * de que não há fala e a orientação sem as linhas da voz. Prompts curtos, só com a mecânica,
- * falharam em 15 de 17 pedidos.
+ * O prompt das instruções de quem usa: elas no lugar do estilo, um plano só e, com fala (só na
+ * 1.1), a fala citada (`SPEECH_LEAD`) e a orientação de qualidade do Wan; sem fala, o aviso de
+ * que não há fala e a orientação sem as linhas da voz. Na 1.2 só vai sem fala, para a cena sem
+ * pessoa, que passou de primeira em 10/11/2026; com a foto de uma pessoa, falhou sempre
+ * (docs/modelos/gemini-omni-1.2-flash.md).
  */
 export function omniPrompt(extra: string, speech: string, language: Language | null): string {
   const scene = `${extra}\n${OMNI_SINGLE_SHOT}`;
   return speech && language
     ? `${scene}\n${SPEECH_LEAD} "${speech}"\n\n${qualityGuide(language)}`
     : `${scene}\n${OMNI_SILENT}\n\n${OMNI_SILENT_GUIDE}`;
+}
+
+/**
+ * O pedido com fala do 1.2: o do estilo Selfie do Wan, exato e sem instruções de quem usa. É o
+ * único que o 1.2 aceitou com a foto de uma pessoa (6 de 6 até 10/11/2026); com instruções no
+ * lugar da frase do Selfie ou depois dela, falhou (0 de 4 no dia).
+ */
+export function omniTalkPrompt(speech: string, language: Language): string {
+  return buildPrompt({ style: styleById("selfie")!, language, speech });
 }
 
 /** Da menor resolução para a maior (o modelo lista 720p, 1080p, 4K, 360p). */
@@ -67,24 +78,20 @@ function defaultDuration(durations: number[], preferred: number): number {
   return durations.includes(preferred) ? preferred : durations.includes(8) ? 8 : durations[durations.length - 1]!;
 }
 
-/**
- * As duas versões são a mesma estrutura com outro modelo: a 1.2 é a principal (o card e a
- * página); a 1.1 fica no seletor Versão enquanto a 1.2 estiver instável (o Google passa a 1.1
- * para a 1.2 em 03/12/2026). Durações e preços vêm de cada modelo no OpenRouter.
- */
 /** O Omni para o agente: só a versão principal (a 1.1 sai em 03/12/2026). */
 const OMNI_AGENT: AgentSpec = {
-  use: "O avatar da foto fala o texto (voz e boca do próprio modelo) ou só faz a cena, sem fala; clipes de 3 a 15 s, só 9:16 e 16:9.",
+  use: "Dois usos, clipes de 3 a 15 s, só 9:16 e 16:9. Com fala: o avatar da foto fala o texto (voz e boca do próprio modelo), parado e olhando para a câmera; não aceita cena. Sem fala: uma cena sem pessoas (produto, objeto, cenário) descrita em cena, com ou sem foto.",
   fields: {
-    cena: `A cena e o estilo: onde está, o que faz, a câmera. Até ${MAX_EXTRA} caracteres. Obrigatória.`,
-    fala: `Só o que a pessoa fala, sem aspas, até ${MAX_OMNI_SPEECH} caracteres. Sem fala, só a cena.`,
+    cena: `Só sem fala, e então obrigatória: a cena sem pessoas (o que aparece, o movimento, a câmera). Até ${MAX_EXTRA} caracteres.`,
+    fala: `Só o que a pessoa fala, sem aspas, até ${MAX_OMNI_SPEECH} caracteres. Com fala, a foto é obrigatória e a cena não entra.`,
     idioma: '"pt-BR" (padrão), "en-US" ou "es", com fala.',
-    foto: `${CAMPOS.foto} Obrigatória.`,
+    foto: `${CAMPOS.foto} Com fala, a foto do avatar (obrigatória). Sem fala, opcional e sem pessoas.`,
     duracao: CAMPOS.duracao,
     resolucao: CAMPOS.resolucao,
     formato: CAMPOS.formato,
   },
-  required: ["cena", "foto"],
+  // Com fala pede a foto; sem fala, a cena: quem confere é o `build`, com a frase do site.
+  required: [],
   values: (a) => ({
     instrucoes: txt(a, "cena"),
     idioma: txt(a, "fala").trim() ? txt(a, "idioma") : NO_SPEECH,
@@ -95,7 +102,30 @@ const OMNI_AGENT: AgentSpec = {
   }),
 };
 
-function omniVersion(v: { id: string; version: string; family?: string }): Structure {
+/**
+ * As versões são a mesma estrutura com outro modelo: a 1.2 é a principal (o card e a página); a
+ * 1.1 fica no seletor Versão até 03/12/2026. `split`: os dois usos da 1.2 (com fala, a selfie sem
+ * instruções; sem fala, a cena sem pessoa); sem ele, o formulário antigo, com instruções sempre.
+ */
+function omniVersion(v: { id: string; version: string; family?: string; split?: boolean }): Structure {
+  const split = v.split ?? false;
+  const instructions: Field = {
+    kind: "textarea",
+    name: "instrucoes",
+    label: "Instruções",
+    maxLength: MAX_EXTRA,
+    ...(split
+      ? {
+          placeholder: "Ex.: frasco de perfume sobre uma mesa de mármore, a câmera se aproxima devagar",
+          supporting: "A cena, sem pessoas: o que aparece e o movimento.",
+          showIf: { idioma: [NO_SPEECH] },
+        }
+      : {
+          placeholder: "Ex.: apresentadora animada num estúdio, gesticula e sorri no final",
+          supporting: "A cena, o jeito de falar e o estilo do vídeo.",
+          perAvatar: true,
+        }),
+  };
   return {
   ...(v.family ? {} : { agent: OMNI_AGENT }),
   id: v.id,
@@ -103,7 +133,7 @@ function omniVersion(v: { id: string; version: string; family?: string }): Struc
   version: v.version,
   name: `Gemini Omni ${v.version} Flash`,
   model: `google/gemini-omni-${v.version}-flash`,
-  summary: "O avatar da foto fala o seu texto, ou só faz a cena que você descreve. Clipes curtos.",
+  summary: split ? "O avatar da foto fala o seu texto, ou uma cena sem pessoas que você descreve. Clipes curtos." : "O avatar da foto fala o seu texto, ou só faz a cena que você descreve. Clipes curtos.",
   icon: "auto_awesome",
   access: "admin",
   // O áudio veio limpo no primeiro teste (−20 LUFS, sem clipping): sai como o modelo entrega.
@@ -126,46 +156,35 @@ function omniVersion(v: { id: string; version: string; family?: string }): Struc
     const durations = model?.supported_durations ?? [8];
     const resolutions = byHeight(model?.supported_resolutions ?? ["720p"]);
     const ratios = model?.supported_aspect_ratios ?? [d.aspectRatio];
+    const speech: Field[] = [
+      {
+        kind: "select",
+        name: "idioma",
+        label: "Idioma da fala",
+        options: [...LANGUAGES.map((l) => ({ value: l.id, label: l.label })), { value: NO_SPEECH, label: split ? "Sem fala: cena sem pessoa" : "Sem fala", divider: true }],
+        value: LANGUAGES[0]!.id,
+      },
+      {
+        kind: "textarea",
+        name: "fala",
+        label: "Texto",
+        maxLength: MAX_OMNI_SPEECH,
+        placeholder: "Só o que a pessoa fala, sem aspas. Ex.: Oi, gente! Hoje eu vou mostrar…",
+        supporting: "Só o que a pessoa fala, sem aspas.",
+        speech: true,
+        showIf: { idioma: LANGUAGES.map((l) => l.id) },
+      },
+    ];
     return [
-      {
-        title: "Cena",
-        fields: [
-          {
-            kind: "textarea",
-            name: "instrucoes",
-            label: "Instruções",
-            maxLength: MAX_EXTRA,
-            placeholder: "Ex.: apresentadora animada num estúdio, gesticula e sorri no final",
-            supporting: "A cena, o jeito de falar e o estilo do vídeo.",
-            perAvatar: true,
-          },
-        ],
-      },
-      {
-        title: "Fala",
-        fields: [
-          {
-            kind: "select",
-            name: "idioma",
-            label: "Idioma da fala",
-            options: [...LANGUAGES.map((l) => ({ value: l.id, label: l.label })), { value: NO_SPEECH, label: "Sem fala", divider: true }],
-            value: LANGUAGES[0]!.id,
-          },
-          {
-            kind: "textarea",
-            name: "fala",
-            label: "Texto",
-            maxLength: MAX_OMNI_SPEECH,
-            placeholder: "Só o que a pessoa fala, sem aspas. Ex.: Oi, gente! Hoje eu vou mostrar…",
-            supporting: "Só o que a pessoa fala, sem aspas.",
-            speech: true,
-            showIf: { idioma: LANGUAGES.map((l) => l.id) },
-          },
-        ],
-      },
+      // Na 1.2, as instruções só existem sem fala: ficam no bloco da Fala, no lugar do Texto.
+      ...(split ? [{ title: "Fala", fields: [...speech, instructions] }] : [{ title: "Cena", fields: [instructions] }, { title: "Fala", fields: speech }]),
       {
         title: "Avatar",
-        fields: [{ kind: "image", name: "imagem", label: "Foto do avatar", required: true, supporting: "Vira o primeiro quadro do vídeo." }],
+        fields: [
+          split
+            ? { kind: "image" as const, name: "imagem", label: "Foto", required: false, supporting: "Com fala, a foto do avatar. Sem fala, opcional e sem pessoas." }
+            : { kind: "image" as const, name: "imagem", label: "Foto do avatar", required: true, supporting: "Vira o primeiro quadro do vídeo." },
+        ],
       },
       {
         title: "Vídeo",
@@ -185,24 +204,28 @@ function omniVersion(v: { id: string; version: string; family?: string }): Struc
   },
 
   build(values, hasImage) {
-    const extra = values("instrucoes").replace(/\s+/g, " ").trim();
-    if (!extra) throw new InputError(ERROS.instrucoes);
-    if (extra.length > MAX_EXTRA) throw new InputError(ERROS.instrucoesLongas(MAX_EXTRA));
     const silent = values("idioma") === NO_SPEECH;
+    // Na 1.2 com fala não há instruções: o campo fica escondido e, se vier (o agente), é recusado.
+    const scene = !split || silent;
+    const extra = values("instrucoes").replace(/\s+/g, " ").trim();
+    if (scene && !extra) throw new InputError(ERROS.instrucoes);
+    if (!scene && extra) throw new InputError(ERROS.cenaComFala);
+    if (extra.length > MAX_EXTRA) throw new InputError(ERROS.instrucoesLongas(MAX_EXTRA));
     const language = silent ? null : languageById(values("idioma"));
     if (!silent && !language) throw new InputError(ERROS.idioma);
     const speech = silent ? "" : cleanSpeech(values("fala"));
     if (!silent && !speech) throw new InputError(ERROS.fala);
     if (speech.length > MAX_OMNI_SPEECH) throw new InputError(ERROS.falaLonga(MAX_OMNI_SPEECH));
-    if (!hasImage) throw new InputError(ERROS.foto);
+    // A cena sem pessoa da 1.2 sai só do texto, se não houver foto.
+    if (!hasImage && !(split && silent)) throw new InputError(ERROS.foto);
 
     const duration = Number(values("duracao"));
     const resolution = values("resolucao");
     const aspectRatio = values("formato");
-    const prompt = omniPrompt(extra, speech, language ?? null);
+    const prompt = split && language ? omniTalkPrompt(speech, language) : omniPrompt(extra, speech, language ?? null);
     return {
       request: { prompt, duration, resolution, aspect_ratio: aspectRatio, generate_audio: true },
-      image: "first_frame",
+      image: hasImage ? "first_frame" : null,
       record: {
         prompt: speech,
         duration,
@@ -220,12 +243,13 @@ function omniVersion(v: { id: string; version: string; family?: string }): Struc
   details(video) {
     return [
       { term: "Idioma da fala", description: video.language === NO_SPEECH ? "Sem fala" : video.language ? (languageById(video.language)?.label ?? video.language) : "—" },
-      { term: "Instruções", description: video.extra ?? "—" },
+      // Na 1.2 com fala não há instruções a mostrar.
+      ...(video.extra || !split ? [{ term: "Instruções", description: video.extra ?? "—" }] : []),
     ];
   },
   };
 }
 
-export const OMNI = omniVersion({ id: "omni", version: "1.2" });
+export const OMNI = omniVersion({ id: "omni", version: "1.2", split: true });
 export const OMNI_11 = omniVersion({ id: "omni-11", version: "1.1", family: OMNI.id });
 
