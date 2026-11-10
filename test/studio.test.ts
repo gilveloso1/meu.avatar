@@ -506,6 +506,46 @@ describe("tratamento do áudio", () => {
     return { api, studio };
   }
 
+  it("o aviso do provedor e o agendamento no mesmo vídeo: só o primeiro fecha, e o áudio é tratado uma vez", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await post(api, { estilo: "selfie", idioma: "pt-BR", fala: "Oi" }, "wan", audio);
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api, audio });
+    // As duas conferências leram o vídeo ainda aberto.
+    const [aberto] = await new Db(env.DB).recentVideos();
+    api.finish("job-1", { status: "completed", usage: { cost: 1.06 } });
+    expect(await studio.sync(aberto!)).toMatchObject({ status: "completed", audio_status: "pending" });
+    expect(await studio.treatNextAudio()).toMatchObject({ audio_status: "done" });
+
+    // A segunda chega depois: fica o que a primeira gravou, e o áudio não volta para a fila.
+    const depois = await studio.sync(aberto!);
+    expect(depois).toMatchObject({ status: "completed", audio_status: "done", cost: 1.06 });
+    expect(depois.updated_at).toBe((await new Db(env.DB).videoById(aberto!.id))!.updated_at);
+    expect(await studio.treatNextAudio()).toBeNull();
+    expect(audio.calls).toBe(1);
+
+    // Uma resposta atrasada do provedor ("gerando", ou uma falha) não reabre nem derruba o vídeo pronto.
+    for (const status of ["in_progress", "failed"] as const) {
+      api.finish("job-1", { status });
+      expect(await studio.sync(aberto!)).toMatchObject({ status: "completed", audio_status: "done", error: null });
+    }
+    expect((await studio.syncOpen()).length).toBe(0);
+  });
+
+  it("as duas conferências ao mesmo tempo: o vídeo fecha uma vez", async () => {
+    const api = new FakeVideoApi();
+    const audio = new FakeAudioApi();
+    await post(api, { estilo: "selfie", idioma: "pt-BR", fala: "Oi" }, "wan", audio);
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api, audio });
+    const [aberto] = await new Db(env.DB).recentVideos();
+    api.finish("job-1", { status: "completed", usage: { cost: 1.06 } });
+    const [a, b] = await Promise.all([studio.sync(aberto!), studio.sync(aberto!)]);
+    expect(a.status).toBe("completed");
+    expect(b.status).toBe("completed");
+    expect(await studio.treatNextAudio()).toMatchObject({ audio_status: "done" });
+    expect(await studio.treatNextAudio()).toBeNull();
+  });
+
   it("o Wan 3.0 livre sem som não entra na fila; com som, entra", async () => {
     for (const [som, esperado] of [["nao", null], ["sim", "pending"]] as const) {
       await env.DB.prepare("DELETE FROM videos").run();
