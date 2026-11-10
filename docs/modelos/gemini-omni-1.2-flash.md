@@ -218,6 +218,28 @@ vídeo `87fdc2b3-ef9b-450e-9cfa-cf3168f52278`. 720×1280, 4 s; rosto, óculos e 
 da foto, um plano só, gesticulando; a fala sai inteira (a transcrição escreve "8,5" para
 "oito e meia"), sem silêncio sobrando. Áudio −20,4 LUFS, pico −3,0 dBFS.
 
+## Teste de 10/11/2026: o formato do código ainda falha
+
+Pelo terminal (`npm run gerar`), a mesma foto da Marina, 4 s, 360p, 9:16, os dois pedidos ao
+mesmo tempo (21:58 UTC), instruções em português ("Apresentadora num estúdio, fala com confiança
+olhando para a câmera e gesticula com as mãos.") e a fala "O resultado sai hoje, entre oito e
+meia e nove!". **Os dois falharam em 40 s, sem custo**, com "Video generation failed":
+
+| Pedido | Job | Resultado |
+|---|---|---|
+| O do código (`omniPrompt`): instruções, `OMNI_SINGLE_SHOT`, a fala citada e a orientação de qualidade | `gen-vid-1794347889-EPgFEyoduDBjz2wVNzZg` | Falhou |
+| O mesmo, com "The person in the photo starts from the position in the photo, in the same place and framing. No cuts." antes das instruções, no lugar do `OMNI_SINGLE_SHOT` | `gen-vid-1794347889-ECAzcd0Wt0jDK2szGHNA` | Falhou |
+
+- O formato que está no código continua falhando, três dias depois do lançamento: não era só a
+  instabilidade dos primeiros dias.
+- Citar a pessoa da foto e a posição de partida numa frase nova, sem o resto da frase do estilo
+  Selfie, não bastou (uma tentativa).
+- Não houve controle com o pedido antigo exato no mesmo horário (só dois pedidos autorizados):
+  não dá para separar o formato de uma queda do provedor naquele minuto.
+
+O que falta testar, nesta ordem: o antigo exato como controle; o antigo exato com as instruções
+logo depois da frase do estilo Selfie (a frase que passou 5 de 5 fica inteira).
+
 ## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
 
 Fontes: a página do Omni no Google (ai.google.dev/gemini-api/docs/omni) e o notebook oficial
