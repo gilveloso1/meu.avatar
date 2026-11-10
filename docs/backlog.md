@@ -240,10 +240,12 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    de 4 a 30 s) como versão do mesmo modelo, com a mesma regra. Conferir a estimativa de custo
    (por tokens) no primeiro vídeo pronto: é o único modelo sem custo real para comparar
    ([modelos/README.md](modelos/README.md)).
-5. **Pastas para guardar os ativos** (pedido de 10/11/2026): organizar em pastas, movendo o item
-   (arrastar) ou pelo menu dele. A combinar com o dono antes de montar: o que entra em pasta (os
-   ativos dos avatares, o que foi gerado, ou os dois), onde as pastas aparecem (a lista de vídeos e
-   a de ativos são telas aprovadas) e se há pasta dentro de pasta.
+5. **Pastas** (pedido de 10/11/2026, no molde do Google Drive). Feito nos ativos de cada avatar:
+   pasta dentro de pasta, mover arrastando ou pelo "Mover para", renomear e apagar (que só desfaz a
+   pasta). Falta, a combinar com o dono: pastas no que foi gerado (aba Vídeos e a página de cada
+   modelo, onde está o volume: as imagens do Nano Banana); escolher vários itens e mover de uma
+   vez; as pastas para o agente (`listar_avatares` dizer a pasta de cada ativo e o `enviar_ativo`
+   escolher a pasta); e o painel do modelo ("Adicionar avatar") mostrar os ativos por pasta.
 
 ## Onde estamos (25/10/2026)
 

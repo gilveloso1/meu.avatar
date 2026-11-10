@@ -71,6 +71,10 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
   - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
   - Texto com emoções (modelos de fala): `speechEditor`, o campo contornado que aceita as emoções em destaque (chip de entrada, com x); `#` abre a lista (`EMOTIONS`, `src/structures/voz.ts`, em português na tela e em inglês no formulário e para o agente), com as mais usadas no topo (contadas no `localStorage`, `emocoes-usadas`) e as outras em ordem alfabética.
   - Voz pronta: campo `voice` no painel, escolhida em `voicePanel`, no mesmo menu (busca, idioma, gênero e prévia); as vozes vêm de `/vozes/lista`, só as do filtro.
+  - Pastas (no molde do Google Drive, hoje nos ativos do avatar): `folderLead` (o caminho `.crumbs` e os cards
+    `.folder`, acima dos arquivos, pelo `lead` do `library`) e `moveDialog` (diálogo básico "Mover para", com a
+    árvore de pastas). O menu do item (`[data-item-menu]`, botão direito ou os três pontos) e arrastar ficam no
+    `SCRIPT`; quem pode ser movido leva `data-move`, e onde pode cair, `data-drop`.
   - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`, que também é a página de não encontrado
     (`notFoundPage`): todo 404 em texto aberto pelo navegador vira essa página, a mesma para o que não existe
     e para o que é de outra conta.
@@ -232,7 +236,12 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   nenhum modelo. A página do avatar segue a do modelo: painel com Nome, Descrição, Foto
   principal e Voz para clonagem; no centro, a listagem de ativos; tocar num ativo abre o
   molde da página do vídeo. O avatar só existe depois de Salvar (`/avatares/novo`, nunca
-  criar no clique). "Salvar no avatar" fica abaixo de Detalhes e abre o diálogo com busca;
+  criar no clique). Os ativos se organizam em pastas (pedido de 10/11/2026, `folders` e
+  `avatar_assets.folder_id`): pasta dentro de pasta, "Nova pasta" ao lado de "Adicionar arquivo",
+  os cards das pastas acima dos arquivos e o caminho quando há uma pasta aberta (`?pasta=`); mover
+  é arrastando para a pasta (ou para um nível do caminho) ou pelo "Mover para" do menu e da página
+  do ativo; o arquivo enviado de dentro de uma pasta fica nela; apagar a pasta não apaga arquivo
+  (o que estava nela sobe um nível). "Salvar no avatar" fica abaixo de Detalhes e abre o diálogo com busca;
   o Novo avatar desse diálogo leva o vídeo junto (`?video=`), salvo com o avatar. O avatar
   só guarda arquivo do que foi enviado a ele; vídeo salvo é um vínculo (como no canvas),
   sem cópia no R2, e usa a versão que vale do vídeo. Regra única: `source_video` vazio quer

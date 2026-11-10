@@ -80,6 +80,8 @@ export const ERROS = {
   textoFala: campo("Escreva o texto que a voz lê."),
   instrucoes: campo("Escreva as instruções da cena."),
   cenaComFala: campo("Com fala, deixe a cena vazia."),
+  pastaNome: campo("Escreva o nome da pasta."),
+  pastasDemais: erro("Este avatar já tem pastas demais.", "Apague uma pasta para criar outra."),
   falaLonga: (max: number) => campo(`Encurte a fala para até ${max} caracteres.`),
   movimento: campo("Descreva o movimento do avatar."),
   movimentoLongo: (max: number) => campo(`Encurte o movimento para até ${max} caracteres.`),

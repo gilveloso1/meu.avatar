@@ -670,6 +670,22 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 .library[data-view="g"] .frames { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
 /* Grupos por data: subtítulo (title-small em primary, como os subtítulos de lista do M3). */
 .library__groups { display: flex; flex-direction: column; gap: 24px; }
+/* Pastas dos ativos (página do avatar, no molde do Google Drive): o caminho da pasta aberta e os
+   cards de pasta (M3: card preenchido, cantos de 12 px, 8 px entre eles), acima dos arquivos. */
+.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin-left: -12px; font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
+.crumbs > .icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); }
+.crumbs__item { padding: 6px 12px; border-radius: var(--md-sys-shape-corner-full); color: var(--md-sys-color-on-surface-variant); text-decoration: none; }
+.crumbs__item--current { color: var(--md-sys-color-on-surface); }
+.folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.folder { display: flex; align-items: center; min-width: 0; height: 56px; padding-right: 4px; border-radius: var(--md-sys-shape-corner-medium); background: var(--md-sys-color-surface-container-highest); }
+.folder__link { flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 12px; padding: 0 4px 0 16px; border-radius: var(--md-sys-shape-corner-medium); color: var(--md-sys-color-on-surface); text-decoration: none; }
+.folder__link > .icon { flex: none; font-size: 24px; color: var(--md-sys-color-on-surface-variant); }
+.folder__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.folder__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; }
+.folder__count { font: var(--md-sys-typescale-label-small); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
+/* Onde o item arrastado pode cair. */
+.folder.is-drop, .crumbs__item.is-drop { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; background: var(--md-sys-color-secondary-container); }
+.dialog__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .vgroup { display: flex; flex-direction: column; gap: 12px; }
 .vgroup__title { padding: 0 4px; font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; color: var(--md-sys-color-primary); }
 .library[data-view="d"] .library__groups { gap: 16px; }
