@@ -1,5 +1,5 @@
 import type { AudioApi, Face } from "./audio";
-import { type AvatarAsset, Db, OPEN_STATUSES, type Video, type Voice, type VoiceProvider } from "./db";
+import { type AvatarAsset, Db, OPEN_STATUSES, type Video, type VideoChanges, type Voice, type VoiceProvider } from "./db";
 import type { Conta } from "./permissoes";
 import { ERROS } from "./erros";
 import { mp3Duration } from "./mp3";
@@ -573,25 +573,34 @@ export class Studio {
       const raw = `videos/${video.id}.aleph.mp4`;
       await this.media.put(raw, await api.download(job), { httpMetadata: { contentType: "video/mp4" } });
       const settings = JSON.stringify({ ...parseSettings(video.settings), aleph_key: raw });
-      return (await this.db.updateVideo(video.id, { status: "in_progress", prep_status: "compose", cost, settings }))!;
+      return (await this.settle(video, { status: "in_progress", prep_status: "compose", cost, settings }));
     }
     if (job.status === "completed") {
       const key = `videos/${video.id}.mp4`;
       await this.media.put(key, await api.download(job), { httpMetadata: { contentType: "video/mp4" } });
-      return (await this.db.updateVideo(video.id, {
+      return (await this.settle(video, {
         status: "completed",
         video_key: key,
         cost,
         // O áudio entra na fila do contêiner, se a estrutura pede; o agendamento trata um por vez.
         // Sem som pedido (o Wan 3.0 livre com som: "nao"), não há fala a tratar.
         audio_status: this.audio && (structure?.treatAudio ?? true) && parseSettings(video.settings).som !== "nao" ? "pending" : null,
-      }))!;
+      }));
     }
     if (job.status === "failed" || job.status === "cancelled" || job.status === "expired") {
-      return (await this.db.updateVideo(video.id, { status: job.status, error: job.error ?? null, cost }))!;
+      return (await this.settle(video, { status: job.status, error: job.error ?? null, cost }));
     }
-    if (job.status !== video.status) return (await this.db.updateVideo(video.id, { status: job.status }))!;
+    if (job.status !== video.status) return (await this.settle(video, { status: job.status }));
     return video;
+  }
+
+  /**
+   * Grava o resultado da conferência. Se outra conferência do mesmo vídeo (o aviso do provedor ou
+   * o agendamento) gravou antes, fica o que ela gravou: nada de fechar duas vezes.
+   */
+  private async settle(video: Video, changes: VideoChanges): Promise<Video> {
+    const saved = Object.keys(changes).length ? await this.db.updateOpenVideo(video.id, changes) : null;
+    return saved ?? (await this.db.videoById(video.id)) ?? video;
   }
 
   /** Aviso do OpenRouter: acha o vídeo pelo id do job e confere. */
@@ -913,25 +922,27 @@ export class Studio {
       const key = `videos/${video.id}.mp4`;
       await this.media.put(key, await this.heygen.download(detail.video_url), { httpMetadata: { contentType: "video/mp4" } });
       const seconds = detail.duration ?? video.duration;
-      const saved = (await this.db.updateVideo(video.id, {
+      const saved = await this.db.updateOpenVideo(video.id, {
         status: "completed",
         video_key: key,
         duration: Math.max(1, Math.round(seconds)),
         cost: Math.round(seconds * PRICE_PER_SECOND * 10_000) / 10_000,
         // A voz vem pronta da HeyGen (ou é o áudio da pessoa): não passa pelo contêiner.
         audio_status: null,
-      }))!;
-      return this.cleanUpHeyGen(saved);
+      });
+      // Outra conferência fechou antes: ela já apagou o que ficou na HeyGen.
+      return saved ? this.cleanUpHeyGen(saved) : this.settle(video, {});
     }
     if (detail.status === "failed") {
       const reason = [detail.failure_code, detail.failure_message].filter(Boolean).join(": ") || "A HeyGen não gerou o vídeo.";
-      return this.cleanUpHeyGen((await this.db.updateVideo(video.id, { status: "failed", error: reason }))!);
+      const failed = await this.db.updateOpenVideo(video.id, { status: "failed", error: reason });
+      return failed ? this.cleanUpHeyGen(failed) : this.settle(video, {});
     }
     // Pronto sem o endereço do vídeo: a HeyGen ainda está guardando o arquivo. Segue "gerando"
     // (não volta para a fila) até o endereço vir ou o prazo dos abertos vencer (failStaleOpen).
     if (detail.status === "completed") console.error("HeyGen: vídeo pronto sem endereço", video.id, video.job_id);
     const status = detail.status === "processing" || detail.status === "completed" ? "in_progress" : "pending";
-    return status !== video.status ? (await this.db.updateVideo(video.id, { status }))! : video;
+    return status !== video.status ? this.settle(video, { status }) : video;
   }
 
   /**

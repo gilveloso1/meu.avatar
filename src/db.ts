@@ -376,6 +376,21 @@ export class Db {
       .first<Video>();
   }
 
+  /**
+   * Grava o que o provedor respondeu, só se o vídeo ainda espera por ele (aberto e fora da
+   * composição). O aviso do provedor e o agendamento podem conferir o mesmo vídeo ao mesmo tempo:
+   * só o primeiro grava; o segundo recebe null e não reabre o vídeo nem repõe o áudio na fila.
+   */
+  async updateOpenVideo(id: string, changes: VideoChanges, now = new Date()): Promise<Video | null> {
+    const fields = Object.entries(changes).filter(([, value]) => value !== undefined);
+    const sets = [...fields.map(([key]) => `${key} = ?`), "updated_at = ?"].join(", ");
+    const marks = OPEN_STATUSES.map(() => "?").join(", ");
+    return this.d1
+      .prepare(`UPDATE videos SET ${sets} WHERE id = ? AND status IN (${marks}) AND (prep_status IS NULL OR prep_status NOT IN ('compose', 'composing')) RETURNING *`)
+      .bind(...fields.map(([, value]) => value), now.toISOString(), id, ...OPEN_STATUSES)
+      .first<Video>();
+  }
+
   videoById(id: string): Promise<Video | null> {
     return this.d1.prepare("SELECT * FROM videos WHERE id = ?").bind(id).first<Video>();
   }

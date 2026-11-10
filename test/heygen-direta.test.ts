@@ -381,6 +381,23 @@ describe("HeyGen direta: acompanhar", () => {
     expect(html).not.toContain("≈ 12 s");
   });
 
+  it("o aviso da HeyGen e o agendamento no mesmo vídeo: fecha uma vez e apaga na HeyGen uma vez", async () => {
+    await useHeyGen();
+    const heygen = new FakeHeyGenApi();
+    await post(heygen, { fonte: "pronta", voz: "voz-rui", fala: FALA, imagem: foto() });
+    const [aberto] = await db().recentVideos();
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api: null, heygen });
+    heygen.finish(aberto!.job_id!, { status: "completed", video_url: "https://files.heygen.ai/v.mp4", duration: 12.4 });
+    const primeiro = await studio.sync(aberto!);
+    expect(primeiro).toMatchObject({ status: "completed", duration: 12 });
+    // A segunda conferência leu o vídeo ainda aberto e chega depois: nada muda.
+    heygen.finish(aberto!.job_id!, { status: "failed", failure_message: "atrasada" });
+    expect(await studio.sync(aberto!)).toMatchObject({ status: "completed", error: null, updated_at: primeiro.updated_at });
+    heygen.finish(aberto!.job_id!, { status: "processing" });
+    expect(await studio.sync(aberto!)).toMatchObject({ status: "completed", updated_at: primeiro.updated_at });
+    expect(heygen.deletedVideos).toEqual([aberto!.job_id]);
+  });
+
   it("pronto sem o endereço do vídeo: segue gerando e, passado o prazo dos abertos, vira falha", async () => {
     await useHeyGen();
     const heygen = new FakeHeyGenApi();
