@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Db, type User } from "../src/db";
 import { ERROS } from "../src/erros";
 import { createStudio } from "../src/index";
+import { OPEN_TIMEOUT_MS } from "../src/studio";
 import { estimateCost, validate, verifySignature } from "../src/openrouter";
 import { buildPrompt, cleanSpeech, LANGUAGES, qualityGuide, SPEECH_LEAD, STYLES } from "../src/prompt";
 import { planParts, RULES } from "../src/quickedit";
@@ -115,6 +116,41 @@ describe("agendamento", () => {
     expect(feitos.map((v) => v.status)).toEqual(["completed"]);
     // O que falhou continua aberto e fecha na rodada seguinte.
     expect((await createStudio({ ...env, SITE_URL: SITE }, { api, audio: null }).syncOpen()).map((v) => v.status)).toEqual(["completed"]);
+  });
+  it("a fila roda: dez presos no começo não seguram os mais novos", async () => {
+    const api = new FakeVideoApi();
+    for (const fala of ["Um", "Dois", "Três"]) await post(api, { ...PEDIDO, fala });
+    // Os dois mais antigos seguem na fila do provedor; só o terceiro ficou pronto.
+    api.finish("job-3", { status: "completed" });
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api, audio: null });
+    expect((await studio.syncOpen(2)).map((v) => v.status)).toEqual(["pending", "pending"]);
+    // A rodada seguinte começa por quem ainda não foi conferido.
+    expect((await studio.syncOpen(2)).map((v) => v.status)).toContain("completed");
+    // Conferir não conta como mudança do vídeo.
+    const abertos = () => env.DB.prepare("SELECT id, updated_at, checked_at FROM videos WHERE status = 'pending' ORDER BY id").all<{ id: string; updated_at: string; checked_at: string | null }>();
+    const antes = (await abertos()).results;
+    await studio.syncOpen(2, new Date(Date.now() + 60_000));
+    const depois = (await abertos()).results;
+    expect(depois).toHaveLength(2);
+    expect(depois.map((v) => v.updated_at)).toEqual(antes.map((v) => v.updated_at));
+    expect(depois.map((v) => v.checked_at)).not.toEqual(antes.map((v) => v.checked_at));
+  });
+
+  it("vídeo aberto há horas vira falha e sai da fila; o recente segue", async () => {
+    const api = new FakeVideoApi();
+    await post(api, PEDIDO);
+    await post(api, { ...PEDIDO, fala: "Promoção de verão" });
+    const [novo, velho] = await new Db(env.DB).recentVideos();
+    const agora = Date.now();
+    await env.DB.prepare("UPDATE videos SET created_at = ? WHERE id = ?").bind(new Date(agora - OPEN_TIMEOUT_MS - 60_000).toISOString(), velho!.id).run();
+    await env.DB.prepare("UPDATE videos SET created_at = ? WHERE id = ?").bind(new Date(agora - OPEN_TIMEOUT_MS + 60_000).toISOString(), novo!.id).run();
+    const feitos = await createStudio({ ...env, SITE_URL: SITE }, { api, audio: null }).syncOpen(10, new Date(agora));
+    expect(feitos.find((v) => v.id === velho!.id)).toMatchObject({ status: "failed", error: ERROS.videoDemorou });
+    expect(feitos.find((v) => v.id === novo!.id)).toMatchObject({ status: "pending", error: null });
+    // Falhou de vez: o provedor responder depois não reabre.
+    api.finish(velho!.job_id!, { status: "completed" });
+    expect((await createStudio({ ...env, SITE_URL: SITE }, { api, audio: null }).syncOpen(10, new Date(agora))).map((v) => v.id)).toEqual([novo!.id]);
+    expect((await new Db(env.DB).videoById(velho!.id))!.status).toBe("failed");
   });
 });
 

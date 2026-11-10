@@ -72,6 +72,13 @@ const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": 
 export const AUDIO_TIMEOUT_MS = 20 * 60_000;
 
 /** Limite da foto do avatar (o Worker guarda no R2 e o provedor baixa de lá). */
+/**
+ * Vídeo aberto há mais tempo que isso vira falha (src/db.ts, failStaleOpen): o provedor esqueceu
+ * o job ou o preparo nunca andou. Folgado: o 720p do Wan leva uns 10 min, e falhar um vídeo que
+ * ainda ficaria pronto perde o que ele custou.
+ */
+export const OPEN_TIMEOUT_MS = 6 * 60 * 60_000;
+
 /** Imagem que não voltou nesse tempo vira falha (src/db.ts, failStaleImages). */
 export const IMAGE_TIMEOUT_MS = 5 * 60_000;
 
@@ -920,7 +927,10 @@ export class Studio {
       const reason = [detail.failure_code, detail.failure_message].filter(Boolean).join(": ") || "A HeyGen não gerou o vídeo.";
       return this.cleanUpHeyGen((await this.db.updateVideo(video.id, { status: "failed", error: reason }))!);
     }
-    const status = detail.status === "processing" ? "in_progress" : "pending";
+    // Pronto sem o endereço do vídeo: a HeyGen ainda está guardando o arquivo. Segue "gerando"
+    // (não volta para a fila) até o endereço vir ou o prazo dos abertos vencer (failStaleOpen).
+    if (detail.status === "completed") console.error("HeyGen: vídeo pronto sem endereço", video.id, video.job_id);
+    const status = detail.status === "processing" || detail.status === "completed" ? "in_progress" : "pending";
     return status !== video.status ? (await this.db.updateVideo(video.id, { status }))! : video;
   }
 
@@ -969,8 +979,13 @@ export class Studio {
     const images = STRUCTURES.filter(madeAtOnce).map((s) => s.id);
     await this.db.failStaleImages(images, new Date(now.getTime() - IMAGE_TIMEOUT_MS).toISOString(), now.toISOString());
     const done: Video[] = [];
+    // Aberto há horas: falha, e o que ficou na HeyGen é apagado.
+    for (const stale of await this.db.failStaleOpen(new Date(now.getTime() - OPEN_TIMEOUT_MS).toISOString(), now.toISOString())) {
+      console.error("Vídeo aberto há tempo demais virou falha", stale.id, stale.structure, stale.job_id);
+      done.push(videoPlatform(stale) === "heygen" ? await this.cleanUpHeyGen(stale).catch(() => stale) : stale);
+    }
     // Um por um: o vídeo que falha ao baixar ou guardar fica para a próxima rodada, sem parar os outros.
-    for (const video of await this.db.openVideos(limit)) {
+    for (const video of await this.db.openVideos(limit, now.toISOString())) {
       try {
         done.push(await this.sync(video));
       } catch (err) {

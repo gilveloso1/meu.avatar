@@ -4,7 +4,7 @@ import { Db } from "../src/db";
 import { ERROS } from "../src/erros";
 import { createStudio } from "../src/index";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
-import { resetVoiceCache } from "../src/studio";
+import { OPEN_TIMEOUT_MS, resetVoiceCache } from "../src/studio";
 import { call, cookie, FakeHeyGenApi, FakeVideoApi, memberCookie, postForm, SITE } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
@@ -379,6 +379,23 @@ describe("HeyGen direta: acompanhar", () => {
     const html = await (await call(new Request(`${SITE}/video/${video!.id}`, { headers: { cookie: await cookie() } }), null, null, heygen)).text();
     expect(html).toContain(">12 s<");
     expect(html).not.toContain("≈ 12 s");
+  });
+
+  it("pronto sem o endereço do vídeo: segue gerando e, passado o prazo dos abertos, vira falha", async () => {
+    await useHeyGen();
+    const heygen = new FakeHeyGenApi();
+    await post(heygen, { fonte: "pronta", voz: "voz-rui", fala: FALA, imagem: foto() });
+    const [video] = await db().recentVideos();
+    const studio = createStudio({ ...env, SITE_URL: SITE }, { api: null, heygen });
+    heygen.finish(video!.job_id!, { status: "completed" });
+    expect((await studio.syncOpen())[0]!.status).toBe("in_progress");
+    // Não volta a "pendente" na rodada seguinte.
+    expect((await studio.syncOpen())[0]!.status).toBe("in_progress");
+    const [falhou] = await studio.syncOpen(10, new Date(Date.now() + OPEN_TIMEOUT_MS + 60_000));
+    expect(falhou).toMatchObject({ id: video!.id, status: "failed", error: ERROS.videoDemorou });
+    // O que ficou na HeyGen é apagado, como em toda falha.
+    expect(heygen.deletedVideos).toEqual([video!.job_id]);
+    expect(await studio.syncOpen(10, new Date(Date.now() + OPEN_TIMEOUT_MS + 120_000))).toEqual([]);
   });
 
   it("depois de salvar no R2, apaga na HeyGen o vídeo, a foto e o áudio", async () => {
