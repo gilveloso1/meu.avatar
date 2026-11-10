@@ -20,5 +20,19 @@ Para que serve: cenas de apoio horizontais e baratas a partir de uma foto (produ
 mãos, câmera se aproximando), para vídeos 16:9 (YouTube) ou como camada por cima. Não serve para o
 formato das redes (9:16), não fala e não tem som.
 
-Ainda sem teste real: falta ver como fica uma pessoa (rosto e mãos), quanto tempo leva e se o custo
-cobrado bate com a lista.
+**Primeiro teste real** (10/11/2026, pelo terminal, `npm run gerar`): o mesmo pedido do vídeo do Wan
+3.0 livre `fef8324d-bf4c-4019-adb4-1f63207c4f70` (a mesma foto 768×1376 como primeiro quadro, o mesmo
+prompt, 3 s, 480p, sem som), só que em 16:9. O vídeo ficou no R2 em
+`testes/mischief-1/2026-11-10-maos-delineador.mp4` (job `gen-vid-1794280741-QGY1IUqH44nLS4m1fGzf`).
+
+| | Wan 3.0 | mischief 1 |
+|---|---|---|
+| Custo real | US$ 0,2125 (cobrado como 5 s) | **US$ 0,015** (os 3 s, como a lista) |
+| Tempo | minutos | **uns 20 s** |
+| Saída | 9:16, a cena inteira | 832×480, 16 fps: a foto vertical **cortada no meio** (somem o espelho, a mesa e a cadeira) |
+| Movimento | O dedo esfrega a linha e sai; mãos e manga naturais | Quase igual (é feito do Wan 2.2): o dedo esfrega e sai, mãos naturais |
+| O que o prompt pedia | A linha não devia mudar; ela cresceu e ficou mais grossa | O mesmo: a linha cresceu |
+
+Conclusão: para cena curta de mãos ou produto, o movimento fica no nível do Wan por uns 7% do custo e
+em segundos. O limite é o formato: foto vertical vira um recorte horizontal do meio, que não serve
+para 9:16. Vale para vídeos 16:9 ou com a foto já horizontal. Falta ver um rosto.
