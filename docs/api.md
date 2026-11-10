@@ -43,9 +43,9 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `criar_avatar`, `editar_avatar`, `enviar_ativo`, `listar_vozes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_cena` (a cena montada, com todas as camadas, em imagem), `inspecionar_animacao` (texto; imagem só com
   `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `gerar_imagem` (devolve
-  a imagem para o agente olhar), `gerar_video` e `acompanhar_video`, `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
+  a imagem para o agente olhar), `gerar_video`, `gerar_video_wan` e `acompanhar_video`, `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
   `exportar` e `acompanhar_exportacao`, mais `listar_ferramentas` e `usar_ferramenta`. Não apagam projeto. Só `gerar_imagem` (uns US$ 0,04 por
-  imagem em 1K), `gerar_video` e `gerar_audio` gastam créditos de modelo.
+  imagem em 1K), `gerar_video`, `gerar_video_wan` e `gerar_audio` gastam créditos de modelo.
 - **Gerar vídeo** (desde 08/11/2026): `gerar_video` faz o avatar falar com o HeyGen Avatar, o
   mesmo modelo e a mesma plataforma do site (a config `plataforma.heygen`; no ar, a API direta, a
   US$ 0,0385 por segundo). Recebe a foto (src de imagem: ativo, arquivo do projeto ou imagem
@@ -56,6 +56,18 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   instruções do servidor pedem ao agente que mostre o texto, a voz e o custo à pessoa e só gere
   com o sim dela. Rotas: `POST /api/v1/projetos/<id>/video`, `GET /api/v1/videos/<id>` e
   `GET /api/v1/vozes`.
+- **Wan 3.0 com tudo** (desde 10/11/2026): `gerar_video_wan` (`POST /api/v1/projetos/<id>/wan`,
+  estrutura `wan-livre.ts`, versão "Livre" do Wan, só o administrador) gera com o Wan 3.0 o que o
+  `gerar_video` não faz. `{cena, foto?, ultimoQuadro?, referencias?, som?, semente?, duracao?,
+  resolucao?, formato?, final?}`: a `cena` é o prompt inteiro (a fala entre aspas, com o idioma);
+  `foto` e `ultimoQuadro` são o primeiro e o último quadro (imagem para vídeo) e `referencias`, até
+  4 imagens que guiam a cena (referência para vídeo). Quadros e referências não vão juntos
+  (`quadros_ou_referencias`): com os dois, o OpenRouter trata como imagem para vídeo. `som: false`
+  tira o som (e o tratamento de áudio); `duracao` de 2 a 30 s (padrão 5), `resolucao` 480p, 720p
+  (padrão) ou 1080p, `formato` o do Final. Responde como o `gerar_video`, com o custo estimado
+  (US$ 0,05, 0,10 ou 0,20 por segundo); segue no `acompanhar_video`. Erros: `cena_obrigatoria`,
+  `quadros_ou_referencias`, `referencias_demais`, `semente_invalida`, `arquivo_indisponivel`,
+  `foto_tipo_invalido` (e `referencia_`, `ultimoQuadro_`), `final_inexistente`, `pedido_invalido`.
 - **Avatares** (desde 08/11/2026): `criar_avatar` (nome e descrição), `editar_avatar` (nome,
   descrição e qual ativo enviado é a foto principal ou a voz para clonagem; `""` tira) e
   `enviar_ativo`, que põe um arquivo nos ativos de um avatar sem base64 (o agente não conseguia
@@ -116,7 +128,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/projetos/<id>/silencios?src=` | Duração e silêncios do arquivo, com a regra da Edição rápida: `{duracao, silencios, som}`; arquivo sem faixa de áudio (como o WebM do render) vem com `som: false` e nenhum silêncio |
 | `POST /api/v1/projetos/<id>/html` `{nome, html, duracao, final?}` | Faz um WebM transparente do HTML e o guarda nos arquivos do projeto: `{arquivo: {id, nome, tipo, src}, largura, altura}` |
 | `POST /api/v1/projetos/<id>/legenda` `{grupo, revisao, bloco?, simular?, palavras?, semTexto?, fontes?, estilo?, final?, nome?}` | Legenda palavra a palavra do grupo, como animação em código por cima dele (com `bloco`, troca o código e o tempo de uma legenda que já existe). Responde como os comandos, com `legenda: {palavras, trechos}`; com `simular`, só `{duracao, palavras, trechos}`, sem mexer no projeto |
-| `POST /api/v1/projetos/<id>/imagem` `{descricao, referencia?, resolucao?, formato?, final?, previa?}` | Gera uma imagem com o Nano Banana 2.1 (gasta créditos) e responde na hora: `{imagem: {id, src, resolucao, formato, custo}}`; com `previa: true`, também `previa` (a imagem em base64) e `previaTipo`. `formato` padrão: o do Final (`final`, ou o primeiro); `resolucao`: `1K` (padrão) ou `2K`. `referencia` é o `src` de uma imagem (ativo, arquivo do projeto ou outra imagem gerada): a pessoa e o que a descrição não muda seguem ela. A imagem também fica na lista do modelo no site. Erros: `descricao_obrigatoria`, `arquivo_indisponivel`, `referencia_nao_e_imagem`, `final_inexistente`, `pedido_invalido` (com `motivo`, como formato que o modelo não aceita), `imagem_falhou` (502, com o `id`) e `criacao_pausada` (503, sem a chave) |
+| `POST /api/v1/projetos/<id>/imagem` `{descricao, referencia?, referencias?, resolucao?, formato?, final?, previa?}` | Gera uma imagem com o Nano Banana 2.1 (gasta créditos) e responde na hora: `{imagem: {id, src, resolucao, formato, custo}}`; com `previa: true`, também `previa` (a imagem em base64) e `previaTipo`. `formato` padrão: o do Final (`final`, ou o primeiro); `resolucao`: `1K` (padrão) ou `2K`. `referencia` é o `src` de uma imagem (ativo, arquivo do projeto ou outra imagem gerada): a pessoa e o que a descrição não muda seguem ela. `referencias` é uma lista de `src` (até 6, com a `referencia` contando e vindo antes), na ordem em que vão ao modelo: a descrição diz o que vem de cada uma ("imagem 1", "imagem 2"), para juntar a pessoa de uma com o produto ou o lugar de outra. A imagem também fica na lista do modelo no site. Erros: `descricao_obrigatoria`, `arquivo_indisponivel` e `referencia_nao_e_imagem` (com a `referencia` que falhou), `referencias_demais` (com o `maximo`), `final_inexistente`, `pedido_invalido` (com `motivo`, como formato que o modelo não aceita), `imagem_falhou` (502, com o `id`) e `criacao_pausada` (503, sem a chave) |
 | `POST /api/v1/projetos/<id>/limpar` `{apagar?}` | Os arquivos do projeto que nenhum bloco usa: `{arquivos: [{id, nome, tipo, tamanho}], tamanho}`. Com `apagar: true`, apaga de vez (do banco e do R2); durante uma exportação, `409 exportando` |
 | `GET /api/v1/projetos/<id>/transcricao?src=` | A fala com o tempo de cada palavra: `{idioma, duracao, texto, palavras: [{palavra, inicio, fim}]}` |
 

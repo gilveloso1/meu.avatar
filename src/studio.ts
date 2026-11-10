@@ -43,6 +43,13 @@ export interface NewVideoInput {
   values: Values;
   /** Foto do avatar. */
   image?: File | null;
+  /**
+   * Mais imagens de referência, depois da foto, na ordem em que vão ao modelo (o gerar_imagem do
+   * MCP com várias referências). Só valem com a foto e numa estrutura que recebe referência.
+   */
+  references?: File[];
+  /** A imagem do último quadro (o Wan 3.0 livre), se a estrutura pede. */
+  lastFrame?: File | null;
   /** Vídeo de origem (estruturas que recebem um vídeo, como a troca de avatar). */
   video?: File | null;
   /** Áudio da fala ("Meu áudio", HeyGen pela API direta). */
@@ -290,6 +297,15 @@ export class Studio {
     const ext = image ? IMAGE_TYPES[image.type] : undefined;
     if (image && !ext) throw new InputError(ERROS.fotoTipo);
     if (image && image.size > MAX_IMAGE_BYTES) throw new InputError(ERROS.fotoTamanho);
+    const extras = image ? (input.references ?? []).filter((f) => f.size > 0) : [];
+    for (const f of extras) {
+      if (!IMAGE_TYPES[f.type]) throw new InputError(ERROS.fotoTipo);
+      if (f.size > MAX_IMAGE_BYTES) throw new InputError(ERROS.fotoTamanho);
+    }
+
+    const last = input.lastFrame && input.lastFrame.size > 0 ? input.lastFrame : null;
+    if (last && !IMAGE_TYPES[last.type]) throw new InputError(ERROS.fotoTipo);
+    if (last && last.size > MAX_IMAGE_BYTES) throw new InputError(ERROS.fotoTamanho);
 
     const upload = input.video && input.video.size > 0 ? input.video : null;
     const videoExt = upload ? VIDEO_TYPES[upload.type] : undefined;
@@ -313,7 +329,11 @@ export class Studio {
     const references: InputReference[] = [];
     if (built.video) references.push(source);
     if (built.image === "first_frame") request.frame_images = [{ ...placeholder, frame_type: "first_frame" }];
+    const lastPlaceholder = { type: "image_url" as const, image_url: { url: "" } };
+    if (built.lastFrame && last) request.frame_images = [...(request.frame_images ?? []), { ...lastPlaceholder, frame_type: "last_frame" }];
     if (built.image === "reference") references.push(placeholder);
+    const more = built.image === "reference" ? extras.map(() => ({ type: "image_url" as const, image_url: { url: "" } })) : [];
+    references.push(...more);
     if (references.length) request.input_references = references;
     const errors = validate(model, request);
     if (errors.length) {
@@ -329,6 +349,24 @@ export class Studio {
       const bytes = await image.arrayBuffer();
       await this.media.put(imageKey, bytes, { httpMetadata: { contentType: image.type } });
       if (!built.prepare) placeholder.image_url.url = await this.imageUrl(imageKey, image.type, bytes);
+    }
+    // O último quadro, como a foto; a chave fica em `settings.ultimo_quadro`.
+    let lastKey: string | null = null;
+    if (built.lastFrame && last) {
+      lastKey = `avatares/${crypto.randomUUID()}.${IMAGE_TYPES[last.type]}`;
+      const bytes = await last.arrayBuffer();
+      await this.media.put(lastKey, bytes, { httpMetadata: { contentType: last.type } });
+      lastPlaceholder.image_url.url = await this.imageUrl(lastKey, last.type, bytes);
+    }
+    // As outras referências, como a foto; as chaves ficam em `settings.referencias`, na ordem.
+    const referenceKeys: string[] = [];
+    for (const [i, f] of extras.entries()) {
+      if (!more[i]) break;
+      const key = `avatares/${crypto.randomUUID()}.${IMAGE_TYPES[f.type]}`;
+      const bytes = await f.arrayBuffer();
+      await this.media.put(key, bytes, { httpMetadata: { contentType: f.type } });
+      referenceKeys.push(key);
+      if (!built.prepare) more[i].image_url.url = await this.imageUrl(key, f.type, bytes);
     }
     let sourceKey: string | null = null;
     if (upload && videoBytes && built.video) {
@@ -348,7 +386,16 @@ export class Studio {
       user_id: input.user.id,
       structure: structure.id,
       avatar_id: input.avatarId ?? null,
-      settings: settings || sourceKey || input.origins ? JSON.stringify({ ...settings, ...input.origins, ...(sourceKey ? { source_key: sourceKey } : {}) }) : null,
+      settings:
+        settings || sourceKey || input.origins || referenceKeys.length || lastKey
+          ? JSON.stringify({
+              ...settings,
+              ...input.origins,
+              ...(sourceKey ? { source_key: sourceKey } : {}),
+              ...(referenceKeys.length ? { referencias: referenceKeys } : {}),
+              ...(lastKey ? { ultimo_quadro: lastKey } : {}),
+            })
+          : null,
     });
 
     // A imagem e a fala saem fora do pedido (src/imagens.ts): a página fica "Gerando" e atualiza sozinha.
@@ -420,10 +467,16 @@ export class Studio {
     try {
       let input_references: InputReference[] | undefined;
       if (video.image_key) {
-        const photo = await this.media.get(video.image_key);
-        if (!photo) throw new Error(`Foto de referência sumiu do R2: ${video.image_key}`);
-        const url = await this.imageUrl(video.image_key, photo.httpMetadata?.contentType ?? "image/png", await photo.arrayBuffer());
-        input_references = [{ type: "image_url", image_url: { url } }];
+        // A foto e, depois dela, as outras referências (gerar_imagem com várias), na ordem.
+        const extra: unknown = (parseSettings(video.settings) as Record<string, unknown>).referencias;
+        const keys = [video.image_key, ...(Array.isArray(extra) ? extra.filter((k): k is string => typeof k === "string") : [])];
+        input_references = [];
+        for (const key of keys) {
+          const photo = await this.media.get(key);
+          if (!photo) throw new Error(`Foto de referência sumiu do R2: ${key}`);
+          const url = await this.imageUrl(key, photo.httpMetadata?.contentType ?? "image/png", await photo.arrayBuffer());
+          input_references.push({ type: "image_url", image_url: { url } });
+        }
       }
       const request: ImageRequest = { model: video.model, prompt: video.request_prompt ?? video.prompt, resolution: video.resolution, aspect_ratio: video.aspect_ratio, input_references };
       const result = await this.requireApi().image(request);
@@ -484,7 +537,8 @@ export class Studio {
         video_key: key,
         cost,
         // O áudio entra na fila do contêiner, se a estrutura pede; o agendamento trata um por vez.
-        audio_status: this.audio && (structure?.treatAudio ?? true) ? "pending" : null,
+        // Sem som pedido (o Wan 3.0 livre com som: "nao"), não há fala a tratar.
+        audio_status: this.audio && (structure?.treatAudio ?? true) && parseSettings(video.settings).som !== "nao" ? "pending" : null,
       }))!;
     }
     if (job.status === "failed" || job.status === "cancelled" || job.status === "expired") {

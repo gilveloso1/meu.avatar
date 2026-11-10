@@ -130,8 +130,9 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    Com ou sem foto de referência. Escolhido o Nano Banana 2.1 pelo OpenRouter (comparação de
    06/11/2026 em `docs/modelos/gemini-nano-banana-2.1.md`, US$ 0,04 por imagem). Estrutura `imagem.ts` (`nano-banana`), só para o administrador:
    a imagem sai na hora e fica na lista do modelo; "Salvar no avatar" a leva para os ativos.
-   O agente também gera pelo MCP (`gerar_imagem`) e põe no canvas (`adicionar {imagem}`).
-   Falta: liberar para todos; mais de uma referência (rosto e cena juntos).
+   O agente também gera pelo MCP (`gerar_imagem`, com até 6 referências em `referencias`, desde
+   10/11/2026) e põe no canvas (`adicionar {imagem}`).
+   Falta: liberar para todos; mais de uma referência no formulário do site (rosto e cena juntos).
 4. **Vozes dos personagens** (pedido de 08/11/2026): modelos de fala com card e painel próprios,
    que geram áudio; o áudio entra no HeyGen como "Meu áudio" (pelo "Adicionar ativo") e vira o
    vídeo falado. Feito: o áudio como tipo de saída (`output: "audio"`, na lista do modelo, na
