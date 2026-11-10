@@ -670,6 +670,21 @@ textarea.text-field__input { min-height: 56px; resize: none; overflow: hidden; d
 .library[data-view="g"] .frames { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
 /* Grupos por data: subtítulo (title-small em primary, como os subtítulos de lista do M3). */
 .library__groups { display: flex; flex-direction: column; gap: 24px; }
+/* Pastas dos ativos (página do avatar): cada pasta é um item da lista, com o ícone de pasta no
+   lugar da imagem e o nome embaixo; com uma pasta aberta, o caminho de volta, com renomear e apagar. */
+.crumbs { display: flex; align-items: center; gap: 4px; margin-left: -12px; }
+.crumbs__path { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
+.crumbs__path > .icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); }
+.crumbs__item { padding: 6px 12px; border-radius: var(--md-sys-shape-corner-full); color: var(--md-sys-color-on-surface-variant); text-decoration: none; }
+.crumbs__item--current { color: var(--md-sys-color-on-surface); }
+.frame__caption { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; flex-direction: column; align-items: center; text-align: center; color: var(--md-sys-color-on-surface); }
+.frame__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; }
+.frame__count { font: var(--md-sys-typescale-label-small); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
+.library[data-view="p"] .frame__count { display: none; }
+/* Onde o item arrastado pode cair. */
+[data-drop].is-drop { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; background: var(--md-sys-color-secondary-container); }
+.dialog__actions .button[hidden] { display: none; }
+.dialog__text { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; color: var(--md-sys-color-on-surface-variant); }
 .vgroup { display: flex; flex-direction: column; gap: 12px; }
 .vgroup__title { padding: 0 4px; font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; color: var(--md-sys-color-primary); }
 .library[data-view="d"] .library__groups { gap: 16px; }

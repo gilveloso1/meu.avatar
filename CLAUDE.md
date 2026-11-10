@@ -71,6 +71,11 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
   - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
   - Texto com emoções (modelos de fala): `speechEditor`, o campo contornado que aceita as emoções em destaque (chip de entrada, com x); `#` abre a lista (`EMOTIONS`, `src/structures/voz.ts`, em português na tela e em inglês no formulário e para o agente), com as mais usadas no topo (contadas no `localStorage`, `emocoes-usadas`) e as outras em ordem alfabética.
   - Voz pronta: campo `voice` no painel, escolhida em `voicePanel`, no mesmo menu (busca, idioma, gênero e prévia); as vozes vêm de `/vozes/lista`, só as do filtro.
+  - Pastas (hoje nos ativos do avatar; simples, sem pasta dentro de pasta): cada pasta é um item da própria
+    lista (`folderItems`, pelo `first` do `library`: o mesmo card e a mesma linha, com o ícone de pasta no lugar
+    da imagem, antes dos arquivos e fora do contador); `folderLead` traz o caminho da pasta aberta (`.crumbs`) e
+    os diálogos, e `moveDialog` é o "Mover para". O menu do item (`[data-item-menu]`, botão direito) e arrastar
+    ficam no `SCRIPT`; o ativo que pode ser movido leva `data-move`, e onde pode cair, `data-drop`.
   - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`, que também é a página de não encontrado
     (`notFoundPage`): todo 404 em texto aberto pelo navegador vira essa página, a mesma para o que não existe
     e para o que é de outra conta.
@@ -232,7 +237,14 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   nenhum modelo. A página do avatar segue a do modelo: painel com Nome, Descrição, Foto
   principal e Voz para clonagem; no centro, a listagem de ativos; tocar num ativo abre o
   molde da página do vídeo. O avatar só existe depois de Salvar (`/avatares/novo`, nunca
-  criar no clique). "Salvar no avatar" fica abaixo de Detalhes e abre o diálogo com busca;
+  criar no clique). Os ativos se organizam em pastas simples, sem pasta dentro de pasta (pedido
+  de 10/11/2026, `folders` e `avatar_assets.folder_id`): "Nova pasta" ao lado de "Adicionar
+  arquivo"; a pasta fica na mesma lista dos ativos, antes deles, com o ícone de pasta no lugar da
+  imagem; tocar abre a pasta (`?pasta=`), com o caminho de volta e os botões de renomear e apagar;
+  mover é arrastando o ativo para a pasta (ou para "Ativos", no caminho) ou pelo "Mover para" do
+  botão direito e da página do ativo; o arquivo enviado de dentro de uma pasta fica nela. Apagar a
+  pasta pergunta dos itens: "Apagar tudo" apaga os itens junto; "Manter os itens" os devolve à
+  lista. "Salvar no avatar" fica abaixo de Detalhes e abre o diálogo com busca;
   o Novo avatar desse diálogo leva o vídeo junto (`?video=`), salvo com o avatar. O avatar
   só guarda arquivo do que foi enviado a ele; vídeo salvo é um vínculo (como no canvas),
   sem cópia no R2, e usa a versão que vale do vídeo. Regra única: `source_video` vazio quer
