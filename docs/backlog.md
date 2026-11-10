@@ -16,8 +16,10 @@ corrigido no mesmo PR). Vem antes do resto, nesta ordem.
    cita a pessoa da foto ([modelos/gemini-omni-1.2-flash.md](modelos/gemini-omni-1.2-flash.md)).
    O pedido antigo exato (frase do estilo Selfie, sem instruções) passou no mesmo minuto, e o
    parâmetro `task` não resolveu: a falha é do formato. O antigo com as instruções depois da
-   frase do Selfie também falhou: hoje o 1.2 só aceita a selfie parada, sem instruções. Falta o
-   dono decidir: fixar o Omni nesse estilo, seguir testando ou deixar o modelo de lado. O Google passa o 1.1 para o 1.2 em
+   frase do Selfie também falhou: com a foto de uma pessoa, o 1.2 só aceita a selfie parada, sem instruções.
+   Sem pessoa (sem foto, cena de objeto), o formato do código passou de primeira: o que barra é a
+   pessoa realista com instruções livres. Falta o dono decidir: fixar o Omni com pessoa na selfie
+   parada, abrir o uso sem pessoa (cena de produto), seguir testando ou deixar o modelo de lado. O Google passa o 1.1 para o 1.2 em
    **03/12/2026**: tirar `OMNI_11` antes dessa data.
 2. **Listas cortadas em 100** (`ContaDb.videos`): `/videos`, a página do modelo e a biblioteca do
    canvas mostram só os 100 mais novos, sem paginação, e o contador diz "100" (`docs/layout.md`, item 11).

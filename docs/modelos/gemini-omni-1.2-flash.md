@@ -266,12 +266,25 @@ só, três minutos depois do controle que passou.
 nenhuma instrução de quem usa (6 de 6). Qualquer pedido com as instruções falhou: no lugar da
 frase do Selfie, depois dela, com `task`, com outra frase citando a foto (0 de 4 no dia; em
 07/11, 2 de 17). Não se sabe se o que derruba é o conteúdo destas instruções (apresentadora,
-gesticular, que contraria "mantém a posição") ou qualquer texto a mais. Gasto do dia: US$ 0,09
-(cinco pedidos, um pronto).
+gesticular, que contraria "mantém a posição") ou qualquer texto a mais.
 
-O formulário do Omni é feito de instruções livres, e é isso que o 1.2 não está aceitando. A
-decisão é do dono: fixar o Omni na selfie parada (sem o campo Instruções), seguir testando outras
-instruções (cada teste pede autorização) ou deixar o modelo de lado até o Google estabilizar.
+**Sem pessoa no pedido (22:12 UTC, 4 s, 360p, 9:16):** o formato do código (`omniPrompt` sem
+fala), **sem foto** e com instruções livres em português só de objeto ("Um frasco de perfume de
+vidro sobre uma mesa de mármore, com luz suave de janela. A câmera se aproxima devagar do
+frasco."): **pronto de primeira**, US$ 0,0927 (`gen-vid-1794348736-XJNSSle7MH953L77SRDl`, vídeo só
+no ambiente de teste). 360×640, 4 s, com som; o quadro do meio mostra o frasco sobre o mármore
+com a luz da janela, como pedido.
+
+O formato do código não é o problema em si: com instruções livres e sem pessoa, passou. O que
+falha é **instruções livres com a foto de uma pessoa realista**, o que aponta para o filtro de
+rosto do Google (ver a pesquisa acima), não para o texto. Uma amostra só, e mudaram duas coisas
+de uma vez (sem foto e sem pessoa no texto): falta separar foto de objeto de texto sem pessoa.
+Gasto do dia: US$ 0,19 (seis pedidos, dois prontos).
+
+A decisão é do dono. Os caminhos: fixar o Omni com pessoa na selfie parada (sem o campo
+Instruções); abrir no Omni o uso sem pessoa (cena de produto ou de objeto, por texto ou por
+foto), onde as instruções livres passam; seguir testando (cada teste pede autorização); ou deixar
+o modelo de lado até o Google estabilizar.
 
 ## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
 
