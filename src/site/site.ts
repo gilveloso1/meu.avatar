@@ -480,13 +480,13 @@ ${error ? snackbar(error) : ""}`;
     // Fechar volta para a pasta em que o ativo está.
     const back = folderHref(avatar.id, asset.folder_id);
     const folders = await this.db.folders(avatar.id);
-    const path = folderPath(folders, asset.folder_id);
+    const folder = folders.find((f) => f.id === asset.folder_id);
     const media = asset.kind === "imagem" ? `<img class="viewer__video" src="${src}" alt="${esc(asset.name)}">` : asset.kind === "video" ? `<video class="viewer__video" src="${src}" controls playsinline></video>` : `<audio src="${src}" controls></audio>`;
     const role = asset.id === avatar.photo_asset ? "Foto principal" : asset.id === avatar.voice_asset ? "Voz para clonagem" : null;
     const details = [
       { icon: "folder_open", term: "Tipo", value: ASSET_LABELS[asset.kind] },
       ...(role ? [{ icon: "star", term: "Uso", value: role }] : []),
-      ...(folders.length ? [{ icon: "folder", term: "Pasta", value: ["Ativos", ...path.map((f) => f.name)].join(" › ") }] : []),
+      ...(folder ? [{ icon: "folder", term: "Pasta", value: folder.name }] : []),
       { icon: "download", term: "Tamanho", value: formatBytes(asset.size) },
       { icon: "schedule", term: "Origem", value: assetOrigin(asset) },
       { icon: "calendar_today", term: "Criado em", value: formatDate(asset.created_at) },
@@ -561,40 +561,31 @@ ${folders.length ? moveDialog(folders, { action: `${src}/mover`, at: asset.folde
   }
 
   /**
-   * As pastas dos ativos do avatar: criar (POST /pastas), renomear (/nome), mover para dentro de
-   * outra (/mover) e apagar (/apagar, que só desfaz a pasta: o que estava nela sobe um nível).
+   * As pastas dos ativos do avatar (simples, sem pasta dentro de pasta): criar (POST /pastas),
+   * renomear (/nome) e apagar (/apagar), com os itens junto (`itens=apagar`) ou devolvendo-os à lista.
    */
   private async folderAction(request: Request, user: User, avatar: Avatar, folderId: string | undefined, action: string | undefined): Promise<Response> {
     const folders = await this.db.folders(avatar.id);
     const form = await request.formData();
     const name = String(form.get("nome") ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NAME);
-    const inFolder = (id: unknown) => folders.find((f) => f.id === id) ?? null;
     if (!folderId) {
-      const parent = inFolder(form.get("pasta"));
-      if (!name) return this.avatarPage(user, avatar, ERROS.pastaNome, undefined, undefined, parent?.id);
-      if (folders.length >= MAX_FOLDERS) return this.avatarPage(user, avatar, ERROS.pastasDemais, undefined, undefined, parent?.id);
-      await this.db.insertFolder({ id: crypto.randomUUID(), avatar_id: avatar.id, parent_id: parent?.id ?? null, name });
-      return redirect(folderHref(avatar.id, parent?.id ?? null));
+      if (!name) return this.avatarPage(user, avatar, ERROS.pastaNome);
+      if (folders.length >= MAX_FOLDERS) return this.avatarPage(user, avatar, ERROS.pastasDemais);
+      await this.db.insertFolder({ id: crypto.randomUUID(), avatar_id: avatar.id, name });
+      return redirect(folderHref(avatar.id, null));
     }
-    const folder = inFolder(folderId);
+    const folder = folders.find((f) => f.id === folderId);
     if (!folder) return new Response("não encontrado", { status: 404 });
     if (action === "/nome") {
-      if (!name) return this.avatarPage(user, avatar, ERROS.pastaNome, undefined, undefined, folder.parent_id);
+      if (!name) return this.avatarPage(user, avatar, ERROS.pastaNome, undefined, undefined, folder.id);
       await this.db.renameFolder(avatar.id, folder.id, name);
-      return movedTo(request, form, avatar, folders, folder.parent_id);
-    }
-    if (action === "/mover") {
-      const to = String(form.get("destino") ?? "");
-      const target = inFolder(to);
-      if (to && !target) return new Response("não encontrado", { status: 404 });
-      // Para dentro dela mesma ou de uma pasta que está nela: a pasta sumiria da árvore.
-      if (target && folderPath(folders, target.id).some((f) => f.id === folder.id)) return new Response("destino inválido", { status: 400 });
-      await this.db.moveFolder(avatar.id, folder.id, target?.id ?? null);
-      return movedTo(request, form, avatar, folders, folder.parent_id);
+      return movedTo(request, form, avatar, folders, null);
     }
     if (action === "/apagar") {
-      await this.db.deleteFolder(folder);
-      return redirect(folderHref(avatar.id, folder.parent_id));
+      // A pessoa escolhe: os itens são apagados junto, ou voltam para a lista de ativos.
+      const keys = await this.db.deleteFolder(folder, form.get("itens") === "apagar");
+      if (keys.length) await this.media.delete(keys);
+      return redirect(folderHref(avatar.id, null));
     }
     return new Response("não encontrado", { status: 404 });
   }
@@ -2147,10 +2138,12 @@ function library<T>(o: {
   /** Lista em páginas: o total de itens (o contador) e a paginação, no fim. */
   total?: number;
   pager?: string;
-  /** O que vem antes dos itens, também na lista vazia (o caminho e as pastas dos ativos). */
+  /** O que vem antes dos itens, também na lista vazia (o caminho da pasta aberta e os diálogos). */
   lead?: string;
+  /** Itens fixos no começo da lista, fora do contador e da ordem (as pastas): os cards e as linhas, prontos. */
+  first?: { frames: string; rows: string };
 }): string {
-  if (!o.items.length) return `<div class="library"><div class="library__head">${o.head("")}${o.action ? `<div class="library__end">${o.action}</div>` : ""}</div>${o.lead ?? ""}${o.empty}</div>`;
+  if (!o.items.length && !o.first) return `<div class="library"><div class="library__head">${o.head("")}${o.action ? `<div class="library__end">${o.action}</div>` : ""}</div>${o.lead ?? ""}${o.empty}</div>`;
   const chips = o.filters
     .map((f, i) => `<button class="chip interactive" type="button" data-filter="${f.kind ?? ""}" aria-pressed="${i === 0}"><span class="icon chip__check">check</span>${esc(f.label)}</button>`)
     .join("");
@@ -2181,7 +2174,7 @@ function library<T>(o: {
       </div>
       <div class="vrows__head" role="row" aria-hidden="true">${o.columns}</div>
       <p class="library__empty" data-library-empty hidden>${esc(o.noMatch)}</p>
-      <div class="library__groups" data-groups>${[...groups].map(section).join("")}</div>
+      <div class="library__groups" data-groups>${o.first ? `<section class="vgroup" data-group data-pinned><div class="frames" data-items>${o.first.frames}</div><div class="vrows" role="rowgroup" data-items>${o.first.rows}</div></section>` : ""}${[...groups].map(section).join("")}</div>
       ${o.pager ?? ""}
     </div>`;
 }
@@ -2345,16 +2338,8 @@ const AUDIO_THUMB = `<span class="frame__placeholder"><span class="icon-tile ico
 /** Quantas pastas um avatar pode ter. */
 export const MAX_FOLDERS = 200;
 
-/** A lista de ativos do avatar, aberta numa pasta (ou na raiz). */
+/** A lista de ativos do avatar, ou uma pasta dele aberta. */
 const folderHref = (avatarId: string, folderId: string | null) => `/avatares/${avatarId}${folderId ? `?pasta=${folderId}` : ""}`;
-
-/** O caminho da raiz até a pasta (ela por último); vazio na raiz. */
-function folderPath(folders: Folder[], id: string | null): Folder[] {
-  const path: Folder[] = [];
-  // O limite evita laço se o banco tiver um ciclo.
-  for (let f = folders.find((x) => x.id === id); f && path.length <= folders.length; f = folders.find((x) => x.id === f!.parent_id)) path.unshift(f);
-  return path;
-}
 
 /** Depois de mover ou renomear: o script (arrastar) recebe 204; sem ele, volta de onde veio. */
 function movedTo(request: Request, form: FormData, avatar: Avatar, folders: Folder[], fallback: string | null): Response {
@@ -2366,56 +2351,42 @@ function movedTo(request: Request, form: FormData, avatar: Avatar, folders: Fold
 }
 
 /**
- * "Mover para" (M3: diálogo básico com lista): a raiz e todas as pastas do avatar, na ordem da
- * árvore. Na lista do avatar, o script diz o que está sendo movido (`action`, e desliga a pasta
- * onde o item já está e, movendo uma pasta, ela e as de dentro); na página do ativo, vem pronto.
+ * "Mover para" (M3: diálogo básico com lista): a lista de ativos e as pastas do avatar. Na lista
+ * do avatar, o script diz qual ativo está sendo movido e desliga onde ele já está; na página do
+ * ativo, o diálogo vem pronto (`action`, `at`).
  */
 function moveDialog(folders: Folder[], o: { action?: string; at?: string | null; back?: string; volta?: string } = {}): string {
-  const rows: { id: string; name: string; depth: number; path: string }[] = [{ id: "", name: "Ativos", depth: 0, path: "" }];
-  const walk = (parent: string | null, depth: number, path: string) => {
-    for (const f of folders.filter((x) => x.parent_id === parent)) {
-      rows.push({ id: f.id, name: f.name, depth, path: `${path}/${f.id}` });
-      if (depth <= folders.length) walk(f.id, depth + 1, `${path}/${f.id}`);
-    }
-  };
-  walk(null, 1, "");
-  const option = (r: (typeof rows)[number]) =>
-    `<li><button class="avatar-option interactive" type="submit" name="destino" value="${r.id}" data-path="${r.path}" style="padding-left:${8 + r.depth * 24}px"${o.action && (o.at ?? "") === r.id ? " disabled" : ""}><span class="icon-tile icon-tile--secondary" aria-hidden="true"><span class="icon">${r.id ? "folder" : "photo_library"}</span></span><span class="avatar-option__text"><span class="vrow__headline">${esc(r.name)}</span></span></button></li>`;
+  const option = (id: string, name: string) =>
+    `<li><button class="avatar-option interactive" type="submit" name="destino" value="${id}"${o.action && (o.at ?? "") === id ? " disabled" : ""}><span class="icon-tile icon-tile--secondary" aria-hidden="true"><span class="icon">${id ? "folder" : "photo_library"}</span></span><span class="avatar-option__text"><span class="vrow__headline">${esc(name)}</span></span></button></li>`;
   return `<dialog class="dialog" id="mover" aria-labelledby="mover-titulo">
     <h2 class="dialog__title" id="mover-titulo">Mover para</h2>
     <form method="post" action="${o.action ?? ""}" data-move-form>
       ${o.back ? `<input type="hidden" name="de" value="${esc(o.back)}">` : ""}
       <input type="hidden" name="volta" value="${o.volta ?? ""}">
-      <ul class="dialog__list">${rows.map(option).join("")}</ul>
+      <ul class="dialog__list">${option("", "Ativos")}${folders.map((f) => option(f.id, f.name)).join("")}</ul>
     </form>
     <form class="dialog__actions" method="dialog"><button class="button button--text interactive" type="submit">Cancelar</button></form>
   </dialog>`;
 }
 
+const FOLDER_THUMB = `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--secondary" aria-hidden="true"><span class="icon">folder</span></span></span>`;
+const itemCount = (n: number) => (n === 1 ? "1 item" : `${n} itens`);
+
 /**
- * As pastas na lista de ativos do avatar, no molde do Google Drive: o caminho (dentro de uma
- * pasta), as pastas dela em cards e os diálogos (nome, mover, apagar). Tocar abre; o menu (botão
- * direito ou os três pontos) renomeia, move e apaga; arrastar um ativo ou uma pasta para cima de
- * outra (ou do caminho) move.
+ * As pastas na lista de ativos do avatar (simples, sem pasta dentro de pasta). Fora de pasta, cada
+ * uma é um item da própria lista (`folderItems`); dentro de uma, este é o caminho de volta, com
+ * renomear e apagar. Aqui também ficam o menu do item e os diálogos de nome, mover e apagar.
  */
 function folderLead(avatar: Avatar, assets: AvatarAsset[], folders: Folder[], current: Folder | null): string {
-  const here = current?.id ?? null;
-  const path = folderPath(folders, here);
-  const crumb = (label: string, id: string | null, last: boolean) =>
-    last
-      ? `<span class="crumbs__item crumbs__item--current" aria-current="page">${esc(label)}</span>`
-      : `<a class="crumbs__item interactive" href="${folderHref(avatar.id, id)}" data-drop="${id ?? ""}">${esc(label)}</a><span class="icon" aria-hidden="true">chevron_right</span>`;
-  const crumbs = current ? `<nav class="crumbs" aria-label="Pasta aberta">${crumb("Ativos", null, false)}${path.map((f, i) => crumb(f.name, f.id, i === path.length - 1)).join("")}</nav>` : "";
-  const inside = (id: string) => assets.filter((a) => a.folder_id === id).length + folders.filter((f) => f.parent_id === id).length;
-  const card = (f: Folder) => {
-    const n = inside(f.id);
-    return `<div class="folder" draggable="true" data-folder="${f.id}" data-drop="${f.id}" data-move="/avatares/${avatar.id}/pastas/${f.id}/mover" data-at="${here ?? ""}" data-name="${esc(f.name)}">
-          <a class="folder__link interactive" href="${folderHref(avatar.id, f.id)}" draggable="false"><span class="icon" aria-hidden="true">folder</span><span class="folder__text"><span class="folder__name">${esc(f.name)}</span><span class="folder__count">${n === 1 ? "1 item" : `${n} itens`}</span></span></a>
-          <button class="icon-button interactive" type="button" data-item-menu-open aria-label="Mais opções de ${esc(f.name)}" title="Mais opções"><span class="icon">more_vert</span></button>
-        </div>`;
-  };
-  const children = folders.filter((f) => f.parent_id === here);
-  return `${crumbs}${children.length ? `<div class="folders" aria-label="Pastas">${children.map(card).join("")}</div>` : ""}
+  const data = (f: Folder) => `data-folder="/avatares/${avatar.id}/pastas/${f.id}" data-name="${esc(f.name)}" data-count="${assets.filter((a) => a.folder_id === f.id).length}"`;
+  const crumbs = current
+    ? `<div class="crumbs" ${data(current)}>
+        <nav class="crumbs__path" aria-label="Pasta aberta"><a class="crumbs__item interactive" href="${folderHref(avatar.id, null)}" data-drop="">Ativos</a><span class="icon" aria-hidden="true">chevron_right</span><span class="crumbs__item crumbs__item--current" aria-current="page">${esc(current.name)}</span></nav>
+        <button class="icon-button interactive" type="button" data-folder-act="renomear" aria-label="Renomear pasta" title="Renomear pasta"><span class="icon">edit</span></button>
+        <button class="icon-button interactive" type="button" data-folder-act="apagar" aria-label="Apagar pasta" title="Apagar pasta"><span class="icon">delete</span></button>
+      </div>`
+    : "";
+  return `${crumbs}
       <div class="menu__list context-menu" popover="manual" role="menu" aria-label="Opções" data-item-menu>
         <button class="menu__item interactive" type="button" role="menuitem" data-act="renomear"><span class="icon">edit</span>Renomear</button>
         <button class="menu__item interactive" type="button" role="menuitem" data-act="mover"><span class="icon">drive_file_move</span>Mover para</button>
@@ -2424,9 +2395,8 @@ function folderLead(avatar: Avatar, assets: AvatarAsset[], folders: Folder[], cu
       <dialog class="dialog" id="pasta-nome" aria-labelledby="pasta-nome-titulo">
         <h2 class="dialog__title" id="pasta-nome-titulo" data-label-new="Nova pasta" data-label-rename="Renomear pasta">Nova pasta</h2>
         <form class="dialog__form" method="post" action="/avatares/${avatar.id}/pastas" data-new-action="/avatares/${avatar.id}/pastas" id="pasta-nome-form">
-          <input type="hidden" name="pasta" value="${here ?? ""}">
-          <input type="hidden" name="volta" value="${here ?? ""}">
-          ${textField("nome", "Nome da pasta", `type="text" maxlength="${MAX_NAME}" autocomplete="off" required`)}
+          <input type="hidden" name="volta" value="${current?.id ?? ""}">
+          ${textField("nome", "Nome da pasta", `type="text" maxlength="${MAX_NAME}" autocomplete="off" required`).replace('id="nome"', 'id="pasta-nome-campo"').replace('for="nome"', 'for="pasta-nome-campo"')}
         </form>
         <div class="dialog__actions">
           <button class="button button--text interactive" type="submit" form="pasta-nome-fechar">Cancelar</button>
@@ -2436,20 +2406,48 @@ function folderLead(avatar: Avatar, assets: AvatarAsset[], folders: Folder[], cu
       </dialog>
       <dialog class="dialog" id="pasta-apagar" aria-labelledby="pasta-apagar-titulo">
         <h2 class="dialog__title" id="pasta-apagar-titulo">Apagar a pasta?</h2>
-        <p class="dialog__text">Os arquivos e as pastas de dentro voltam para a pasta de cima. Nenhum arquivo é apagado.</p>
+        <p class="dialog__text" data-with-items="Quer apagar junto os itens da pasta? Se não, eles voltam para a lista de ativos." data-empty="A pasta está vazia.">A pasta está vazia.</p>
         <form method="post" action="" id="pasta-apagar-form"></form>
         <div class="dialog__actions">
-          <button class="button button--text interactive" type="submit" form="pasta-apagar-fechar">Cancelar</button>
-          <button class="button button--filled interactive" type="submit" form="pasta-apagar-form"><span class="icon">delete</span>Apagar pasta</button>
+          <button class="button button--text interactive dialog__start" type="submit" form="pasta-apagar-fechar">Cancelar</button>
+          <button class="button button--text interactive" type="submit" form="pasta-apagar-form" name="itens" value="manter" data-label-keep="Manter os itens" data-label-empty="Apagar pasta">Apagar pasta</button>
+          <button class="button button--filled interactive" type="submit" form="pasta-apagar-form" name="itens" value="apagar" hidden><span class="icon">delete</span>Apagar tudo</button>
         </div>
         <form method="dialog" id="pasta-apagar-fechar"></form>
       </dialog>
-      ${moveDialog(folders, { volta: here ?? "" })}`;
+      ${moveDialog(folders, { volta: current?.id ?? "" })}`;
+}
+
+/**
+ * As pastas como itens da lista de ativos, antes dos arquivos: o mesmo card e a mesma linha, com o
+ * ícone de pasta no lugar da imagem. Tocar abre; o botão direito tem renomear e apagar; soltar um
+ * ativo em cima move para ela.
+ */
+function folderItems(avatar: Avatar, assets: AvatarAsset[], folders: Folder[]): { frames: string; rows: string } {
+  const item = (f: Folder) => {
+    const n = assets.filter((a) => a.folder_id === f.id).length;
+    const attrs = `href="${folderHref(avatar.id, f.id)}" data-kind="pasta" data-drop="${f.id}" data-folder="/avatares/${avatar.id}/pastas/${f.id}" data-name="${esc(f.name)}" data-count="${n}" draggable="false"`;
+    const label = esc(`Pasta ${f.name}, ${itemCount(n)}`);
+    return {
+      frame: `<a class="frame frame--folder interactive" ${attrs} aria-label="${label}" title="${esc(f.name)}"><span class="frame__media">${FOLDER_THUMB}<span class="frame__caption"><span class="frame__name">${esc(f.name)}</span><span class="frame__count">${itemCount(n)}</span></span></span></a>`,
+      row: `<a class="vrow interactive" ${attrs} role="row">
+          <span class="vrow__thumb" role="cell">${FOLDER_THUMB}</span>
+          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(f.name)}</span><span class="vrow__support">${itemCount(n)}</span></span>
+          <span class="vrow__status vrow__status--done" role="cell"><span class="icon">folder</span>Pasta</span>
+          <span role="cell">${itemCount(n)}</span>
+          <span class="vrow__wide" role="cell">—</span>
+          <span class="vrow__wide" role="cell">—</span>
+          <span role="cell">${esc(formatDate(f.created_at))}</span>
+        </a>`,
+    };
+  };
+  const items = folders.map(item);
+  return { frames: items.map((i) => i.frame).join(""), rows: items.map((i) => i.row).join("") };
 }
 
 function assetLibrary(all: AvatarAsset[], o: { key: string; avatar?: Avatar; src?: (a: AvatarAsset) => string; href?: (a: AvatarAsset) => string; folders?: { all: Folder[]; current: Folder | null } }): string {
   const { avatar } = o;
-  // Com pastas, a lista mostra só o que está na pasta aberta.
+  // Com pastas, a lista mostra o que está na pasta aberta ou, fora de pasta, as pastas e o que não está em nenhuma.
   const here = o.folders?.current?.id ?? null;
   const assets = o.folders ? all.filter((a) => (o.folders!.all.some((f) => f.id === a.folder_id) ? a.folder_id : null) === here) : all;
   const moving = (a: AvatarAsset) => (avatar && o.folders ? ` data-move="/avatares/${avatar.id}/arquivos/${a.id}/mover" data-at="${here ?? ""}" data-name="${esc(a.name)}"` : "");
@@ -2461,9 +2459,10 @@ function assetLibrary(all: AvatarAsset[], o: { key: string; avatar?: Avatar; src
     head: (count) => `<h2 class="library__title">Ativos <span class="pane__count"${count ? " data-library-count" : ""}>${count || 0}</span></h2>`,
     // No avatar ainda não salvo não há onde guardar arquivos.
     action: avatar
-      ? `${o.folders ? `<button class="button button--tonal interactive" type="button" data-folder-new><span class="icon">create_new_folder</span>Nova pasta</button>` : ""}${fabUpload("upload", "Adicionar arquivo", `/avatares/${avatar.id}/arquivos${here ? `?pasta=${here}` : ""}`, ASSET_ACCEPT)}`
+      ? `${o.folders && !here ? `<button class="button button--tonal interactive" type="button" data-folder-new><span class="icon">create_new_folder</span>Nova pasta</button>` : ""}${fabUpload("upload", "Adicionar arquivo", `/avatares/${avatar.id}/arquivos${here ? `?pasta=${here}` : ""}`, ASSET_ACCEPT)}`
       : undefined,
     lead: avatar && o.folders ? folderLead(avatar, all, o.folders.all, o.folders.current) : undefined,
+    first: avatar && o.folders && !here && o.folders.all.length ? folderItems(avatar, all, o.folders.all) : undefined,
     empty: here ? emptyState("folder_open", "Pasta vazia", "Envie arquivos ou mova ativos para cá.") : emptyState("face", "Nenhum ativo ainda", "Envie arquivos ou salve o que um modelo criar."),
     items: assets,
     date: (a) => a.created_at,
@@ -3711,10 +3710,11 @@ const SCRIPT = `(() => {
       for (const g of groups.children) {
         let n = 0;
         for (const list of g.querySelectorAll("[data-items]")) for (const it of list.children) { const show = !kind || it.dataset.kind === kind; it.hidden = !show; if (show) n++; }
-        g.hidden = n === 0; total += n / 2;
+        // Os itens fixos (as pastas) somem com um filtro de tipo e não entram no contador.
+        g.hidden = n === 0; if (!g.hasAttribute("data-pinned")) total += n / 2;
       }
       // Sem filtro, o contador é o da lista inteira (todas as páginas); com filtro, o que a página mostra.
-      count.textContent = kind ? total : count.dataset.total || total; empty.hidden = total > 0;
+      count.textContent = kind ? total : count.dataset.total || total; empty.hidden = total > 0 || (!kind && !!groups.querySelector("[data-pinned]"));
     };
     for (const c of lib.querySelectorAll("[data-filter]")) c.addEventListener("click", () => {
       for (const o of lib.querySelectorAll("[data-filter]")) o.setAttribute("aria-pressed", String(o === c));
@@ -3722,8 +3722,11 @@ const SCRIPT = `(() => {
     });
     const sort = lib.querySelector("[data-sort]");
     sort.addEventListener("click", () => {
+      // Os itens fixos (as pastas) ficam no começo, na mesma ordem.
+      const pinned = groups.querySelector("[data-pinned]");
       groups.append(...[...groups.children].reverse());
-      for (const list of groups.querySelectorAll("[data-items]")) list.append(...[...list.children].reverse());
+      for (const list of groups.querySelectorAll("[data-group]:not([data-pinned]) [data-items]")) list.append(...[...list.children].reverse());
+      if (pinned) groups.prepend(pinned);
       const label = sort.querySelector("[data-sort-label]"), recent = label.textContent === "Mais recentes";
       label.textContent = recent ? "Mais antigos" : "Mais recentes";
       sort.setAttribute("aria-label", recent ? "Ordem: mais antigos primeiro" : "Ordem: mais recentes primeiro");
@@ -3780,62 +3783,73 @@ const SCRIPT = `(() => {
   };
   initLibrary(document.querySelector("[data-library]"));
 
-  // Pastas dos ativos (página do avatar): o menu do item (botão direito ou os três pontos), os
-  // diálogos de nome, de mover e de apagar, e arrastar um ativo ou uma pasta para dentro de outra.
+  // Pastas dos ativos (página do avatar): o menu do item (botão direito), os diálogos de nome, de
+  // mover e de apagar, e arrastar um ativo para dentro de uma pasta (ou de volta para a lista).
   const itemMenu = document.querySelector("[data-item-menu]");
   if (itemMenu) {
     const box = itemMenu.closest(".library"), moveDialog = document.getElementById("mover"), moveForm = moveDialog.querySelector("[data-move-form]");
     const nameDialog = document.getElementById("pasta-nome"), nameForm = document.getElementById("pasta-nome-form"), delDialog = document.getElementById("pasta-apagar");
-    const read = (el) => ({ move: el.dataset.move, name: el.dataset.name || "", folder: el.dataset.folder || "", at: el.dataset.at || "" });
+    // O item tocado: um ativo (move) ou uma pasta (folder, com o nome e quantos itens tem).
+    const read = (el) => ({ move: el.dataset.move || "", folder: el.dataset.folder || "", name: el.dataset.name || "", at: el.dataset.at || "", count: Number(el.dataset.count) || 0 });
     let item = null;
-    const openMenu = (el, x, y) => {
-      item = read(el);
-      // Um ativo só se move; a pasta também muda de nome e pode ser apagada.
-      for (const b of itemMenu.querySelectorAll("[data-act]")) b.hidden = !item.folder && b.dataset.act !== "mover";
-      itemMenu.style.left = Math.max(8, Math.min(x, innerWidth - 232)) + "px";
-      itemMenu.style.top = Math.max(8, Math.min(y, innerHeight - 160)) + "px";
-      itemMenu.showPopover();
-      itemMenu.querySelector(".menu__item:not([hidden])").focus();
+    const naming = (rename) => {
+      const title = nameDialog.querySelector(".dialog__title"), ok = nameDialog.querySelector("button[data-label-new]");
+      title.textContent = rename ? title.dataset.labelRename : title.dataset.labelNew;
+      ok.textContent = rename ? ok.dataset.labelRename : ok.dataset.labelNew;
+      nameForm.action = rename ? item.folder + "/nome" : nameForm.dataset.newAction;
+      nameForm.elements.nome.value = rename ? item.name : "";
+      nameDialog.showModal();
+      nameForm.elements.nome.select();
+    };
+    // Apagar pergunta dos itens: apagar junto ou devolver à lista. Pasta vazia, só confirma.
+    const deleting = () => {
+      const text = delDialog.querySelector(".dialog__text"), keep = delDialog.querySelector('[name=itens][value="manter"]'), all = delDialog.querySelector('[name=itens][value="apagar"]');
+      delDialog.querySelector(".dialog__title").textContent = "Apagar a pasta “" + item.name + "”?";
+      text.textContent = item.count ? (item.count === 1 ? "A pasta tem 1 item. " : "A pasta tem " + item.count + " itens. ") + text.dataset.withItems : text.dataset.empty;
+      keep.textContent = item.count ? keep.dataset.labelKeep : keep.dataset.labelEmpty;
+      keep.classList.toggle("button--filled", !item.count);
+      keep.classList.toggle("button--text", !!item.count);
+      all.hidden = !item.count;
+      document.getElementById("pasta-apagar-form").action = item.folder + "/apagar";
+      delDialog.showModal();
+    };
+    const act = (name) => {
+      if (name === "renomear") naming(true);
+      else if (name === "apagar") deleting();
+      else {
+        moveForm.action = item.move;
+        // Onde o ativo já está fica desligado.
+        for (const o of moveForm.querySelectorAll("[name=destino]")) o.disabled = o.value === item.at;
+        moveDialog.showModal();
+      }
     };
     // O menu fecha por aqui (popover manual): o próprio botão direito que o abre o fecharia, ao soltar.
     document.addEventListener("pointerdown", (e) => { if (itemMenu.matches(":popover-open") && !itemMenu.contains(e.target)) itemMenu.hidePopover(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && itemMenu.matches(":popover-open")) itemMenu.hidePopover(); });
     box.addEventListener("contextmenu", (e) => {
-      const el = e.target.closest("[data-move]");
+      const el = e.target.closest("[data-move], [data-folder]");
       if (!el) return;
       e.preventDefault();
-      openMenu(el, e.clientX, e.clientY);
+      item = read(el);
+      // O ativo se move; a pasta muda de nome e pode ser apagada.
+      for (const b of itemMenu.querySelectorAll("[data-act]")) b.hidden = (b.dataset.act === "mover") === !!item.folder;
+      itemMenu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - 232)) + "px";
+      itemMenu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - 120)) + "px";
+      itemMenu.showPopover();
+      itemMenu.querySelector(".menu__item:not([hidden])").focus();
     });
-    box.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-item-menu-open]");
-      if (!b) return;
-      const r = b.getBoundingClientRect();
-      openMenu(b.closest("[data-move]"), r.left, r.bottom + 4);
-    });
-    const naming = (rename) => {
-      const title = nameDialog.querySelector(".dialog__title"), ok = nameDialog.querySelector("button[data-label-new]");
-      title.textContent = rename ? title.dataset.labelRename : title.dataset.labelNew;
-      ok.textContent = rename ? ok.dataset.labelRename : ok.dataset.labelNew;
-      nameForm.action = rename ? item.move.replace(/mover$/, "nome") : nameForm.dataset.newAction;
-      nameForm.elements.nome.value = rename ? item.name : "";
-      nameDialog.showModal();
-      nameForm.elements.nome.select();
-    };
     itemMenu.addEventListener("click", (e) => {
       const b = e.target.closest("[data-act]");
       if (!b || !item) return;
       itemMenu.hidePopover();
-      if (b.dataset.act === "renomear") naming(true);
-      else if (b.dataset.act === "mover") {
-        moveForm.action = item.move;
-        // Não vai para onde já está; a pasta não vai para dentro dela mesma nem das que estão nela.
-        for (const o of moveForm.querySelectorAll("[name=destino]")) o.disabled = o.value === item.at || (item.folder !== "" && o.dataset.path.split("/").includes(item.folder));
-        moveDialog.showModal();
-      } else {
-        delDialog.querySelector(".dialog__title").textContent = "Apagar a pasta “" + item.name + "”?";
-        document.getElementById("pasta-apagar-form").action = item.move.replace(/mover$/, "apagar");
-        delDialog.showModal();
-      }
+      act(b.dataset.act);
+    });
+    // Dentro da pasta: renomear e apagar ficam ao lado do caminho.
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-folder-act]");
+      if (!b) return;
+      item = read(b.closest("[data-folder]"));
+      act(b.dataset.folderAct);
     });
     const newFolder = box.querySelector("[data-folder-new]");
     if (newFolder) newFolder.addEventListener("click", () => naming(false));
@@ -3850,10 +3864,10 @@ const SCRIPT = `(() => {
     });
     const dropOff = () => { for (const d of box.querySelectorAll(".is-drop")) d.classList.remove("is-drop"); };
     box.addEventListener("dragend", () => { dragging = null; dropOff(); });
-    // Onde o item pode cair: outra pasta ou um nível do caminho, menos onde ele já está e ele mesmo.
+    // Onde o ativo pode cair: uma pasta ou, de dentro de uma, "Ativos" no caminho; nunca onde ele já está.
     const target = (e) => {
       const d = dragging && e.target.closest && e.target.closest("[data-drop]");
-      return d && d.dataset.drop !== dragging.at && d.dataset.drop !== dragging.folder ? d : null;
+      return d && d.dataset.drop !== dragging.at ? d : null;
     };
     box.addEventListener("dragover", (e) => {
       const d = target(e);

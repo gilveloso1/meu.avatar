@@ -232,16 +232,15 @@ export interface AvatarAsset {
   source_video: string | null;
   /** Onde está o rosto, em imagens e vídeos: o mesmo JSON de videos.face. */
   face: string | null;
-  /** A pasta do avatar em que o ativo está; vazio, a raiz (a lista Ativos). */
+  /** A pasta do avatar em que o ativo está; vazio, fora de pasta (a lista Ativos). */
   folder_id: string | null;
   created_at: string;
 }
 
-/** Pasta dos ativos de um avatar: pode ficar dentro de outra (`parent_id`; vazio, na raiz). */
+/** Pasta dos ativos de um avatar: simples, sem pasta dentro de pasta. */
 export interface Folder {
   id: string;
   avatar_id: string;
-  parent_id: string | null;
   name: string;
   created_at: string;
 }
@@ -683,34 +682,42 @@ export class Db {
 
   // --- Pastas dos ativos de um avatar (quem chama já conferiu o dono do avatar) ---
 
-  /** As pastas do avatar, todas, pelo nome. */
+  /** As pastas do avatar, pelo nome. */
   async folders(avatarId: string): Promise<Folder[]> {
     return (await this.d1.prepare("SELECT * FROM folders WHERE avatar_id = ? ORDER BY name COLLATE NOCASE, created_at").bind(avatarId).all<Folder>()).results;
   }
 
   async insertFolder(f: Omit<Folder, "created_at">, now = new Date()): Promise<void> {
-    await this.d1.prepare("INSERT INTO folders (id, avatar_id, parent_id, name, created_at) VALUES (?, ?, ?, ?, ?)").bind(f.id, f.avatar_id, f.parent_id, f.name, now.toISOString()).run();
+    await this.d1.prepare("INSERT INTO folders (id, avatar_id, name, created_at) VALUES (?, ?, ?, ?)").bind(f.id, f.avatar_id, f.name, now.toISOString()).run();
   }
 
   async renameFolder(avatarId: string, id: string, name: string): Promise<void> {
     await this.d1.prepare("UPDATE folders SET name = ? WHERE id = ? AND avatar_id = ?").bind(name, id, avatarId).run();
   }
 
-  /** Põe a pasta dentro de outra (ou na raiz). Quem chama confere que o destino não está dentro dela. */
-  async moveFolder(avatarId: string, id: string, parentId: string | null): Promise<void> {
-    await this.d1.prepare("UPDATE folders SET parent_id = ? WHERE id = ? AND avatar_id = ?").bind(parentId, id, avatarId).run();
-  }
-
-  /** Apaga só a pasta: as pastas e os ativos de dentro sobem para a pasta de cima. Nenhum arquivo é apagado. */
-  async deleteFolder(folder: Folder): Promise<void> {
+  /**
+   * Apaga a pasta. Com `withItems`, os ativos dela são apagados junto (a foto principal e a voz do
+   * avatar esvaziam, como ao apagar um ativo) e voltam as chaves dos arquivos do avatar a tirar do
+   * R2; sem, os ativos voltam para a lista, fora de pasta, e nenhum arquivo é apagado.
+   */
+  async deleteFolder(folder: Folder, withItems: boolean): Promise<string[]> {
+    const inside = "SELECT id FROM avatar_assets WHERE folder_id = ?1 AND avatar_id = ?2";
+    const drop = this.d1.prepare("DELETE FROM folders WHERE id = ?1 AND avatar_id = ?2").bind(folder.id, folder.avatar_id);
+    if (!withItems) {
+      await this.d1.batch([this.d1.prepare("UPDATE avatar_assets SET folder_id = NULL WHERE folder_id = ?1 AND avatar_id = ?2").bind(folder.id, folder.avatar_id), drop]);
+      return [];
+    }
+    const keys = (await this.d1.prepare("SELECT key FROM avatar_assets WHERE folder_id = ?1 AND avatar_id = ?2 AND source_video IS NULL").bind(folder.id, folder.avatar_id).all<{ key: string }>()).results.map((r) => r.key);
     await this.d1.batch([
-      this.d1.prepare("UPDATE folders SET parent_id = ? WHERE parent_id = ? AND avatar_id = ?").bind(folder.parent_id, folder.id, folder.avatar_id),
-      this.d1.prepare("UPDATE avatar_assets SET folder_id = ? WHERE folder_id = ? AND avatar_id = ?").bind(folder.parent_id, folder.id, folder.avatar_id),
-      this.d1.prepare("DELETE FROM folders WHERE id = ? AND avatar_id = ?").bind(folder.id, folder.avatar_id),
+      this.d1.prepare(`UPDATE avatars SET photo_asset = NULL WHERE id = ?2 AND photo_asset IN (${inside})`).bind(folder.id, folder.avatar_id),
+      this.d1.prepare(`UPDATE avatars SET voice_asset = NULL WHERE id = ?2 AND voice_asset IN (${inside})`).bind(folder.id, folder.avatar_id),
+      this.d1.prepare("DELETE FROM avatar_assets WHERE folder_id = ?1 AND avatar_id = ?2").bind(folder.id, folder.avatar_id),
+      drop,
     ]);
+    return keys;
   }
 
-  /** Põe o ativo numa pasta do avatar (ou na raiz). */
+  /** Põe o ativo numa pasta do avatar (ou fora de pasta). */
   async moveAsset(avatarId: string, assetId: string, folderId: string | null): Promise<void> {
     await this.d1.prepare("UPDATE avatar_assets SET folder_id = ? WHERE id = ? AND avatar_id = ?").bind(folderId, assetId, avatarId).run();
   }

@@ -1,15 +1,14 @@
--- Pastas dos ativos de um avatar (pedido de 10/11/2026, no molde do Google Drive): pasta dentro
--- de pasta (parent_id; NULL é a raiz, a lista "Ativos" do avatar) e cada ativo numa pasta só
--- (avatar_assets.folder_id; NULL é a raiz). Sem chave estrangeira em parent_id e folder_id:
--- apagar uma pasta não apaga nada, o código sobe o que estava nela para a pasta de cima.
+-- Pastas dos ativos de um avatar (pedido de 10/11/2026): pasta simples, sem pasta dentro de pasta,
+-- e cada ativo numa pasta só (avatar_assets.folder_id; NULL é a lista "Ativos" do avatar). Sem
+-- chave estrangeira em folder_id: ao apagar a pasta, a pessoa escolhe se os itens são apagados
+-- junto ou se voltam para a lista, e é o código que faz um ou outro.
 CREATE TABLE folders (
     id         TEXT PRIMARY KEY,
     avatar_id  TEXT NOT NULL REFERENCES avatars(id) ON DELETE CASCADE,
-    parent_id  TEXT,
     name       TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
 
-CREATE INDEX folders_by_avatar ON folders (avatar_id, parent_id);
+CREATE INDEX folders_by_avatar ON folders (avatar_id);
 
 ALTER TABLE avatar_assets ADD COLUMN folder_id TEXT;
