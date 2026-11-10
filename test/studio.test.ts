@@ -12,10 +12,11 @@ import { estimate } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
 import { GROK, GROK_GUIDE } from "../src/structures/grok";
+import { MISCHIEF, MISCHIEF_GUIDE } from "../src/structures/mischief";
 import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_11, OMNI_SILENT, OMNI_SILENT_GUIDE, OMNI_SINGLE_SHOT } from "../src/structures/omni";
 import { IMAGE_GUIDE, IMAGE_REFERENCE_GUIDE, NANO_BANANA } from "../src/structures/imagem";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
-import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, OMNI_11_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, dono, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
+import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_11_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, dono, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
@@ -671,6 +672,63 @@ describe("Grok Imagine 1.5 Lite", () => {
     expect(await (await get("/", member)).text()).not.toContain("/modelo/grok");
     expect((await get("/modelo/grok", member)).status).toBe(404);
     const res = await call(postForm("/modelo/grok", { movimento: MOVIMENTO, imagem: foto() }, { cookie: member }), api);
+    expect(res.status).toBe(404);
+    expect(api.submitted).toHaveLength(0);
+  });
+});
+
+describe("mischief 1", () => {
+  const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
+  const MOVIMENTO = "a câmera se aproxima devagar do frasco na mesa";
+
+  it("o custo é o da resolução em dólar por segundo, sem foto", () => {
+    const values = (name: string) => ({ resolucao: "720p", duracao: "5" })[name] ?? "";
+    expect(MISCHIEF.prices!(MISCHIEF_MODEL)).toEqual({ "480p": "0.005", "720p": "0.01" });
+    expect(estimate(MISCHIEF, MISCHIEF_MODEL, values)).toBeCloseTo(0.05);
+  });
+
+  it("o formulário pede o movimento e a foto; 5 s, 720p e o único formato, 16:9", async () => {
+    const page = await (await get("/modelo/mischief")).text();
+    expect(page).toContain('name="movimento"');
+    expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
+    expect(page).toMatch(/<option value="5" selected/);
+    expect(page).toContain('value="720p" checked');
+    expect(page).toContain("O modelo só faz este formato.");
+    expect(page).not.toContain('name="fala"');
+  });
+
+  it("manda o movimento com o guia, a foto como primeiro quadro e sem áudio", async () => {
+    const api = new FakeVideoApi();
+    const res = await post(api, { movimento: MOVIMENTO, imagem: foto(), duracao: "3", resolucao: "480p", formato: "16:9" }, "mischief");
+    expect(res.status).toBe(303);
+    const [req] = api.submitted;
+    expect(req).toMatchObject({ model: "tbc/mischief-1", prompt: `${MOVIMENTO} ${MISCHIEF_GUIDE}`, duration: 3, resolution: "480p", aspect_ratio: "16:9", generate_audio: false });
+    expect(req!.frame_images![0]).toMatchObject({ frame_type: "first_frame" });
+    const [video] = await new Db(env.DB).recentVideos();
+    expect(video).toMatchObject({ structure: "mischief", prompt: "", extra: MOVIMENTO, duration: 3 });
+  });
+
+  it("recusa sem foto, vertical e duração fora do modelo", async () => {
+    const api = new FakeVideoApi();
+    const casos: [Record<string, string | File>, string][] = [
+      [{ movimento: MOVIMENTO }, ERROS.foto],
+      [{ movimento: MOVIMENTO, imagem: foto(), formato: "9:16" }, ERROS.ajustesNaoAceitos],
+      [{ movimento: MOVIMENTO, imagem: foto(), duracao: "4" }, ERROS.ajustesNaoAceitos],
+    ];
+    for (const [fields, erro] of casos) {
+      const res = await post(api, fields, "mischief");
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(erro);
+    }
+    expect(api.submitted).toHaveLength(0);
+  });
+
+  it("conta comum não vê nem usa o mischief", async () => {
+    const api = new FakeVideoApi();
+    const member = await memberCookie();
+    expect(await (await get("/", member)).text()).not.toContain("/modelo/mischief");
+    expect((await get("/modelo/mischief", member)).status).toBe(404);
+    const res = await call(postForm("/modelo/mischief", { movimento: MOVIMENTO, imagem: foto() }, { cookie: member }), api);
     expect(res.status).toBe(404);
     expect(api.submitted).toHaveLength(0);
   });

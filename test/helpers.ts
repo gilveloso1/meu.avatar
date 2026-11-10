@@ -67,6 +67,17 @@ export const GROK_MODEL: VideoModel = {
   pricing_skus: { cents_per_image_input: "1", cents_per_video_output_second_480p: "2", cents_per_video_output_second_720p: "3", cents_per_video_output_second_1080p: "14" },
 };
 
+export const MISCHIEF_MODEL: VideoModel = {
+  id: "tbc/mischief-1",
+  name: "TBC: mischief 1",
+  supported_durations: [3, 5],
+  supported_resolutions: ["480p", "720p"],
+  supported_aspect_ratios: ["16:9"],
+  supported_frame_images: ["first_frame"],
+  generate_audio: false,
+  pricing_skus: { cents_per_video_output_second_480p: "0.5", cents_per_video_output_second_720p: "1" },
+};
+
 export const OMNI_MODEL: VideoModel = {
   id: "google/gemini-omni-1.2-flash",
   name: "Google: Gemini Omni 1.2 Flash",
@@ -96,7 +107,7 @@ export const OMNI_11_MODEL: VideoModel = {
   },
 };
 
-const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, GROK_MODEL, OMNI_MODEL, OMNI_11_MODEL];
+const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_MODEL, OMNI_11_MODEL];
 
 /** Nano Banana 2.1 pela lista de imagens: cobra por token de saída (endpoints). */
 export const BANANA_MODEL: VideoModel = {
