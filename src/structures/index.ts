@@ -80,14 +80,20 @@ export function estimate(structure: Structure, model: VideoModel, values: Values
   const price = Number(prices(structure, model)[rule.sku.replace(/\{(\w+)\}/g, (_, name: string) => values(name))]);
   // Fala: o preço é por caractere do texto, sem nada fixo.
   if ("characters" in rule.seconds) {
-    const characters = values(rule.seconds.characters).replace(/\s+/g, " ").trim().length;
+    const text = values(rule.seconds.characters);
+    const characters = (rule.seconds.sent?.(text) ?? text).replace(/\s+/g, " ").trim().length;
     return price && characters ? price * characters : undefined;
   }
   const seconds =
     "speech" in rule.seconds && rule.seconds.audio && values("fonte") === "audio"
       ? 0
       : "field" in rule.seconds ? Number(values(rule.seconds.field)) : "speech" in rule.seconds ? speechSeconds(values(rule.seconds.speech), structure.wordsPerSecond) : "fixed" in rule.seconds ? rule.seconds.fixed : 0;
-  return price && seconds ? price * seconds + fixedCost(structure, model) : undefined;
+  return price && seconds ? price * billedSeconds(rule, seconds) + fixedCost(structure, model) : undefined;
+}
+
+/** Os segundos que o provedor cobra por um vídeo de `seconds` (o mínimo e o teto da regra). */
+export function billedSeconds(rule: CostRule, seconds: number): number {
+  return Math.min(Math.max(seconds, rule.billed?.min ?? 0), rule.billed?.max ?? Infinity);
 }
 
 /** US$ fixos por vídeo, além do preço por segundo: o valor da regra e o SKU dela, se houver. */

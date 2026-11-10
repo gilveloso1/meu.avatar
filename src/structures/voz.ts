@@ -139,7 +139,8 @@ export function speechStructure(o: SpeechModel): Structure {
     treatAudio: false,
     quickEdit: false,
     wordsPerSecond: WORDS_PER_SECOND,
-    cost: { sku: "character", seconds: { characters: "texto" } },
+    // O provedor conta o texto enviado: as emoções já em inglês e juntas (speechText), como no speechCost.
+    cost: { sku: "character", seconds: { characters: "texto", sent: speechText } },
 
     sections(model, _defaults, lists = {}) {
       const voices = o.voices(model, lists);

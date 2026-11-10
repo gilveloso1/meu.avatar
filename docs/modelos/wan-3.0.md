@@ -27,7 +27,8 @@ Primeiro teste real (10/11/2026, o agente pelo MCP, três vídeos na lista do Wa
 
 - **Custo real abaixo da tabela**: US$ 0,0425 por segundo em 480p e 0,085 em 720p (o OpenRouter mandou
   para a Alibaba Cloud Int.), contra 0,05 e 0,10 da lista de modelos. A estimativa do site, que lê a
-  lista, sai uns 15% acima. Abaixo de 5 s não compensa: custa o mesmo que 5 s.
+  lista, sai uns 15% acima. Abaixo de 5 s não compensa: custa o mesmo que 5 s. A estimativa já conta
+  esse mínimo (`billed: { min: 5 }` no `wan.ts` e no `wan-livre.ts`, desde 10/11/2026).
 - **Sem som não é sem faixa**: com `generate_audio: false`, o vídeo ainda vem com uma faixa de som
   (sem silêncio medido, um ruído de fundo), como no Grok. Por cima entra outro áudio no canvas.
 - Falta testar a referência para vídeo (`referencias`).

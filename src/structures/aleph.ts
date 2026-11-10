@@ -145,7 +145,9 @@ export const ALEPH: Structure = {
   compose: true,
   quickEdit: true,
   wordsPerSecond: WORDS_PER_SECOND,
-  cost: { sku: "segundo", seconds: { video: "video" }, extra: KEYFRAMES * FACE_COST },
+  // A lista diz por segundo, mas a cobrança foi a de 5 s (US$ 1,40) em todo pedido, de 5,5 a 20,4 s
+  // (docs/modelos/runway-aleph-2.md); abaixo de 5 s, vale o por segundo da lista.
+  cost: { sku: "segundo", seconds: { video: "video" }, billed: { max: 5 }, extra: KEYFRAMES * FACE_COST },
 
   sections() {
     return [

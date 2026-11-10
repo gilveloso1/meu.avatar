@@ -94,11 +94,20 @@ export interface Defaults {
  * "duration_seconds_{resolucao}") vezes os segundos, que vêm de um campo, da
  * quantidade de palavras da fala ou da duração do vídeo enviado. Nos modelos de
  * fala (`characters`), o preço é por caractere do texto, e é ele que conta.
+ * Toda regra é conferida com o custo real em docs/modelos/ (o que o provedor cobrou).
  */
 export interface CostRule {
   sku: string;
-  /** `audio`: com esse áudio enviado (e visível), os segundos são os dele, não os da fala. */
-  seconds: { field: string } | { speech: string; audio?: string } | { video: string } | { fixed: number } | { characters: string };
+  /**
+   * `audio`: com esse áudio enviado (e visível), os segundos são os dele, não os da fala.
+   * `sent`: o texto como vai para o modelo (é dele que o provedor conta os caracteres).
+   */
+  seconds: { field: string } | { speech: string; audio?: string } | { video: string } | { fixed: number } | { characters: string; sent?: (text: string) => string };
+  /**
+   * Os segundos que o provedor cobra, quando não são os do vídeo: um mínimo (o Wan cobra 5 s por
+   * um vídeo de 3) ou um teto (o Aleph cobra 5 s por qualquer duração). Medido, em docs/modelos/.
+   */
+  billed?: { min?: number; max?: number };
   /** US$ fixos por vídeo, além do preço por segundo (as imagens dos quadros-chave do Aleph 2). */
   extra?: number;
   /** SKU de um preço fixo por vídeo, lido dos preços do modelo (a foto do Grok); soma ao `extra`. */

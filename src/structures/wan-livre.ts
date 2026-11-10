@@ -56,7 +56,8 @@ export const WAN_LIVRE: Structure = {
   treatAudio: true,
   quickEdit: false,
   wordsPerSecond: WORDS_PER_SECOND,
-  cost: { sku: "duration_seconds_{resolucao}", seconds: { field: "duracao" } },
+  // Abaixo de 5 s, o provedor cobra 5 s (docs/modelos/wan-3.0.md, teste de 10/11/2026).
+  cost: { sku: "duration_seconds_{resolucao}", seconds: { field: "duracao" }, billed: { min: 5 } },
 
   sections(model: VideoModel | null, d) {
     const durations = model?.supported_durations ?? [d.duration];
