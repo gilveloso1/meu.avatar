@@ -231,6 +231,15 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    para o administrador testar; ver abaixo)
 3. Voz gerada à parte e avatar falante (em andamento: o ElevenLabs gera a fala e o HeyGen
    anima a foto com ela; ver "Vozes dos personagens", acima)
+4. **Seedance: corrigir o 2.0 e adicionar o 2.5, para os vídeos permitidos** (pedido de
+   10/11/2026). Hoje a estrutura (`src/structures/seedance.ts`) só tem o uso "Trocar avatar", que a
+   ByteDance recusa (rosto que pareça real, na foto ou no vídeo; ver
+   [modelos/seedance-2.0.md](modelos/seedance-2.0.md)): o card do modelo só leva a um pedido que
+   falha. Trocar por usos que o provedor aceita (sem rosto realista na entrada: cenário, objeto,
+   personagem estilizado), sem contornar o filtro, e pôr o Seedance 2.5 (`bytedance/seedance-2.5`,
+   de 4 a 30 s) como versão do mesmo modelo, com a mesma regra. Conferir a estimativa de custo
+   (por tokens) no primeiro vídeo pronto: é o único modelo sem custo real para comparar
+   ([modelos/README.md](modelos/README.md)).
 
 ## Onde estamos (25/10/2026)
 
