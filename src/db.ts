@@ -903,6 +903,26 @@ export class Db {
     ]);
   }
 
+  /** Guarda a simulação de um gerar_* do agente; as vencidas saem junto. */
+  async addSimulacao(codigoHash: string, userId: number, pedido: string, custo: number | null, nowIso: string, expiresIso: string): Promise<void> {
+    await this.d1.batch([
+      this.d1.prepare("DELETE FROM simulacoes WHERE expires_at <= ?").bind(nowIso),
+      this.d1.prepare("INSERT INTO simulacoes (codigo_hash, user_id, pedido, custo, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)").bind(codigoHash, userId, pedido, custo, nowIso, expiresIso),
+    ]);
+  }
+
+  /**
+   * Gasta a simulação: só existe para a mesma conta e o mesmo pedido, dentro do prazo, e sai do
+   * banco na mesma instrução (dois pedidos com o mesmo código: só um a recebe). Devolve o custo
+   * que a pessoa viu, ou null se o código não vale.
+   */
+  async useSimulacao(codigoHash: string, userId: number, pedido: string, nowIso: string): Promise<{ custo: number | null } | null> {
+    return this.d1
+      .prepare("DELETE FROM simulacoes WHERE codigo_hash = ? AND user_id = ? AND pedido = ? AND expires_at > ? RETURNING custo")
+      .bind(codigoHash, userId, pedido, nowIso)
+      .first<{ custo: number | null }>();
+  }
+
   /** A conta do link, se ele ainda vale. */
   async inviteUser(tokenHash: string, nowIso: string): Promise<UserLogin | null> {
     const row = await this.d1
@@ -983,6 +1003,7 @@ export class Db {
       this.d1.prepare("DELETE FROM config WHERE key = 'alarme.conteiner'"),
       this.d1.prepare("DELETE FROM sessions"),
       this.d1.prepare("DELETE FROM invites"),
+      this.d1.prepare("DELETE FROM simulacoes"),
       this.d1.prepare("DELETE FROM api_tokens"),
       this.d1.prepare("DELETE FROM users"),
     ]);

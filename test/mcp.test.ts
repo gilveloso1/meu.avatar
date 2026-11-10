@@ -347,6 +347,48 @@ describe("listar_modelos e os dois passos do gerar_*", () => {
     expect(semModelo.content[0]!.text).toContain("modelo_obrigatorio");
   });
 
+  it("a confirmação vence, não vale para um código inventado nem quando o custo mudou", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Prazo" }));
+    const foto = (await imagemGerada((n, x) => comApi(api, n, x), id)).src;
+    const pedido = { modelo: "mischief", projeto: id, cena: "a câmera se aproxima do frasco", foto, formato: "16:9" };
+    const simular = async () => dados<{ confirmacao: string; validade: string }>(await comApi(api, "gerar_video", pedido));
+    const recusa = async (confirmacao: string, motivo: string) => {
+      const r = await comApi(api, "gerar_video", { ...pedido, confirmacao });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain("confirmacao_invalida");
+      expect(r.content[0]!.text).toContain(motivo);
+      expect(api.submitted).toHaveLength(0);
+    };
+
+    // O código é sorteado: duas simulações do mesmo pedido dão códigos diferentes, e só o hash fica no banco.
+    const primeira = await simular();
+    const segunda = await simular();
+    expect(primeira.validade).toBe("20 min");
+    expect(segunda.confirmacao).not.toBe(primeira.confirmacao);
+    const { n } = (await env.DB.prepare("SELECT COUNT(*) AS n FROM simulacoes WHERE codigo_hash IN (?, ?)").bind(primeira.confirmacao, segunda.confirmacao).first<{ n: number }>())!;
+    expect(n).toBe(0);
+    await recusa("0123456789abcdef", "simule de novo");
+    await recusa("", "simule de novo");
+
+    // Passado o prazo, o sim não vale mais.
+    await env.DB.prepare("UPDATE simulacoes SET expires_at = ?").bind(new Date(Date.now() - 1000).toISOString()).run();
+    await recusa(primeira.confirmacao, "20 min");
+
+    // O custo que a pessoa viu não é mais o do pedido: simula de novo. O código já foi gasto.
+    const terceira = await simular();
+    await env.DB.prepare("UPDATE simulacoes SET custo = 0.01 WHERE expires_at > ?").bind(new Date().toISOString()).run();
+    await recusa(terceira.confirmacao, "custo mudou");
+    await recusa(terceira.confirmacao, "simule de novo");
+    // A simulação seguinte tira as vencidas do banco.
+    const quarta = await simular();
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM simulacoes").first<{ n: number }>())!.n).toBe(1);
+    const r = await comApi(api, "gerar_video", { ...pedido, confirmacao: quarta.confirmacao });
+    expect(r.isError).toBeFalsy();
+    expect(api.submitted).toHaveLength(1);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM simulacoes").first<{ n: number }>())!.n).toBe(0);
+  });
+
   it("sem confirmacao, só simula: confere, mostra o custo e não gasta; o código só vale para o mesmo pedido", async () => {
     const api = new FakeVideoApi();
     const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Dois passos" }));
@@ -371,6 +413,13 @@ describe("listar_modelos e os dois passos do gerar_*", () => {
     const r = await comApi(api, "gerar_video", { ...pedido, confirmacao: simulacao.confirmacao });
     expect(dados<{ video: { modelo: string; custoEstimado: number } }>(r).video).toMatchObject({ modelo: "mischief", custoEstimado: 0.05 });
     expect(api.submitted[0]).toMatchObject({ model: "tbc/mischief-1", duration: 5, resolution: "720p", aspect_ratio: "16:9", generate_audio: false });
+
+    // O mesmo sim não gera duas vezes: o código reenviado não gera nem cobra de novo.
+    const reenvio = await comApi(api, "gerar_video", { ...pedido, confirmacao: simulacao.confirmacao });
+    expect(reenvio.isError).toBe(true);
+    expect(reenvio.content[0]!.text).toContain("confirmacao_invalida");
+    expect(api.submitted).toHaveLength(1);
+    expect(await new Db(env.DB).recentVideos()).toHaveLength(antes + 1);
 
     // No formato do Final (9:16), o mischief recusa já na simulação.
     const vertical = await comApi(api, "gerar_video", { ...pedido, formato: undefined });

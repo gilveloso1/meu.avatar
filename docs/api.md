@@ -58,11 +58,15 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
     `mischief`, `omni` (vídeo), `nano-banana` (imagem), `elevenlabs` e `fish` (áudio). O Seedance e o
     Aleph (troca de avatar) ficam só no site.
   - **Dois passos.** Sem `confirmacao`, a chamada só simula: confere tudo como o site (campos,
-    arquivos, o que o modelo aceita) sem gastar nem guardar, e responde `{simulacao: true, modelo,
-    custoEstimado, duracao?, resolucao?, formato?, confirmacao, proximo}`. O agente mostra à pessoa o
+    arquivos, o que o modelo aceita) sem gastar, e responde `{simulacao: true, modelo,
+    custoEstimado, duracao?, resolucao?, formato?, confirmacao, validade, proximo}`. O agente mostra à pessoa o
     modelo, o pedido e o custo e, com o sim dela, chama de novo com os mesmos campos e a
-    `confirmacao`. O código é um resumo do pedido (conta, tipo, projeto, modelo e campos): qualquer
-    campo diferente dá `confirmacao_invalida` (409) e pede outra simulação.
+    `confirmacao`. O código é sorteado e a simulação fica guardada (tabela `simulacoes`: o hash do
+    código, o resumo do pedido, o custo e o prazo): vale para o mesmo pedido (conta, tipo, projeto,
+    modelo e campos), **uma vez** e por **20 min**. Campo diferente, código já usado (o reenvio não
+    gera nem cobra de novo), prazo vencido ou custo que mudou desde a simulação dão
+    `confirmacao_invalida` (409, com o `motivo`) e pedem outra simulação. O código é gasto antes de
+    gerar: se a geração recusar o pedido, simule de novo.
   - **Campos** (cada modelo aceita os seus, ver `listar_modelos`): vídeo `cena` (a cena, o movimento
     ou os gestos), `fala`, `voz` (de `listar_vozes` com o mesmo modelo), `idioma`, `estilo`, `foto`
     (primeiro quadro), `ultimoQuadro`, `referencias` (imagens que guiam, nunca com quadros:
