@@ -256,8 +256,22 @@ meia e nove!". **Os dois falharam em 40 s, sem custo**, com "Video generation fa
 
 Gasto do dia: US$ 0,09 (quatro pedidos, um pronto).
 
-O que falta testar: o antigo exato com as instruções logo depois da frase do estilo Selfie (a
-frase que passa fica inteira; é o `buildPrompt` com `extra`, o caminho do Wan).
+**O antigo com as instruções depois da frase do Selfie (22:10 UTC, 4 s, 360p):** falhou, sem
+custo (`gen-vid-1794348600-VFqhHGdMmqJwaOBjHm7q`). Era o `buildPrompt` com `extra` (o caminho do
+Wan): a frase do Selfie inteira, depois "Apresentadora num estúdio, fala com confiança olhando
+para a câmera e gesticula com as mãos.", a fala citada e a orientação de qualidade. Uma tentativa
+só, três minutos depois do controle que passou.
+
+**Conclusão de 10/11/2026:** no 1.2, com esta foto, só passa o pedido da selfie parada, sem
+nenhuma instrução de quem usa (6 de 6). Qualquer pedido com as instruções falhou: no lugar da
+frase do Selfie, depois dela, com `task`, com outra frase citando a foto (0 de 4 no dia; em
+07/11, 2 de 17). Não se sabe se o que derruba é o conteúdo destas instruções (apresentadora,
+gesticular, que contraria "mantém a posição") ou qualquer texto a mais. Gasto do dia: US$ 0,09
+(cinco pedidos, um pronto).
+
+O formulário do Omni é feito de instruções livres, e é isso que o 1.2 não está aceitando. A
+decisão é do dono: fixar o Omni na selfie parada (sem o campo Instruções), seguir testando outras
+instruções (cada teste pede autorização) ou deixar o modelo de lado até o Google estabilizar.
 
 ## O que a documentação diz (pesquisa de 07/11/2026, depois dos testes)
 
