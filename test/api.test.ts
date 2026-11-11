@@ -1177,7 +1177,7 @@ describe("animação em código", () => {
     type Lista = { animacoes: { projeto: { id: string }; bloco: string; nome: string; duracao: number; texto: string; parametros?: unknown; avatares: string[]; html?: string }[]; mais?: number };
     const lista = (q: string) => api(`/api/v1/animacoes?${q}`, admin).then((r) => r.json<Lista>());
     const doAvatar = await lista(`avatar=${AV}`);
-    expect(doAvatar.animacoes).toEqual([{ projeto: { id: a.id, nome: "Campanha" }, bloco: ra.criados[1], nome: "Selo", duracao: 2, texto: "{{preco}}", parametros: { preco: "R$ 49" }, avatares: [AV], atualizado: expect.any(String) }]);
+    expect(doAvatar.animacoes).toEqual([{ projeto: { id: a.id, nome: "Campanha" }, bloco: ra.criados[1], nome: "Selo", duracao: 2, texto: "R$ 49", parametros: { preco: "R$ 49" }, avatares: [AV], atualizado: expect.any(String) }]);
     expect((await lista("q=oferta")).animacoes.map((x) => x.nome)).toEqual(["Título"]);
     expect((await lista("q=49")).animacoes.map((x) => x.nome)).toEqual(["Selo"]);
     expect((await lista(`projeto=${b.id}`)).animacoes.map((x) => x.nome)).toEqual(["Título"]);

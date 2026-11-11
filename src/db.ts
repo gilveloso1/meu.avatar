@@ -176,6 +176,9 @@ export interface Project {
   updated_at: string;
 }
 
+/** Quantas pastas uma lista aceita (os ativos de um avatar, a aba Vídeos, Projetos). */
+export const MAX_FOLDERS = 200;
+
 /** De que lista é uma pasta da conta: a aba Vídeos ou Projetos. */
 export type FolderKind = "videos" | "projetos";
 
@@ -701,6 +704,11 @@ export class Db {
   /** As pastas do avatar, pelo nome. */
   async folders(avatarId: string): Promise<Folder[]> {
     return (await this.d1.prepare("SELECT * FROM folders WHERE avatar_id = ? ORDER BY name COLLATE NOCASE, created_at").bind(avatarId).all<Folder>()).results;
+  }
+
+  /** As pastas de todos os avatares da pessoa (o agente vê a pasta de cada ativo). */
+  async foldersByUser(userId: number): Promise<Folder[]> {
+    return (await this.d1.prepare("SELECT f.* FROM folders f JOIN avatars a ON a.id = f.avatar_id WHERE a.user_id = ? ORDER BY f.name COLLATE NOCASE, f.created_at").bind(userId).all<Folder>()).results;
   }
 
   async insertFolder(f: Omit<Folder, "created_at">, now = new Date()): Promise<void> {
@@ -1284,22 +1292,24 @@ export class ContaDb {
    * página por vez; com `avatar`, só os gerados com ele. Os filtros de página são os de toda lista
    * do agente (`Pagina`).
    */
-  async readyVideos(structures: string[], f: Pagina & { avatar?: string }): Promise<Video[]> {
+  async readyVideos(structures: string[], f: Pagina & { avatar?: string; folder?: string }): Promise<Video[]> {
     if (!structures.length) return [];
     const binds: (string | number)[] = [this.userId, like(f.q ?? "")];
     const bind = (v: string | number) => `?${binds.push(v)}`;
     const where = [`structure IN (${structures.map(bind).join(", ")})`, "status = 'completed'", "video_key IS NOT NULL", "(prompt LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\')"];
     if (f.avatar) where.push(`avatar_id = ${bind(f.avatar)}`);
+    if (f.folder) where.push(`folder_id = ${bind(f.folder)}`);
     return (await this.d1.prepare(`SELECT * FROM videos WHERE user_id = ?1 AND ${[...where, ...pagina(f, bind)].join(" AND ")} ORDER BY created_at DESC, id DESC LIMIT ${bind(f.limite)}`).bind(...binds).all<Video>()).results;
   }
 
   /** Os ativos dos avatares da conta, com o nome do avatar, uma página por vez (como `readyVideos`). */
-  async assetsPage(f: Pagina & { kind?: AssetKind; avatar?: string }): Promise<(AvatarAsset & { avatar_name: string })[]> {
+  async assetsPage(f: Pagina & { kind?: AssetKind; avatar?: string; folder?: string }): Promise<(AvatarAsset & { avatar_name: string })[]> {
     const binds: (string | number)[] = [this.userId, like(f.q ?? "")];
     const bind = (v: string | number) => `?${binds.push(v)}`;
     const where = ["x.name LIKE ?2 ESCAPE '\\'"];
     if (f.kind) where.push(`x.kind = ${bind(f.kind)}`);
     if (f.avatar) where.push(`x.avatar_id = ${bind(f.avatar)}`);
+    if (f.folder) where.push(`x.folder_id = ${bind(f.folder)}`);
     return (
       await this.d1
         .prepare(`SELECT x.*, a.name AS avatar_name FROM avatar_assets x JOIN avatars a ON a.id = x.avatar_id WHERE a.user_id = ?1 AND ${[...where, ...pagina(f, bind, "x.")].join(" AND ")} ORDER BY x.created_at DESC, x.id DESC LIMIT ${bind(f.limite)}`)

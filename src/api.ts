@@ -7,7 +7,8 @@ import { base, baseGaps, finalRate, groups, links, members, output, PX, upgrade,
 import { ESTILO_PADRAO, type Estilo, falantes, html as legendaHtml, noGrupo, trechos } from "./legenda";
 import type { CanvasProject } from "./canvas/modelo.js";
 import { aplicar, ComandoError, type Fonte, MAX_COMANDOS } from "./comandos";
-import { filtro, itemAtivo, itemProjeto, listar } from "./acervo";
+import { filtro, itemAtivo, itemProjeto, listar, pastaDe } from "./acervo";
+import { MAX_FOLDERS } from "./db";
 import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video } from "./db";
 import { type Exports } from "./exportar";
 import { mp3Duration } from "./mp3";
@@ -89,6 +90,30 @@ function estiloValido(e: Estilo): boolean {
   return FONTES.includes(e.fonte) && COR.test(e.cor) && COR.test(e.destaque) && typeof e.maiusculas === "boolean" && typeof e.tamanho === "number" && e.tamanho >= 16 && e.tamanho <= 120 && typeof e.altura === "number" && e.altura >= 0.05 && e.altura <= 0.95;
 }
 
+/** As listas que têm pastas: a aba Vídeos, Projetos e os ativos de um avatar. */
+const DE = ["videos", "projetos", "avatar"] as const;
+type De = (typeof DE)[number];
+/** Quantos itens o mover_para_pasta leva de uma vez. */
+const MAX_MOVER = 100;
+
+/** A resposta de um link de envio criado: o endereço, quando vence e o curl pronto, sem token. */
+function envioCriado(url: URL, codigo: string, expira: string, tipoPedido: unknown): Response {
+  const tipo = typeof tipoPedido === "string" && mediaType(tipoPedido) ? tipoPedido : "";
+  const destino = `${url.origin}/envio/${codigo}`;
+  return Response.json(
+    {
+      envio: {
+        url: destino,
+        metodo: "POST",
+        expira,
+        comando: `curl -sS --data-binary @"<caminho do arquivo>" -H "content-type: ${tipo || "<tipo, como audio/mpeg ou image/png>"}" ${destino}`,
+        tipos: Object.keys(MEDIA_TYPES),
+      },
+    },
+    { status: 201 },
+  );
+}
+
 export function bearerToken(request: Request): string | null {
   return /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") ?? "")?.[1] ?? null;
 }
@@ -117,6 +142,11 @@ function resumo(data: CanvasProject) {
         camada: main.includes(b) ? "base" : g.covers.includes(b) ? "cobertura" : "audio",
         inicio: segundos(b.x - g.x),
         fim: segundos(b.x + width(b) - g.x),
+        // O que som e velocidade mudaram, só quando saiu do padrão: o agente confere sem pedir o canvas inteiro.
+        // O trecho do arquivo que o bloco usa, quando ele foi cortado (a imagem, o rascunho e a animação não têm arquivo a cortar).
+        ...(b.kind !== "image" && (b.tin > 0.001 || b.tout < b.dur - 0.001) ? { corte: [+b.tin.toFixed(3), +b.tout.toFixed(3)] } : {}),
+        ...(b.speed && b.speed !== 1 ? { velocidade: b.speed } : {}),
+        ...(b.mute ? { mudo: true } : b.vol !== 1 && b.vol !== undefined ? { volume: b.vol } : {}),
       })),
       };
     }),
@@ -270,6 +300,8 @@ export class Api {
       if (av[2] === "envio") return this.uploadLink(request, user, avatar, url);
       return this.editAvatar(request, avatar);
     }
+    if (path === "/api/v1/pastas") return post ? this.createFolder(request, user) : this.folders(user, url);
+    if (path === "/api/v1/pastas/mover") return post ? this.moveToFolder(request, user) : falha(405, "metodo_invalido");
     if (path === "/api/v1/animacoes" && !post) return this.animations(user, url);
     if (path === "/api/v1/projetos") return post ? this.create(request, user) : this.list(user, url);
     if (path === "/api/v1/vozes" && !post) return this.voices(user, url);
@@ -277,13 +309,15 @@ export class Api {
     if (path === "/api/v1/audios") return post ? this.generate("audio", request, user, null) : falha(405, "metodo_invalido");
     const video = /^\/api\/v1\/videos\/([0-9a-f-]{36})$/.exec(path);
     if (video) return post ? falha(405, "metodo_invalido") : this.followVideo(user, video[1]!);
-    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video|cena))?$/.exec(path);
+    const m = /^\/api\/v1\/projetos\/([0-9a-f-]{36})(?:\/(comandos|quadros|silencios|transcricao|html|legenda|limpar|animacao|imagem|video|cena|envio|apagar))?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     if (!m || !project || project.user_id !== user.id) return falha(404, "nao_encontrado");
     if (m[2] === "comandos") return post ? this.commands(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "html") return post ? this.renderHtml(request, project) : falha(405, "metodo_invalido");
     if (m[2] === "legenda") return post ? this.caption(request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "limpar") return post ? this.cleanFiles(request, project) : falha(405, "metodo_invalido");
+    if (m[2] === "envio") return post ? this.projectUploadLink(request, user, project, url) : falha(405, "metodo_invalido");
+    if (m[2] === "apagar") return post ? this.deleteProject(request, project) : falha(405, "metodo_invalido");
     if (m[2] === "animacao") return post ? falha(405, "metodo_invalido") : this.inspectCode(project, url);
     if (m[2] === "imagem") return post ? this.generate("imagem", request, user, project) : falha(405, "metodo_invalido");
     if (m[2] === "video") return post ? this.generate("video", request, user, project) : falha(405, "metodo_invalido");
@@ -323,7 +357,8 @@ export class Api {
       if (avatar && !avatares.includes(avatar)) continue;
       for (const b of data.blocks) {
         if (!b.code) continue;
-        const texto = textoNaTela(b.code.html);
+        // O texto como sai na tela: com os valores dos parâmetros no lugar de {{chave}}.
+        const texto = textoNaTela(b.code.html.replace(/\{\{\s*(\w+)\s*\}\}/g, (m: string, k: string) => String(b.code!.params?.[k] ?? m)));
         if (busca && !`${b.name} ${texto} ${Object.values(b.code.params ?? {}).join(" ")}`.toLowerCase().includes(busca)) continue;
         lista.push({ projeto: { id: o.id, nome: o.name }, bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), texto, ...(b.code.params ? { parametros: b.code.params } : {}), avatares, atualizado: o.updated_at });
       }
@@ -378,17 +413,25 @@ export class Api {
     } catch {
       name = "";
     }
+    const pasta = await this.avatarFolder(avatar, url.searchParams.get("pasta"));
+    if (pasta === false) return falha(404, "pasta_inexistente");
     const tipo = mediaType(request.headers.get("content-type") ?? "");
     if (tipo && Number(request.headers.get("content-length")) > MAX_ATIVO(tipo.kind)) return falha(413, "arquivo_grande_demais", { maximo: MAX_ATIVO(tipo.kind) });
-    const r = await receberAtivo(this.db, this.media, avatar, { bytes: tipo ? await request.arrayBuffer() : new ArrayBuffer(0), type: request.headers.get("content-type") ?? "", name }, papel);
+    const r = await receberAtivo(this.db, this.media, avatar, { bytes: tipo ? await request.arrayBuffer() : new ArrayBuffer(0), type: request.headers.get("content-type") ?? "", name }, papel, pasta);
     if (typeof r !== "string") return falha(r.status, r.erro, r.extra);
     return this.assetResponse(avatar.id, r, url);
   }
 
+  /** A pasta do avatar pedida pelo agente: o id, null sem pedido, ou false se ela não é deste avatar. */
+  private async avatarFolder(avatar: Avatar, id: unknown): Promise<string | null | false> {
+    if (id === undefined || id === null || id === "") return null;
+    return (await this.db.folders(avatar.id)).find((f) => f.id === id)?.id ?? false;
+  }
+
   /** O ativo recém-guardado, no mesmo item do listar_avatares. */
   private async assetResponse(avatarId: string, id: string, url: URL): Promise<Response> {
-    const [avatar, asset] = await Promise.all([this.db.avatarById(avatarId), this.db.asset(avatarId, id)]);
-    return Response.json({ ativo: { ...itemAtivo(asset!, avatar!.name, url), origem: "enviado", foto: id === avatar!.photo_asset, voz: id === avatar!.voice_asset } }, { status: 201 });
+    const [avatar, asset, pastas] = await Promise.all([this.db.avatarById(avatarId), this.db.asset(avatarId, id), this.db.folders(avatarId)]);
+    return Response.json({ ativo: { ...itemAtivo(asset!, avatar!.name, url, pastaDe(pastas)(asset!.folder_id)), origem: "enviado", foto: id === avatar!.photo_asset, voz: id === avatar!.voice_asset } }, { status: 201 });
   }
 
   /**
@@ -400,47 +443,169 @@ export class Api {
     const papel = uso(body.uso ?? "");
     if (papel === null) return falha(400, "uso_invalido", { foto: "imagem", voz: "audio" });
     const nome = typeof body.nome === "string" ? body.nome.trim() : "";
-    const tipo = typeof body.tipo === "string" && mediaType(body.tipo) ? body.tipo : "";
-    const { codigo, expira } = await criarEnvio(this.media, user.id, avatar.id, nome, papel);
-    const destino = `${url.origin}/envio/${codigo}`;
-    return Response.json(
-      {
-        envio: {
-          url: destino,
-          metodo: "POST",
-          expira,
-          comando: `curl -sS --data-binary @"<caminho do arquivo>" -H "content-type: ${tipo || "<tipo, como audio/mpeg ou image/png>"}" ${destino}`,
-          tipos: Object.keys(MEDIA_TYPES),
-        },
-      },
-      { status: 201 },
-    );
+    const pasta = await this.avatarFolder(avatar, body.pasta);
+    if (pasta === false) return falha(404, "pasta_inexistente");
+    const { codigo, expira } = await criarEnvio(this.media, user.id, { avatar: avatar.id, pasta }, nome, papel);
+    return envioCriado(url, codigo, expira, body.tipo);
+  }
+
+  /**
+   * O link de envio para o projeto (enviar_arquivo sem url nem base64): o arquivo do computador entra
+   * nos arquivos deste projeto com um curl, sem token. Um arquivo, em até 30 min (src/ativos.ts).
+   */
+  private async projectUploadLink(request: Request, user: User, project: Project, url: URL): Promise<Response> {
+    const body = (await json(request)) ?? {};
+    const { codigo, expira } = await criarEnvio(this.media, user.id, { projeto: project.id }, nomeDoArquivo(body.nome, ""), "");
+    return envioCriado(url, codigo, expira, body.tipo);
+  }
+
+  /**
+   * Apaga o projeto (apagar_projeto), com os arquivos enviados a ele e as exportações; os vídeos
+   * gerados e os ativos dos avatares ficam. Sem a confirmacao, só mostra o que sairia e devolve o
+   * código: o agente leva isso à pessoa e só apaga com o sim dela. O código sai do projeto como está
+   * (id, revisão e arquivos), sem nada guardado: não dá para apagar sem ter visto o primeiro passo,
+   * nem um projeto que mudou depois dele. Durante uma exportação, recusa.
+   */
+  private async deleteProject(request: Request, project: Project): Promise<Response> {
+    const body = await json(request);
+    const data = JSON.parse(project.data) as CanvasProject;
+    const arquivos = await this.db.projectFiles(project.id);
+    const resumo = { id: project.id, nome: project.name, atualizado: project.updated_at, blocos: data.blocks.length, arquivos: arquivos.length, tamanho: arquivos.reduce((t, f) => t + f.size, 0) };
+    const codigo = (await sha256(`apagar:${project.id}:${project.revision}:${arquivos.map((f) => f.id).sort().join(",")}`)).slice(0, 12);
+    if (body?.confirmacao === undefined || body.confirmacao === null || body.confirmacao === "") {
+      return Response.json({ projeto: resumo, apagado: false, confirmacao: codigo, proximo: "Mostre à pessoa o nome do projeto e o que sai com ele; só com o sim dela, chame de novo com a confirmacao. Não tem volta." });
+    }
+    if (body.confirmacao !== codigo) return falha(409, "confirmacao_invalida", { motivo: "O código não é o deste projeto como está agora. Chame sem confirmacao, mostre à pessoa e use o código novo." });
+    if ((await this.db.runningExports(project.id)).length) return falha(409, "exportando");
+    const keys = await this.db.deleteProject(project.id);
+    if (keys.length) await this.media.delete(keys);
+    return Response.json({ projeto: resumo, apagado: true });
+  }
+
+  /** As estruturas cujos vídeos a conta vê na aba Vídeos (a contagem das pastas é a da tela). */
+  private structures(user: User): string[] {
+    return STRUCTURES.filter((s) => canUse(s, user)).map((s) => s.id);
+  }
+
+  /**
+   * As pastas da conta (listar_pastas): da aba Vídeos, de Projetos e dos ativos de cada avatar, cada
+   * uma com quantos itens tem. `de` escolhe a lista; com `avatar`, só as dele.
+   */
+  private async folders(user: User, url: URL): Promise<Response> {
+    const de = url.searchParams.get("de") ?? "";
+    const avatarId = url.searchParams.get("avatar") ?? "";
+    if (de && !DE.includes(de as De)) return falha(400, "de_invalido", { aceitos: DE });
+    const conta = this.db.conta(user.id);
+    const pastas: Record<string, unknown>[] = [];
+    for (const kind of ["videos", "projetos"] as const) {
+      if ((de && de !== kind) || avatarId) continue;
+      const [lista, n] = await Promise.all([conta.folders(kind), conta.folderCounts(kind, kind === "videos" ? this.structures(user) : [])]);
+      pastas.push(...lista.map((f) => ({ id: f.id, nome: f.name, de: kind, itens: n.get(f.id) ?? 0 })));
+    }
+    if (!de || de === "avatar") {
+      const [avatares, lista, ativos] = await Promise.all([this.db.avatarsByUser(user.id), this.db.foldersByUser(user.id), this.db.assetsByUser(user.id)]);
+      if (avatarId && !avatares.some((a) => a.id === avatarId)) return falha(404, "nao_encontrado");
+      const nomes = new Map(avatares.map((a) => [a.id, a.name]));
+      pastas.push(...lista.filter((f) => !avatarId || f.avatar_id === avatarId).map((f) => ({ id: f.id, nome: f.name, de: "avatar", avatar: { id: f.avatar_id, nome: nomes.get(f.avatar_id) ?? "" }, itens: ativos.filter((x) => x.folder_id === f.id).length })));
+    }
+    return Response.json({ pastas });
+  }
+
+  /** Cria uma pasta (criar_pasta) numa das listas: simples, sem pasta dentro de pasta, como no site. */
+  private async createFolder(request: Request, user: User): Promise<Response> {
+    const body = await json(request);
+    const de = body?.de;
+    if (typeof de !== "string" || !DE.includes(de as De)) return falha(400, "de_invalido", { aceitos: DE });
+    const nome = typeof body?.nome === "string" ? body.nome.replace(/\s+/g, " ").trim().slice(0, 120) : "";
+    if (!nome) return falha(400, "nome_obrigatorio");
+    const id = crypto.randomUUID();
+    if (de === "avatar") {
+      const avatar = typeof body?.avatar === "string" ? await this.db.avatarById(body.avatar) : null;
+      if (!avatar || avatar.user_id !== user.id) return falha(404, "nao_encontrado");
+      if ((await this.db.folders(avatar.id)).length >= MAX_FOLDERS) return falha(409, "pastas_demais", { maximo: MAX_FOLDERS });
+      await this.db.insertFolder({ id, avatar_id: avatar.id, name: nome });
+      return Response.json({ pasta: { id, nome, de, avatar: { id: avatar.id, nome: avatar.name }, itens: 0 } }, { status: 201 });
+    }
+    if (!(await this.db.conta(user.id).insertFolder(id, de as "videos" | "projetos", nome, MAX_FOLDERS))) return falha(409, "pastas_demais", { maximo: MAX_FOLDERS });
+    return Response.json({ pasta: { id, nome, de, itens: 0 } }, { status: 201 });
+  }
+
+  /**
+   * Põe itens numa pasta da lista deles, ou fora de pasta (mover_para_pasta): vídeos, imagens e
+   * áudios gerados numa pasta da aba Vídeos, projetos numa de Projetos e ativos numa do avatar
+   * deles. A pasta tem de ser da mesma lista (e, nos ativos, do mesmo avatar); item de outra conta
+   * não existe. Só muda onde o item aparece: nada é apagado nem copiado.
+   */
+  private async moveToFolder(request: Request, user: User): Promise<Response> {
+    const body = await json(request);
+    const de = body?.de;
+    if (typeof de !== "string" || !DE.includes(de as De)) return falha(400, "de_invalido", { aceitos: DE });
+    const itens = Array.isArray(body?.itens) ? [...new Set(body.itens.filter((i): i is string => typeof i === "string" && !!i))] : [];
+    if (!itens.length || itens.length > MAX_MOVER) return falha(400, "itens_invalidos", { maximo: MAX_MOVER });
+    const destino = typeof body?.pasta === "string" && body.pasta ? body.pasta : null;
+    const conta = this.db.conta(user.id);
+    const movidos: string[] = [];
+    let pasta: { id: string; nome: string } | null = null;
+    if (de === "avatar") {
+      const avatar = typeof body?.avatar === "string" ? await this.db.avatarById(body.avatar) : null;
+      if (!avatar || avatar.user_id !== user.id) return falha(404, "nao_encontrado");
+      const alvo = destino ? (await this.db.folders(avatar.id)).find((f) => f.id === destino) : null;
+      if (destino && !alvo) return falha(404, "pasta_inexistente");
+      pasta = alvo ? { id: alvo.id, nome: alvo.name } : null;
+      for (const id of itens) {
+        if (!(await this.db.asset(avatar.id, id))) continue;
+        await this.db.moveAsset(avatar.id, id, alvo?.id ?? null);
+        movidos.push(id);
+      }
+    } else {
+      const alvo = destino ? await conta.folder(destino) : null;
+      // Pasta de outra conta, ou da outra lista, não serve de destino.
+      if (destino && alvo?.kind !== de) return falha(404, "pasta_inexistente");
+      pasta = alvo ? { id: alvo.id, nome: alvo.name } : null;
+      for (const id of itens) if (de === "videos" ? await conta.moveVideo(id, alvo?.id ?? null) : await conta.moveProject(id, alvo?.id ?? null)) movidos.push(id);
+    }
+    const naoEncontrados = itens.filter((i) => !movidos.includes(i));
+    if (!movidos.length) return falha(404, "itens_inexistentes", { naoEncontrados });
+    return Response.json({ movidos, pasta, ...(naoEncontrados.length ? { naoEncontrados } : {}) });
   }
 
   private async avatars(user: User, url: URL): Promise<Response> {
-    const [avatars, assets] = await Promise.all([this.db.avatarsByUser(user.id, (url.searchParams.get("q") ?? "").trim()), this.db.assetsByUser(user.id)]);
+    const [avatars, assets, folders] = await Promise.all([this.db.avatarsByUser(user.id, (url.searchParams.get("q") ?? "").trim()), this.db.assetsByUser(user.id), this.db.foldersByUser(user.id)]);
+    const pasta = pastaDe(folders);
     return Response.json({
       avatares: avatars.map((a) => ({
         id: a.id,
         nome: a.name,
         descricao: a.description,
+        // As pastas dos ativos dele (só quando há): cada ativo diz a sua em pasta.
+        ...(folders.some((f) => f.avatar_id === a.id) ? { pastas: folders.filter((f) => f.avatar_id === a.id).map((f) => ({ id: f.id, nome: f.name })) } : {}),
         ativos: assets
           .filter((x) => x.avatar_id === a.id)
-          .map((x) => ({ ...itemAtivo(x, a.name, url), origem: x.source_video ? "gerado" : "enviado", foto: x.id === a.photo_asset, voz: x.id === a.voice_asset })),
+          .map((x) => ({ ...itemAtivo(x, a.name, url, pasta(x.folder_id)), origem: x.source_video ? "gerado" : "enviado", foto: x.id === a.photo_asset, voz: x.id === a.voice_asset })),
       })),
     });
   }
 
   private async list(user: User, url: URL): Promise<Response> {
-    const projects = await this.db.projectsByUser(user.id, (url.searchParams.get("q") ?? "").trim());
-    return Response.json({ projetos: projects.map((p) => ({ id: p.id, nome: p.name, revisao: p.revision, atualizado: p.updated_at })) });
+    const [projects, folders] = await Promise.all([this.db.projectsByUser(user.id, (url.searchParams.get("q") ?? "").trim()), this.db.conta(user.id).folders("projetos")]);
+    const pasta = pastaDe(folders);
+    const so = url.searchParams.get("pasta") ?? "";
+    if (so && !folders.some((f) => f.id === so)) return falha(404, "pasta_inexistente");
+    return Response.json({
+      projetos: projects.filter((p) => !so || p.folder_id === so).map((p) => ({ id: p.id, nome: p.name, revisao: p.revision, atualizado: p.updated_at, ...(pasta(p.folder_id) ? { pasta: pasta(p.folder_id) } : {}) })),
+    });
   }
 
   private async create(request: Request, user: User): Promise<Response> {
     const body = await json(request);
     const name = typeof body?.nome === "string" ? body.nome.trim().slice(0, 120) : "";
+    // Criado numa pasta de Projetos, o projeto fica nela (como na tela).
+    const conta = this.db.conta(user.id);
+    const pasta = typeof body?.pasta === "string" && body.pasta ? await conta.folder(body.pasta) : null;
+    if (typeof body?.pasta === "string" && body.pasta && pasta?.kind !== "projetos") return falha(404, "pasta_inexistente");
     const project = await this.db.insertProject({ id: crypto.randomUUID(), user_id: user.id, name: name || "Projeto sem nome", data: VAZIO });
-    return Response.json(await this.view(project), { status: 201 });
+    if (pasta) await conta.moveProject(project.id, pasta.id);
+    return Response.json({ ...(await this.view(project)), ...(pasta ? { pasta: { id: pasta.id, nome: pasta.name } } : {}) }, { status: 201 });
   }
 
   /**

@@ -13,7 +13,7 @@ conta com a permissão `usar:api`; cada projeto é só de quem o criou. O códig
   `enquadrar` e `tempo` no `container/exportar.py`. Mudou um, mude o outro.
 - **Token, não sessão.** `Authorization: Bearer ma_...`. O banco guarda só o hash
   (`api_tokens`). O token abre `/api/v1/`, o arquivo de cada vídeo e de cada ativo (para baixar) e as rotas de arquivos e de exportação de um
-  projeto; não abre páginas, não apaga projeto e não salva JSON cru. Gerar (vídeo, imagem, áudio) é em dois passos, com a confirmação (ver "Gerar", abaixo).
+  projeto; não abre páginas e não salva JSON cru. Apagar um projeto é em dois passos, só com o sim da pessoa (ver "Apagar projeto", abaixo). Gerar (vídeo, imagem, áudio) é em dois passos, com a confirmação (ver "Gerar", abaixo).
 - **Sem tela de tokens por enquanto**: só há o administrador. Ela entra quando a API
   abrir para outras contas.
 - **Revisão.** `projects.revision` sobe a cada mudança. Quem salva diz de qual revisão
@@ -40,11 +40,26 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - **Clientes antigos** (`initialize`, até 2025-11-25) seguem funcionando no mesmo endereço. Por
   padrão, até o SDK v2 ainda conecta assim.
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
-- Ferramentas: `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `criar_avatar`, `editar_avatar`, `enviar_ativo`, `listar_vozes`, `listar_animacoes`, `listar_projetos`, `criar_projeto`, `ver_projeto`,
+- **Custo fixo de contexto** (11/11/2026): as instruções e a lista de ferramentas vão em toda
+  conversa, usadas ou não. Eram uns 39 mil caracteres (3,6 mil de instruções e 35,8 mil de
+  ferramentas, 8 mil só no `editar_projeto`); ficaram uns 27 mil (1,8 mil e 25,2 mil), já com as
+  cinco ferramentas novas. O que saiu não se perdeu: foi para a ferramenta **`ajuda {assunto}`**, que
+  o agente lê por assunto: `comandos` (as regras e os casos de cada comando, sem repetir as
+  assinaturas, uns 5,8 mil caracteres; ou o nome de um comando só, como `trocar`, umas centenas),
+  `cenas`, `animacoes`, `legenda`, `gerar` e `arquivos`. As instruções mandam ler sempre só
+  `animacoes` (antes de escrever HTML) e `comandos` (antes de um comando que não domina); as outras,
+  quando a descrição não bastar. Na descrição do `editar_projeto` fica a assinatura de cada
+  comando, com uma nota curta. A assinatura e as regras de um comando moram juntas (`COMANDO`,
+  `src/mcp.ts`); regra nova entra na ajuda, não na descrição, e `test/mcp.test.ts` segura o teto
+  (1.900 caracteres de instruções e 26 mil de ferramentas). Os dois testes com um agente, de
+  11/11/2026, estão em [agente-avaliacoes.md](agente-avaliacoes.md): nenhum erro de uso, e a conversa
+  inteira leu uns 35 mil caracteres de instruções, ferramentas e ajuda (antes, 39 mil sem ajuda
+  nenhuma). Se um agente errar por não ler a ajuda, a regra que faltou volta, curta, para a descrição.
+- Ferramentas: `ajuda`, `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `criar_avatar`, `editar_avatar`, `enviar_ativo`, `listar_vozes`, `listar_animacoes`, `listar_projetos`, `criar_projeto`, `apagar_projeto`, `listar_pastas`, `criar_pasta`, `mover_para_pasta`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_cena` (a cena montada, com todas as camadas, em imagem), `inspecionar_animacao` (texto; imagem só com
   `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `listar_modelos`,
   `gerar_video` e `acompanhar_video`, `gerar_imagem` (devolve a imagem para o agente olhar), `gerar_audio`, `renderizar_html`, `legendar`, `limpar_arquivos`,
-  `exportar` e `acompanhar_exportacao`, mais `listar_ferramentas` e `usar_ferramenta`. Não apagam projeto. Só `gerar_video`, `gerar_imagem` e
+  `exportar` e `acompanhar_exportacao`, mais `listar_ferramentas` e `usar_ferramenta`. Só `gerar_video`, `gerar_imagem` e
   `gerar_audio` gastam créditos de modelo, e só na segunda chamada (ver "Gerar", abaixo).
 - **Gerar** (desde 10/11/2026; antes, uma ferramenta por modelo): três ferramentas, uma por tipo de
   arquivo, e todas pedem o `modelo`, **sem padrão**: `gerar_video` (`POST /api/v1/projetos/<id>/video`),
@@ -102,11 +117,37 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   `tipo_invalido` (415), `arquivo_vazio`, `arquivo_grande_demais` (413, com `maximo`),
   `uso_invalido`, `ativo_inexistente` e `nao_encontrado` (avatar de outra conta).
 - **Link de envio** (`POST /envio/<código>`, sem token nem sessão): só abre o envio de **um**
-  arquivo para **um** avatar. O link só nasce de quem tem o token da API; o código tem 256 bits e só
-  o hash fica guardado (R2, `envios/`, que nenhuma rota serve); vale por 30 min e uma tentativa (some
-  no primeiro uso, dê certo ou não); na hora do envio, confere de novo a conta (não suspensa, com a
-  API) e o dono do avatar; aceita só os tipos de `MEDIA_TYPES` e o tamanho máximo (imagem 10 MB,
-  vídeo e áudio 50 MB), sem CORS. Vencido, usado, de outra conta ou inexistente: `envio_invalido` (404).
+  arquivo para **um** avatar ou, desde 11/11/2026, para **um** projeto (`enviar_arquivo` sem `url`
+  nem `base64`, `POST /api/v1/projetos/<id>/envio` `{nome?, tipo?}`: o arquivo que só está no
+  computador entra no projeto com um `curl`). O link só nasce de quem tem o token da API; o código
+  tem 256 bits e só o hash fica guardado (R2, `envios/`, que nenhuma rota serve); vale por 30 min e
+  uma tentativa (some no primeiro uso, dê certo ou não); na hora do envio, confere de novo a conta
+  (não suspensa, com a API) e o dono do avatar ou do projeto; aceita só os tipos de `MEDIA_TYPES` e o
+  tamanho máximo (imagem 10 MB, vídeo e áudio 50 MB), sem CORS. Vencido, usado, de outra conta, de
+  projeto apagado ou inexistente: `envio_invalido` (404). A resposta do projeto: `{arquivo, projeto,
+  src, usar: {arquivo}}` e, em vídeo, `som`.
+- **Pastas** (desde 11/11/2026): o agente vê e usa as pastas da pessoa, as mesmas do site (simples,
+  sem pasta dentro de pasta), em três listas: `videos` (os gerados, como na aba Vídeos), `projetos` e
+  `avatar` (os ativos de um avatar). Cada item do `listar_arquivos` e cada ativo do `listar_avatares`
+  dizem `pasta: {id, nome}` quando estão numa (o avatar traz `pastas`); o `listar_projetos` também, e
+  os dois primeiros filtram por `pasta`. `criar_projeto {pasta}` e `enviar_ativo {pasta}` (por url ou
+  pelo link) já criam dentro dela. `listar_pastas` (`GET /api/v1/pastas?de=&avatar=`) responde
+  `{pastas: [{id, nome, de, avatar?, itens}]}`; `criar_pasta` (`POST /api/v1/pastas` `{de, nome,
+  avatar?}`), até 200 por lista; `mover_para_pasta` (`POST /api/v1/pastas/mover` `{de, itens, pasta?,
+  avatar?}`, até 100 itens; sem `pasta`, fora de pasta) responde `{movidos, pasta, naoEncontrados?}`.
+  A pasta tem de ser da mesma lista e, nos ativos, do mesmo avatar. Não renomeiam nem apagam pasta:
+  isso segue só no site. Erros: `de_invalido` (com os `aceitos`), `nome_obrigatorio`, `pastas_demais`
+  (409), `pasta_inexistente` (404: de outra conta, de outra lista ou de outro avatar),
+  `itens_invalidos`, `itens_inexistentes` (404, nenhum item era da conta) e `nao_encontrado` (avatar).
+- **Apagar projeto** (desde 11/11/2026; o teste de 05/11 tinha deixado um projeto de teste na conta):
+  `apagar_projeto` (`POST /api/v1/projetos/<id>/apagar` `{confirmacao?}`). Sem `confirmacao`, só
+  mostra o que sairia e devolve o código: `{projeto: {id, nome, atualizado, blocos, arquivos,
+  tamanho}, apagado: false, confirmacao, proximo}`; o agente leva isso à pessoa e só apaga com o sim
+  dela, chamando de novo com o código. O código sai do projeto como está (id, revisão e arquivos),
+  sem nada guardado: não se apaga sem ter visto o primeiro passo, nem um projeto que mudou depois
+  dele (`409 confirmacao_invalida`, com o `motivo`). Com ele, saem o projeto, os arquivos enviados a
+  ele (do banco e do R2) e as exportações; os vídeos gerados e os ativos dos avatares ficam. Não tem
+  volta. Durante uma exportação, `409 exportando`.
 - **Gerar áudio** (desde 08/11/2026): `gerar_audio` faz uma fala (MP3) com um modelo de fala, o
   mesmo do site: `fish` (uns US$ 0,002 por minuto) ou `elevenlabs`, nos dois passos de "Gerar". O
   `texto` leva as emoções em inglês entre colchetes (a lista vai na descrição da ferramenta); a `voz`
@@ -132,12 +173,12 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 
 | Rota | O que faz |
 |---|---|
-| `GET /api/v1/arquivos?tipo=&fonte=&modelo=&avatar=&projeto=&q=&desde=&ate=&limite=&continuar=` | O acervo da conta numa lista só (`src/acervo.ts`), do mais novo ao mais antigo, 20 por vez (`limite` até 100): os vídeos, imagens e áudios gerados (`fonte: gerado`, com `modelo` e, quando houve, `avatar`; `fala` no vídeo e no áudio, `descricao` na imagem), os ativos dos avatares (`avatar`) e os arquivos enviados aos projetos (`projeto`). Cada item: `id`, `nome` (o gerado só quando tem), `tipo` (`video`, `imagem`, `audio`), `fonte`, `src`, `criado`, `tamanho` (ativo e projeto), `usar` (o que vai no `adicionar`: `{video}`, `{imagem}`, `{audio}`, `{ativo}` ou `{arquivo}`) e, para baixar, `arquivo` (o nome com a extensão), `mime` e `baixar` (o endereço completo, com o mesmo token). `modelo` só traz o que ele gerou; `avatar`, os ativos dele e o gerado com ele; `projeto`, os enviados a ele. `q` procura no nome, na fala e na descrição; `desde` e `ate` são datas (`2026-11-02`, UTC; o dia do `ate` vale inteiro); com mais itens, vem `continuar`. Erros: `limite_invalido`, `data_invalida`, `continuar_invalido`, `tipo_invalido`, `fonte_invalida` e `modelo_invalido` |
+| `GET /api/v1/arquivos?tipo=&fonte=&modelo=&avatar=&projeto=&pasta=&q=&desde=&ate=&limite=&continuar=` | O acervo da conta numa lista só (`src/acervo.ts`), do mais novo ao mais antigo, 20 por vez (`limite` até 100): os vídeos, imagens e áudios gerados (`fonte: gerado`, com `modelo` e, quando houve, `avatar`; `fala` no vídeo e no áudio, `descricao` na imagem), os ativos dos avatares (`avatar`) e os arquivos enviados aos projetos (`projeto`). Cada item: `id`, `nome` (o gerado só quando tem), `tipo` (`video`, `imagem`, `audio`), `fonte`, `src`, `criado`, `tamanho` (ativo e projeto), `usar` (o que vai no `adicionar`: `{video}`, `{imagem}`, `{audio}`, `{ativo}` ou `{arquivo}`) e, para baixar, `arquivo` (o nome com a extensão), `mime` e `baixar` (o endereço completo, com o mesmo token). `modelo` só traz o que ele gerou; `avatar`, os ativos dele e o gerado com ele; `projeto`, os enviados a ele. `q` procura no nome, na fala e na descrição; `desde` e `ate` são datas (`2026-11-02`, UTC; o dia do `ate` vale inteiro); com mais itens, vem `continuar`. Erros: `limite_invalido`, `data_invalida`, `continuar_invalido`, `tipo_invalido`, `fonte_invalida` e `modelo_invalido` |
 | `GET /api/v1/animacoes?projeto=&avatar=&q=&limite=` | As animações em código já feitas nos projetos da conta, do projeto editado por último ao mais antigo (20 por vez, até 100): `{animacoes: [{projeto: {id, nome}, bloco, nome, duracao, texto, parametros, avatares, atualizado}], mais}`. `projeto` filtra um projeto; `avatar`, os projetos que usam vídeos ou ativos dele; `q` busca no nome, no texto na tela e nos valores dos parâmetros. Sem o código: leia com `ver_projeto` (`incluir: codigo`). Ver "Reusar animações", abaixo |
 | `GET /api/v1/avatares?q=` | Avatares da conta com os ativos, cada um no item do acervo (o mesmo do `/api/v1/arquivos`) e mais `origem` (`gerado`, `enviado`), `foto` e `voz` |
-| `GET /api/v1/projetos?q=` | Projetos da conta |
-| `POST /api/v1/projetos` `{nome}` | Cria um projeto |
-| `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio (num grupo só de som, os áudios da primeira faixa são a base), e `inicio` e `fim` em segundos do grupo), `ligacoes` (`id`, `de`, `para`: grupo ou Final), Finais com as variações, avisos e `notas` (`[{id, texto}]`, o texto que a pessoa colou ou escreveu no canvas: briefing, roteiro, referências; só vem quando há). Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
+| `GET /api/v1/projetos?q=&pasta=` | Projetos da conta, cada um com a `pasta` em que está |
+| `POST /api/v1/projetos` `{nome, pasta?}` | Cria um projeto, na pasta de Projetos pedida |
+| `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio (num grupo só de som, os áudios da primeira faixa são a base), `inicio` e `fim` em segundos do grupo e, só quando saem do padrão, `corte` (`[início, fim]` do arquivo), `velocidade`, `volume` e `mudo`), `ligacoes` (`id`, `de`, `para`: grupo ou Final), Finais com as variações, avisos e `notas` (`[{id, texto}]`, o texto que a pessoa colou ou escreveu no canvas: briefing, roteiro, referências; só vem quando há). Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
 | `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) e devolve só o que mudou: `{revisao, criados, mudou, avisosPendentes}` (abaixo). O projeto inteiro fica no `ver_projeto` |
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
 | `GET /api/v1/projetos/<id>/cena?grupo=&instantes=1,3.5&final=` | `ver_cena` (09/11/2026): JPG com os instantes (até 12, segundos do grupo, como em `ver_projeto`) de uma cena montada como na exportação, com todas as camadas, no tamanho, formato e velocidade do Final (sem `final`, o primeiro). A primeira vez a cena é montada no servidor, como um passo de exportação (as animações e o trecho, guardados pelo conteúdo: a exportação depois reaproveita): `202 {status: "montando", feitos, total}` até ficar pronta. Erros: `grupo_inexistente`, `final_inexistente`, `instantes_invalidos` (com a `duracao` do grupo), `cena_invalida` (com `motivo`, como rascunho sem vídeo), `cena_falhou` (502; a mesma cena não recomeça por 10 min) |
@@ -154,7 +195,7 @@ pronta deste projeto: é como o agente confere o que exportou.
 
 | Rota | O que faz |
 |---|---|
-| `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas): `{src}` e, em vídeo, `som` (`false` quando o arquivo não tem faixa de som). Só JPG, PNG, WebP, MP4, MOV, WebM, MP3, M4A, WAV e OGG; SVG e HTML não (podem levar script). Todo arquivo enviado é servido com `nosniff` e CSP com `sandbox`. Com `?baixar`, vem como download, pela regra de todo download do site: o nome da tela, sem mudança, e a extensão do tipo (`src/arquivos.ts`); o `ver_projeto` com `incluir: arquivos` traz cada arquivo no item do acervo (`tipo` é `video`, `imagem` ou `audio`; o tipo do arquivo fica em `mime`). O corpo é o arquivo cru, com `content-type` e `x-nome`: com terminal, o agente manda direto (`curl --data-binary @foto.png`). No MCP, `enviar_arquivo` aceita `url` (o servidor baixa, até 50 MB, e passa pela mesma conferência; o melhor caminho sem terminal) ou `base64` (até 10 MB). Erros do `url`: `url_invalida`, `url_indisponivel`, `arquivo_grande_demais` |
+| `POST /projetos/<id>/arquivos` | Envia um arquivo (a mesma rota do canvas): `{src}` e, em vídeo, `som` (`false` quando o arquivo não tem faixa de som). Só JPG, PNG, WebP, MP4, MOV, WebM, MP3, M4A, WAV e OGG; SVG e HTML não (podem levar script). Todo arquivo enviado é servido com `nosniff` e CSP com `sandbox`. Com `?baixar`, vem como download, pela regra de todo download do site: o nome da tela, sem mudança, e a extensão do tipo (`src/arquivos.ts`); o `ver_projeto` com `incluir: arquivos` traz cada arquivo no item do acervo (`tipo` é `video`, `imagem` ou `audio`; o tipo do arquivo fica em `mime`). O corpo é o arquivo cru, com `content-type` e `x-nome`: com terminal, o agente manda direto (`curl --data-binary @foto.png`). No MCP, `enviar_arquivo` aceita `url` (o servidor baixa, até 50 MB, e passa pela mesma conferência; o melhor caminho sem terminal) ou `base64` (até 10 MB). Erros do `url`: `url_invalida`, `url_indisponivel`, `arquivo_grande_demais`. Sem `url` nem `base64`, vem o link de envio (ver "Link de envio") |
 | `POST /projetos/<id>/exportar` `{final, versoes?}` | Começa a exportação; a mesma (mesmas versões, mesmo conteúdo) já andando é devolvida, sem começar outra |
 | `POST /projetos/<id>/exportacoes/<e>` | O andamento; a exportação anda sozinha no servidor (`src/exportando.ts`) |
 | `GET /projetos/<id>/exportacoes/<e>` | Estado e endereços para baixar: `href` (com o token ou a sessão) e, pronta, `baixar` em cada versão e `baixarZip`; em cada versão, também `som`, `arquivoSom` e `baixarSom`, só o som em MP3 |

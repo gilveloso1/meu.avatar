@@ -22,6 +22,7 @@ import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { handleMcp } from "../mcp";
 import { ENVIO_PATH, guardarAtivo, MAX_AVATAR_DESCRIPTION, usarEnvio } from "../ativos";
 import { type Accounts, INVITE_HOURS, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
+import { MAX_FOLDERS } from "../db";
 import type { AccountFolder, AccountRow, AssetKind, Avatar, AvatarAsset, Db, Folder, FolderKind, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
 import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
 import { ERROS, PARTES } from "../erros";
@@ -126,12 +127,13 @@ export class Site {
       return new Response(FAVICON, { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" } });
     }
 
-    // O link de envio do agente (src/ativos.ts): um arquivo para um avatar, sem token nem sessão.
+    // O link de envio do agente (src/ativos.ts): um arquivo para um avatar ou um projeto, sem token nem sessão.
     const envio = ENVIO_PATH.exec(path);
     if (envio) {
       if (!post) return Response.json({ erro: "metodo_invalido" }, { status: 405 });
-      const r = await usarEnvio(this.db, this.media, envio[1]!, request);
+      const r = await usarEnvio(this.db, this.media, envio[1]!, request, (project, name, type, bytes) => this.exports.saveFile(project, name, type, bytes));
       if ("erro" in r) return Response.json({ erro: r.erro, ...r.extra }, { status: r.status });
+      if ("projeto" in r) return Response.json({ arquivo: r.id, projeto: r.projeto.id, src: `/projetos/${r.projeto.id}/arquivos/${r.id}`, usar: { arquivo: r.id }, ...(r.som === undefined ? {} : { som: r.som }) }, { status: 201 });
       return Response.json({ ativo: r.id, avatar: r.avatar.id, src: `/avatares/${r.avatar.id}/arquivos/${r.id}` }, { status: 201 });
     }
 
@@ -2484,7 +2486,7 @@ function assetThumb(a: AvatarAsset, src: string): string {
 const AUDIO_THUMB = `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--tertiary" aria-hidden="true"><span class="icon">mic</span></span></span>`;
 
 /** Quantas pastas um avatar pode ter. */
-export const MAX_FOLDERS = 200;
+export { MAX_FOLDERS };
 
 /** A lista de ativos do avatar, ou uma pasta dele aberta. */
 const folderHref = (avatarId: string, folderId: string | null) => `/avatares/${avatarId}${folderId ? `?pasta=${folderId}` : ""}`;

@@ -319,9 +319,15 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   `src/arquivos.ts`), nunca qualquer `image/*`: SVG e HTML levam script e são servidos pelo endereço
   do site. Todo arquivo do R2 sai pelo `object()`, com `nosniff` e CSP com `sandbox`.
 - O agente envia arquivo sem base64 (ele não consegue montar): por url (o site baixa) ou pelo link de
-  envio do avatar (`/envio/<código>`, `src/ativos.ts`), a única rota que recebe arquivo sem token nem
-  sessão. Ela abre um arquivo para um avatar só, uma vez, por 30 min; regra nova ali ganha teste em
-  `test/avatares-agente.test.ts`.
+  envio (`/envio/<código>`, `src/ativos.ts`), a única rota que recebe arquivo sem token nem
+  sessão. Ela abre um arquivo para um avatar ou para um projeto só, uma vez, por 30 min; regra nova
+  ali ganha teste em `test/avatares-agente.test.ts`.
+- O agente apaga projeto só em dois passos (`apagar_projeto`: mostra o que sairia e devolve um
+  código; só apaga com ele em `confirmacao`, depois do sim da pessoa). Outra ferramenta que apague
+  segue o mesmo molde.
+- O MCP tem um teto de contexto fixo (as instruções e a lista de ferramentas vão em toda conversa):
+  na descrição fica só o que o agente precisa para montar a chamada; regras e casos vão para a
+  ferramenta `ajuda` (`AJUDA` e `COMANDO`, `src/mcp.ts`). `test/mcp.test.ts` segura o teto.
 - A exportação pronta tem um link de download sem token nem sessão (`/baixar/<exportação>/<código>/...`,
   `BAIXAR_PATH` em `src/exportar.ts`): o agente baixa no terminal, que não tem o token. Só lê, só aquela
   exportação e só por 1 hora depois de entregue (perguntar de novo renova); regra nova ali ganha teste em `test/canvas.test.ts`.
