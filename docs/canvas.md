@@ -245,7 +245,10 @@ menos custo.
   (Vídeos, Imagens, Áudios; nenhum marcado é tudo); o caminho da pasta aberta (`.crumbs`); e o
   conteúdo: pastas e avatares em lista, vídeos e imagens numa grade de três colunas de cards quadrados
   com o nome embaixo, áudios em lista. Como nas listas do site, a raiz mostra só o que está fora de
-  pasta, e a busca procura em tudo, sem pastas. **Arrasta-se o arquivo até o ponto do canvas** em que
+  pasta, e a busca procura em tudo, sem pastas. Com um tipo escolhido, também: aparecem todos os
+  arquivos daquele tipo, estejam ou não numa pasta (e, em Avatares, de todos os avatares), sem as
+  pastas; sem tipo, as pastas voltam (pedido do dono, 11/11/2026). Os três chips dividem a largura
+  do painel. **Arrasta-se o arquivo até o ponto do canvas** em que
   ele entra; tocar também põe, no meio do que está à vista (se ali já houver bloco, desce até um
   lugar livre, e a vista vai até ele). O card do que já está no canvas ganha o selo de camadas.
   **Ver antes de pôr**: com o mouse em cima, o vídeo toca mudo no próprio card; o áudio tem o botão

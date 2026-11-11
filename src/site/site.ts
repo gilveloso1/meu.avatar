@@ -912,6 +912,8 @@ ${error ? snackbar(error) : ""}`;
    * com as pastas da aba Vídeos), os ativos de um avatar (com as pastas dele) e os arquivos enviados
    * a este projeto (os de outro projeto não entram: a exportação só lê os do próprio). Como nas
    * listas do site, a raiz mostra as pastas e o que está fora delas, e a busca procura em tudo.
+   * Com um tipo escolhido (Vídeos, Imagens, Áudios), a raiz também mostra tudo daquele tipo, esteja
+   * ou não numa pasta, sem as pastas (pedido do dono, 11/11/2026): quem filtra quer ver todos.
    */
   private async projectLibrary(user: User, project: Project, url: URL): Promise<Response> {
     const p = url.searchParams;
@@ -919,9 +921,10 @@ ${error ? snackbar(error) : ""}`;
     const q = (p.get("q") ?? "").trim();
     const pasta = p.get("pasta") ?? "";
     const avatarId = p.get("avatar") ?? "";
+    const tipo = p.get("tipo") ?? "";
     const conta = this.db.conta(user.id);
-    // Avatares, sem busca: primeiro se escolhe o avatar.
-    if (fonte === "avatar" && !avatarId && !q) {
+    // Avatares, sem busca nem tipo: primeiro se escolhe o avatar.
+    if (fonte === "avatar" && !avatarId && !q && !tipo) {
       const [avatars, assets] = await Promise.all([this.db.avatarsByUser(user.id), this.db.assetsByUser(user.id)]);
       const avatares = avatars.map((a) => ({ id: a.id, nome: a.name, foto: a.photo_asset ? `/avatares/${a.id}/arquivos/${a.photo_asset}` : null, itens: assets.filter((x) => x.avatar_id === a.id).length }));
       return Response.json({ avatares: avatares.filter((a) => a.itens), arquivos: [] });
@@ -935,11 +938,12 @@ ${error ? snackbar(error) : ""}`;
     if (pasta && !q) params.set("pasta", pasta);
     const f = filtro(params, user);
     if ("erro" in f) return Response.json({ erro: f.erro }, { status: 400 });
-    const raiz = !pasta && !q && fonte !== "projeto";
+    // A raiz, com as pastas e só o que está fora delas: sem pasta aberta, sem busca e sem tipo.
+    const raiz = !pasta && !q && !tipo && fonte !== "projeto";
     const lista = await listar(this.db, user, { ...f, foraDePasta: raiz }, url);
     // As pastas vêm antes dos arquivos, só na raiz e na primeira página.
     let pastas: { id: string; nome: string; itens: number }[] = [];
-    if (raiz && !p.get("continuar") && !p.get("tipo")) {
+    if (raiz && !p.get("continuar")) {
       if (avatar) {
         const assets = await this.db.assetsByAvatar(avatar.id);
         pastas = (await this.db.folders(avatar.id)).map((x) => ({ id: x.id, nome: x.name, itens: assets.filter((a) => a.folder_id === x.id).length }));
