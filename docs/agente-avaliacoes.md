@@ -4,6 +4,57 @@ O que cada teste real de um agente fazendo um vídeo pelo MCP mostrou, nas palav
 data. Serve para escolher o que entra no backlog ([backlog.md](backlog.md)); o que vira item lá
 fica marcado aqui. O mais novo primeiro.
 
+## MCP com menos contexto, pastas, link de envio e apagar projeto (11/11/2026)
+
+Dois agentes novos, um depois do outro, só com o MCP do site local (sem ler o código, sem contêiner
+e sem gerar nada), cada um com um pedido de anúncio completo. Os projetos ficaram no banco local,
+que não é guardado.
+
+### Primeiro teste (antes dos ajustes)
+
+Pedido: projeto novo numa pasta, 3 ganchos, corpo e CTA em rascunho (3 variações), imagem e áudio
+do computador pelo link de envio, título animado, corte, velocidade, nota, vídeos numa pasta e um
+projeto criado e apagado.
+
+- 28 chamadas, um lote de 20 comandos aceito de primeira, nenhum erro de uso. Pastas, link de envio
+  e apagar projeto sem tropeço; a resposta do primeiro passo do apagar foi clara.
+- Leu a ajuda de quatro assuntos (15,4 mil caracteres), porque as instruções mandavam ler na
+  primeira vez de cada um. Com isso a conversa leu mais do que antes da mudança (uns 42 mil
+  caracteres contra 39 mil). A ajuda `comandos` repetia as assinaturas da descrição.
+  (Corrigido: a ajuda `comandos` traz só as regras, e as instruções mandam ler sempre só `animacoes`
+  e `comandos`; as outras, quando a descrição não bastar.)
+- Dava para apagar direto com `confirmar: true`, sem o primeiro passo.
+  (Corrigido: o primeiro passo devolve um código, e só ele apaga; projeto que mudou pede outro.)
+- Para conferir volume e velocidade teve de pedir o canvas inteiro (6 mil caracteres, nomes internos).
+  (Corrigido: o resumo traz `velocidade`, `volume` e `mudo` quando saem do padrão.)
+- `conteiner_falhou` não diz o que fazer. (Em aberto.)
+
+### Segundo teste (depois dos ajustes)
+
+Pedido: segunda versão do anúncio, com dois vídeos na mesma cena, a animação do outro projeto
+reaproveitada com outro texto, corte e mudo, música pelo link de envio, a ordem das cenas trocada
+(corpo antes de dois ganchos) e um projeto a apagar que não existia.
+
+- 19 chamadas, nenhum erro. Leu só `comandos` e, depois, `cenas`: uns 35 mil caracteres de
+  instruções, ferramentas e ajuda na conversa inteira. Não chamou o apagar, porque o projeto não existia.
+- Reusar a animação foi direto (`listar_animacoes` e `adicionar {animacao, parametros}`).
+- Ramificar depois do corpo saiu de primeira, mas pedindo raciocínio: a ajuda do `ordenar` só dava o
+  caso dos ganchos que chegam à primeira cena. (Corrigido: a ajuda dá também o caso inverso.)
+- O corte do arquivo não aparecia no resumo, só no canvas (`tin`, `tout`).
+  (Corrigido: o bloco cortado traz `corte: [início, fim]`.)
+- O `listar_animacoes` mostrava `{{texto}}` no lugar do texto na tela.
+  (Corrigido: os valores dos parâmetros entram no texto.)
+- A cena sem nome aparece com o nome do bloco, e não há como saber pelo `ver_projeto` se ela já foi
+  nomeada. (Em aberto.)
+- A `duracao` do `listar_arquivos` é a pedida ao modelo, não a medida: nos vídeos de exemplo, 8 a
+  25 s contra 6 s de verdade. Com vídeos reais a diferença deve ser pequena, mas o agente planeja
+  cortes com esse número. (Em aberto.)
+
+### O que foi para o backlog
+
+`conteiner_falhou` com orientação, a cena sem nome e a `duracao` medida entraram em "Pendências
+pequenas" do [backlog](backlog.md).
+
 ## Proposta do Lara Resende (02/11/2026)
 
 Projeto feito do zero numa sessão separada, só com o MCP e as ferramentas gerais (pesquisa e

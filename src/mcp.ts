@@ -41,7 +41,7 @@ const COMANDO: { tipo: string; assinatura: string; nota?: string; regras: string
   {
     tipo: "adicionar",
     assinatura: `{video|arquivo|ativo|imagem|audio: id, nome, inicio, fim, semSom, dur, ${POS}}`,
-    nota: "bloco de um arquivo; dur, a duração do arquivo (de ver_silencios), é obrigatório em vídeo e áudio de arquivo e de ativo enviado",
+    nota: "bloco de um arquivo; dur, a duração do arquivo (de ver_silencios), é obrigatório em vídeo e áudio de arquivo e de ativo enviado (o gerado não precisa)",
     regras:
       "imagem: o id de gerar_imagem. Toda imagem (gerada, de arquivo ou de ativo) fica na tela de inicio a fim, 3 s sem fim. audio: o id de um áudio gerado, de listar_arquivos. depois encadeia som com som e imagem ou vídeo com imagem ou vídeo: falas de áudio em sequência formam a base de um grupo só de som; depois de uma fala cortada em pedaços é depois do último pedaço. Sem depois nem sobre: bloco solto, uma cena nova. Vídeo de arquivo sem faixa de som (o WebM do render) entra sem a camada de áudio sozinho; semSom faz o mesmo com qualquer vídeo.",
   },
@@ -79,7 +79,7 @@ const COMANDO: { tipo: string; assinatura: string; nota?: string; regras: string
   },
   { tipo: "nota", assinatura: "{texto, perto}", nota: "texto solto no canvas, fora da exportação", regras: "Como um post-it amarelo: briefing, roteiro, referências, o que falta fazer. perto: um bloco, nota ou Final (fica logo acima dele); sem perto, embaixo de tudo. Até 10 mil caracteres, com as quebras de linha." },
   { tipo: "editarNota", assinatura: "{nota, texto}", regras: "Troca o texto de uma nota; as notas e os ids vêm em ver_projeto. Para apagar, remover {ids}." },
-  { tipo: "renomear", assinatura: "{bloco | grupo, nome}", regras: "Com grupo, o nome da cena, como Cena 1, no lugar de Bloco 1; vale o id de qualquer bloco dele. O nome do bloco (o nome do adicionar) não é o da cena." },
+  { tipo: "renomear", assinatura: "{bloco | grupo, nome}", regras: "Com grupo, o nome da cena, como Cena 1, no lugar de Bloco 1; vale o id de qualquer bloco dele." },
   { tipo: "cortar", assinatura: "{bloco, inicio, fim | duracao}", regras: "duracao no lugar de fim: o que fica a partir do início; num rascunho, cortar {bloco, duracao: 3} deixa 3 s." },
   { tipo: "dividir", assinatura: "{bloco, em}", regras: "Dois blocos, no instante em do arquivo; 0,5 s no mínimo de cada lado." },
   {
@@ -112,7 +112,7 @@ const COMANDO: { tipo: string; assinatura: string; nota?: string; regras: string
     tipo: "ordenar",
     assinatura: "{grupos: [um bloco de cada grupo, na ordem], final}",
     nota: "as cenas em sequência até o Final",
-    regras: "Liga as cenas nessa ordem e a última ao Final, no lugar das ligações entre elas e das delas ao Final, inclusive a automática do primeiro bloco; ligações de fora, como ganchos que chegam à primeira, ficam. Sem final, o único que houver.",
+    regras: "Liga as cenas nessa ordem e a última ao Final, no lugar das ligações entre elas e das delas ao Final, inclusive a automática do primeiro bloco; ligações de fora, como ganchos que chegam à primeira, ficam. Sem final, o único que houver. Para ramificar depois de uma cena (corpo, um de N ganchos, Final): tire antes as ligações antigas dos ramos, ordene com um dos ramos e, para cada outro, ligar {de: corpo, para: ramo} e ligar {de: ramo, para: final}.",
   },
   {
     tipo: "remover",
@@ -256,7 +256,7 @@ const FERRAMENTAS = [
   },
   {
     name: "ver_projeto",
-    description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo), ligações, Finais com as variações, avisos e as notas da pessoa. Os arquivos, o código das animações e o canvas inteiro são grandes: peça em incluir só quando precisar.",
+    description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo; corte [início, fim] do arquivo, velocidade, volume e mudo só quando fogem do padrão), ligações, Finais com as variações, avisos e as notas da pessoa. Os arquivos, o código das animações e o canvas inteiro são grandes: peça em incluir só quando precisar.",
     inputSchema: objeto({ projeto, incluir: { type: "array", items: { type: "string", enum: ["arquivos", "codigo", "canvas"] }, description: "arquivos: os do projeto; codigo: o HTML de cada animação; canvas: o modelo inteiro." } }, ["projeto"]),
   },
   {

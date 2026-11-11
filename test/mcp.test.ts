@@ -421,8 +421,13 @@ describe("ferramentas publicadas depois de conectar", () => {
     expect(r.mudou.grupos[0]!.blocos[0]).toMatchObject({ volume: 0.3, velocidade: 1.25 });
     const bloco = async () => dados<{ grupos: { blocos: Bloco[] }[] }>(await ferramenta("ver_projeto", { projeto: id })).grupos[0]!.blocos[0]!;
     expect(await bloco()).toMatchObject({ volume: 0.3, velocidade: 1.25 });
+    expect("corte" in (await bloco())).toBe(false);
     const m = dados<{ mudou: { grupos: { blocos: Bloco[] }[] } }>(await ferramenta("editar_projeto", { projeto: id, revisao: r.revisao, comandos: [{ tipo: "som", bloco: r.criados[0], mudo: true }, { tipo: "velocidade", bloco: r.criados[0], velocidade: 1 }] }));
     expect(m.mudou.grupos[0]!.blocos[0]).toMatchObject({ mudo: true });
+    // O corte do arquivo aparece no bloco cortado.
+    const { revisao: r3 } = dados<{ revisao: number }>(await ferramenta("ver_projeto", { projeto: id }));
+    await ferramenta("editar_projeto", { projeto: id, revisao: r3, comandos: [{ tipo: "cortar", bloco: r.criados[0], inicio: 1, fim: 4 }] });
+    expect((await bloco() as Bloco & { corte?: number[] }).corte).toEqual([1, 4]);
     const depois = await bloco();
     expect(depois.mudo).toBe(true);
     expect("velocidade" in depois || "volume" in depois).toBe(false);

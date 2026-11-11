@@ -143,6 +143,8 @@ function resumo(data: CanvasProject) {
         inicio: segundos(b.x - g.x),
         fim: segundos(b.x + width(b) - g.x),
         // O que som e velocidade mudaram, só quando saiu do padrão: o agente confere sem pedir o canvas inteiro.
+        // O trecho do arquivo que o bloco usa, quando ele foi cortado (a imagem, o rascunho e a animação não têm arquivo a cortar).
+        ...(b.kind !== "image" && (b.tin > 0.001 || b.tout < b.dur - 0.001) ? { corte: [+b.tin.toFixed(3), +b.tout.toFixed(3)] } : {}),
         ...(b.speed && b.speed !== 1 ? { velocidade: b.speed } : {}),
         ...(b.mute ? { mudo: true } : b.vol !== 1 && b.vol !== undefined ? { volume: b.vol } : {}),
       })),
@@ -355,7 +357,8 @@ export class Api {
       if (avatar && !avatares.includes(avatar)) continue;
       for (const b of data.blocks) {
         if (!b.code) continue;
-        const texto = textoNaTela(b.code.html);
+        // O texto como sai na tela: com os valores dos parâmetros no lugar de {{chave}}.
+        const texto = textoNaTela(b.code.html.replace(/\{\{\s*(\w+)\s*\}\}/g, (m: string, k: string) => String(b.code!.params?.[k] ?? m)));
         if (busca && !`${b.name} ${texto} ${Object.values(b.code.params ?? {}).join(" ")}`.toLowerCase().includes(busca)) continue;
         lista.push({ projeto: { id: o.id, nome: o.name }, bloco: b.id, nome: b.name, duracao: +(b.tout - b.tin).toFixed(3), texto, ...(b.code.params ? { parametros: b.code.params } : {}), avatares, atualizado: o.updated_at });
       }

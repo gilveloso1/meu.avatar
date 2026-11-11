@@ -445,6 +445,10 @@ Fora da ordem acima, pedido pelo dono: uma página com os números do site, só 
 - **Canvas**: velocidade e enquadramento ainda não têm campos nos Ajustes (só pela API, a prévia
   mostra), e o fundo desfocado da prévia não acompanha o zoom (o da exportação, sim).
 
+- **MCP** (dos testes de 11/11/2026, [agente-avaliacoes.md](agente-avaliacoes.md)): `conteiner_falhou`
+  não diz o que fazer; a cena sem nome aparece com o nome do bloco, e o `ver_projeto` não diz se ela
+  já foi nomeada; a `duracao` do `listar_arquivos` é a pedida ao modelo, não a medida.
+
 - **`www.meuavatar.ia.br`**: configurado na Cloudflare com certificado
   próprio, mas não deu para conferir do ambiente cloud (o proxy recusa).
   Conferir no navegador que redireciona para `https://meuavatar.ia.br`.

@@ -42,16 +42,19 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
 - Só token, por enquanto: o conector do claude.ai pede OAuth, que fica para depois.
 - **Custo fixo de contexto** (11/11/2026): as instruções e a lista de ferramentas vão em toda
   conversa, usadas ou não. Eram uns 39 mil caracteres (3,6 mil de instruções e 35,8 mil de
-  ferramentas, 8 mil só no `editar_projeto`); ficaram uns 26,5 mil (1,6 mil e 24,9 mil), já com as
+  ferramentas, 8 mil só no `editar_projeto`); ficaram uns 27 mil (1,8 mil e 25,2 mil), já com as
   cinco ferramentas novas. O que saiu não se perdeu: foi para a ferramenta **`ajuda {assunto}`**, que
-  o agente lê só quando vai usar o assunto: `comandos` (as regras e os casos de cada comando, uns 7,7
-  mil caracteres; ou o nome de um comando só, como `trocar`, umas centenas), `cenas`, `animacoes`,
-  `legenda`, `gerar` e `arquivos`. Na descrição do `editar_projeto` fica a assinatura de cada
+  o agente lê por assunto: `comandos` (as regras e os casos de cada comando, sem repetir as
+  assinaturas, uns 5,8 mil caracteres; ou o nome de um comando só, como `trocar`, umas centenas),
+  `cenas`, `animacoes`, `legenda`, `gerar` e `arquivos`. As instruções mandam ler sempre só
+  `animacoes` (antes de escrever HTML) e `comandos` (antes de um comando que não domina); as outras,
+  quando a descrição não bastar. Na descrição do `editar_projeto` fica a assinatura de cada
   comando, com uma nota curta. A assinatura e as regras de um comando moram juntas (`COMANDO`,
   `src/mcp.ts`); regra nova entra na ajuda, não na descrição, e `test/mcp.test.ts` segura o teto
-  (1.800 caracteres de instruções e 26 mil de ferramentas). Ainda não houve teste com um agente de
-  verdade depois da mudança: se ele errar por não ler a ajuda, a regra que faltou volta, curta, para
-  a descrição.
+  (1.900 caracteres de instruções e 26 mil de ferramentas). Os dois testes com um agente, de
+  11/11/2026, estão em [agente-avaliacoes.md](agente-avaliacoes.md): nenhum erro de uso, e a conversa
+  inteira leu uns 35 mil caracteres de instruções, ferramentas e ajuda (antes, 39 mil sem ajuda
+  nenhuma). Se um agente errar por não ler a ajuda, a regra que faltou volta, curta, para a descrição.
 - Ferramentas: `ajuda`, `listar_arquivos` (vídeos, imagens e áudios: gerados, dos avatares e dos projetos), `listar_avatares`, `criar_avatar`, `editar_avatar`, `enviar_ativo`, `listar_vozes`, `listar_animacoes`, `listar_projetos`, `criar_projeto`, `apagar_projeto`, `listar_pastas`, `criar_pasta`, `mover_para_pasta`, `ver_projeto`,
   `editar_projeto`, `ver_quadros` (devolve imagem), `ver_cena` (a cena montada, com todas as camadas, em imagem), `inspecionar_animacao` (texto; imagem só com
   `quadros: true`), `ver_transcricao`, `ver_silencios`, `enviar_arquivo`, `listar_modelos`,
@@ -175,7 +178,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/avatares?q=` | Avatares da conta com os ativos, cada um no item do acervo (o mesmo do `/api/v1/arquivos`) e mais `origem` (`gerado`, `enviado`), `foto` e `voz` |
 | `GET /api/v1/projetos?q=&pasta=` | Projetos da conta, cada um com a `pasta` em que está |
 | `POST /api/v1/projetos` `{nome, pasta?}` | Cria um projeto, na pasta de Projetos pedida |
-| `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio (num grupo só de som, os áudios da primeira faixa são a base), `inicio` e `fim` em segundos do grupo e, só quando saem do padrão, `velocidade`, `volume` e `mudo`), `ligacoes` (`id`, `de`, `para`: grupo ou Final), Finais com as variações, avisos e `notas` (`[{id, texto}]`, o texto que a pessoa colou ou escreveu no canvas: briefing, roteiro, referências; só vem quando há). Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
+| `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio (num grupo só de som, os áudios da primeira faixa são a base), `inicio` e `fim` em segundos do grupo e, só quando saem do padrão, `corte` (`[início, fim]` do arquivo), `velocidade`, `volume` e `mudo`), `ligacoes` (`id`, `de`, `para`: grupo ou Final), Finais com as variações, avisos e `notas` (`[{id, texto}]`, o texto que a pessoa colou ou escreveu no canvas: briefing, roteiro, referências; só vem quando há). Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
 | `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) e devolve só o que mudou: `{revisao, criados, mudou, avisosPendentes}` (abaixo). O projeto inteiro fica no `ver_projeto` |
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
 | `GET /api/v1/projetos/<id>/cena?grupo=&instantes=1,3.5&final=` | `ver_cena` (09/11/2026): JPG com os instantes (até 12, segundos do grupo, como em `ver_projeto`) de uma cena montada como na exportação, com todas as camadas, no tamanho, formato e velocidade do Final (sem `final`, o primeiro). A primeira vez a cena é montada no servidor, como um passo de exportação (as animações e o trecho, guardados pelo conteúdo: a exportação depois reaproveita): `202 {status: "montando", feitos, total}` até ficar pronta. Erros: `grupo_inexistente`, `final_inexistente`, `instantes_invalidos` (com a `duracao` do grupo), `cena_invalida` (com `motivo`, como rascunho sem vídeo), `cena_falhou` (502; a mesma cena não recomeça por 10 min) |
