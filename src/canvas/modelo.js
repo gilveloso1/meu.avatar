@@ -44,8 +44,9 @@ const GAP_MIN = 0.034;
 // Organizar: a área do grupo (20 px em volta) e a aba dele (40 px) cabem nas folgas; o Final, na dele.
 const COL_GAP = 140;
 const ROW_GAP = 110;
-// O ímã do bloco alcança MAGNET vezes a mira fina do encaixe.
-const MAGNET = 3;
+// O ímã do bloco alcança MAGNET vezes a mira fina do encaixe: 24 px na tela, para puxar e para
+// soltar (11/11/2026; eram 48 para puxar e 96 para soltar, e o bloco saltava de longe e ficava preso).
+const MAGNET = 1.5;
 // Longe assim da trilha atual (em trilhas), o elemento muda de trilha.
 const TRACK_HOLD = 0.7;
 const FINAL_HEAD = 92;
@@ -181,7 +182,8 @@ export function groups(project) {
         const all = members(o);
         const x0 = Math.min(...all.map((b) => b.x));
         const x1 = Math.max(...all.map((b) => b.x + width(b)));
-        if (!overlapX(x0, x1, lo, hi) && !near(x0, hi) && !near(x1, lo)) return false;
+        // Encostam, um fica sobre o outro, ou são do mesmo bloco com um buraco no meio (`joint`).
+        if (!overlapX(x0, x1, lo, hi) && !near(x0, hi) && !near(x1, lo) && !sameJoint(edge, all)) return false;
         // Sem trilha vazia no meio da área de vídeo: longe assim, é só coincidência de altura.
         const top = Math.max(...[...g.blocks, ...g.covers].map((b) => trackIn(b, g)), -1);
         const fits = (b) => trackIn(b, g) >= 0 && (!visual(b) || trackIn(b, g) <= top + 1);
@@ -224,6 +226,17 @@ function soundFirst(g, order) {
   g.soloAudio = true;
   g.id = first.id;
 }
+
+/**
+ * O buraco no bloco (pedido do dono, 11/11/2026): quando um elemento sai do meio de um bloco, os que
+ * ficam levam a mesma marca (`joint`) e seguem no mesmo bloco, com o espaço vazio entre eles, para a
+ * pessoa arrastar os outros ou pôr um novo ali. Sem a marca, o bloco é só geometria (quem encosta), e
+ * tirar um elemento do meio o partia em dois. A marca sai do elemento que é solto fora do bloco.
+ */
+const sameJoint = (a, b) => {
+  const marks = new Set(a.map((o) => o.joint).filter(Boolean));
+  return marks.size > 0 && b.some((o) => o.joint && marks.has(o.joint));
+};
 
 const single = (b, blocks = [], covers = [], audios = []) => ({ id: b.id, blocks, covers, audios, x: b.x, y: b.y, w: width(b), h: VIS_H });
 export const members = (g) => [...g.blocks, ...g.covers, ...g.audios];
@@ -572,11 +585,14 @@ export function snap(project, id, x, y, tol, keep = {}) {
   const isVideo = visual(b);
   const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) });
   const magnet = tol * MAGNET;
-  // O bloco onde o elemento já está vem primeiro, e o segura numa área maior.
+  // O bloco onde o elemento já está vem primeiro; ele solta à mesma distância em que puxa.
   for (const g of [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group)]) {
     const inside = g.id === keep.group;
-    const pad = inside ? magnet * 2 : magnet;
+    const pad = magnet;
     if (y + h <= g.top - pad || y >= g.bottom + pad) continue;
+    // Vídeo ou imagem que vem por baixo (pela área de som) só entra quando chega à área de vídeo:
+    // antes, encostar na faixa de som de um bloco o jogava para cima dele, num salto de centenas de px.
+    if (isVideo && !inside && (videoY(g) - y) / VIS_H < -0.5) continue;
     const lo = g.x;
     const hi = g.x + g.w;
     let at;
@@ -606,6 +622,43 @@ export function snap(project, id, x, y, tol, keep = {}) {
   return { x, y, mode: null };
 }
 
+/**
+ * O corte com a ponta alinhada: se a ponta que o corte move chega perto (até `tol`, em unidades do
+ * canvas) da ponta de um elemento de outra trilha do mesmo bloco (o vídeo de baixo, a cobertura, o
+ * som), o corte para exatamente nela. Devolve o projeto cortado e onde fica a guia ({ x, top,
+ * bottom }), ou null quando não há ponta por perto. Serve para não deixar, sem querer, elementos
+ * com tamanhos quase iguais. A conta de quanto a ponta anda por segundo é medida, não suposta: a
+ * velocidade do bloco e o lado do corte mudam a relação.
+ */
+export function trimAlign(project, id, side, timelineSeconds, tol) {
+  const ends = (p) => {
+    const b = p.blocks.find((o) => o.id === id);
+    return [b.x, b.x + width(b)];
+  };
+  const before = ends(project);
+  const cut = trim(project, id, side, timelineSeconds);
+  const after = ends(cut);
+  const moved = [0, 1].filter((i) => Math.abs(after[i] - before[i]) > EPS);
+  const g = groupIndex(groups(cut)).get(id);
+  if (!moved.length || !g) return null;
+  const me = cut.blocks.find((o) => o.id === id);
+  const others = members(g).filter((o) => o.id !== id && Math.abs(o.y - me.y) > EPS).flatMap((o) => [o.x, o.x + width(o)]);
+  let best = null;
+  for (const i of moved)
+    for (const x of others) {
+      const gap = x - after[i];
+      if (Math.abs(gap) <= tol && (!best || Math.abs(gap) < Math.abs(best.gap))) best = { i, x, gap };
+    }
+  if (!best) return null;
+  const guide = (p) => ({ project: p, x: best.x, top: g.top, bottom: g.bottom });
+  if (Math.abs(best.gap) < EPS) return guide(cut);
+  const step = 0.01;
+  const perSecond = (ends(trim(project, id, side, timelineSeconds + step))[best.i] - after[best.i]) / step;
+  if (Math.abs(perSecond) < EPS) return null;
+  const aligned = trim(project, id, side, timelineSeconds + best.gap / perSecond);
+  return Math.abs(ends(aligned)[best.i] - best.x) > 0.5 ? null : guide(aligned);
+}
+
 /** A posição que encosta uma ponta do elemento na ponta mais perto, dentro da mira. */
 function nearestEdge(x, w, edges, tol) {
   let best = x;
@@ -622,6 +675,29 @@ export function dropBlock(project, id, s) {
   const b = p.blocks.find((o) => o.id === id);
   b.x = s.x;
   b.y = s.y;
+  // Encaixado num bloco com buraco, passa a ser dele; solto fora de qualquer bloco, deixa o de antes.
+  const mark = s.mode && s.group ? members(s.group).map((o) => o.joint).find(Boolean) : null;
+  if (mark) b.joint = mark;
+  else delete b.joint;
+  return p;
+}
+
+/**
+ * Tira elementos (como removeItems) sem partir o bloco: os que ficam no bloco de quem saiu levam a
+ * mesma marca e continuam juntos, com o buraco. É o apagar da tela; os comandos do agente seguem com
+ * removeItems (lá, `fechar` encosta a sequência, e sem ele o grupo se parte, com o aviso).
+ */
+export function removeKeeping(project, ids) {
+  const gone = new Set(ids);
+  const stay = new Map();
+  for (const g of groups(project)) {
+    const rest = members(g).filter((b) => !gone.has(b.id));
+    if (rest.length < 2 || rest.length === members(g).length) continue;
+    const mark = rest.map((b) => b.joint).find(Boolean) ?? newId("j");
+    for (const b of rest) stay.set(b.id, mark);
+  }
+  const p = removeItems(project, ids);
+  for (const b of p.blocks) if (stay.has(b.id)) b.joint = stay.get(b.id);
   return p;
 }
 
@@ -1038,8 +1114,11 @@ export function pasteItems(project, items, at, { suffix = false } = {}) {
   const dx = Math.round(at.x - box.x), dy = Math.round(at.y - box.y);
   const empty = !p.blocks.length && !p.finals.length;
   const ids = [];
+  // A cópia de um bloco com buraco é outro bloco: a marca dele é nova, para não se juntar ao original.
+  const marks = new Map();
+  const mark = (j) => marks.get(j) ?? marks.set(j, newId("j")).get(j);
   for (const b of items.blocks) {
-    const c = { ...clone(b), id: newId("b"), x: b.x + dx, y: b.y + dy, ...(suffix ? { name: `${b.name} (cópia)` } : {}) };
+    const c = { ...clone(b), id: newId("b"), x: b.x + dx, y: b.y + dy, ...(suffix ? { name: `${b.name} (cópia)` } : {}), ...(b.joint ? { joint: mark(b.joint) } : {}) };
     p.blocks.push(c);
     ids.push(c.id);
   }

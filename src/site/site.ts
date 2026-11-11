@@ -992,6 +992,7 @@ ${error ? snackbar(error) : ""}`;
         exportarSom: ERROS.exportarSom,
         exportarLimite: ERROS.exportarLimite(MAX_VERSOES),
         ligacaoCiclo: ERROS.ligacaoCiclo,
+        ligacaoSolta: ERROS.ligacaoSolta,
         ligacaoRepetida: ERROS.ligacaoRepetida,
       },
     };

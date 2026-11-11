@@ -55,6 +55,13 @@ menos custo.
   prévia e faz outro vídeo na próxima exportação, sem mexer no código.
 - **Juntar**: blocos encostados lado a lado formam uma sequência fixa (corte
   seco), como numa linha do tempo. Juntos, viram um grupo.
+- **Buraco no bloco** (pedido do dono, 11/11/2026): apagar um elemento do meio de um bloco não o
+  parte em dois: os que ficam continuam no mesmo bloco, com o espaço vazio, para arrastar os outros
+  ou pôr um novo ali. Os elementos que ficam levam a mesma marca (`joint`, `removeKeeping` em
+  `modelo.js`), e `groups` junta quem tem a mesma marca na mesma altura; o elemento solto fora do
+  bloco perde a marca, e o que encaixa num bloco marcado a ganha. Enquanto o buraco estiver na
+  sequência de vídeo, aquele trecho sai sobre fundo preto (o aviso `sem_video_de_base` do agente).
+  Pelos comandos do agente nada mudou: `remover` com `fechar` encosta, e sem ele o grupo se parte.
 - **Sobrepor**: um bloco em cima de outro cobre a imagem dele naquele trecho,
   como um corte para o b-roll; arrastar para os lados escolhe o momento. Um
   b-roll também pode ficar entre dois blocos, como trecho próprio.
@@ -106,8 +113,10 @@ menos custo.
   a trilha 0 embaixo e as outras subindo; sons ficam na área de som, com a trilha 0 em cima e
   as outras descendo. Uma trilha pode ter um elemento ou vários, e nada se sobrepõe nela: o
   elemento vai para a trilha livre mais perto do mouse, e a seguinte à última está sempre livre.
-  Qualquer elemento é puxado pelo ímã, corre até a própria ponta sair do bloco, que cresce
-  junto, e encosta nas pontas dos outros. Passou da direita, fica ao lado, na primeira trilha;
+  Qualquer elemento é puxado pelo ímã (24 px na tela, para puxar e para soltar, desde 11/11/2026:
+  eram 48 e 96, e o bloco saltava de longe e ficava preso; o vídeo que vem por baixo, pela área de
+  som de um bloco, só entra ao chegar à área de vídeo), corre até a própria ponta sair do bloco, que
+  cresce junto, e encosta nas pontas dos outros. Passou da direita, fica ao lado, na primeira trilha;
   passou da esquerda, sai do bloco. O bloco o segura numa área maior e, perto da trilha onde
   está, ele fica nela, para nada piscar. Alt solta sem encaixar. O tempo de cada elemento vem
   só da posição dele; quem está em trilha mais alta fica por cima.
@@ -130,6 +139,39 @@ menos custo.
   som solto não tem área de vídeo, então o conector dele fica na altura dele; a prévia junta as
   trilhas de vídeo acima da base numa camada, e nela mostra todas as do instante, empilhadas pela
   trilha (09/11/2026): a animação é transparente e deixa ver a imagem de baixo, como na exportação.
+- **Sem saltos e fácil de pegar** (11/11/2026, do teste de uso com medições, aprovado pelo dono):
+  - A linha de reprodução só se pega pela alça de cima; a linha em si não recebe o clique, para não
+    cobrir a borda de corte do começo do bloco.
+  - No bloco escolhido, o tocar surge no lugar do ícone do tipo, no rótulo, com a mesma largura e
+    altura (é o próprio ícone que vira o botão); o bloco inteiro arrasta.
+  - Puxar pela faixa de som só muda a faixa: o vídeo não sai do lugar.
+  - Soltar um grupo ou o Final em cima de outro elemento o leva ao lugar livre mais perto (`settle`,
+    `canvas.js`); com Alt, fica onde foi solto. O que entra pelo painel Arquivos ou pelo envio cai num
+    lugar livre do que está à vista (`findSpot`), sem mexer na vista; sem lugar, a vista se afasta até
+    mostrar tudo.
+  - "Organizar" termina com "Ver tudo". Abrir e fechar o painel Arquivos não desloca o que está no canvas.
+  - O tamanho de cada coisa com o zoom segue o sistema de proporção, abaixo.
+  - A ligação solta a até 32 px de um ponto liga nele; no vazio, um aviso diz que não ligou (a linha
+    puxada de uma ligação que já existia some, sem aviso: é o gesto de tirar).
+- **Sistema de proporção** (aprovado pelo dono em 11/11/2026; antes cada elemento tinha a sua regra, e
+  a 800% o ponto de ligação tinha 144 px ao lado de uma linha de 4). Três famílias, cada uma com uma
+  regra só (`scale()` e `stroke()`, `canvas.js`; `--ck`, `--sw` e `--lz`, `tela.html`):
+  - **Conteúdo** (blocos, miniaturas, ondas de som, texto do rótulo, card do Final): acompanha o
+    zoom por inteiro. Exceção: afastado, o texto do rótulo não fica menor que uns 10 px na tela, e
+    abaixo de 75% o rótulo mostra só o nome.
+  - **Controles** (ponto de ligação, borda de corte, aba do grupo, ícone das áreas): crescem pela
+    raiz do zoom, de 1 a 2 vezes, e afastados não ficam menores que a 100%. Ponto de ligação: 18 px
+    até 100%, 26 em 200%, 36 a partir de 400%.
+  - **Traços** (seleção, contorno do grupo, divisa das áreas, ligações, guia do corte): a mesma
+    medida, em px inteiros: 2 px até 100%, 3 em 200%, 4 a partir de 400%.
+  - **Cursor de progresso** (a linha de reprodução e a alça): atravessa o bloco de cima a baixo e por
+    isso segue o tamanho dele mais de perto, nos dois sentidos (pedido do dono, 11/11/2026): o zoom
+    elevado a 0,6, de 0,6 a 3,5 vezes. Alça de 12 × 20 e linha de 2 px a 100%; 8 × 13 e 1 px a 50%;
+    42 × 70 e 7 px a 800%. A área de toque em volta da alça não encolhe.
+  Os traços ficam numa camada fora do canvas ampliado (`#lines`, `drawStrokes`), e a linha de
+  reprodução direto no `#vp`: dentro do canvas ampliado, o navegador arredonda para 1 px do canvas
+  tudo o que for mais fino (a borda de 2 px saía com 8 em 800%). Traço ou controle novo entra numa
+  dessas famílias, sem regra própria.
 - **Arrasto leve**: cada arrasto desenha no máximo uma vez por quadro, sem o painel (ele vem
   ao soltar). Sem mudança no lugar do elemento, nada é desenhado; cada elemento, as portas e
   as linhas só tocam a página se algo deles mudou.
@@ -137,7 +179,7 @@ menos custo.
   Ajustes (`project.names`, pelo id do primeiro elemento), e vazio volta ao número.
 - **Área e prévia**: o grupo ganha um retângulo tracejado em volta de tudo o
   que entra nele (sequência, coberturas e som), com o chip do nome em cima. O
-  bloco escolhido tem o botão de tocar no meio; o chip do grupo também. A prévia
+  bloco escolhido tem o tocar no lugar do ícone do tipo; o chip do grupo também tem o seu. A prévia
   toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo; a
   linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
   Clicar num ponto vazio dentro da área de um grupo escolhe o grupo e leva a linha
@@ -155,6 +197,11 @@ menos custo.
   - Apagar um não afeta o outro. O som somado tem até 8 faixas embaixo do grupo.
 - **Corte**: no bloco escolhido, puxar a borda da esquerda ou da direita (sem
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.
+  **Alinhado** (pedido do dono, 11/11/2026): quando a ponta que o corte move chega a 8 px (na tela)
+  da ponta de um elemento de outra trilha do mesmo bloco (o vídeo de baixo, a cobertura, o som), o
+  corte para exatamente nela, uma guia tracejada em primary (um traço do sistema de proporção) aparece de cima a baixo do bloco e o aviso de cima
+  diz "Alinhado": assim não ficam, sem querer, elementos de tamanhos quase iguais. Com Alt, corta
+  livre (`trimAlign`, `modelo.js`).
 
 - **Folha da direita**: abas Prévia e Ajustes (abas principais fixas do M3, como na
   página do vídeo), sem título em cima. Na Prévia, o vídeo 9:16 ocupa a altura que

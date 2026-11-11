@@ -145,6 +145,7 @@ export const ERROS = {
   canvasEnviar: erro("Não foi possível enviar o arquivo.", "Tente de novo em instantes."),
   canvasArquivoGrande: (max: number) => erro("Este arquivo é grande demais.", `Use um arquivo de até ${max} MB.`),
   projetoNome: campo("Escreva o nome do projeto."),
+  ligacaoSolta: erro("A linha não chegou a nenhum ponto.", "Solte-a sobre um ponto de entrada."),
   ligacaoCiclo: erro("Essa ligação faria um caminho em círculo.", "Ligue para o que vem depois."),
   ligacaoRepetida: erro("Esses dois já estão ligados.", "Escolha outro bloco."),
   exportarSemVersao: erro("Este Final ainda não tem variações.", "Ligue um grupo ao Final."),

@@ -124,7 +124,7 @@ const previewFinal = () => (sel.type === "final" && project.finals.find((f) => f
 const head = document.createElement("div");
 head.className = "playhead";
 head.innerHTML = `<span class="playhead__knob"></span>`;
-world.append(head);
+vp.append(head);
 let headBox = null;
 function playhead(t) {
   let box = null;
@@ -140,9 +140,17 @@ function playhead(t) {
   headBox = box;
   // Aparece sempre que a prévia toca um bloco ou um grupo, para poder arrastar.
   head.hidden = !box;
-  // Passa 4 px (na tela) acima e abaixo do que toca, com qualquer zoom.
-  const pad = 4 / Math.max(1, view.z);
-  if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - pad / 4}px`, top: `${box.y - pad}px`, height: `${box.h + 2 * pad}px` });
+  // A linha fica fora do canvas ampliado, em px da tela: dentro dele, com o zoom no máximo, a linha e a
+  // alça viravam frações de px que o navegador arredondava (a linha de 2 px saía com 8, a alça torta).
+  // Passa 4 px acima e abaixo do que toca, com qualquer zoom.
+  // O cursor de progresso atravessa o bloco de cima a baixo: por isso acompanha o tamanho dele mais
+  // de perto que os outros controles (pedido do dono), nos dois sentidos: o zoom elevado a 0,6, de
+  // 0,6 a 3,5 vezes. Alça de 12 × 20 e linha de 2 px a 100%; 8 × 13 e 1 px a 50%; 42 × 70 e 7 px a
+  // 800%. Sempre em px inteiros da tela; a área de toque em volta da alça não encolhe.
+  const grow = Math.min(3.5, Math.max(0.6, view.z ** 0.6));
+  const line = Math.max(1, Math.round(2 * grow));
+  head.style.setProperty("--hs", String(grow));
+  if (box) Object.assign(head.style, { width: `${line}px`, left: `${Math.round((box.x + t * M.PX) * view.z + view.x - line / 2)}px`, top: `${Math.round(box.y * view.z + view.y) - 4}px`, height: `${Math.round(box.h * view.z) + 8}px` });
 }
 /** Tocar numa variação do Final: destaca o caminho e toca; a que já está na prévia pausa ou continua. */
 function pickVariant(id, i) {
@@ -371,9 +379,42 @@ function sharpen() {
   }
 }
 
+/** A medida dos controles e dos traços na tela: a raiz do zoom, de 1 a 2 vezes o tamanho de 100%. */
+const scale = () => Math.min(2, Math.max(1, Math.sqrt(view.z)));
+/** O traço (linha de reprodução, seleção, contorno do grupo, ligações, guia): 2 px até 100%, 4 px a partir de 400%. */
+const stroke = () => Math.round(2 * scale());
+
+// Os traços ficam fora do canvas ampliado, em px inteiros da tela: dentro dele, o navegador
+// arredonda para 1 px do canvas o que for mais fino (a borda de 2 px saía com 8 no zoom de 800%).
+// O render() guarda as caixas, em medidas do canvas; aqui elas viram px da tela, a cada zoom ou rolagem.
+const lines = $("#lines");
+let strokes = [];
+let guideAt = null;
+function drawStrokes() {
+  const s = stroke();
+  const px = (v) => Math.round(v * view.z);
+  const box = (o, grow = 0) => `left:${px(o.x) + Math.round(view.x) - grow}px;top:${px(o.y) + Math.round(view.y) - grow}px;width:${px(o.w) + 2 * grow}px;height:${px(o.h) + 2 * grow}px`;
+  let html = "";
+  for (const o of strokes) {
+    if (o.kind === "split") html += `<div class="stroke stroke--split" style="${box({ ...o, h: 0 })};height:${Math.round(scale())}px"></div>`;
+    else html += `<div class="stroke stroke--${o.kind} ${o.cls ?? ""}" style="${box(o, o.out ? s : 0)};border-radius:${Math.round((o.r ?? 0) * (o.kind === "frame" ? scale() : view.z)) + (o.out ? s : 0)}px"></div>`;
+  }
+  if (guideAt) html += `<div class="stroke stroke--guide" style="left:${px(guideAt.x) + Math.round(view.x) - Math.round(s / 2)}px;top:${px(guideAt.top) + Math.round(view.y) - 16}px;height:${px(guideAt.bottom - guideAt.top) + 32}px"></div>`;
+  if (lines.innerHTML !== html) lines.innerHTML = html;
+}
+
 function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
   world.style.setProperty("--zi", String(1 / Math.max(1, view.z)));
+  // O sistema de proporção (docs/canvas.md): o conteúdo acompanha o zoom; os controles e os traços
+  // crescem pela raiz dele, de 1 a 2 vezes (scale()), e não encolhem abaixo do tamanho de 100%.
+  // --ck desfaz o zoom do canvas e aplica a medida; --sw é o traço, em px inteiros da tela.
+  world.style.setProperty("--ck", String(scale() / view.z));
+  for (const el of [world, lines]) el.style.setProperty("--sw", `${stroke()}px`);
+  // O texto do rótulo é conteúdo, mas afastado não fica menor que uns 10 px na tela.
+  world.style.setProperty("--lz", String(Math.min(2.2, Math.max(1, 0.85 / view.z))));
+  world.classList.toggle("is-far", view.z < 0.75);
+  drawStrokes();
   playhead(player.t);
   vp.style.backgroundSize = `${24 * view.z}px ${24 * view.z}px`;
   vp.style.backgroundPosition = `${view.x}px ${view.y}px`;
@@ -443,7 +484,10 @@ function render({ side = true } = {}) {
     // Só mexe no elemento se algo mudou: arrastar um bloco não redesenha os outros.
     // O som do vídeo fica na área de som, na faixa dele.
     const sound = g?.sounds.find((s) => s.block === b);
-    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}|${b.src}|${b.draft?.fala}|${b.draft?.descricao}`;
+    // O bloco escolhido mostra o tocar ou o pausar no lugar do ícone: tocar também redesenha o bloco.
+    const chosen = sel.type === "block" && sel.id === b.id;
+    const playing = chosen && player.playing && preview?.type === "block" && preview.id === b.id;
+    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}|${b.src}|${b.draft?.fala}|${b.draft?.descricao}|${playing}`;
     if (el.drawn === state) continue;
     el.drawn = state;
     el.className = look;
@@ -455,7 +499,12 @@ function render({ side = true } = {}) {
     const media = $(".blk__media", el);
     if (M.linked(b)) paintWave($(".blk__wave", el), b);
     if (b.kind === "audio") paintWave(media, b);
-    $(".blk__kind", el).textContent = b.draft ? "edit_note" : b.code ? "animation" : { video: "movie", image: "image", audio: "music_note" }[b.kind];
+    // O ícone do tipo; no bloco escolhido, o tocar surge no lugar dele, com a mesma largura e altura
+    // (é o próprio ícone que vira o botão: mesma posição, mesmo tamanho, mesma cor).
+    const kindEl = $(".blk__kind", el);
+    kindEl.textContent = chosen ? (playing ? "pause" : "play_arrow") : b.draft ? "edit_note" : b.code ? "animation" : { video: "movie", image: "image", audio: "music_note" }[b.kind];
+    if (chosen) Object.assign(kindEl.dataset, { playBlock: b.id }), kindEl.setAttribute("role", "button"), kindEl.setAttribute("aria-label", playing ? "Pausar" : "Tocar"), (kindEl.title = playing ? "Pausar" : "Tocar");
+    else delete kindEl.dataset.playBlock, kindEl.removeAttribute("role"), kindEl.removeAttribute("aria-label"), kindEl.removeAttribute("title");
     $(".blk__name", el).textContent = b.name;
     if (b.draft) media.replaceChildren(Object.assign(document.createElement("span"), { className: "blk__fala", textContent: draftText(b) }));
     $(".blk__dur", el).textContent = fmt(M.len(b));
@@ -487,8 +536,10 @@ function render({ side = true } = {}) {
   const empty = $("#canvas-empty");
   if (empty) empty.hidden = project.blocks.length > 0 || (project.notes?.length ?? 0) > 0;
 
-  // Abas dos grupos, portas e blocos finais.
+  // Abas dos grupos, portas e blocos finais. Os traços (contorno do grupo, divisa das áreas, seleção)
+  // vão para a camada de fora do canvas ampliado (drawStrokes).
   let html = "";
+  const marks = [];
   for (const g of gs) {
     const top = g.top;
     const rowH = g.soloAudio ? M.AUD_H : M.VIS_H;
@@ -498,26 +549,18 @@ function render({ side = true } = {}) {
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
       const bottom = g.bottom;
       const onPath = path?.includes(g) ? "is-path" : "";
-      html += `<div class="gframe ${isSel ? "is-sel" : ""} ${onPath}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
+      marks.push({ kind: "frame", cls: `${isSel ? "is-sel" : ""} ${path && !onPath ? "is-dim" : ""}`, x: g.x - FRAME_PAD, y: top - FRAME_PAD, w: g.w + 2 * FRAME_PAD, h: bottom - top + 2 * FRAME_PAD, r: 16 });
       html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.label)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o bloco"}" title="${gPlaying ? "Pausar" : "Tocar o bloco"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
     }
     // As duas áreas do bloco: vídeo em cima, som embaixo.
     if (M.hasArea(g) && g.bottom > g.y + M.VIS_H) {
       const side = g.x - FRAME_PAD;
-      html += `<div class="gsplit" style="left:${side}px;top:${g.y + M.VIS_H}px;width:${g.w + 2 * FRAME_PAD}px"></div>`;
+      marks.push({ kind: "split", x: side, y: g.y + M.VIS_H, w: g.w + 2 * FRAME_PAD, h: 0 });
       html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${top + 4}px">movie</span>`;
       html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${g.y + M.VIS_H + 12}px">music_note</span>`;
     }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
-  }
-  // Bloco escolhido: o botão de tocar só ele, no meio da imagem.
-  const sb = sel.type === "block" && project.blocks.find((b) => b.id === sel.id);
-  if (sb) {
-    const w = M.width(sb);
-    const cy = sb.kind === "audio" ? sb.y + M.AUD_H / 2 : sb.y + 28 + (M.VIS_H - 32) / 2;
-    const playing = player.playing && preview?.type === "block" && preview.id === sb.id;
-    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + w / 2}px;top:${cy}px" aria-label="${playing ? "Pausar" : "Tocar"}" title="${playing ? "Pausar" : "Tocar"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
   }
   for (const f of project.finals) {
     const vs = M.versions(project, f.id, gs);
@@ -544,6 +587,17 @@ function render({ side = true } = {}) {
     const temp = $("#wire-temp")?.getAttribute("d") ?? "";
     wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d="${temp}"/>`;
   }
+
+  // A seleção: a borda por dentro do bloco ou da nota; no Final, por fora, com a folga do traço.
+  const sb = sel.type === "block" && project.blocks.find((b) => b.id === sel.id);
+  if (sb) marks.push({ kind: "sel", x: sb.x, y: sb.y, w: M.width(sb), h: M.height(sb), r: sb.kind === "audio" ? 8 : 12 });
+  const sn = sel.type === "note" && project.notes?.find((n) => n.id === sel.id);
+  if (sn) marks.push({ kind: "sel", x: sn.x, y: sn.y, w: M.NOTE_W, h: M.VIS_H, r: 12 });
+  const sf = sel.type === "final" && project.finals.find((f) => f.id === sel.id);
+  const sfEl = sf && chrome.querySelector(`.fin[data-final="${sf.id}"]`);
+  if (sfEl) marks.push({ kind: "sel", out: true, x: sf.x, y: sf.y, w: sfEl.offsetWidth, h: sfEl.offsetHeight, r: 16 });
+  strokes = marks;
+  drawStrokes();
 
   if (side) renderSide(gs);
   frameRatio();
@@ -856,7 +910,7 @@ function removeSelection() {
   if (sel.type === "group") {
     const g = M.groups(project).find((g) => g.id === sel.id);
     if (g) project = M.removeItems(project, M.members(g).map((b) => b.id));
-  } else if (sel.type) project = M.removeItems(project, [sel.id]);
+  } else if (sel.type) project = M.removeKeeping(project, [sel.id]);
   commit(before);
   sel = { type: null };
   render();
@@ -958,8 +1012,12 @@ const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart
 
 /** Abre ou fecha o painel; o canvas encolhe para dar lugar, e a escolha fica lembrada. */
 function showLibrary(open) {
+  // O canvas encolhe ou cresce pela esquerda: a vista compensa, e o que está nele não sai do lugar na tela.
+  const left = vp.getBoundingClientRect().left;
   lib.hidden = !open;
   $(".editor").classList.toggle("has-files", open);
+  const moved = vp.getBoundingClientRect().left - left;
+  if (moved) (view.x -= moved), applyView();
   for (const b of document.querySelectorAll("[data-open-library]")) b.setAttribute("aria-expanded", String(open));
   try {
     localStorage.setItem("canvas-arquivos", open ? "1" : "0");
@@ -1069,35 +1127,37 @@ async function addFromLibrary(a, at = null, quiet = false, free = !at) {
   const before = project;
   project = structuredClone(project);
   const b = { id: M.newId("b"), tone: M.nextTone(project, kind, a.src), kind, name: a.nome, src: a.src, dur, tin: 0, tout: kind === "image" ? 3 : dur, x: 0, y: 0, mute: false, vol: 1 };
-  const r = vp.getBoundingClientRect();
-  const mid = toWorld(r.left + r.width / 2, r.top + r.height / 2);
-  const spot = at ?? { x: mid.x - M.width(b) / 2, y: mid.y - M.height(b) / 2 };
-  const [w, h] = [M.width(b), M.height(b)];
+  // A caixa do bloco no canvas: o vídeo leva a faixa de som embaixo.
+  const [w, h] = [M.width(b), M.height(b) + (kind === "video" ? M.AUD_H : 0)];
+  // Tocado, entra num lugar livre do que está à vista, sem mexer na vista; solto, onde foi solto.
+  const spot = at ?? findSpot(w, h);
   b.x = spot.x;
   b.y = spot.y;
-  // Fora do ponto em que foi solto, o bloco desce até um lugar livre, para não cair em cima de outro.
-  for (let hit; free && (hit = project.blocks.find((o) => o.x < b.x + w + 24 && o.x + M.width(o) + 24 > b.x && o.y < b.y + h + 48 && o.y + M.height(o) + 48 > b.y)); ) b.y = hit.y + M.height(hit) + 48;
+  // Os seguintes de vários soltos juntos descem até um lugar livre, para não cair em cima de nada.
+  if (at && free) for (let hit, taken = boxes(); (hit = taken.find((o) => hits({ x: b.x, y: b.y, w, h }, o))); ) b.y = hit.y + hit.h + GAP_Y;
   project.blocks.push(b);
   const first = M.linkFirst(project, b);
   sel = { type: "block", id: b.id };
   preview = { type: "block", id: b.id };
+  // Solto sobre outro elemento sem encaixar: vai para o lugar livre mais perto (antes de guardar o passo do desfazer).
+  if (at && !free && !first) settle("block", b.id);
   commit(before);
   render();
   if (first) fit();
-  else reveal(b);
+  else {
+    // Solto sobre outro elemento sem encaixar: vai para o lugar livre mais perto.
+    reveal(project.blocks.find((o) => o.id === b.id));
+  }
   for (const el of lib.querySelectorAll(".ftile[data-lib]")) if (libItems[+el.dataset.lib]?.src === a.src && !$(".ftile__badge", el)) $(".ftile__media", el).insertAdjacentHTML("beforeend", `<span class="ftile__badge" title="Já está no canvas"><span class="icon" aria-hidden="true">layers</span></span>`);
   if (!quiet) toast(`${a.nome} entrou no canvas.`);
   return b;
 }
 
-/** Leva a vista até o bloco, se ele ficou fora dela (sem mexer no zoom). */
+/** O bloco ficou fora do que está à vista (não havia lugar livre): a vista se afasta até mostrar tudo, em vez de pular para ele. */
 function reveal(b) {
   const r = vp.getBoundingClientRect();
   const [x, y, w, h] = [b.x * view.z + view.x, b.y * view.z + view.y, M.width(b) * view.z, M.height(b) * view.z];
-  if (x >= 0 && y >= 0 && x + w <= r.width && y + h <= r.height - 80) return;
-  view.x = r.width / 2 - (b.x + M.width(b) / 2) * view.z;
-  view.y = r.height / 2 - (b.y + M.height(b) / 2) * view.z;
-  applyView();
+  if (x < 0 || y < 0 || x + w > r.width || y + h > r.height - 80) fit();
 }
 
 /** Os escolhidos entram de uma vez, um embaixo do outro a partir do ponto (ou do meio da vista). */
@@ -1270,8 +1330,8 @@ function probeUrl(src, kind = "video") {
 
 $("#import")?.addEventListener("click", () => $("#file").click());
 $("#file").onchange = (e) => {
-  const r = vp.getBoundingClientRect();
-  importFiles([...e.target.files], toWorld(r.left + r.width / 3, r.top + r.height / 3));
+  // Pelo botão de enviar, o arquivo entra num lugar livre do que está à vista (como os do painel).
+  importFiles([...e.target.files], findSpot(280, M.VIS_H + M.AUD_H));
   e.target.value = "";
 };
 /* ---------- arrastar e colar: arquivos entram como blocos; texto vira nota ---------- */
@@ -1448,6 +1508,8 @@ $("#arrange").onclick = () => {
   project = M.arrange(project);
   commit(before);
   render();
+  // Tudo mudou de lugar: a vista vai junto, para o resultado não ficar fora da tela.
+  fit();
 };
 
 const ZOOM_MIN = 0.15;
@@ -1739,6 +1801,87 @@ vp.addEventListener(
  * Puxar uma ligação de um ponto até outro grupo ou Final. end: a ponta que fica parada, de
  * saída (out) ou de entrada, num grupo (group, o id dele) ou num Final (final).
  */
+/** A guia de alinhamento do corte: uma linha de cima a baixo do bloco, na ponta em que o corte parou. */
+function showGuide(at) {
+  guideAt = at ? { x: at.x, top: at.top, bottom: at.bottom } : null;
+  $("#snapinfo").textContent = at ? "Alinhado" : "";
+  drawStrokes();
+}
+
+/** O ponto de ligação (entrada ou saída) mais perto do mouse, até `reach` px na tela. */
+function nearestPort(x, y, selector, reach = 32) {
+  let best = null;
+  let gap = reach;
+  for (const el of chrome.querySelectorAll(selector)) {
+    const r = el.getBoundingClientRect();
+    const d = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y);
+    if (d < gap) (gap = d), (best = el);
+  }
+  return best;
+}
+
+/** As caixas do que ocupa o canvas: cada grupo com a área de som, cada Final e cada nota. */
+function boxes() {
+  const out = [];
+  for (const g of M.groups(project)) out.push({ kind: "group", id: g.id, x: g.x, y: g.top, w: g.w, h: g.bottom - g.top });
+  for (const f of project.finals) {
+    const el = chrome.querySelector(`.fin[data-final="${f.id}"]`);
+    out.push({ kind: "final", id: f.id, x: f.x, y: f.y, w: el?.offsetWidth ?? 200, h: el?.offsetHeight ?? 120 });
+  }
+  for (const n of project.notes ?? []) out.push({ kind: "note", id: n.id, x: n.x, y: n.y, w: M.NOTE_W, h: M.VIS_H });
+  return out;
+}
+// A folga entre elementos: dos lados cabem os pontos de ligação; em cima, a aba do grupo.
+const GAP_X = 48;
+const GAP_Y = 56;
+const hits = (a, o) => o.x < a.x + a.w + GAP_X && o.x + o.w + GAP_X > a.x && o.y < a.y + a.h + GAP_Y && o.y + o.h + GAP_Y > a.y;
+
+/**
+ * Um lugar livre para um elemento novo, dentro do que está à vista: da esquerda para a direita, de cima
+ * para baixo, sem cobrir nada. A vista não se mexe. Sem lugar à vista, embaixo de tudo (e a vista vai até lá).
+ */
+function findSpot(w, h) {
+  const r = vp.getBoundingClientRect();
+  const a = toWorld(r.left + 56, r.top + 72);
+  const z = toWorld(r.right - 24, r.bottom - 96);
+  const taken = boxes();
+  for (let y = a.y; y + h <= z.y; y += 24)
+    for (let x = a.x; x + w <= z.x; x += 24) {
+      const box = { x, y, w, h };
+      if (!taken.some((o) => hits(box, o))) return { x: Math.round(x), y: Math.round(y) };
+    }
+  return { x: Math.round(a.x), y: Math.round(Math.max(a.y, ...taken.map((o) => o.y + o.h + GAP_Y))) };
+}
+
+/**
+ * Depois de soltar: o grupo (ou o Final) que ficou em cima de outro elemento vai para o lugar livre
+ * mais perto, ao lado, acima ou abaixo. Com Alt, fica onde foi solto. O que encaixou num grupo passa
+ * a ser parte dele, e é o grupo inteiro que não pode cobrir o Final ou outro grupo.
+ */
+function settle(kind, id) {
+  const all = boxes();
+  const gid = kind === "final" ? id : M.groupIndex(M.groups(project)).get(id)?.id;
+  const me = all.find((o) => o.kind === (kind === "final" ? "final" : "group") && o.id === gid);
+  if (!me) return;
+  const others = all.filter((o) => o !== me && o.kind !== "note");
+  const over = others.filter((o) => hits({ ...me, x: me.x + GAP_X, y: me.y + GAP_Y, w: me.w - 2 * GAP_X, h: me.h - 2 * GAP_Y }, o));
+  if (!over.length) return;
+  const u = { x0: Math.min(...over.map((o) => o.x)), y0: Math.min(...over.map((o) => o.y)), x1: Math.max(...over.map((o) => o.x + o.w)), y1: Math.max(...over.map((o) => o.y + o.h)) };
+  const moves = [
+    [u.x1 + GAP_X - me.x, 0],
+    [u.x0 - GAP_X - me.w - me.x, 0],
+    [0, u.y1 + GAP_Y - me.y],
+    [0, u.y0 - GAP_Y - me.h - me.y],
+  ].sort((a, b) => Math.abs(a[0]) + Math.abs(a[1]) - Math.abs(b[0]) - Math.abs(b[1]));
+  const clear = ([dx, dy]) => !others.some((o) => hits({ ...me, x: me.x + dx + 1, y: me.y + dy + 1, w: me.w - 2, h: me.h - 2 }, { ...o, x: o.x + GAP_X, y: o.y + GAP_Y, w: o.w - 2 * GAP_X, h: o.h - 2 * GAP_Y }));
+  const [dx, dy] = moves.find(clear) ?? moves[0];
+  if (kind === "final") {
+    project = structuredClone(project);
+    const f = project.finals.find((o) => o.id === id);
+    (f.x += dx), (f.y += dy);
+  } else project = M.moveGroup(project, gid, dx, dy);
+}
+
 function linkDrag(end) {
   const gs0 = M.groups(project);
   const f = end.final && project.finals.find((o) => o.id === end.final);
@@ -1754,15 +1897,18 @@ function linkDrag(end) {
       const over = document.elementFromPoint(ev.clientX, ev.clientY);
       const gs = M.groups(project);
       const idx = M.groupIndex(gs);
-      const fEl = over?.closest("[data-final]");
-      const gEl = over?.closest(".port[data-group], .gtab");
+      // Soltou perto de um ponto (até 32 px na tela), mas não em cima: vale o ponto mais perto.
+      const near = over?.closest("[data-final], .port[data-group], .gtab, .blk") ? null : nearestPort(ev.clientX, ev.clientY, end.out ? ".port--in" : ".port--out");
+      const fEl = over?.closest("[data-final]") ?? (near?.dataset.final ? near : null);
+      const gEl = over?.closest(".port[data-group], .gtab") ?? (near?.dataset.group ? near : null);
       const bEl = over?.closest(".blk");
       const other = gEl ? gs.find((x) => x.id === gEl.dataset.group) : bEl ? idx.get(bEl.dataset.id) : null;
       const self = gs.find((x) => x.id === end.group);
       let from, to;
       if (end.out) (from = self?.last.id), (to = fEl?.dataset.final ?? other?.first.id);
       else (from = other?.last.id), (to = end.final ?? self?.first.id);
-      if (!from || !to) return;
+      // No vazio: a linha puxada de uma ligação some (é o gesto de tirar); a nova avisa que não ligou.
+      if (!from || !to) return end.quiet ? undefined : toast(CONFIG.erros?.ligacaoSolta ?? "");
       const problem = M.linkProblem(project, from, to);
       const text = { cycle: CONFIG.erros?.ligacaoCiclo, repeated: CONFIG.erros?.ligacaoRepetida, limit: CONFIG.erros?.exportarLimite }[problem];
       if (text) toast(text);
@@ -1784,6 +1930,8 @@ vp.addEventListener("pointerdown", (e) => {
   let moved = false;
   let onMove;
   let onUp = () => {};
+  // O que foi arrastado e, ao soltar, não pode ficar em cima de outro (settle).
+  let dropped = null;
 
   if (t.closest(".playhead") && headBox) {
     // Arrastar a linha de reprodução: anda pela prévia (tocando ou parada).
@@ -1851,9 +1999,15 @@ vp.addEventListener("pointerdown", (e) => {
     const id = trimEl.closest(".blk").dataset.id;
     sel = { type: "block", id };
     onMove = (ev) => {
-      project = M.trim(base, id, trimEl.dataset.trim, dW(ev).x / M.PX);
+      const seconds = dW(ev).x / M.PX;
+      // Perto da ponta de um elemento de outra trilha do bloco (8 px na tela), o corte para nela e a
+      // guia aparece: os dois ficam do mesmo tamanho. Com Alt, corta livre.
+      const aligned = ev.altKey ? null : M.trimAlign(base, id, trimEl.dataset.trim, seconds, 8 / view.z);
+      project = aligned?.project ?? M.trim(base, id, trimEl.dataset.trim, seconds);
+      showGuide(aligned);
       renderSoon();
     };
+    onUp = () => showGuide(null);
   } else if (port) {
     const drag = linkDrag({ out: port.classList.contains("port--out"), group: port.dataset.group, final: port.dataset.final });
     onMove = drag.onMove;
@@ -1863,6 +2017,7 @@ vp.addEventListener("pointerdown", (e) => {
     sel = { type: "group", id: gid };
     preview = { type: "group", id: gid };
     render();
+    dropped = { kind: "block", id: gid };
     onMove = (ev) => {
       const d = dW(ev);
       project = M.moveGroup(base, gid, d.x, d.y);
@@ -1892,17 +2047,22 @@ vp.addEventListener("pointerdown", (e) => {
     // O bloco que segura o elemento neste arrasto.
     let keep = {};
     let placed = "";
+    dropped = bySound ? null : { kind: "block", id };
     onMove = (ev) => {
+      // Pela faixa de som, só a faixa muda: o vídeo fica onde está (antes, o encaixe o levava para o bloco vizinho).
+      if (bySound) {
+        project = M.setLane(base, id, toWorld(ev.clientX, ev.clientY).y);
+        return renderSoon();
+      }
       const d = dW(ev);
-      const dy = bySound ? 0 : d.y;
+      const dy = d.y;
       const s = ev.altKey ? { x: b0.x + d.x, y: b0.y + dy, mode: null } : M.snap(base, id, b0.x + d.x, b0.y + dy, 16 / view.z, keep);
       keep = { group: s.group?.id, track: s.track, beside: s.beside };
       // O mouse anda, mas o elemento pode estar parado no encaixe: nada a redesenhar.
-      const at = `${s.x}|${s.y}|${bySound ? Math.round(d.y / M.AUD_H) : ""}`;
+      const at = `${s.x}|${s.y}`;
       if (at === placed) return;
       placed = at;
       project = M.dropBlock(base, id, s);
-      if (bySound) project = M.setLane(project, id, toWorld(ev.clientX, ev.clientY).y);
       $("#snapinfo").textContent = SNAP[s.mode] ?? "";
       blockEls.get(id)?.classList.add("is-drag");
       renderSoon();
@@ -1919,6 +2079,7 @@ vp.addEventListener("pointerdown", (e) => {
     sel = { type: "final", id };
     preview = null;
     render();
+    dropped = { kind: "final", id };
     onMove = (ev) => {
       const d = dW(ev);
       project = structuredClone(base);
@@ -1941,7 +2102,7 @@ vp.addEventListener("pointerdown", (e) => {
         project = M.removeItems(base, [id]);
         sel = { type: null };
         render();
-        drag = linkDrag(keepOut ? { out: true, group: l.from.id } : { out: false, group: f ? undefined : l.to.id, final: f?.id });
+        drag = linkDrag(keepOut ? { out: true, group: l.from.id, quiet: true } : { out: false, group: f ? undefined : l.to.id, final: f?.id, quiet: true });
       }
       drag.onMove(ev);
     };
@@ -1961,6 +2122,7 @@ vp.addEventListener("pointerdown", (e) => {
     window.removeEventListener("pointercancel", up);
     vp.classList.remove("is-panning");
     onUp(ev);
+    if (moved && dropped && !ev.altKey) render(), settle(dropped.kind, dropped.id);
     if (moved) commit(base), render();
   };
   window.addEventListener("pointermove", move);

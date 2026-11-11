@@ -53,10 +53,67 @@ const areas = [
 ];
 const pilha = (a, ...extra) => (a.nome === "vídeo" ? base(a.novo(), ...extra) : base(a.novo(), faixa("m", 0, 0, 10), ...extra));
 
+test("corte alinhado: a ponta para na ponta do elemento de outra trilha, e só perto dela", () => {
+  // A base de 10 s (0 a 10 * PX) e uma cobertura por cima, de 1 s a 7 s.
+  const p = base(el("c", 1 * M.PX, -M.VIS_H, 6));
+  const fim = (q) => { const b = q.blocks.find((o) => o.id === "c"); return b.x + M.width(b); };
+  // Esticar a cobertura até 9,95 s: a 4 px do fim da base (10 s), para nele.
+  const perto = M.trimAlign(p, "c", "r", 2.95, 8);
+  assert.ok(perto);
+  assert.ok(Math.abs(fim(perto.project) - 10 * M.PX) < 0.01);
+  assert.ok(Math.abs(perto.x - 10 * M.PX) < 0.01);
+  // Longe de qualquer ponta (até 8,5 s): não alinha, e o corte comum vale.
+  assert.equal(M.trimAlign(p, "c", "r", 1.5, 8), null);
+  // Pela esquerda: o começo da cobertura chega a 3 px do começo da base e para nele.
+  const esq = M.trimAlign({ ...p, blocks: p.blocks.map((b) => (b.id === "c" ? { ...b, tin: 2, tout: 8, dur: 10 } : b)) }, "c", "l", -(1 * M.PX - 3) / M.PX, 8);
+  assert.ok(esq);
+  assert.ok(Math.abs(esq.project.blocks.find((o) => o.id === "c").x) < 0.01);
+  // A ponta do vizinho da mesma trilha não conta: só as outras trilhas.
+  const seq = base(el("v", 10 * M.PX, 0, 4));
+  assert.equal(M.trimAlign(seq, "v", "r", -0.02, 8), null);
+});
+
+test("buraco no bloco: tirar o do meio pela tela mantém o bloco, e o agente segue partindo", () => {
+  // Três vídeos em sequência (0, 200 e 400) e um som embaixo do terceiro.
+  const p = base(el("c", 400, 0), faixa("s", 420, 0, 2));
+  assert.equal(M.groups(p).length, 1);
+  const q = M.removeKeeping(p, ["b"]);
+  const gs = M.groups(q);
+  assert.equal(gs.length, 1);
+  assert.deepEqual(gs[0].blocks.map((b) => b.id), ["a", "c"]);
+  assert.deepEqual([gs[0].x, gs[0].w], [0, 400 + M.width(q.blocks.find((b) => b.id === "c"))]);
+  assert.equal(gs[0].audios.length, 1);
+  // Pelos comandos (removeItems), o grupo se parte como antes.
+  assert.equal(M.groups(M.removeItems(p, ["b"])).length, 2);
+  // Tirar da ponta não deixa buraco nem marca; o bloco de um elemento só também não.
+  assert.equal(M.removeKeeping(base(), ["b"]).blocks[0].joint, undefined);
+  // Um elemento novo encaixa no buraco e passa a ser do bloco; solto fora, deixa o bloco.
+  const novo = { ...q, blocks: [...q.blocks, el("n", 2000, 2000)] };
+  const s = M.snap(novo, "n", 205, 4, 16);
+  assert.deepEqual([s.mode, s.x, s.y], ["video", 200, 0]);
+  const cheio = M.dropBlock(novo, "n", s);
+  assert.equal(cheio.blocks.find((b) => b.id === "n").joint, q.blocks[0].joint);
+  assert.deepEqual(M.groups(cheio)[0].blocks.map((b) => b.id), ["a", "n", "c"]);
+  const fora = M.dropBlock(q, "c", { x: 3000, y: 0, mode: null });
+  assert.equal(fora.blocks.find((b) => b.id === "c").joint, undefined);
+  assert.equal(M.groups(fora).length, 2);
+  // A cópia do bloco com buraco é outro bloco, com a marca dela.
+  const copia = M.pasteItems(q, { blocks: q.blocks, notes: [], finals: [] }, { x: 0, y: 900 });
+  assert.equal(M.groups(copia.project).length, 2);
+});
+
 for (const a of areas) {
   test(`${a.nome}: é puxado ao chegar perto e fica na sua área, venha de onde vier`, () => {
-    for (const y of [a.nome === "som" ? -30 : -100, 130, a.acima(0)]) assert.equal(M.snap(pilha(a), "n", 100, y, 16).mode, a.nome === "vídeo" ? "video" : "sound");
+    // O vídeo vem de cima ou da própria área de vídeo; o som, de onde vier.
+    for (const y of [a.nome === "som" ? -30 : -100, a.nome === "som" ? 130 : 40, a.acima(0)]) assert.equal(M.snap(pilha(a), "n", 100, y, 16).mode, a.nome === "vídeo" ? "video" : "sound");
     assert.equal(M.snap(pilha(a), "n", 100, -700, 16).mode, null);
+    // O vídeo que vem por baixo, ainda sobre a área de som do bloco, não é jogado para cima dele.
+    if (a.nome === "vídeo") assert.equal(M.snap(pilha(a), "n", 100, 130, 16).mode, null);
+    // O ímã puxa a 24 px (1,5 vez a mira) e não mais longe.
+    if (a.nome === "vídeo") {
+      assert.equal(M.snap(pilha(a), "n", 100, -M.VIS_H - 20, 16).mode, "video");
+      assert.equal(M.snap(pilha(a), "n", 100, -M.VIS_H - 30, 16).mode, null);
+    }
   });
 
   test(`${a.nome}: na mesma trilha nunca fica sobre outro; vai para a livre mais perto`, () => {
