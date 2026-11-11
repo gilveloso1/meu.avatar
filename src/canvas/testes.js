@@ -694,3 +694,45 @@ test("som cortado sem tirar nada no meio continua dentro da cena; a pausa tirada
   assert.deepEqual([a.segue, b.continua, b.origem, b.desde], [true, true, 0, 2]);
   assert.deepEqual([b.segue, c.continua], [undefined, undefined]);
 });
+
+test("o corte na base fecha o espaço e leva junto as coberturas, a partir do ponto do corte; a música fica", () => {
+  // O exemplo: o corpo (8 s, de 400 a 720), o produto encostado depois, o b-roll por cima (480 a 600) e a música embaixo.
+  const p = M.sample((f) => f);
+  const x = (q, id) => q.blocks.find((o) => o.id === id).x;
+  const fim = (q, id) => x(q, id) + M.width(q.blocks.find((o) => o.id === id));
+  // Tira 1 s do começo do corpo: o começo fica onde está, e o que vem depois anda 1 s para a esquerda.
+  const a = M.trim(p, "corpo", "l", 1);
+  assert.equal(x(a, "corpo"), 400);
+  assert.equal(fim(a, "corpo"), 720 - M.PX);
+  assert.equal(x(a, "produto"), 720 - M.PX);
+  // O b-roll começava 2 s depois do começo do corpo: continua sobre o mesmo instante dele.
+  assert.equal(x(a, "broll"), 480 - M.PX);
+  assert.equal(x(a, "musica"), 400);
+  // Tira 3 s: o b-roll ficava sobre o trecho tirado (de 2 a 5 s) e fica onde está.
+  const b = M.trim(p, "corpo", "l", 3);
+  assert.equal(x(b, "broll"), 480);
+  assert.equal(x(b, "produto"), 720 - 3 * M.PX);
+  // Pelo fim: quem vem depois acompanha; o b-roll, que está sobre o que ficou, não.
+  const c = M.trim(p, "corpo", "r", -2);
+  assert.equal(x(c, "produto"), 720 - 2 * M.PX);
+  assert.equal(x(c, "broll"), 480);
+  // Sem vizinho depois, o mesmo: o começo fica onde está e o fim anda.
+  const d = M.trim(p, "g1", "l", 1);
+  assert.equal(x(d, "g1"), 0);
+  assert.equal(fim(d, "g1"), 2 * M.PX);
+});
+
+test("o corte solto (Alt) só anda a borda: ninguém acompanha, fica o buraco e o bloco não se parte", () => {
+  const p = M.sample((f) => f);
+  const x = (q, id) => q.blocks.find((o) => o.id === id).x;
+  const a = M.trim(p, "corpo", "l", 1, { free: true });
+  // O começo anda 1 s e o fim fica onde estava.
+  assert.equal(x(a, "corpo"), 400 + M.PX);
+  assert.equal(x(a, "produto"), 720);
+  assert.equal(x(a, "broll"), 480);
+  const b = M.trim(p, "corpo", "r", -2, { free: true });
+  assert.equal(x(b, "produto"), 720);
+  // O corpo e o produto seguem no mesmo bloco, com o buraco de 2 s entre eles.
+  const g = M.groupIndex(M.groups(b));
+  assert.equal(g.get("corpo"), g.get("produto"));
+});
