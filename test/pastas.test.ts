@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { Db } from "../src/db";
 import { ERROS } from "../src/erros";
-import { MAX_FOLDERS } from "../src/site/site";
+import { LIST_PAGE, MAX_FOLDERS } from "../src/site/site";
 import { call, cookie, memberCookie, postForm, SITE } from "./helpers";
 
 const db = () => new Db(env.DB);
@@ -84,7 +84,7 @@ describe("pastas dos ativos", () => {
     const { id, asset } = await avatarCom(session);
     const fotos = await pasta(session, id, "Fotos");
 
-    const mover = await post(`/avatares/${id}/arquivos/${asset.id}/mover`, { destino: fotos.id, volta: "" }, session);
+    const mover = await post(`/avatares/${id}/arquivos/${asset.id}/mover`, { destino: fotos.id }, session);
     expect(mover.status).toBe(303);
     expect(mover.headers.get("location")).toBe(`/avatares/${id}`);
     expect((await db().asset(id, asset.id))!.folder_id).toBe(fotos.id);
@@ -113,7 +113,7 @@ describe("pastas dos ativos", () => {
     const session = await cookie();
     const { id } = await avatarCom(session);
     const a = await pasta(session, id, "A");
-    const renomear = await post(`/avatares/${id}/pastas/${a.id}/nome`, { nome: "Anúncios", volta: a.id }, session);
+    const renomear = await post(`/avatares/${id}/pastas/${a.id}/nome`, { nome: "Anúncios", de: `/avatares/${id}?pasta=${a.id}` }, session);
     expect(renomear.headers.get("location")).toBe(`/avatares/${id}?pasta=${a.id}`);
     expect((await db().folders(id)).map((f) => f.name)).toEqual(["Anúncios"]);
     const semNome = await post(`/avatares/${id}/pastas/${a.id}/nome`, { nome: "  " }, session);
@@ -220,5 +220,213 @@ describe("pastas dos ativos", () => {
     expect((await db().folders(id)).map((f) => f.name)).toEqual(["A"]);
     expect((await db().asset(id, asset.id))!.folder_id).toBeNull();
     expect(await env.MIDIA.get(asset.key)).not.toBeNull();
+  });
+});
+
+describe("pastas da aba Vídeos", () => {
+  const admin = async () => (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin'").first<{ id: number }>())!.id;
+  async function video(id: string, fala: string, structure = "wan", minuto = 0) {
+    await db().insertVideo({ id, prompt: fala, model: "alibaba/wan-3.0", duration: 5, resolution: "480p", aspect_ratio: "9:16", image_key: null, user_id: await admin(), request_prompt: "x", style: null, language: null, extra: null, structure, settings: null, avatar_id: null }, new Date(Date.UTC(2026, 10, 1, 0, minuto)));
+    return id;
+  }
+  async function pastaDe(session: string, tipo: string, nome: string) {
+    const res = await post("/pastas", { tipo, nome }, session);
+    expect(res.status).toBe(303);
+    const { id } = (await env.DB.prepare("SELECT id FROM account_folders WHERE name = ? AND kind = ?").bind(nome, tipo).first<{ id: string }>())!;
+    return id;
+  }
+  const cards = (html: string) => [...html.matchAll(/class="frame interactive" href="\/video\/([0-9a-f-]+)/g)].map((m) => m[1]);
+
+  it("a pasta é um item da lista de vídeos; aberta, mostra só os dela; a busca procura em tudo", async () => {
+    const session = await cookie();
+    const a = await video("00000000-0000-4000-8000-00000000000a", "Oi, gente", "wan", 1);
+    const b = await video("00000000-0000-4000-8000-00000000000b", "Promoção de verão", "wan", 2);
+    const pasta = await pastaDe(session, "videos", "Campanha");
+    const mover = await post(`/videos/${b}/mover`, { destino: pasta, de: "/videos" }, session);
+    expect(mover.headers.get("location")).toBe("/videos");
+    expect((await db().videoById(b))!.folder_id).toBe(pasta);
+    // Mover não conta como mudança do vídeo.
+    const v = (await db().videoById(b))!;
+    expect(v.updated_at).toBe(v.created_at);
+
+    const lista = await (await get("/videos", session)).text();
+    expect(cards(lista)).toEqual([a]);
+    expect(lista).toContain(`<a class="frame frame--folder interactive" href="/videos?pasta=${pasta}" data-kind="pasta" data-drop="${pasta}" data-folder="/pastas/${pasta}" data-name="Campanha" data-count="1"`);
+    expect(lista).toContain("1 vídeo");
+    expect(lista).toContain(`data-move="/videos/${a}/mover" data-at=""`);
+    expect(lista).toContain('data-total="1"');
+    expect(lista).toContain('type="button" data-folder-new');
+    expect(lista).toContain('<input type="hidden" name="tipo" value="videos">');
+    // Vídeo gerado não se apaga no site: apagar a pasta não oferece "Apagar tudo".
+    expect(lista).not.toContain('name="itens" value="apagar"');
+    expect(lista).toContain('data-with-items="Os itens voltam para a lista."');
+
+    const aberta = await (await get(`/videos?pasta=${pasta}`, session)).text();
+    expect(cards(aberta)).toEqual([b]);
+    expect(aberta).toContain(`class="crumbs" data-folder="/pastas/${pasta}"`);
+    expect(aberta).toContain(`href="/video/${b}?de=${encodeURIComponent(`/videos?pasta=${pasta}`)}"`);
+    expect(aberta).not.toContain("data-group data-pinned");
+    expect(aberta).not.toContain('type="button" data-folder-new');
+    // A busca acha o vídeo que está na pasta e não mostra pastas.
+    const busca = await (await get("/videos?q=ver%C3%A3o", session)).text();
+    expect(cards(busca)).toEqual([b]);
+    expect(busca).not.toContain("data-group data-pinned");
+    // A página do modelo não tem pastas: mostra todos, como antes.
+    const modelo = await (await get("/modelo/wan", session)).text();
+    expect(cards(modelo).sort()).toEqual([a, b]);
+    expect(modelo).not.toContain("frame--folder");
+    expect(modelo).not.toContain("data-move=");
+
+    // A página do vídeo tem o "Mover para", com a pasta dele desligada, e volta para ela mesma.
+    const pagina = await (await get(`/video/${b}?de=%2Fvideos`, session)).text();
+    expect(pagina).toContain('data-dialog-open="mover"');
+    expect(pagina).toMatch(new RegExp(`name="destino" value="${pasta}" disabled`));
+    const voltar = await post(`/videos/${b}/mover`, { destino: "", de: `/video/${b}?de=%2Fvideos` }, session);
+    expect(voltar.headers.get("location")).toBe(`/video/${b}?de=%2Fvideos`);
+    expect((await db().videoById(b))!.folder_id).toBeNull();
+    // Arrastar: 204, sem página.
+    expect((await post(`/videos/${b}/mover`, { destino: pasta }, session, { "x-fetch": "1" })).status).toBe(204);
+  });
+
+  it("as pastas vêm só na primeira página; renomear; apagar devolve os vídeos à lista e não apaga nenhum", async () => {
+    const session = await cookie();
+    for (let i = 0; i < LIST_PAGE + 2; i++) await video(`00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, `Fala ${i}`, "wan", i);
+    const pasta = await pastaDe(session, "videos", "Lote");
+    await post("/videos/00000000-0000-4000-8000-000000000000/mover", { destino: pasta }, session);
+    expect(await (await get("/videos", session)).text()).toContain("data-group data-pinned");
+    const dois = await (await get("/videos?pagina=2", session)).text();
+    expect(dois).not.toContain("data-group data-pinned");
+    expect(cards(dois)).toHaveLength(1);
+
+    await post(`/pastas/${pasta}/nome`, { nome: "Lote de novembro", de: `/videos?pasta=${pasta}` }, session);
+    expect(await (await get(`/videos?pasta=${pasta}`, session)).text()).toContain('aria-current="page">Lote de novembro<');
+    const semNome = await post(`/pastas/${pasta}/nome`, { nome: " " }, session);
+    expect(semNome.status).toBe(400);
+    expect(await semNome.text()).toContain(ERROS.pastaNome);
+
+    // Mesmo pedindo "apagar", o vídeo fica: volta para a lista.
+    const res = await post(`/pastas/${pasta}/apagar`, { itens: "apagar" }, session);
+    expect(res.headers.get("location")).toBe("/videos");
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM account_folders").first("n")).toBe(0);
+    expect((await db().videoById("00000000-0000-4000-8000-000000000000"))!.folder_id).toBeNull();
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM videos").first("n")).toBe(LIST_PAGE + 2);
+  });
+
+  it("recusa pasta sem nome, tipo inventado e destino de outra lista ou de outra conta", async () => {
+    const session = await cookie();
+    const v = await video("00000000-0000-4000-8000-00000000000a", "Oi");
+    const semNome = await post("/pastas", { tipo: "videos", nome: " " }, session);
+    expect(semNome.status).toBe(400);
+    expect(await semNome.text()).toContain(ERROS.pastaNome);
+    expect((await post("/pastas", { tipo: "avatares", nome: "X" }, session)).status).toBe(404);
+    // Pastas demais numa lista: a outra lista não conta.
+    const agora = new Date().toISOString();
+    const dono = (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin'").first<{ id: number }>())!.id;
+    await env.DB.batch(Array.from({ length: MAX_FOLDERS }, (_, i) => env.DB.prepare("INSERT INTO account_folders (id, user_id, kind, name, created_at) VALUES (?, ?, 'projetos', ?, ?)").bind(crypto.randomUUID(), dono, `Cheia ${i}`, agora)));
+    const demais = await post("/pastas", { tipo: "projetos", nome: "Mais uma" }, session);
+    expect(demais.status).toBe(400);
+    expect(await demais.text()).toContain(ERROS.pastasDemaisLista);
+    await env.DB.prepare("DELETE FROM account_folders").run();
+    const deProjetos = await pastaDe(session, "projetos", "De projetos");
+    expect((await post(`/videos/${v}/mover`, { destino: deProjetos }, session)).status).toBe(404);
+    expect((await post(`/videos/${v}/mover`, { destino: crypto.randomUUID() }, session)).status).toBe(404);
+    expect((await db().videoById(v))!.folder_id).toBeNull();
+
+    // Outra conta: não vê a pasta, não a mexe, não move o vídeo nem usa a pasta como destino.
+    const pasta = await pastaDe(session, "videos", "Minha");
+    const member = await memberCookie();
+    expect(await (await get(`/videos?pasta=${pasta}`, member)).text()).not.toContain("Minha");
+    expect((await post(`/pastas/${pasta}/nome`, { nome: "Invasão" }, member)).status).toBe(404);
+    expect((await post(`/pastas/${pasta}/apagar`, {}, member)).status).toBe(404);
+    expect((await post(`/videos/${v}/mover`, { destino: "" }, member)).status).toBe(404);
+    const membro = (await env.DB.prepare("SELECT id FROM users WHERE email = 'membro@exemplo.com'").first<{ id: number }>())!.id;
+    await db().insertVideo({ id: "00000000-0000-4000-8000-0000000000ff", prompt: "Do membro", model: "alibaba/wan-3.0", duration: 5, resolution: "480p", aspect_ratio: "9:16", image_key: null, user_id: membro, request_prompt: "x", style: null, language: null, extra: null, structure: "wan", settings: null, avatar_id: null });
+    expect((await post("/videos/00000000-0000-4000-8000-0000000000ff/mover", { destino: pasta }, member)).status).toBe(404);
+    expect((await env.DB.prepare("SELECT name FROM account_folders WHERE id = ?").bind(pasta).first<{ name: string }>())!.name).toBe("Minha");
+  });
+});
+
+describe("pastas de Projetos", () => {
+  async function projeto(session: string, pasta = "") {
+    const res = await post(`/projetos${pasta ? `?pasta=${pasta}` : ""}`, {}, session);
+    return res.headers.get("location")!.split("/").pop()!;
+  }
+  async function pastaDe(session: string, nome: string) {
+    expect((await post("/pastas", { tipo: "projetos", nome, de: "/projetos" }, session)).headers.get("location")).toBe("/projetos");
+    return (await env.DB.prepare("SELECT id FROM account_folders WHERE name = ? AND kind = 'projetos'").bind(nome).first<{ id: string }>())!.id;
+  }
+
+  it("a pasta é um card da grade, antes dos projetos; aberta, mostra só os dela; o projeto novo fica nela", async () => {
+    const session = await cookie();
+    const solto = await projeto(session);
+    const pasta = await pastaDe(session, "Cliente A");
+    const dentro = await projeto(session, pasta);
+    expect((await db().projectById(dentro))!.folder_id).toBe(pasta);
+
+    const lista = await (await get("/projetos", session)).text();
+    expect(lista).toContain(`<article class="tile-card" data-drop="${pasta}" data-folder="/pastas/${pasta}" data-name="Cliente A" data-count="1">`);
+    expect(lista).toContain("1 projeto");
+    expect(lista).toContain('<span class="icon">folder</span>');
+    expect(lista.indexOf(`data-folder="/pastas/${pasta}"`)).toBeLessThan(lista.indexOf(`/canvas/${solto}`));
+    expect(lista).toContain(`draggable="true" data-move="/projetos/${solto}/mover" data-at=""`);
+    expect(lista).not.toContain(`/canvas/${dentro}`);
+    expect(lista).toContain('data-card-act="mover"');
+    expect(lista).toContain('data-card-act="renomear"');
+    expect(lista).toContain('name="itens" value="apagar"');
+    // O contador conta os projetos, não as pastas.
+    expect(lista).toContain('Projetos <span class="pane__count">1</span>');
+
+    const aberta = await (await get(`/projetos?pasta=${pasta}`, session)).text();
+    expect(aberta).toContain(`/canvas/${dentro}`);
+    expect(aberta).not.toContain(`/canvas/${solto}`);
+    expect(aberta).toContain(`class="crumbs" data-folder="/pastas/${pasta}"`);
+    expect(aberta).toContain(`action="/projetos?pasta=${pasta}"`);
+    expect(aberta).not.toContain('type="button" data-folder-new');
+
+    // Mover pelo menu e arrastando; o projeto não muda de data.
+    const antes = (await db().projectById(solto))!.updated_at;
+    expect((await post(`/projetos/${solto}/mover`, { destino: pasta, de: "/projetos" }, session)).headers.get("location")).toBe("/projetos");
+    expect((await db().projectById(solto))!).toMatchObject({ folder_id: pasta, updated_at: antes });
+    expect((await post(`/projetos/${solto}/mover`, { destino: "" }, session, { "x-fetch": "1" })).status).toBe(204);
+    expect((await db().projectById(solto))!.folder_id).toBeNull();
+    // Sem pastas, o projeto não tem o que mover.
+    await post(`/pastas/${pasta}/apagar`, { itens: "manter" }, session);
+    expect(await (await get("/projetos", session)).text()).not.toContain('data-card-act="mover"');
+  });
+
+  it("apagar a pasta pergunta dos projetos: manter devolve à lista; apagar tudo apaga os dela, com os arquivos", async () => {
+    const session = await cookie();
+    const fora = await projeto(session);
+    const a = await pastaDe(session, "A");
+    const b = await pastaDe(session, "B");
+    const emA = await projeto(session, a);
+    const emB = await projeto(session, b);
+    await db().insertProjectFile({ id: crypto.randomUUID(), project_id: emB, key: "projetos/arquivo-b.png", name: "b.png", type: "image/png", size: 3 });
+    await env.MIDIA.put("projetos/arquivo-b.png", "png");
+
+    expect((await post(`/pastas/${a}/apagar`, { itens: "manter" }, session)).headers.get("location")).toBe("/projetos");
+    expect((await db().projectById(emA))!.folder_id).toBeNull();
+
+    await post(`/pastas/${b}/apagar`, { itens: "apagar" }, session);
+    expect(await db().projectById(emB)).toBeNull();
+    expect(await env.MIDIA.get("projetos/arquivo-b.png")).toBeNull();
+    expect(await db().projectById(fora)).not.toBeNull();
+    expect(await db().projectById(emA)).not.toBeNull();
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM account_folders").first("n")).toBe(0);
+  });
+
+  it("as pastas de Projetos são só de quem pode usar o canvas e só do dono", async () => {
+    const session = await cookie();
+    const meu = await projeto(session);
+    const pasta = await pastaDe(session, "Minha");
+    const deVideos = (await post("/pastas", { tipo: "videos", nome: "De vídeos" }, session), (await env.DB.prepare("SELECT id FROM account_folders WHERE kind = 'videos'").first<{ id: string }>())!.id);
+    expect((await post(`/projetos/${meu}/mover`, { destino: deVideos }, session)).status).toBe(404);
+    const member = await memberCookie();
+    // A conta comum não tem o canvas: nem cria pasta de projetos.
+    expect((await post("/pastas", { tipo: "projetos", nome: "X" }, member)).status).toBe(404);
+    expect((await post(`/pastas/${pasta}/apagar`, { itens: "apagar" }, member)).status).toBe(404);
+    expect((await post(`/projetos/${meu}/mover`, { destino: "" }, member)).status).toBe(404);
+    expect(await db().projectById(meu)).not.toBeNull();
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM account_folders WHERE kind = 'projetos'").first("n")).toBe(1);
   });
 });

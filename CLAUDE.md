@@ -71,11 +71,15 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
   - Avatar e ativos no modelo: `assetList` no painel e `assetPanel`, o menu que desdobra colado nele.
   - Texto com emoções (modelos de fala): `speechEditor`, o campo contornado que aceita as emoções em destaque (chip de entrada, com x); `#` abre a lista (`EMOTIONS`, `src/structures/voz.ts`, em português na tela e em inglês no formulário e para o agente), com as mais usadas no topo (contadas no `localStorage`, `emocoes-usadas`) e as outras em ordem alfabética.
   - Voz pronta: campo `voice` no painel, escolhida em `voicePanel`, no mesmo menu (busca, idioma, gênero e prévia); as vozes vêm de `/vozes/lista`, só as do filtro.
-  - Pastas (hoje nos ativos do avatar; simples, sem pasta dentro de pasta): cada pasta é um item da própria
-    lista (`folderItems`, pelo `first` do `library`: o mesmo card e a mesma linha, com o ícone de pasta no lugar
-    da imagem, antes dos arquivos e fora do contador); `folderLead` traz o caminho da pasta aberta (`.crumbs`) e
-    os diálogos, e `moveDialog` é o "Mover para". O menu do item (`[data-item-menu]`, botão direito) e arrastar
-    ficam no `SCRIPT`; o ativo que pode ser movido leva `data-move`, e onde pode cair, `data-drop`.
+  - Pastas (nos ativos do avatar, na aba Vídeos e em Projetos; simples, sem pasta dentro de pasta): um
+    componente só, que recebe onde ficam as pastas da lista (`FolderUi`: endereços, nomes, contagem e se apagar
+    a pasta pode apagar os itens). Cada pasta é um item da própria lista, antes dos outros e fora do contador:
+    `folderItems` (pelo `first` do `library`: o mesmo card e a mesma linha, com o ícone de pasta no lugar da
+    imagem) ou, em Projetos, um `tileCard`. `newFolderButton` é o "Nova pasta"; `folderLead` traz o caminho da
+    pasta aberta (`.crumbs`, com renomear e apagar) e os diálogos; `moveDialog` é o "Mover para". O menu do item
+    (`[data-item-menu]`, botão direito; nos cards, `act` do `MenuItem`) e arrastar ficam no `SCRIPT`, pelo
+    documento; o que pode ser movido leva `data-move`, e onde pode cair, `data-drop`. Lista nova com pastas é
+    um `FolderUi` novo, não outra cópia.
   - Confirmação de apagar: `.confirm`; estado vazio: `emptyState`, que também é a página de não encontrado
     (`notFoundPage`): todo 404 em texto aberto pelo navegador vira essa página, a mesma para o que não existe
     e para o que é de outra conta.
@@ -176,7 +180,13 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   (`LIST_PAGE`, pedido de 10/11/2026): no fim, a paginação do painel (`pager`: "61–120 de 150" e as
   setas), que troca a página sem recarregar (o que está escrito no painel fica) e leva a página no
   endereço (`?pagina=`); o contador do título é o total, e filtro, ordem e agrupamento valem para a
-  página aberta. Miniatura só
+  página aberta. Só a aba Vídeos tem pastas (pedido de 11/11/2026, `account_folders` e
+  `videos.folder_id`; as páginas dos modelos seguem mostrando tudo): "Nova pasta" ao lado de "Novo
+  vídeo"; a pasta é um item da lista, antes dos vídeos, só na primeira página; aberta (`?pasta=`),
+  mostra só os vídeos dela, com o caminho de volta; mover é arrastando o vídeo para a pasta, pelo
+  "Mover para" do botão direito ou pelo da página do vídeo (abaixo de "Salvar no avatar"); a busca
+  procura em tudo, sem pastas. Apagar a pasta devolve os vídeos à lista (vídeo gerado não se apaga
+  no site). Miniatura só
   baixa quando aparece na tela e enquadra o rosto (`videos.face`; sem rosto, o terço de
   cima). Quem acha o rosto é o navegador de quem vê (MediaPipe, `data-face-find`), uma vez por
   arquivo, e guarda no site; a prévia da Edição rápida também. O servidor não procura (ligava o
@@ -251,6 +261,12 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   dizer que o arquivo é do avatar. A tela do ativo é a mesma para os dois, com o mesmo campo Nome da página do vídeo (`nameField`;
   no ativo, vazio não muda o nome); a Origem diz
   "Vídeo gerado", "Vídeo enviado", "Imagem enviada" ou "Áudio enviado".
+- Projetos (`/projetos`): cards como os de Modelos. Tem pastas desde 11/11/2026 (`account_folders` e
+  `projects.folder_id`), no mesmo molde: "Nova pasta" ao lado de "Novo projeto"; a pasta é um card
+  da grade, antes dos projetos, com o ícone de pasta; aberta (`?pasta=`), mostra só os projetos
+  dela, e o projeto criado ali fica nela; mover é arrastando o card para a pasta ou pelo "Mover
+  para" do menu do card. Apagar a pasta pergunta dos projetos: "Apagar tudo" os apaga junto;
+  "Manter os itens" os devolve à lista.
 - Barra superior: a marca é o ícone de rosto (`face`, o mesmo da foto do
   avatar) e o nome, sem cara de botão (sem camada de estado no hover). Sair fica
   só no menu do perfil. Não há rodapé.
