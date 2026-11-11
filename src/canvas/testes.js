@@ -55,8 +55,16 @@ const pilha = (a, ...extra) => (a.nome === "vídeo" ? base(a.novo(), ...extra) :
 
 for (const a of areas) {
   test(`${a.nome}: é puxado ao chegar perto e fica na sua área, venha de onde vier`, () => {
-    for (const y of [a.nome === "som" ? -30 : -100, 130, a.acima(0)]) assert.equal(M.snap(pilha(a), "n", 100, y, 16).mode, a.nome === "vídeo" ? "video" : "sound");
+    // O vídeo vem de cima ou da própria área de vídeo; o som, de onde vier.
+    for (const y of [a.nome === "som" ? -30 : -100, a.nome === "som" ? 130 : 40, a.acima(0)]) assert.equal(M.snap(pilha(a), "n", 100, y, 16).mode, a.nome === "vídeo" ? "video" : "sound");
     assert.equal(M.snap(pilha(a), "n", 100, -700, 16).mode, null);
+    // O vídeo que vem por baixo, ainda sobre a área de som do bloco, não é jogado para cima dele.
+    if (a.nome === "vídeo") assert.equal(M.snap(pilha(a), "n", 100, 130, 16).mode, null);
+    // O ímã puxa a 24 px (1,5 vez a mira) e não mais longe.
+    if (a.nome === "vídeo") {
+      assert.equal(M.snap(pilha(a), "n", 100, -M.VIS_H - 20, 16).mode, "video");
+      assert.equal(M.snap(pilha(a), "n", 100, -M.VIS_H - 30, 16).mode, null);
+    }
   });
 
   test(`${a.nome}: na mesma trilha nunca fica sobre outro; vai para a livre mais perto`, () => {

@@ -106,8 +106,10 @@ menos custo.
   a trilha 0 embaixo e as outras subindo; sons ficam na área de som, com a trilha 0 em cima e
   as outras descendo. Uma trilha pode ter um elemento ou vários, e nada se sobrepõe nela: o
   elemento vai para a trilha livre mais perto do mouse, e a seguinte à última está sempre livre.
-  Qualquer elemento é puxado pelo ímã, corre até a própria ponta sair do bloco, que cresce
-  junto, e encosta nas pontas dos outros. Passou da direita, fica ao lado, na primeira trilha;
+  Qualquer elemento é puxado pelo ímã (24 px na tela, para puxar e para soltar, desde 11/11/2026:
+  eram 48 e 96, e o bloco saltava de longe e ficava preso; o vídeo que vem por baixo, pela área de
+  som de um bloco, só entra ao chegar à área de vídeo), corre até a própria ponta sair do bloco, que
+  cresce junto, e encosta nas pontas dos outros. Passou da direita, fica ao lado, na primeira trilha;
   passou da esquerda, sai do bloco. O bloco o segura numa área maior e, perto da trilha onde
   está, ele fica nela, para nada piscar. Alt solta sem encaixar. O tempo de cada elemento vem
   só da posição dele; quem está em trilha mais alta fica por cima.
@@ -130,6 +132,21 @@ menos custo.
   som solto não tem área de vídeo, então o conector dele fica na altura dele; a prévia junta as
   trilhas de vídeo acima da base numa camada, e nela mostra todas as do instante, empilhadas pela
   trilha (09/11/2026): a animação é transparente e deixa ver a imagem de baixo, como na exportação.
+- **Sem saltos e fácil de pegar** (11/11/2026, do teste de uso com medições, aprovado pelo dono):
+  - A linha de reprodução só se pega pela alça de cima; a linha em si não recebe o clique, para não
+    cobrir a borda de corte do começo do bloco.
+  - O botão de tocar do bloco escolhido fica no canto do rótulo, pequeno; o bloco inteiro arrasta.
+  - Puxar pela faixa de som só muda a faixa: o vídeo não sai do lugar.
+  - Soltar um grupo ou o Final em cima de outro elemento o leva ao lugar livre mais perto (`settle`,
+    `canvas.js`); com Alt, fica onde foi solto. O que entra pelo painel Arquivos ou pelo envio cai num
+    lugar livre do que está à vista (`findSpot`), sem mexer na vista; sem lugar, a vista se afasta até
+    mostrar tudo.
+  - "Organizar" termina com "Ver tudo". Abrir e fechar o painel Arquivos não desloca o que está no canvas.
+  - Afastado, o que se pega e o que se lê têm tamanho mínimo na tela: ponto de ligação de 16 px,
+    borda de corte de 10 px, e o nome do bloco e a aba do grupo crescem (abaixo de 75%, o rótulo
+    mostra só o nome).
+  - A ligação solta a até 32 px de um ponto liga nele; no vazio, um aviso diz que não ligou (a linha
+    puxada de uma ligação que já existia some, sem aviso: é o gesto de tirar).
 - **Arrasto leve**: cada arrasto desenha no máximo uma vez por quadro, sem o painel (ele vem
   ao soltar). Sem mudança no lugar do elemento, nada é desenhado; cada elemento, as portas e
   as linhas só tocam a página se algo deles mudou.
@@ -137,7 +154,7 @@ menos custo.
   Ajustes (`project.names`, pelo id do primeiro elemento), e vazio volta ao número.
 - **Área e prévia**: o grupo ganha um retângulo tracejado em volta de tudo o
   que entra nele (sequência, coberturas e som), com o chip do nome em cima. O
-  bloco escolhido tem o botão de tocar no meio; o chip do grupo também. A prévia
+  bloco escolhido tem o botão de tocar no canto do rótulo; o chip do grupo também. A prévia
   toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo; a
   linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
   Clicar num ponto vazio dentro da área de um grupo escolhe o grupo e leva a linha

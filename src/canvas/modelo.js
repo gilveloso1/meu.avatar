@@ -44,8 +44,9 @@ const GAP_MIN = 0.034;
 // Organizar: a área do grupo (20 px em volta) e a aba dele (40 px) cabem nas folgas; o Final, na dele.
 const COL_GAP = 140;
 const ROW_GAP = 110;
-// O ímã do bloco alcança MAGNET vezes a mira fina do encaixe.
-const MAGNET = 3;
+// O ímã do bloco alcança MAGNET vezes a mira fina do encaixe: 24 px na tela, para puxar e para
+// soltar (11/11/2026; eram 48 para puxar e 96 para soltar, e o bloco saltava de longe e ficava preso).
+const MAGNET = 1.5;
 // Longe assim da trilha atual (em trilhas), o elemento muda de trilha.
 const TRACK_HOLD = 0.7;
 const FINAL_HEAD = 92;
@@ -572,11 +573,14 @@ export function snap(project, id, x, y, tol, keep = {}) {
   const isVideo = visual(b);
   const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) });
   const magnet = tol * MAGNET;
-  // O bloco onde o elemento já está vem primeiro, e o segura numa área maior.
+  // O bloco onde o elemento já está vem primeiro; ele solta à mesma distância em que puxa.
   for (const g of [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group)]) {
     const inside = g.id === keep.group;
-    const pad = inside ? magnet * 2 : magnet;
+    const pad = magnet;
     if (y + h <= g.top - pad || y >= g.bottom + pad) continue;
+    // Vídeo ou imagem que vem por baixo (pela área de som) só entra quando chega à área de vídeo:
+    // antes, encostar na faixa de som de um bloco o jogava para cima dele, num salto de centenas de px.
+    if (isVideo && !inside && (videoY(g) - y) / VIS_H < -0.5) continue;
     const lo = g.x;
     const hi = g.x + g.w;
     let at;
