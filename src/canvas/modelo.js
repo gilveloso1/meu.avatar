@@ -107,6 +107,19 @@ export const width = (b) => len(b) * PX;
  * scripts leem o objeto params. Mudar um valor muda o código, e a exportação renderiza de novo.
  */
 export function codeHtml(code) {
+  // A tela pede o mesmo código a cada desenho (a chave da prévia): o resultado fica guardado pelo
+  // conteúdo (o código, os parâmetros e a escala), e só é montado de novo quando um deles muda.
+  const key = `${code.escala ?? ""}\u0000${code.params ? JSON.stringify(code.params) : ""}\u0000${code.html}`;
+  let out = codeMemo.get(key);
+  if (out === undefined) {
+    if (codeMemo.size >= 64) codeMemo.clear();
+    codeMemo.set(key, (out = buildCodeHtml(code)));
+  }
+  return out;
+}
+const codeMemo = new Map();
+
+function buildCodeHtml(code) {
   const html = comParametros(code);
   // A escala estica ou encolhe a linha do tempo inteira, depois do código do agente: os tempos escritos no código
   // são os de antes, e tudo vai para o mesmo ponto, na proporção. Os filhos do tl passam para uma linha interna, e só
@@ -154,8 +167,57 @@ const visual = (b) => b.kind !== "audio";
 const near = (a, b) => Math.abs(a - b) < EPS;
 const overlapX = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0) > EPS;
 
-/** Grupos: sequências de blocos visuais, com o que está em cima e embaixo. */
+/**
+ * Guarda um resultado junto do objeto de que ele saiu (`owner`) e só o devolve de novo se a `key`
+ * (uma lista plana de tudo o que a conta lê) for igual, item a item, à da vez anterior. O projeto às
+ * vezes é mudado no lugar (o bloco novo entra depois da cópia), e por isso a identidade dele não basta.
+ */
+function remember(store, owner, key, make) {
+  const hit = store.get(owner);
+  if (hit && hit.key.length === key.length) {
+    let same = true;
+    for (let i = 0; i < key.length; i++)
+      if (hit.key[i] !== key[i]) {
+        same = false;
+        break;
+      }
+    if (same) return hit.value;
+  }
+  const value = make();
+  store.set(owner, { key, value });
+  return value;
+}
+
+const groupsMemo = new WeakMap();
+/**
+ * Grupos: sequências de blocos visuais, com o que está em cima e embaixo. A tela pede os grupos do
+ * mesmo projeto várias vezes por desenho (e a cada quadro de um arrasto): o resultado fica guardado
+ * enquanto o projeto for o mesmo objeto, com os mesmos blocos, e nada do que a conta lê tiver mudado.
+ * Quem recebe os grupos não os altera.
+ */
 export function groups(project) {
+  const blocks = project.blocks;
+  const key = new Array(blocks.length * 12 + 1);
+  let n = 0;
+  for (const b of blocks) {
+    key[n++] = b;
+    key[n++] = b.id;
+    key[n++] = b.kind;
+    key[n++] = b.x;
+    key[n++] = b.y;
+    key[n++] = b.tin;
+    key[n++] = b.tout;
+    key[n++] = b.speed;
+    key[n++] = b.audio;
+    key[n++] = b.lane;
+    key[n++] = b.joint;
+    key[n++] = b.name;
+  }
+  key[n] = project.names ? JSON.stringify(project.names) : "";
+  return remember(groupsMemo, project, key, () => buildGroups(project));
+}
+
+function buildGroups(project) {
   const blocks = project.blocks;
   const vis = blocks.filter(visual);
   // A primeira trilha de vídeo é a de quem não apoia em ninguém; o resto se acha pela altura.
@@ -342,13 +404,26 @@ export function renameGroup(project, group, name) {
 }
 
 export function groupIndex(gs) {
-  const m = new Map();
+  let m = indexMemo.get(gs);
+  if (m) return m;
+  m = new Map();
   for (const g of gs) for (const b of [...g.blocks, ...g.covers, ...g.audios]) m.set(b.id, g);
+  indexMemo.set(gs, m);
   return m;
 }
+const indexMemo = new WeakMap();
 
 /** Linhas entre grupos (as que apontam para o mesmo grupo somem). */
 export function links(project, gs = groups(project)) {
+  const key = [];
+  for (const e of project.edges) key.push(e, e.from, e.to);
+  key.push(null);
+  for (const f of project.finals) key.push(f.id);
+  return remember(linksMemo, gs, key, () => buildLinks(project, gs));
+}
+const linksMemo = new WeakMap();
+
+function buildLinks(project, gs) {
   const idx = groupIndex(gs);
   const finals = new Set(project.finals.map((f) => f.id));
   const out = [];
@@ -364,6 +439,17 @@ export function links(project, gs = groups(project)) {
 /** Versões que chegam a um bloco final: uma lista de grupos cada. */
 export function versions(project, finalId, gs = groups(project), max = MAX_VERSOES) {
   const ls = links(project, gs);
+  // As ligações guardadas são a mesma lista enquanto os grupos e as linhas não mudam: as variações também.
+  let byFinal = versionsMemo.get(ls);
+  if (!byFinal) versionsMemo.set(ls, (byFinal = new Map()));
+  const key = `${max}|${finalId}`;
+  let res = byFinal.get(key);
+  if (!res) byFinal.set(key, (res = buildVersions(ls, finalId, max)));
+  return res;
+}
+const versionsMemo = new WeakMap();
+
+function buildVersions(ls, finalId, max) {
   const preds = (node) => ls.filter((l) => l.to === node).map((l) => l.from);
   const res = [];
   const walk = (g, tail, seen) => {
@@ -583,7 +669,7 @@ export function snap(project, id, x, y, tol, keep = {}) {
   const w = width(b);
   const h = height(b);
   const isVideo = visual(b);
-  const gs = groups({ ...project, blocks: project.blocks.filter((o) => o.id !== id) });
+  const gs = groups(without(project, id));
   const magnet = tol * MAGNET;
   // O bloco onde o elemento já está vem primeiro; ele solta à mesma distância em que puxa.
   for (const g of [...gs.filter((g) => g.id === keep.group), ...gs.filter((g) => g.id !== keep.group)]) {
@@ -658,6 +744,15 @@ export function trimAlign(project, id, side, timelineSeconds, tol) {
   const aligned = trim(project, id, side, timelineSeconds + best.gap / perSecond);
   return Math.abs(ends(aligned)[best.i] - best.x) > 0.5 ? null : guide(aligned);
 }
+
+/**
+ * O projeto sem um bloco (o que está sendo arrastado). No arrasto, o projeto de partida é o mesmo a
+ * cada quadro: o mesmo objeto volta, e os grupos dele saem da memória.
+ */
+function without(project, id) {
+  return remember(withoutMemo, project, [id, project.names, ...project.blocks], () => ({ ...project, blocks: project.blocks.filter((o) => o.id !== id) }));
+}
+const withoutMemo = new WeakMap();
 
 /** A posição que encosta uma ponta do elemento na ponta mais perto, dentro da mira. */
 function nearestEdge(x, w, edges, tol) {

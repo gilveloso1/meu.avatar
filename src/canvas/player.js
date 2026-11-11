@@ -48,7 +48,21 @@ export class Player {
   load(tl, size = { width: 720, height: 1280 }) {
     this.pause();
     this.size = size;
-    this.stage.querySelectorAll(".pv-media").forEach((el) => el.remove());
+    // Os elementos da prévia anterior ficam à mão: o trecho do mesmo arquivo reaproveita o dele, já
+    // carregado e com imagem, em vez de baixar e decodificar tudo de novo a cada troca (escolher outro
+    // bloco, outra variação, mexer num corte). Um que deu erro não volta: o novo tenta de novo.
+    const spare = new Map();
+    for (const i of this.items) {
+      const el = i.el;
+      if (el.tagName === "IFRAME" || el.error || (el.tagName === "IMG" && el.complete && !el.naturalWidth)) {
+        discard(el);
+        continue;
+      }
+      el.classList.remove("is-on");
+      // O enquadramento do trecho de antes sai (place() o põe de novo no que tiver).
+      el.removeAttribute("style");
+      (spare.get(i.key) ?? spare.set(i.key, []).get(i.key)).push(el);
+    }
     this.duration = tl.duration;
     this.shown = { 0: null, 1: [] };
     this.back ??= this.stage.appendChild(Object.assign(document.createElement("canvas"), { className: "pv-back", width: 36, height: 64 }));
@@ -56,32 +70,61 @@ export class Player {
     this.items = tl.items.map((i) => {
       if (i.block.code && this.frameSrc) return this.frame(i);
       const k = i.block.kind;
-      const el = document.createElement(k === "image" ? "img" : k === "audio" ? "audio" : "video");
-      el.className = "pv-media";
+      const tag = k === "image" ? "img" : k === "audio" ? "audio" : "video";
+      const src = i.block.draft ? draftCard(i.block) : i.block.src;
+      const key = `${tag}\n${src}`;
+      const el = spare.get(key)?.shift() ?? this.media(tag, src);
+      const item = { ...i, el, key, active: false };
+      // Os ouvintes do elemento leem o trecho de agora.
+      el.item = item;
       el.dataset.layer = String(i.layer);
       if (k !== "image") {
-        el.preload = "auto";
-        el.playsInline = true;
         // Vídeo com o áudio desvinculado toca mudo: o som dele está no bloco de áudio.
         el.muted = !sounds(i.block);
         el.volume = Math.min(1, Math.max(0, i.block.vol));
         // A velocidade também vale ao carregar: o navegador zera ao trocar de arquivo.
-        const rate = () => (el.defaultPlaybackRate = el.playbackRate = i.speed);
-        rate();
-        el.addEventListener("loadedmetadata", rate, { once: true });
-        // Parado no quadro onde o trecho começa, pronto para entrar.
-        el.addEventListener("loadedmetadata", () => el.currentTime === 0 && i.tin && (el.currentTime = i.tin), { once: true });
+        el.defaultPlaybackRate = el.playbackRate = i.speed;
       }
-      // Mostra o primeiro quadro assim que ele chega (antes de tocar).
-      el.addEventListener(k === "image" ? "load" : "loadeddata", () => this.show(), { once: true });
+      return item;
+    });
+    // O que não serviu a esta prévia sai, e para de baixar.
+    for (const list of spare.values()) list.forEach(discard);
+    // No quadro, na ordem da lista (quem vem depois fica por cima), depois do fundo; só anda o que saiu do lugar.
+    let at = this.back.nextElementSibling;
+    for (const i of this.items) {
+      if (i.el.tagName === "AUDIO") continue;
+      if (i.el === at) at = at.nextElementSibling;
+      else this.stage.insertBefore(i.el, at);
+    }
+    this.seek(0);
+  }
+
+  /** Um elemento novo de vídeo, áudio ou imagem para um arquivo; os ouvintes valem para o trecho que o estiver usando. */
+  media(tag, src) {
+    const el = document.createElement(tag);
+    el.className = "pv-media";
+    if (tag !== "img") {
+      el.preload = "auto";
+      el.playsInline = true;
+      el.addEventListener(
+        "loadedmetadata",
+        () => {
+          const i = el.item;
+          if (!i) return;
+          el.defaultPlaybackRate = el.playbackRate = i.speed;
+          // Parado no quadro onde o trecho começa, pronto para entrar.
+          if (el.currentTime === 0 && i.tin) el.currentTime = i.tin;
+        },
+        { once: true },
+      );
       // Parado: mostra o quadro novo assim que o navegador terminar de buscar. Um ouvinte só por
       // arquivo (um a cada seek se acumulava ao arrastar o controle).
-      if (k !== "image") el.addEventListener("seeked", () => !this.playing && this.show());
-      el.src = i.block.draft ? draftCard(i.block) : i.block.src;
-      if (k !== "audio") this.stage.append(el);
-      return { ...i, el, active: false };
-    });
-    this.seek(0);
+      el.addEventListener("seeked", () => !this.playing && el.item && this.show());
+    }
+    // Mostra o primeiro quadro assim que ele chega (antes de tocar).
+    el.addEventListener(tag === "img" ? "load" : "loadeddata", () => el.item && this.show(), { once: true });
+    el.src = src;
+    return el;
   }
 
   /** A animação: o quadro carrega a página e recebe o código; fica pronta quando ela avisa. */
@@ -96,7 +139,6 @@ export class Player {
     Object.assign(el.style, { width: `${width}px`, height: `${height}px` });
     el.addEventListener("load", () => el.contentWindow.postMessage({ tipo: "carregar", html: codeHtml(i.block.code), largura: width, altura: height, duracao: i.block.tout }, "*"), { once: true });
     el.src = this.frameSrc;
-    this.stage.append(el);
     const item = { ...i, el, active: false, ready: false, sent: null };
     // Sem resposta (quadro bloqueado, código que trava), a prévia segue sem a animação.
     setTimeout(() => !item.ready && ((item.failed = true), this.show()), FRAME_WAIT_MS);
@@ -222,11 +264,22 @@ export class Player {
     // O fundo é o da imagem mais de cima que não é animação.
     const i = this.shown[1].findLast((o) => !o.block.code) ?? this.shown[0];
     const blur = i?.block.frame?.fit === "blur";
-    this.back.hidden = !blur;
+    if (this.back.hidden === blur) this.back.hidden = !blur;
     if (!blur) return;
     try {
       this.back.getContext("2d").drawImage(i.el, 0, 0, 36, 64);
     } catch {}
+  }
+}
+
+/** O elemento que a prévia não usa mais: sai do quadro e solta o arquivo (para de baixar e de decodificar). */
+function discard(el) {
+  el.item = null;
+  el.remove();
+  if (el.pause) {
+    el.pause();
+    el.removeAttribute("src");
+    el.load();
   }
 }
 
