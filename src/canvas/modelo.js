@@ -721,11 +721,19 @@ export function moveGroup(project, groupId, dx, dy) {
 
 /* Linhas: curva suave; a que passaria sobre um elemento vai reta na altura de saída e curva no fim. */
 export const PORT_OUT = 14;
+/** A folga entre os elementos de um bloco e o contorno tracejado dele. */
+export const FRAME_PAD = 20;
+/**
+ * A que distância da ponta do bloco fica o ponto de ligação: o bloco com área (mais de um elemento)
+ * tem o contorno tracejado, e o ponto fica fora dele (pedido do dono, 11/11/2026: dentro, ele se
+ * espremia entre o elemento e o contorno, e com o canvas afastado encostava nos vizinhos).
+ */
+export const portGap = (g) => PORT_OUT + (hasArea(g) ? FRAME_PAD : 0);
 const WIRE_BEND = 120;
 const WIRE_PAD = 8;
 const portY = (g) => g.y + (g.soloAudio ? AUD_H : VIS_H) / 2;
-export const outPoint = (g) => ({ x: g.x + g.w + PORT_OUT, y: portY(g) });
-export const inPoint = (g) => ({ x: g.x - PORT_OUT, y: portY(g) });
+export const outPoint = (g) => ({ x: g.x + g.w + portGap(g), y: portY(g) });
+export const inPoint = (g) => ({ x: g.x - portGap(g), y: portY(g) });
 export const finalPoint = (f) => ({ x: f.x, y: f.y + 40 });
 export function curve(a, b) {
   const k = Math.max(40, Math.abs(b.x - a.x) / 2);

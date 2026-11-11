@@ -308,7 +308,7 @@ function step(from, to) {
 /* ---------- desenho ---------- */
 
 // Espaço entre os blocos e o tracejado da área do grupo.
-const FRAME_PAD = 20;
+const FRAME_PAD = M.FRAME_PAD;
 /** O grupo cuja área (o tracejado) tem este ponto do canvas. */
 function groupAt(pt) {
   return M.groups(project).find((g) => {
@@ -379,8 +379,15 @@ function sharpen() {
   }
 }
 
-/** A medida dos controles e dos traços na tela: a raiz do zoom, de 1 a 2 vezes o tamanho de 100%. */
+/** A medida dos traços na tela (e dos controles, aproximando): a raiz do zoom, de 1 a 2 vezes o tamanho de 100%. */
 const scale = () => Math.min(2, Math.max(1, Math.sqrt(view.z)));
+/**
+ * A medida dos controles (ponto de ligação, aba do grupo, ícone das áreas): aproximando, a dos traços;
+ * afastando, encolhem com o canvas, mais devagar que ele (o zoom elevado a 0,6: 0,66 a 50%), como o
+ * cursor de progresso. Com o tamanho de 100% no canvas a 50%, a aba ficava do tamanho do bloco e os
+ * pontos de ligação de dois vizinhos se encostavam.
+ */
+const ctrl = () => (view.z >= 1 ? scale() : Math.max(0.6, view.z ** 0.6));
 /** O traço (linha de reprodução, seleção, contorno do grupo, ligações, guia): 2 px até 100%, 4 px a partir de 400%. */
 const stroke = () => Math.round(2 * scale());
 
@@ -409,7 +416,11 @@ function applyView() {
   // O sistema de proporção (docs/canvas.md): o conteúdo acompanha o zoom; os controles e os traços
   // crescem pela raiz dele, de 1 a 2 vezes (scale()), e não encolhem abaixo do tamanho de 100%.
   // --ck desfaz o zoom do canvas e aplica a medida; --sw é o traço, em px inteiros da tela.
-  world.style.setProperty("--ck", String(scale() / view.z));
+  world.style.setProperty("--ck", String(ctrl() / view.z));
+  // A borda de corte não se vê, só se pega: não encolhe abaixo dos 10 px da tela.
+  world.style.setProperty("--tk", String(scale() / view.z));
+  // O inverso do zoom, para o piso do texto do Final (10 px na tela).
+  world.style.setProperty("--iz", String(1 / view.z));
   for (const el of [world, lines]) el.style.setProperty("--sw", `${stroke()}px`);
   // O texto do rótulo é conteúdo, mas afastado não fica menor que uns 10 px na tela.
   world.style.setProperty("--lz", String(Math.min(2.2, Math.max(1, 0.85 / view.z))));
@@ -559,8 +570,8 @@ function render({ side = true } = {}) {
       html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${top + 4}px">movie</span>`;
       html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${g.y + M.VIS_H + 12}px">music_note</span>`;
     }
-    html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
-    html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
+    html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - M.portGap(g) - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
+    html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + M.portGap(g) - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
   }
   for (const f of project.finals) {
     const vs = M.versions(project, f.id, gs);
@@ -1841,8 +1852,8 @@ function boxes() {
   for (const n of project.notes ?? []) out.push({ kind: "note", id: n.id, x: n.x, y: n.y, w: M.NOTE_W, h: M.VIS_H });
   return out;
 }
-// A folga entre elementos: dos lados cabem os pontos de ligação; em cima, a aba do grupo.
-const GAP_X = 48;
+// A folga entre elementos: dos lados cabem os pontos de ligação dos dois (cada um fora do contorno do seu bloco); em cima, a aba do grupo.
+const GAP_X = 96;
 const GAP_Y = 56;
 const hits = (a, o) => o.x < a.x + a.w + GAP_X && o.x + o.w + GAP_X > a.x && o.y < a.y + a.h + GAP_Y && o.y + o.h + GAP_Y > a.y;
 

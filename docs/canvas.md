@@ -104,6 +104,9 @@ menos custo.
 
 - **Começo**: o canvas vazio não tem Final. O primeiro elemento que entra traz o Final, já
   ligado a ele; os seguintes ficam soltos.
+- **Ponto de ligação fora do contorno** (pedido do dono, 11/11/2026): no bloco com área, a entrada e
+  a saída ficam fora do contorno tracejado, a 14 px dele (`portGap`, `modelo.js`); no elemento solto,
+  a 14 px do próprio elemento, como antes.
 - **Ligações**: puxa-se de um ponto de saída para uma entrada, ou de uma entrada para uma
   saída. Puxar a linha solta a ponta mais perto: num ponto ela liga de novo, no vazio ela
   some. Clique na linha e Delete apaga. `linkProblem` (`modelo.js`) recusa ligar um grupo a
@@ -157,11 +160,13 @@ menos custo.
   a 800% o ponto de ligação tinha 144 px ao lado de uma linha de 4). Três famílias, cada uma com uma
   regra só (`scale()` e `stroke()`, `canvas.js`; `--ck`, `--sw` e `--lz`, `tela.html`):
   - **Conteúdo** (blocos, miniaturas, ondas de som, texto do rótulo, card do Final): acompanha o
-    zoom por inteiro. Exceção: afastado, o texto do rótulo não fica menor que uns 10 px na tela, e
-    abaixo de 75% o rótulo mostra só o nome.
-  - **Controles** (ponto de ligação, borda de corte, aba do grupo, ícone das áreas): crescem pela
-    raiz do zoom, de 1 a 2 vezes, e afastados não ficam menores que a 100%. Ponto de ligação: 18 px
-    até 100%, 26 em 200%, 36 a partir de 400%.
+    zoom por inteiro. Exceção: afastado, o texto do rótulo e o do card do Final não ficam menores que
+    uns 10 px na tela, e abaixo de 75% o rótulo mostra só o nome.
+  - **Controles** (ponto de ligação, aba do grupo, ícone das áreas): aproximando, crescem pela raiz
+    do zoom, de 1 a 2 vezes; afastando, encolhem com o canvas, mais devagar que ele (o zoom elevado
+    a 0,6). Ponto de ligação: 12 px a 50%, 18 a 100%, 26 em 200%, 36 a partir de 400%. A borda de
+    corte, que só se pega, não fica menor que 10 px. (Com o tamanho de 100% a 50%, a aba ficava do
+    tamanho do bloco e os pontos de ligação de dois vizinhos se encostavam: visto em 11/11/2026.)
   - **Traços** (seleção, contorno do grupo, divisa das áreas, ligações, guia do corte): a mesma
     medida, em px inteiros: 2 px até 100%, 3 em 200%, 4 a partir de 400%.
   - **Cursor de progresso** (a linha de reprodução e a alça): atravessa o bloco de cima a baixo e por
