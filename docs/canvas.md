@@ -211,13 +211,13 @@ menos custo.
   Abrir e Apagar (com uma página de confirmação; leva o projeto e os arquivos
   enviados para ele, os vídeos não).
 - **Canvas de um projeto** (`/canvas/<id>`; `/canvas` sozinho leva à lista): a barra
-  tem o nome do projeto, Bloco final, Do computador e Seus vídeos. Salva sozinho
+  tem o nome do projeto, Bloco final e Arquivos (o envio do computador fica no pé do painel Arquivos). Salva sozinho
   pouco depois de cada mudança (`POST /projetos/<id>/salvar`, o canvas em JSON, até
   1 MB); se falhar, um aviso. O nome muda na barra superior (um clique no título; sair do campo salva, Esc desiste) ou
   nos Ajustes, sem nada escolhido, onde também ficam os dados do projeto: criado em,
   modificado em, criado por, blocos e variações.
 - **Arrastar e colar**: soltar arquivos em qualquer ponto da página (o canvas mostra o contorno
-  enquanto eles passam) faz o mesmo que o "Do computador"; soltar fora do canvas não deixa o navegador
+  enquanto eles passam) faz o mesmo que o "Enviar do computador"; soltar fora do canvas não deixa o navegador
   abrir o arquivo. Colar (Ctrl+V ou Cmd+V) fora de um campo: imagem copiada vira bloco ("Imagem
   colada"), texto vira nota. Entra onde está o mouse; sem ele no canvas, embaixo de tudo. Arquivo que não
   é imagem, vídeo nem áudio: o aviso de sempre. Colar num campo de texto continua normal.
@@ -231,7 +231,35 @@ menos custo.
   continua grupo; linhas não vão junto. Duplicar põe logo embaixo, com "(cópia)" nos blocos. O Colar do
   menu lê a área de transferência pelo navegador, que pode pedir permissão; se não der, o aviso pede o
   Ctrl+V (`copyItems`, `pasteItems` em `modelo.js`).
-- **Do computador**: o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
+- **Arquivos** (11/11/2026, no lugar do "Seus vídeos", um diálogo que só trazia os 100 vídeos
+  gerados mais novos; aprovado pelo dono no mesmo dia): um painel só para tudo o que a pessoa pode pôr
+  no projeto, preso à esquerda do canvas. É a folha lateral padrão do M3 (320 px, rola por dentro):
+  convive com o canvas, que encolhe para dar lugar, em vez de cobri-lo como o diálogo (o M3 reserva o
+  diálogo para decisão ou aviso que bloqueia; o painel de mídia ao lado é o molde dos editores de
+  vídeo). O botão "Arquivos" da barra abre e fecha, e a escolha fica lembrada (`canvas-arquivos`).
+  Abaixo de 1200 px de largura o painel passa por cima do canvas. De cima para baixo: o título e o
+  fechar; a origem em abas (as da folha da direita): **Gerados** (vídeo, imagem e áudio de todos os
+  modelos, com as pastas da aba Vídeos), **Avatares** (primeiro os avatares; dentro de um, as pastas
+  e os ativos dele) e **Projeto** (os arquivos enviados a ele, mesmo os que nenhum bloco usa; os de
+  outro projeto não entram: a exportação só lê os do próprio); a busca; o tipo em chips de filtro
+  (Vídeos, Imagens, Áudios; nenhum marcado é tudo); o caminho da pasta aberta (`.crumbs`); e o
+  conteúdo: pastas e avatares em lista, vídeos e imagens numa grade de três colunas de cards quadrados
+  com o nome embaixo, áudios em lista. Como nas listas do site, a raiz mostra só o que está fora de
+  pasta, e a busca procura em tudo, sem pastas. **Arrasta-se o arquivo até o ponto do canvas** em que
+  ele entra; tocar também põe, no meio do que está à vista (se ali já houver bloco, desce até um
+  lugar livre, e a vista vai até ele). O card do que já está no canvas ganha o selo de camadas.
+  **Ver antes de pôr**: com o mouse em cima, o vídeo toca mudo no próprio card; o áudio tem o botão
+  de ouvir na linha (um por vez); o card do vídeo e a linha do áudio mostram a duração, lida do
+  cabeçalho do arquivo (a mesma que o bloco usa ao entrar, sem ler de novo). **Escolher vários**: o
+  círculo no canto do card (aparece com o mouse em cima), Ctrl ou Cmd com o toque ou, já com algum
+  escolhido, qualquer toque; o pé do painel mostra quantos são e o "Inserir", que os põe um
+  embaixo do outro; arrastar um dos escolhidos leva todos. Sem escolhidos, o pé tem o **Enviar do
+  computador** (o botão saiu da barra de cima): o arquivo entra no canvas e na aba Projeto. Vem do servidor em páginas de 24
+  (`LIBRARY_PAGE`), com "Mostrar mais", por `GET /projetos/<id>/acervo` (`projectLibrary`,
+  `src/site/site.ts`), que usa o mesmo acervo do agente (`src/acervo.ts`); a página do canvas não
+  carrega mais lista nenhuma ao abrir. A duração do vídeo e do áudio é lida no navegador, do
+  cabeçalho do arquivo; a imagem entra com 3 s.
+- **Enviar do computador** (no pé do painel Arquivos e no canvas vazio): o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
   `project_files`), com os limites do site (imagem 10 MB, vídeo e áudio 50 MB), e o
   bloco usa o endereço de lá; não some ao recarregar.
 - **Ajustes do Final**: um card com Variações e Duração, depois Qualidade e formato,

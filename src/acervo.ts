@@ -96,6 +96,8 @@ export interface Filtro extends Pagina {
   projeto?: string;
   /** Só os arquivos de uma pasta: da aba Vídeos (gerados) ou de um avatar (ativos). */
   pasta?: string;
+  /** Só os que estão fora de pasta, como a raiz das listas do site (o seletor do canvas). */
+  foraDePasta?: boolean;
 }
 
 /** O nome de cada pasta pelo id, para o item dizer onde o arquivo está. */
@@ -156,8 +158,8 @@ export async function listar(db: Db, user: User, f: Filtro, url: URL): Promise<{
   const structures = STRUCTURES.filter((s) => canUse(s, user) && (!f.modelo || s.id === f.modelo) && (!f.tipo || f.tipo === outputKind(s))).map((s) => s.id);
   // A pasta é da aba Vídeos ou de um avatar: os arquivos dos projetos não têm pasta.
   const [gerados, ativos, enviados, avatares, pastasDeVideos, pastasDeAvatares] = await Promise.all([
-    quer("gerado") && !f.projeto ? conta.readyVideos(structures, { ...pagina, folder: f.pasta }) : [],
-    quer("avatar") && !f.modelo && !f.projeto ? conta.assetsPage({ ...pagina, kind: f.tipo, folder: f.pasta }) : [],
+    quer("gerado") && !f.projeto ? conta.readyVideos(structures, { ...pagina, folder: f.foraDePasta ? null : f.pasta }) : [],
+    quer("avatar") && !f.modelo && !f.projeto ? conta.assetsPage({ ...pagina, kind: f.tipo, folder: f.foraDePasta ? null : f.pasta }) : [],
     quer("projeto") && !f.modelo && !f.avatar && !f.pasta ? conta.projectFilesPage({ ...pagina, types: f.tipo ? Object.keys(MEDIA_TYPES).filter((t) => MEDIA_TYPES[t]!.kind === f.tipo) : undefined, project: f.projeto }) : [],
     db.avatarsByUser(user.id),
     conta.folders("videos"),

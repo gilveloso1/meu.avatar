@@ -34,24 +34,139 @@ async function novo(session: string): Promise<string> {
 const config = (page: string) => JSON.parse(/<script type="application\/json" id="canvas-config">([\s\S]*?)<\/script>/.exec(page)![1]!);
 
 describe("projetos do canvas", () => {
-  it("Novo projeto abre o canvas com os vídeos prontos, o projeto e as frases do catálogo", async () => {
+  it("Novo projeto abre o canvas com o projeto e as frases do catálogo; os arquivos vêm depois, pelo painel Arquivos", async () => {
     const admin = await cookie();
     await videos();
     const id = await novo(admin);
     const res = await get(`/canvas/${id}`, admin);
     expect(res.status).toBe(200);
-    const c = config(await res.text());
-    expect(c.videos).toEqual([
-      { id: "11111111-1111-4111-8111-111111111111", name: "Oi, gente! Hoje eu vou mostrar", src: "/videos/11111111-1111-4111-8111-111111111111.mp4", when: expect.any(String) },
-    ]);
-    // O vídeo de outra conta não aparece na lista do canvas.
-    await memberCookie();
-    await env.DB.prepare("UPDATE videos SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com')").run();
-    expect(config(await (await get(`/canvas/${id}`, admin)).text()).videos).toEqual([]);
-    expect(c.projeto).toMatchObject({ id, name: "Projeto sem nome", data: { blocks: [], edges: [] }, salvar: `/projetos/${id}/salvar`, arquivos: `/projetos/${id}/arquivos` });
-    expect(c.erros).toMatchObject({ arquivo: ERROS.canvasArquivo, salvar: ERROS.canvasSalvar, nome: ERROS.projetoNome });
+    const page = await res.text();
+    const c = config(page);
+    // A página não carrega mais a lista de vídeos: o painel Arquivos pede uma página por vez.
+    expect(c.videos).toBeUndefined();
+    // O painel vem fechado, à esquerda do canvas, e o botão da barra o abre.
+    expect(page).toMatch(/<aside class="files-panel" id="lib"[^>]* hidden>/);
+    expect(page).toContain('data-open-library aria-controls="lib" aria-expanded="false"');
+    // O envio do computador saiu da barra de cima: fica no pé do painel (e no canvas vazio).
+    expect(/<header[\s\S]*?<\/header>/.exec(page)?.[0] ?? "").not.toContain("data-open-file");
+    expect(page).toMatch(/id="lib-foot">\s*<button[^>]*data-open-file>/);
+    expect(c.projeto).toMatchObject({ id, name: "Projeto sem nome", data: { blocks: [], edges: [] }, salvar: `/projetos/${id}/salvar`, arquivos: `/projetos/${id}/arquivos`, acervo: `/projetos/${id}/acervo` });
+    expect(c.erros).toMatchObject({ arquivo: ERROS.canvasArquivo, salvar: ERROS.canvasSalvar, nome: ERROS.projetoNome, abrir: ERROS.canvasAbrir, acervo: ERROS.canvasAcervo });
     expect(res.headers.get("content-security-policy")).toContain("img-src 'self' blob: data:");
     expect(res.headers.get("content-security-policy")).toContain("connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com blob:");
+  });
+
+  describe("Arquivos (o painel do canvas)", () => {
+    const V1 = "11111111-1111-4111-8111-111111111111";
+    type Arquivo = { id: string; nome: string; tipo: string; src: string; quando: string; de?: string };
+    type Lista = { pastas?: { id: string; nome: string; itens: number }[]; avatares?: { id: string; nome: string; foto: string | null; itens: number }[]; arquivos: Arquivo[]; continuar?: string };
+    const acervo = async (id: string, session: string, query = "") => (await (await get(`/projetos/${id}/acervo${query}`, session)).json()) as Lista;
+    const dono = async () => (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin'").first<{ id: number }>())!.id;
+    const agora = () => new Date().toISOString();
+    /** Um gerado pronto direto no banco: vídeo (wan), imagem (nano-banana) ou áudio (fish). */
+    const gerado = async (structure: string, ext: string, prompt: string, when = agora(), folder: string | null = null) => {
+      const id = crypto.randomUUID();
+      await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, folder_id, created_at, updated_at) VALUES (?, ?, 'completed', ?, 'm', 5, '480p', '9:16', ?, ?, ?, ?, ?)")
+        .bind(await dono(), id, prompt, `videos/${id}.${ext}`, structure, folder, when, when)
+        .run();
+      return id;
+    };
+
+    it("Gerados: vídeo, imagem e áudio, com as pastas antes; a raiz só mostra o que está fora de pasta", async () => {
+      const admin = await cookie();
+      await videos();
+      const id = await novo(admin);
+      const pasta = crypto.randomUUID();
+      await env.DB.prepare("INSERT INTO account_folders (id, user_id, kind, name, created_at) VALUES (?, ?, 'videos', 'Ganchos', ?)").bind(pasta, await dono(), agora()).run();
+      const naPasta = await gerado("wan", "mp4", "Você não vai acreditar", "2026-01-02T00:00:00.000Z", pasta);
+      const imagem = await gerado("nano-banana", "png", "Uma praia ao pôr do sol", "2026-01-03T00:00:00.000Z");
+      const audio = await gerado("fish", "mp3", "[excited] Bom dia, pessoal", "2026-01-04T00:00:00.000Z");
+
+      const raiz = await acervo(id, admin);
+      expect(raiz.pastas).toEqual([{ id: pasta, nome: "Ganchos", itens: 1 }]);
+      expect(raiz.arquivos.map((a) => a.id)).toEqual([V1, audio, imagem]);
+      expect(raiz.arquivos.find((a) => a.id === V1)).toMatchObject({ nome: "Oi, gente! Hoje eu vou mostrar", tipo: "video", src: `/videos/${V1}.mp4` });
+      // O nome do áudio não leva a marcação da emoção; a imagem e o áudio saem com o endereço do tipo deles.
+      expect(raiz.arquivos.find((a) => a.id === audio)).toMatchObject({ nome: "Bom dia, pessoal", tipo: "audio", src: `/videos/${audio}.mp3` });
+      expect(raiz.arquivos.find((a) => a.id === imagem)).toMatchObject({ tipo: "imagem", src: `/videos/${imagem}.png` });
+      // O que ainda está na fila não entra.
+      expect(raiz.arquivos.some((a) => a.id === "22222222-2222-4222-8222-222222222222")).toBe(false);
+
+      expect((await acervo(id, admin, `?pasta=${pasta}`)).arquivos.map((a) => a.id)).toEqual([naPasta]);
+      // O tipo filtra (e as pastas somem); a busca procura em tudo, também dentro das pastas.
+      const audios = await acervo(id, admin, "?tipo=audio");
+      expect(audios.arquivos.map((a) => a.id)).toEqual([audio]);
+      expect(audios.pastas).toEqual([]);
+      expect((await acervo(id, admin, "?q=acreditar")).arquivos.map((a) => a.id)).toEqual([naPasta]);
+      expect((await get(`/projetos/${id}/acervo?tipo=musica`, admin)).status).toBe(400);
+    });
+
+    it("vem em páginas, com o continuar", async () => {
+      const admin = await cookie();
+      const id = await novo(admin);
+      const { LIBRARY_PAGE } = await import("../src/site/site");
+      for (let i = 0; i < LIBRARY_PAGE + 3; i++) await gerado("wan", "mp4", `Vídeo ${i}`, new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString());
+      const um = await acervo(id, admin);
+      expect(um.arquivos).toHaveLength(LIBRARY_PAGE);
+      expect(um.arquivos[0]!.nome).toBe(`Vídeo ${LIBRARY_PAGE + 2}`);
+      const dois = await acervo(id, admin, `?continuar=${encodeURIComponent(um.continuar!)}`);
+      expect(dois.arquivos.map((a) => a.nome)).toEqual(["Vídeo 2", "Vídeo 1", "Vídeo 0"]);
+      expect(dois.continuar).toBeUndefined();
+    });
+
+    it("Avatares: primeiro o avatar, depois as pastas e os ativos dele; Deste projeto: só os arquivos deste", async () => {
+      const admin = await cookie();
+      const id = await novo(admin);
+      const outro = await novo(admin);
+      const [avatar, vazio, pasta, foto, voz] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+      const user = await dono();
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO avatars (id, user_id, name, description, photo_asset, created_at, updated_at) VALUES (?, ?, 'Camila', '', ?, ?, ?)").bind(avatar, user, foto, agora(), agora()),
+        env.DB.prepare("INSERT INTO avatars (id, user_id, name, description, created_at, updated_at) VALUES (?, ?, 'Sem ativos', '', ?, ?)").bind(vazio, user, agora(), agora()),
+        env.DB.prepare("INSERT INTO folders (id, avatar_id, name, created_at) VALUES (?, ?, 'Fotos', ?)").bind(pasta, avatar, agora()),
+        env.DB.prepare("INSERT INTO avatar_assets (id, avatar_id, kind, key, name, type, size, folder_id, created_at) VALUES (?, ?, 'imagem', 'k1', 'Rosto.png', 'image/png', 3, ?, ?)").bind(foto, avatar, pasta, agora()),
+        env.DB.prepare("INSERT INTO avatar_assets (id, avatar_id, kind, key, name, type, size, created_at) VALUES (?, ?, 'audio', 'k2', 'Voz.mp3', 'audio/mpeg', 3, ?)").bind(voz, avatar, agora()),
+      ]);
+      // Sem avatar escolhido: a lista dos avatares que têm arquivos, com a foto.
+      const lista = await acervo(id, admin, "?fonte=avatar");
+      expect(lista).toEqual({ avatares: [{ id: avatar, nome: "Camila", foto: `/avatares/${avatar}/arquivos/${foto}`, itens: 2 }], arquivos: [] });
+      const dele = await acervo(id, admin, `?fonte=avatar&avatar=${avatar}`);
+      expect(dele.pastas).toEqual([{ id: pasta, nome: "Fotos", itens: 1 }]);
+      expect(dele.arquivos).toEqual([expect.objectContaining({ id: voz, nome: "Voz.mp3", tipo: "audio", src: `/avatares/${avatar}/arquivos/${voz}` })]);
+      expect((await acervo(id, admin, `?fonte=avatar&avatar=${avatar}&pasta=${pasta}`)).arquivos.map((a) => a.id)).toEqual([foto]);
+      // A busca sem avatar procura nos ativos de todos e diz de quem é.
+      expect((await acervo(id, admin, "?fonte=avatar&q=rosto")).arquivos).toEqual([expect.objectContaining({ id: foto, de: "Camila" })]);
+
+      // Deste projeto: o que foi enviado a ele, mesmo sem bloco; o de outro projeto não entra.
+      const envia = (projeto: string, nome: string) => post(`/projetos/${projeto}/arquivos`, admin, webmBytes(false), { "content-type": "video/webm", "x-nome": nome });
+      const meu = ((await (await envia(id, "camada.webm")).json()) as { src: string }).src;
+      await envia(outro, "de-outro.webm");
+      expect((await acervo(id, admin, "?fonte=projeto")).arquivos).toEqual([expect.objectContaining({ nome: "camada.webm", tipo: "video", src: meu })]);
+      expect((await get(`/projetos/${id}/acervo?fonte=lixo`, admin)).status).toBe(400);
+    });
+
+    it("de outra conta nada aparece: nem os gerados, nem o avatar, nem a pasta; sem o canvas, a rota não existe", async () => {
+      const admin = await cookie();
+      const id = await novo(admin);
+      const membro = await memberCookie();
+      const dela = (await env.DB.prepare("SELECT id FROM users WHERE email = 'membro@exemplo.com'").first<{ id: number }>())!.id;
+      const [video, avatar, ativo, pasta] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO account_folders (id, user_id, kind, name, created_at) VALUES (?, ?, 'videos', 'Dela', ?)").bind(pasta, dela, agora()),
+        env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, folder_id, created_at, updated_at) VALUES (?, ?, 'completed', 'Dela', 'm', 5, '480p', '9:16', ?, 'wan', ?, ?, ?)").bind(dela, video, `videos/${video}.mp4`, pasta, agora(), agora()),
+        env.DB.prepare("INSERT INTO avatars (id, user_id, name, description, created_at, updated_at) VALUES (?, ?, 'Dela', '', ?, ?)").bind(avatar, dela, agora(), agora()),
+        env.DB.prepare("INSERT INTO avatar_assets (id, avatar_id, kind, key, name, type, size, created_at) VALUES (?, ?, 'imagem', 'k', 'Dela.png', 'image/png', 3, ?)").bind(ativo, avatar, agora()),
+      ]);
+      expect(await acervo(id, admin)).toEqual({ pastas: [], arquivos: [] });
+      expect((await acervo(id, admin, `?pasta=${pasta}`)).arquivos).toEqual([]);
+      expect((await acervo(id, admin, "?q=Dela")).arquivos).toEqual([]);
+      expect((await acervo(id, admin, "?fonte=avatar")).avatares).toEqual([]);
+      expect((await get(`/projetos/${id}/acervo?fonte=avatar&avatar=${avatar}`, admin)).status).toBe(404);
+      expect((await acervo(id, admin, "?fonte=avatar&q=Dela")).arquivos).toEqual([]);
+      // A conta sem o canvas não lê o acervo de projeto nenhum, e sem login também não.
+      expect((await get(`/projetos/${id}/acervo`, membro)).status).toBe(404);
+      expect((await get(`/projetos/${id}/acervo`)).status).not.toBe(200);
+    });
   });
 
   it("salva o canvas e o nome, e a lista mostra o projeto", async () => {

@@ -332,7 +332,8 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   `BAIXAR_PATH` em `src/exportar.ts`): o agente baixa no terminal, que não tem o token. Só lê, só aquela
   exportação e só por 1 hora depois de entregue (perguntar de novo renova); regra nova ali ganha teste em `test/canvas.test.ts`.
 - O que o agente vê dos arquivos sai de um item só (`src/acervo.ts`): `listar_arquivos`, os ativos do
-  `listar_avatares` e os arquivos do `ver_projeto`. Fonte nova de arquivo é mais uma consulta ali, com o
+  `listar_avatares` e os arquivos do `ver_projeto`. O painel Arquivos do canvas lê o mesmo acervo
+  (`projectLibrary`, `src/site/site.ts`). Fonte nova de arquivo é mais uma consulta ali, com o
   mesmo item e a mesma página (`Pagina`, `src/db.ts`), nunca uma lista à parte.
 - Todo download (vídeo, imagem, ativo, arquivo de projeto, exportação) tem o mesmo nome: o da tela,
   sem mudança, e a extensão do tipo real (`downloadName` e `contentDisposition`, `src/arquivos.ts`).

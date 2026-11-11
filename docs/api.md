@@ -393,7 +393,6 @@ agora.
 ## Limites de agora
 
 - A transcrição não acha sozinha os vícios e as repetições: quem decide é o agente, pelo texto.
-- Os ativos de avatar entram pela API, mas o "Seus vídeos" do canvas ainda não os lista.
 - Sem limite de uso por conta: exportar custa contêiner, e isso precisa de regra antes
   de abrir a outras contas.
 - Velocidade e enquadramento ainda não têm campos nos Ajustes: só pela API, e a prévia mostra.
