@@ -46,6 +46,11 @@ editarem projetos: [docs/api.md](docs/api.md); o que cada teste real de um agent
   à mão) e `npm run teste:canvas` roda os testes do modelo. Como funciona e o que
   foi decidido: [docs/canvas.md](docs/canvas.md). A exportação dos projetos fica em
   `src/exportar.ts` e `container/exportar.py`.
+- Sempre que o canvas for alterado, veja a alteração no navegador em três zooms: o mínimo (50%), o
+  neutro (100%) e o máximo (800%). Vale antes de propor medidas ou proporções (olhe primeiro, proponha
+  depois) e de novo antes do PR, com a imagem de cada um. Um zoom intermediário não substitui os
+  extremos: em 11/11/2026 a proporção do cursor de progresso foi proposta e publicada sem ninguém ter
+  olhado o mínimo (então 15%) nem o 800%.
 
 ## Reaproveitar componentes
 

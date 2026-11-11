@@ -308,7 +308,7 @@ function step(from, to) {
 /* ---------- desenho ---------- */
 
 // Espaço entre os blocos e o tracejado da área do grupo.
-const FRAME_PAD = 20;
+const FRAME_PAD = M.FRAME_PAD;
 /** O grupo cuja área (o tracejado) tem este ponto do canvas. */
 function groupAt(pt) {
   return M.groups(project).find((g) => {
@@ -379,8 +379,15 @@ function sharpen() {
   }
 }
 
-/** A medida dos controles e dos traços na tela: a raiz do zoom, de 1 a 2 vezes o tamanho de 100%. */
+/** A medida dos traços na tela (e dos controles, aproximando): a raiz do zoom, de 1 a 2 vezes o tamanho de 100%. */
 const scale = () => Math.min(2, Math.max(1, Math.sqrt(view.z)));
+/**
+ * A medida dos controles (ponto de ligação, aba do grupo, ícone das áreas): aproximando, a dos traços;
+ * afastando, encolhem com o canvas, mais devagar que ele (o zoom elevado a 0,6: 0,66 a 50%), como o
+ * cursor de progresso. Com o tamanho de 100% no canvas a 50%, a aba ficava do tamanho do bloco e os
+ * pontos de ligação de dois vizinhos se encostavam.
+ */
+const ctrl = () => (view.z >= 1 ? scale() : Math.max(0.6, view.z ** 0.6));
 /** O traço (linha de reprodução, seleção, contorno do grupo, ligações, guia): 2 px até 100%, 4 px a partir de 400%. */
 const stroke = () => Math.round(2 * scale());
 
@@ -409,8 +416,14 @@ function applyView() {
   // O sistema de proporção (docs/canvas.md): o conteúdo acompanha o zoom; os controles e os traços
   // crescem pela raiz dele, de 1 a 2 vezes (scale()), e não encolhem abaixo do tamanho de 100%.
   // --ck desfaz o zoom do canvas e aplica a medida; --sw é o traço, em px inteiros da tela.
-  world.style.setProperty("--ck", String(scale() / view.z));
+  world.style.setProperty("--ck", String(ctrl() / view.z));
+  // A borda de corte não se vê, só se pega: não encolhe abaixo dos 10 px da tela.
+  world.style.setProperty("--tk", String(scale() / view.z));
+  // O inverso do zoom, para o piso do texto do Final (10 px na tela).
+  world.style.setProperty("--iz", String(1 / view.z));
   for (const el of [world, lines]) el.style.setProperty("--sw", `${stroke()}px`);
+  // O fio de ligação é desenhado dentro do canvas ampliado: o traço dele vai dividido pelo zoom.
+  world.style.setProperty("--wsw", `${stroke() / view.z}px`);
   // O texto do rótulo é conteúdo, mas afastado não fica menor que uns 10 px na tela.
   world.style.setProperty("--lz", String(Math.min(2.2, Math.max(1, 0.85 / view.z))));
   world.classList.toggle("is-far", view.z < 0.75);
@@ -559,15 +572,15 @@ function render({ side = true } = {}) {
       html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${top + 4}px">movie</span>`;
       html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${g.y + M.VIS_H + 12}px">music_note</span>`;
     }
-    html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
-    html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
+    html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - M.portGap(g) - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
+    html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + M.portGap(g) - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
   }
   for (const f of project.finals) {
     const vs = M.versions(project, f.id, gs);
     const n = vs.length;
     const isSel = sel.type === "final" && sel.id === f.id;
     html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview, selectionIn(f.id, gs, idx), M.finalRate(f)) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
-    html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
+    html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - PORT_OUT - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
   if (html !== chromeHtml) chrome.innerHTML = chromeHtml = html;
 
@@ -1492,8 +1505,16 @@ $("#reset")?.addEventListener("click", () => {
   fit();
   render();
 });
-$("#zoom-in").onclick = () => zoomAt(1.2);
-$("#zoom-out").onclick = () => zoomAt(1 / 1.2);
+// Os botões + e − andam de 25 em 25 (50%, 75%, 100%... 800%): de um zoom quebrado, como 112%, o + vai
+// a 125% e o − a 100% (pedido do dono, 11/11/2026; antes multiplicavam por 1,2 e davam números soltos).
+const ZOOM_STEP = 0.25;
+const zoomTo = (dir) => {
+  const steps = view.z / ZOOM_STEP;
+  const next = (dir > 0 ? Math.floor(steps + 1e-6) + 1 : Math.ceil(steps - 1e-6) - 1) * ZOOM_STEP;
+  zoomAt(next / view.z);
+};
+$("#zoom-in").onclick = () => zoomTo(1);
+$("#zoom-out").onclick = () => zoomTo(-1);
 $("#fit").onclick = () => fit();
 // Info: o tooltip sobe do botão, 8 px acima da barra, sem sair da janela.
 $("#info-tip").addEventListener("toggle", (e) => {
@@ -1512,7 +1533,8 @@ $("#arrange").onclick = () => {
   fit();
 };
 
-const ZOOM_MIN = 0.15;
+// O zoom vai de 50% a 800% (o mínimo era 15%; o dono fixou em 50% em 11/11/2026: abaixo disso nada se lia nem se pegava).
+const ZOOM_MIN = 0.5;
 const FIT_Y = 88;
 // Até 800%: dá para ver a onda do som de perto para cortar.
 const ZOOM_MAX = 8;
@@ -1595,9 +1617,10 @@ function fit() {
   const w = Math.max(...xs) - x0;
   const h = Math.max(...ys) - y0;
   // Centralizado, com folga para a barra de baixo (80 px) igual em cima e embaixo.
-  view.z = Math.min(1.2, (r.width - 80) / w, (r.height - 2 * FIT_Y) / h);
-  view.x = (r.width - w * view.z) / 2 - x0 * view.z;
-  view.y = (r.height - h * view.z) / 2 - y0 * view.z;
+  view.z = Math.max(ZOOM_MIN, Math.min(1.2, (r.width - 80) / w, (r.height - 2 * FIT_Y) / h));
+  // Cabe: no meio. Não cabe nem no zoom mínimo: começa pelo canto de cima, à esquerda, e o resto se alcança rolando.
+  view.x = w * view.z <= r.width - 80 ? (r.width - w * view.z) / 2 - x0 * view.z : 40 - x0 * view.z;
+  view.y = h * view.z <= r.height - 2 * FIT_Y ? (r.height - h * view.z) / 2 - y0 * view.z : FIT_Y - y0 * view.z;
   applyView();
 }
 
@@ -1831,8 +1854,8 @@ function boxes() {
   for (const n of project.notes ?? []) out.push({ kind: "note", id: n.id, x: n.x, y: n.y, w: M.NOTE_W, h: M.VIS_H });
   return out;
 }
-// A folga entre elementos: dos lados cabem os pontos de ligação; em cima, a aba do grupo.
-const GAP_X = 48;
+// A folga entre elementos: dos lados cabem os pontos de ligação dos dois (cada um fora do contorno do seu bloco); em cima, a aba do grupo.
+const GAP_X = 96;
 const GAP_Y = 56;
 const hits = (a, o) => o.x < a.x + a.w + GAP_X && o.x + o.w + GAP_X > a.x && o.y < a.y + a.h + GAP_Y && o.y + o.h + GAP_Y > a.y;
 

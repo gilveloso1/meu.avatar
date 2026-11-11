@@ -34,10 +34,13 @@ body { min-height: 0; overflow: hidden; }
   --el3: 0 calc(1px * var(--zi, 1)) calc(3px * var(--zi, 1)) 0 rgb(0 0 0 / 0.3), 0 calc(4px * var(--zi, 1)) calc(8px * var(--zi, 1)) calc(3px * var(--zi, 1)) rgb(0 0 0 / 0.15);
 }
 #wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
-.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: var(--sw, 2px); vector-effect: non-scaling-stroke; }
-.wire.is-sel, .wire.is-path { stroke: var(--md-sys-color-primary); stroke-width: calc(var(--sw, 2px) + 1px); }
+/* O fio é um traço, mas fica dentro do canvas ampliado (é SVG, que não arredonda traço fino): a
+   espessura vem já dividida pelo zoom (--wsw, do script). O non-scaling-stroke não desfaz o zoom do
+   canvas, que é uma transformação de CSS fora do SVG: a 800%, o fio de 4 px saía com 32. */
+.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: var(--wsw, 2px); }
+.wire.is-sel, .wire.is-path { stroke: var(--md-sys-color-primary); stroke-width: calc(var(--wsw, 2px) * 1.5); }
 .wire--temp { stroke: var(--md-sys-color-primary); stroke-dasharray: 6 4; }
-.wire-hit { fill: none; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; cursor: pointer; pointer-events: stroke; }
+.wire-hit { fill: none; stroke: transparent; stroke-width: calc(var(--wsw, 2px) * 7); cursor: pointer; pointer-events: stroke; }
 
 /* Bloco: cor do tipo e tom do arquivo (--c e --on vêm do script, de --bloco-<tipo>-<tom>),
    cantos médios (12 px), elevação 1; arrastando, elevação 3. */
@@ -140,12 +143,12 @@ body { min-height: 0; overflow: hidden; }
 }
 .port { cursor: crosshair; }
 /* Sistema de proporção (docs/canvas.md). Conteúdo (blocos, miniaturas, ondas, texto): acompanha o
-   zoom. Controles (ponto de ligação, borda de corte, aba do grupo, alça da linha): crescem pela raiz
-   do zoom, de 1 a 2 vezes, e afastados não ficam menores que a 100% (--ck, do script, já desfaz o
-   zoom do canvas). Traços: a mesma medida, em px inteiros (--sw), fora do canvas ampliado. O texto do
+   zoom. Controles (ponto de ligação, aba do grupo, ícone das áreas): aproximando, crescem pela raiz do
+   zoom, de 1 a 2 vezes; afastando, encolhem mais devagar que o canvas (0,66 a 50%). --ck, do script,
+   já desfaz o zoom do canvas; a borda de corte (--tk) não encolhe abaixo de 10 px, porque só se pega. Traços: a mesma medida, em px inteiros (--sw), fora do canvas ampliado. O texto do
    rótulo, afastado, não fica menor que uns 10 px (--lz), e de longe o rótulo mostra só o nome. */
 .port { transform: scale(var(--ck, 1)); }
-.trim { transform: scaleX(var(--ck, 1)); }
+.trim { transform: scaleX(var(--tk, 1)); }
 .gtab { transform: scale(var(--ck, 1)); transform-origin: left bottom; }
 .garea { transform: scale(var(--ck, 1)); transform-origin: left top; }
 .blk__label { font-size: calc(12px * var(--lz, 1)); line-height: 1; }
@@ -165,6 +168,10 @@ body { min-height: 0; overflow: hidden; }
 .fin__head > span:last-child { display: flex; flex-direction: column; }
 .fin b { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
 .fin small { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
+/* O texto do Final é conteúdo, mas afastado não fica menor que 10 px na tela (--iz = 1 / zoom), como o nome dos blocos. */
+.fin b { font-size: max(16px, calc(10px * var(--iz, 1))); }
+.fin small, #world .fin .xlist__item { font-size: max(14px, calc(10px * var(--iz, 1))); }
+.fin .xlist__trail { font-size: max(11px, calc(9px * var(--iz, 1))); }
 /* A variação escolhida: o caminho dela fica, e o resto do canvas apaga. */
 #world.has-path :is(.blk, .gtab):not(.is-path), #world.has-path .wire:not(.is-path, .wire--temp) { opacity: 0.3; }
 
