@@ -222,7 +222,9 @@ menos custo.
   toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo; a
   linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
   Clicar num ponto vazio dentro da área de um grupo escolhe o grupo e leva a linha
-  de reprodução até ali; o tocar (ou o Espaço) toca dali.
+  de reprodução até ali; o tocar (ou o Espaço) toca dali. O grupo toca na velocidade do Final, e a
+  linha anda nessa velocidade (`headRate`, `canvas.js`): com o Final acelerado, ela parava antes do
+  fim do bloco (a prévia acabava em 16 s e a linha só tinha andado 16 dos 20 s de largura).
 - **Áudio do vídeo**: todo vídeo com som mostra o próprio áudio numa faixa da área
   de som, na mesma cor e tom do vídeo (corta e anda junto).
   - "Desvincular o áudio" cria uma **cópia** do som como bloco de áudio comum

@@ -135,6 +135,12 @@ head.className = "playhead";
 head.innerHTML = `<span class="playhead__knob"></span>`;
 vp.append(head);
 let headBox = null;
+/**
+ * Quantos segundos do canvas passam por segundo da prévia. O grupo toca na velocidade do Final (como
+ * as variações dele): com o Final acelerado, a prévia dura menos que a largura do grupo, e a linha
+ * anda mais depressa para chegar ao fim junto com ela. O bloco sozinho toca no tempo da largura dele.
+ */
+const headRate = () => (preview?.type === "group" ? M.finalRate(previewFinal()) : 1);
 function playhead(t) {
   let box = null;
   if (preview?.type === "block") {
@@ -161,7 +167,7 @@ function playhead(t) {
   put(head, "--hs", String(grow));
   if (!box) return;
   put(head, "width", `${line}px`);
-  put(head, "left", `${Math.round((box.x + t * M.PX) * view.z + view.x - line / 2)}px`);
+  put(head, "left", `${Math.round((box.x + t * headRate() * M.PX) * view.z + view.x - line / 2)}px`);
   put(head, "top", `${Math.round(box.y * view.z + view.y) - 4}px`);
   put(head, "height", `${Math.round(box.h * view.z) + 8}px`);
 }
@@ -2209,7 +2215,7 @@ vp.addEventListener("pointerdown", (e) => {
   if (t.closest(".playhead") && headBox) {
     // Arrastar a linha de reprodução: anda pela prévia (tocando ou parada).
     const box = headBox;
-    const seekTo = (ev) => player.seek(Math.min(Math.max((toWorld(ev.clientX, ev.clientY).x - box.x) / M.PX, 0), player.duration));
+    const seekTo = (ev) => player.seek(Math.min(Math.max((toWorld(ev.clientX, ev.clientY).x - box.x) / M.PX / headRate(), 0), player.duration));
     head.classList.add("is-drag");
     const mv = (ev) => seekTo(ev);
     const end = () => {
@@ -2261,7 +2267,7 @@ vp.addEventListener("pointerdown", (e) => {
         sel = { type: "group", id: g.id };
         preview = { type: "group", id: g.id };
         render();
-        player.seek(Math.min(Math.max((at.x - g.x) / M.PX, 0), g.dur));
+        player.seek(Math.min(Math.max((at.x - g.x) / M.PX, 0), g.dur) / headRate());
         setPlayIcon();
         return;
       }
