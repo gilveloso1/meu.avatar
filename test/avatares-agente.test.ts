@@ -297,7 +297,8 @@ describe("link de envio do projeto", () => {
     await env.DB.prepare("UPDATE users SET permissoes = '[]' WHERE id = ?").bind(await admin()).run();
 
     l = await link(id);
-    expect(dados<{ apagado: boolean }>(await ferramenta("apagar_projeto", { projeto: id, confirmar: true })).apagado).toBe(true);
+    const { confirmacao } = dados<{ confirmacao: string }>(await ferramenta("apagar_projeto", { projeto: id }));
+    expect(dados<{ apagado: boolean }>(await ferramenta("apagar_projeto", { projeto: id, confirmacao })).apagado).toBe(true);
     expect((await enviar(l.url, PNG, "image/png")).status).toBe(404);
     expect(await arquivos(id)).toBe(0);
     expect((await env.MIDIA.list({ prefix: `projetos/${id}/` })).objects).toHaveLength(0);

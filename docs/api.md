@@ -137,11 +137,14 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
   (409), `pasta_inexistente` (404: de outra conta, de outra lista ou de outro avatar),
   `itens_invalidos`, `itens_inexistentes` (404, nenhum item era da conta) e `nao_encontrado` (avatar).
 - **Apagar projeto** (desde 11/11/2026; o teste de 05/11 tinha deixado um projeto de teste na conta):
-  `apagar_projeto` (`POST /api/v1/projetos/<id>/apagar` `{confirmar?}`). Sem `confirmar: true` (o
-  booleano), só mostra o que sairia: `{projeto: {id, nome, atualizado, blocos, arquivos, tamanho},
-  apagado: false, proximo}`; o agente leva isso à pessoa e só apaga com o sim dela. Com ele, saem o
-  projeto, os arquivos enviados a ele (do banco e do R2) e as exportações; os vídeos gerados e os
-  ativos dos avatares ficam. Não tem volta. Durante uma exportação, `409 exportando`.
+  `apagar_projeto` (`POST /api/v1/projetos/<id>/apagar` `{confirmacao?}`). Sem `confirmacao`, só
+  mostra o que sairia e devolve o código: `{projeto: {id, nome, atualizado, blocos, arquivos,
+  tamanho}, apagado: false, confirmacao, proximo}`; o agente leva isso à pessoa e só apaga com o sim
+  dela, chamando de novo com o código. O código sai do projeto como está (id, revisão e arquivos),
+  sem nada guardado: não se apaga sem ter visto o primeiro passo, nem um projeto que mudou depois
+  dele (`409 confirmacao_invalida`, com o `motivo`). Com ele, saem o projeto, os arquivos enviados a
+  ele (do banco e do R2) e as exportações; os vídeos gerados e os ativos dos avatares ficam. Não tem
+  volta. Durante uma exportação, `409 exportando`.
 - **Gerar áudio** (desde 08/11/2026): `gerar_audio` faz uma fala (MP3) com um modelo de fala, o
   mesmo do site: `fish` (uns US$ 0,002 por minuto) ou `elevenlabs`, nos dois passos de "Gerar". O
   `texto` leva as emoções em inglês entre colchetes (a lista vai na descrição da ferramenta); a `voz`
@@ -172,7 +175,7 @@ Para revogar: `DELETE FROM api_tokens WHERE name = '...'`.
 | `GET /api/v1/avatares?q=` | Avatares da conta com os ativos, cada um no item do acervo (o mesmo do `/api/v1/arquivos`) e mais `origem` (`gerado`, `enviado`), `foto` e `voz` |
 | `GET /api/v1/projetos?q=&pasta=` | Projetos da conta, cada um com a `pasta` em que está |
 | `POST /api/v1/projetos` `{nome, pasta?}` | Cria um projeto, na pasta de Projetos pedida |
-| `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio (num grupo só de som, os áudios da primeira faixa são a base), e `inicio` e `fim` em segundos do grupo), `ligacoes` (`id`, `de`, `para`: grupo ou Final), Finais com as variações, avisos e `notas` (`[{id, texto}]`, o texto que a pessoa colou ou escreveu no canvas: briefing, roteiro, referências; só vem quando há). Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
+| `GET /api/v1/projetos/<id>?incluir=arquivos,codigo,canvas` | Revisão, grupos com os blocos (`id`, `nome`, `tipo`: video, imagem, audio, rascunho ou animacao; `camada`: base, cobertura ou audio (num grupo só de som, os áudios da primeira faixa são a base), `inicio` e `fim` em segundos do grupo e, só quando saem do padrão, `velocidade`, `volume` e `mudo`), `ligacoes` (`id`, `de`, `para`: grupo ou Final), Finais com as variações, avisos e `notas` (`[{id, texto}]`, o texto que a pessoa colou ou escreveu no canvas: briefing, roteiro, referências; só vem quando há). Os arquivos, o código das animações (`codigo: [{bloco, nome, duracao, html}]`) e o canvas inteiro só vêm pedidos em `incluir` (no projeto da Lara Resende, uns 17 dos 19 mil caracteres) |
 | `POST /api/v1/projetos/<id>/comandos` `{revisao, comandos}` | Aplica um lote (até 100) e devolve só o que mudou: `{revisao, criados, mudou, avisosPendentes}` (abaixo). O projeto inteiro fica no `ver_projeto` |
 | `GET /api/v1/projetos/<id>/quadros?src=&instantes=1,3.5` | JPG com os instantes lado a lado (até 12), para ver o vídeo |
 | `GET /api/v1/projetos/<id>/cena?grupo=&instantes=1,3.5&final=` | `ver_cena` (09/11/2026): JPG com os instantes (até 12, segundos do grupo, como em `ver_projeto`) de uma cena montada como na exportação, com todas as camadas, no tamanho, formato e velocidade do Final (sem `final`, o primeiro). A primeira vez a cena é montada no servidor, como um passo de exportação (as animações e o trecho, guardados pelo conteúdo: a exportação depois reaproveita): `202 {status: "montando", feitos, total}` até ficar pronta. Erros: `grupo_inexistente`, `final_inexistente`, `instantes_invalidos` (com a `duracao` do grupo), `cena_invalida` (com `motivo`, como rascunho sem vídeo), `cena_falhou` (502; a mesma cena não recomeça por 10 min) |

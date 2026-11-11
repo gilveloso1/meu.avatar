@@ -142,6 +142,9 @@ function resumo(data: CanvasProject) {
         camada: main.includes(b) ? "base" : g.covers.includes(b) ? "cobertura" : "audio",
         inicio: segundos(b.x - g.x),
         fim: segundos(b.x + width(b) - g.x),
+        // O que som e velocidade mudaram, só quando saiu do padrão: o agente confere sem pedir o canvas inteiro.
+        ...(b.speed && b.speed !== 1 ? { velocidade: b.speed } : {}),
+        ...(b.mute ? { mudo: true } : b.vol !== 1 && b.vol !== undefined ? { volume: b.vol } : {}),
       })),
       };
     }),
@@ -455,15 +458,21 @@ export class Api {
 
   /**
    * Apaga o projeto (apagar_projeto), com os arquivos enviados a ele e as exportações; os vídeos
-   * gerados e os ativos dos avatares ficam. Sem confirmar: true, só mostra o que sairia: o agente
-   * leva isso à pessoa e só apaga com o sim dela. Durante uma exportação, recusa.
+   * gerados e os ativos dos avatares ficam. Sem a confirmacao, só mostra o que sairia e devolve o
+   * código: o agente leva isso à pessoa e só apaga com o sim dela. O código sai do projeto como está
+   * (id, revisão e arquivos), sem nada guardado: não dá para apagar sem ter visto o primeiro passo,
+   * nem um projeto que mudou depois dele. Durante uma exportação, recusa.
    */
   private async deleteProject(request: Request, project: Project): Promise<Response> {
     const body = await json(request);
     const data = JSON.parse(project.data) as CanvasProject;
     const arquivos = await this.db.projectFiles(project.id);
     const resumo = { id: project.id, nome: project.name, atualizado: project.updated_at, blocos: data.blocks.length, arquivos: arquivos.length, tamanho: arquivos.reduce((t, f) => t + f.size, 0) };
-    if (body?.confirmar !== true) return Response.json({ projeto: resumo, apagado: false, proximo: "Mostre à pessoa o nome do projeto e o que sai com ele; só com o sim dela, chame de novo com confirmar: true. Não tem volta." });
+    const codigo = (await sha256(`apagar:${project.id}:${project.revision}:${arquivos.map((f) => f.id).sort().join(",")}`)).slice(0, 12);
+    if (body?.confirmacao === undefined || body.confirmacao === null || body.confirmacao === "") {
+      return Response.json({ projeto: resumo, apagado: false, confirmacao: codigo, proximo: "Mostre à pessoa o nome do projeto e o que sai com ele; só com o sim dela, chame de novo com a confirmacao. Não tem volta." });
+    }
+    if (body.confirmacao !== codigo) return falha(409, "confirmacao_invalida", { motivo: "O código não é o deste projeto como está agora. Chame sem confirmacao, mostre à pessoa e use o código novo." });
     if ((await this.db.runningExports(project.id)).length) return falha(409, "exportando");
     const keys = await this.db.deleteProject(project.id);
     if (keys.length) await this.media.delete(keys);

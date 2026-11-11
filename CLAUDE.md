@@ -322,8 +322,9 @@ Aprovadas com o usuário em 27/10/2026. Mudar só se ele pedir; tela nova segue 
   envio (`/envio/<código>`, `src/ativos.ts`), a única rota que recebe arquivo sem token nem
   sessão. Ela abre um arquivo para um avatar ou para um projeto só, uma vez, por 30 min; regra nova
   ali ganha teste em `test/avatares-agente.test.ts`.
-- O agente apaga projeto só em dois passos (`apagar_projeto`: mostra o que sairia e só apaga com
-  `confirmar: true`, depois do sim da pessoa). Outra ferramenta que apague segue o mesmo molde.
+- O agente apaga projeto só em dois passos (`apagar_projeto`: mostra o que sairia e devolve um
+  código; só apaga com ele em `confirmacao`, depois do sim da pessoa). Outra ferramenta que apague
+  segue o mesmo molde.
 - O MCP tem um teto de contexto fixo (as instruções e a lista de ferramentas vão em toda conversa):
   na descrição fica só o que o agente precisa para montar a chamada; regras e casos vão para a
   ferramenta `ajuda` (`AJUDA` e `COMANDO`, `src/mcp.ts`). `test/mcp.test.ts` segura o teto.

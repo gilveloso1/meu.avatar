@@ -163,7 +163,7 @@ describe("protocolo", () => {
     const { tools } = (await rpc("tools/list")).result as { tools: unknown[] };
     const { instructions } = (await rpc("server/discover")).result as { instructions: string };
     // Eram uns 39 mil caracteres (11/11/2026). Regra nova vai para a ajuda, não para a descrição.
-    expect(instructions.length).toBeLessThanOrEqual(1800);
+    expect(instructions.length).toBeLessThanOrEqual(1900);
     expect(JSON.stringify(tools).length).toBeLessThanOrEqual(26_000);
   });
 
@@ -171,6 +171,8 @@ describe("protocolo", () => {
     const comandos = (await ferramenta("ajuda", { assunto: "comandos" })).content[0]!.text!;
     // Tudo o que saiu da descrição do editar_projeto segue ao alcance do agente.
     for (const parte of ["removerPausas", "60% depois da fala", "gruposComIdNovo", "params.chave", "aparar: false"]) expect(comandos).toContain(parte);
+    // Sem repetir as assinaturas, que já estão na descrição do editar_projeto.
+    expect(comandos).not.toContain("{bloco, velocidade: 0,25 a 4}");
     const trocar = (await ferramenta("ajuda", { assunto: "Trocar" })).content[0]!.text!;
     expect(trocar).toContain("silêncio das pontas");
     expect(trocar.length).toBeLessThan(comandos.length / 5);
@@ -310,36 +312,45 @@ describe("ferramentas publicadas depois de conectar", () => {
     const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Teste do agente" }));
     const arquivo = dados<{ src: string }>(await ferramenta("enviar_arquivo", { projeto: id, nome: "camada.webm", tipo: "video/webm", base64: btoa("webm") })).src;
     await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", arquivo: arquivo.split("/").pop(), dur: 2 }, { tipo: "adicionar", video: VIDEO }] });
-    const antes = dados<{ projeto: Record<string, unknown>; apagado: boolean; proximo: string }>(await ferramenta("apagar_projeto", { projeto: id }));
+    const antes = dados<{ projeto: Record<string, unknown>; apagado: boolean; proximo: string; confirmacao: string }>(await ferramenta("apagar_projeto", { projeto: id }));
     expect(antes).toMatchObject({ projeto: { id, nome: "Teste do agente", blocos: 2, arquivos: 1, tamanho: 4 }, apagado: false });
     expect(antes.proximo).toContain("sim dela");
-    // "true" em texto não é o sim: só o booleano apaga.
-    expect(dados<{ apagado: boolean }>(await ferramenta("apagar_projeto", { projeto: id, confirmar: "true" })).apagado).toBe(false);
+    // Sem ter visto o primeiro passo não se apaga: true, um código inventado e o de outro projeto não valem.
+    const outro = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Outro" })).id;
+    const doOutro = dados<{ confirmacao: string }>(await ferramenta("apagar_projeto", { projeto: outro })).confirmacao;
+    for (const confirmacao of [true, "true", "0".repeat(12), doOutro]) expect(dados<{ erro: string }>(await ferramenta("apagar_projeto", { projeto: id, confirmacao })).erro, String(confirmacao)).toBe("confirmacao_invalida");
+    // O confirmar: true de antes do código não apaga: só mostra de novo.
+    expect(dados<{ apagado: boolean }>(await ferramenta("apagar_projeto", { projeto: id, confirmar: true })).apagado).toBe(false);
+    // O projeto mudou depois do primeiro passo: o código velho não vale mais.
+    const { revisao: agora } = dados<{ revisao: number }>(await ferramenta("ver_projeto", { projeto: id }));
+    await ferramenta("editar_projeto", { projeto: id, revisao: agora, comandos: [{ tipo: "nota", texto: "mudou" }] });
+    expect(dados<{ erro: string }>(await ferramenta("apagar_projeto", { projeto: id, confirmacao: antes.confirmacao })).erro).toBe("confirmacao_invalida");
+    const { confirmacao } = dados<{ confirmacao: string }>(await ferramenta("apagar_projeto", { projeto: id }));
     expect(dados<{ nome: string }>(await ferramenta("ver_projeto", { projeto: id })).nome).toBe("Teste do agente");
     expect((await env.MIDIA.list({ prefix: `projetos/${id}/` })).objects).toHaveLength(1);
 
-    expect(dados<{ apagado: boolean }>(await ferramenta("apagar_projeto", { projeto: id, confirmar: true })).apagado).toBe(true);
+    expect(dados<{ apagado: boolean }>(await ferramenta("apagar_projeto", { projeto: id, confirmacao })).apagado).toBe(true);
     expect((await ferramenta("ver_projeto", { projeto: id })).isError).toBe(true);
     expect((await env.MIDIA.list({ prefix: `projetos/${id}/` })).objects).toHaveLength(0);
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM project_files WHERE project_id = ?").bind(id).first()).toEqual({ n: 0 });
     // O vídeo gerado que estava no projeto fica na conta.
     expect(dados<{ arquivos: { id: string }[] }>(await ferramenta("listar_arquivos", { tipo: "video", fonte: "gerado" })).arquivos.map((v) => v.id)).toEqual([VIDEO]);
     // Apagar de novo: o projeto não existe mais.
-    expect((await ferramenta("apagar_projeto", { projeto: id, confirmar: true })).content[0]!.text).toContain("nao_encontrado");
+    expect((await ferramenta("apagar_projeto", { projeto: id, confirmacao })).content[0]!.text).toContain("nao_encontrado");
   });
 
   it("apagar_projeto não apaga projeto de outra conta nem durante uma exportação", async () => {
     const alheio = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Dela" })).id;
     await memberCookie();
     await env.DB.prepare("UPDATE projects SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com') WHERE id = ?").bind(alheio).run();
-    const r = await ferramenta("apagar_projeto", { projeto: alheio, confirmar: true });
+    const r = await ferramenta("apagar_projeto", { projeto: alheio });
     expect(r.isError).toBe(true);
     expect(r.content[0]!.text).toContain("nao_encontrado");
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM projects WHERE id = ?").bind(alheio).first()).toEqual({ n: 1 });
 
     const meu = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Exportando" })).id;
     await env.DB.prepare("INSERT INTO exports (id, project_id, total, plan, created_at, expires_at) VALUES (?, ?, 1, '{}', ?, ?)").bind(crypto.randomUUID(), meu, new Date().toISOString(), new Date(Date.now() + 3_600_000).toISOString()).run();
-    const ocupado = await ferramenta("apagar_projeto", { projeto: meu, confirmar: true });
+    const ocupado = await ferramenta("apagar_projeto", { projeto: meu, confirmacao: dados<{ confirmacao: string }>(await ferramenta("apagar_projeto", { projeto: meu })).confirmacao });
     expect(ocupado.isError).toBe(true);
     expect(ocupado.content[0]!.text).toContain("exportando");
     expect(dados<{ nome: string }>(await ferramenta("ver_projeto", { projeto: meu })).nome).toBe("Exportando");
@@ -401,6 +412,20 @@ describe("ferramentas publicadas depois de conectar", () => {
     expect(await env.DB.prepare("SELECT folder_id FROM videos WHERE id = ?").bind(videoDela).first()).toEqual({ folder_id: pastaDela });
     expect(await env.DB.prepare("SELECT folder_id FROM projects WHERE id = ?").bind(projetoDela).first()).toEqual({ folder_id: null });
     expect(dados<{ erro: string }>(await ferramenta("listar_projetos", { pasta: pastaDela })).erro).toBe("pasta_inexistente");
+  });
+
+  it("ver_projeto e mudou dizem o volume e a velocidade que saíram do padrão", async () => {
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Som" }));
+    type Bloco = { id: string; velocidade?: number; volume?: number; mudo?: boolean };
+    const r = dados<{ revisao: number; criados: string[]; mudou: { grupos: { blocos: Bloco[] }[] } }>(await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", video: VIDEO, rotulo: "a" }, { tipo: "som", bloco: "@a", volume: 0.3 }, { tipo: "velocidade", bloco: "@a", velocidade: 1.25 }] }));
+    expect(r.mudou.grupos[0]!.blocos[0]).toMatchObject({ volume: 0.3, velocidade: 1.25 });
+    const bloco = async () => dados<{ grupos: { blocos: Bloco[] }[] }>(await ferramenta("ver_projeto", { projeto: id })).grupos[0]!.blocos[0]!;
+    expect(await bloco()).toMatchObject({ volume: 0.3, velocidade: 1.25 });
+    const m = dados<{ mudou: { grupos: { blocos: Bloco[] }[] } }>(await ferramenta("editar_projeto", { projeto: id, revisao: r.revisao, comandos: [{ tipo: "som", bloco: r.criados[0], mudo: true }, { tipo: "velocidade", bloco: r.criados[0], velocidade: 1 }] }));
+    expect(m.mudou.grupos[0]!.blocos[0]).toMatchObject({ mudo: true });
+    const depois = await bloco();
+    expect(depois.mudo).toBe(true);
+    expect("velocidade" in depois || "volume" in depois).toBe(false);
   });
 
   it("listar_ferramentas traz todas, curtas, e uma inteira pelo nome", async () => {
