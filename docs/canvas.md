@@ -141,7 +141,9 @@ menos custo.
   trilha (09/11/2026): a animação é transparente e deixa ver a imagem de baixo, como na exportação.
 - **Sem saltos e fácil de pegar** (11/11/2026, do teste de uso com medições, aprovado pelo dono):
   - A linha de reprodução só se pega pela alça de cima; a linha em si não recebe o clique, para não
-    cobrir a borda de corte do começo do bloco.
+    cobrir a borda de corte do começo do bloco. Ela e a alça ficam fora do canvas ampliado, em px da
+    tela (dentro dele, no zoom máximo, viravam frações de px e saíam deformadas), e crescem com o
+    zoom pela raiz dele, até o dobro: 2 px e 12 × 20 até 100%, 4 px e 24 × 40 em 800%.
   - No bloco escolhido, o tocar surge no lugar do ícone do tipo, no rótulo, com a mesma largura e
     altura (é o próprio ícone que vira o botão); o bloco inteiro arrasta.
   - Puxar pela faixa de som só muda a faixa: o vídeo não sai do lugar.

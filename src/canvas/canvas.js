@@ -124,7 +124,7 @@ const previewFinal = () => (sel.type === "final" && project.finals.find((f) => f
 const head = document.createElement("div");
 head.className = "playhead";
 head.innerHTML = `<span class="playhead__knob"></span>`;
-world.append(head);
+vp.append(head);
 let headBox = null;
 function playhead(t) {
   let box = null;
@@ -140,9 +140,15 @@ function playhead(t) {
   headBox = box;
   // Aparece sempre que a prévia toca um bloco ou um grupo, para poder arrastar.
   head.hidden = !box;
-  // Passa 4 px (na tela) acima e abaixo do que toca, com qualquer zoom.
-  const pad = 4 / Math.max(1, view.z);
-  if (box) Object.assign(head.style, { left: `${box.x + t * M.PX - pad / 4}px`, top: `${box.y - pad}px`, height: `${box.h + 2 * pad}px` });
+  // A linha fica fora do canvas ampliado, em px da tela: dentro dele, com o zoom no máximo, a linha e a
+  // alça viravam frações de px que o navegador arredondava (a linha de 2 px saía com 8, a alça torta).
+  // Passa 4 px acima e abaixo do que toca, com qualquer zoom.
+  // Aproximando, a linha e a alça crescem com o canvas, mais devagar que ele (a raiz do zoom, até o
+  // dobro: 2 px e 12 × 20 até 100%; 4 px e 24 × 40 no máximo), sempre em px inteiros.
+  const grow = Math.min(2, Math.max(1, Math.sqrt(view.z)));
+  const line = Math.round(2 * grow);
+  head.style.setProperty("--hs", String(grow));
+  if (box) Object.assign(head.style, { width: `${line}px`, left: `${Math.round((box.x + t * M.PX) * view.z + view.x - line / 2)}px`, top: `${Math.round(box.y * view.z + view.y) - 4}px`, height: `${Math.round(box.h * view.z) + 8}px` });
 }
 /** Tocar numa variação do Final: destaca o caminho e toca; a que já está na prévia pausa ou continua. */
 function pickVariant(id, i) {
@@ -374,8 +380,6 @@ function sharpen() {
 function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
   world.style.setProperty("--zi", String(1 / Math.max(1, view.z)));
-  // O inverso do zoom, em qualquer zoom: o que tem de ter sempre o mesmo tamanho na tela (a linha de reprodução e a alça).
-  world.style.setProperty("--iz", String(1 / view.z));
   // Afastado, portas, bordas de corte e nomes mantêm um tamanho mínimo na tela (tela.html).
   world.style.setProperty("--ps", String(Math.max(1, 16 / (20 * view.z))));
   world.style.setProperty("--ts", String(Math.min(4, Math.max(1, 1 / view.z))));

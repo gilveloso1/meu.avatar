@@ -118,14 +118,14 @@ body { min-height: 0; overflow: hidden; }
    com a mesma largura e altura; o resto do bloco fica livre para arrastar. */
 .blk__kind[data-play-block] { pointer-events: auto; cursor: pointer; }
 /* Linha de reprodução: 2 px em primary sobre o que a prévia toca. */
-.playhead { position: absolute; z-index: 5; width: calc(2px * var(--iz, 1)); border-radius: 1px; background: var(--md-sys-color-primary); box-shadow: 0 0 0 calc(1px * var(--iz, 1)) var(--md-sys-color-surface-container-lowest); pointer-events: none; }
+.playhead { position: absolute; z-index: 3; width: 2px; border-radius: 1px; background: var(--md-sys-color-primary); box-shadow: 0 0 0 1px var(--md-sys-color-surface-container-lowest); pointer-events: none; }
 /* Só a alça pega a linha (como a do slider do M3: 12 × 20 px), com uma área de toque maior em volta:
    a linha em si não recebe o clique, para não cobrir a borda de corte do bloco que está embaixo.
-   A linha e a alça têm sempre o mesmo tamanho na tela (--iz = 1 / zoom, em qualquer zoom): com --zi,
-   que só vale acima de 100%, a alça encolhia e se deformava com o canvas afastado. */
-.playhead__knob { position: absolute; left: 50%; top: calc(-20px * var(--iz, 1)); width: calc(12px * var(--iz, 1)); height: calc(20px * var(--iz, 1)); transform: translateX(-50%); border-radius: calc(6px * var(--iz, 1)); background: var(--md-sys-color-primary); box-shadow: 0 0 0 calc(2px * var(--iz, 1)) var(--md-sys-color-surface-container-lowest); pointer-events: auto; cursor: ew-resize; }
-.playhead__knob::before { content: ""; position: absolute; inset: calc(-8px * var(--iz, 1)); }
-.playhead__knob:hover, .playhead.is-drag .playhead__knob { width: calc(16px * var(--iz, 1)); border-radius: calc(8px * var(--iz, 1)); }
+   A linha e a alça ficam fora do canvas ampliado (direto no #vp), em px da tela, e crescem com o
+   zoom pela medida que o script dá (--hs, de 1 a 2): não deformam, e não somem perto do bloco grande. */
+.playhead__knob { position: absolute; left: 50%; top: calc(-20px * var(--hs, 1)); width: calc(12px * var(--hs, 1)); height: calc(20px * var(--hs, 1)); transform: translateX(-50%); border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); box-shadow: 0 0 0 2px var(--md-sys-color-surface-container-lowest); pointer-events: auto; cursor: ew-resize; }
+.playhead__knob::before { content: ""; position: absolute; inset: -8px; }
+.playhead__knob:hover, .playhead.is-drag .playhead__knob { width: calc(16px * var(--hs, 1)); }
 /* Guia de alinhamento do corte: linha fina em primary, tracejada (a de reprodução é primary e
    contínua, com a alça em cima), de cima a baixo do bloco, na ponta em que o corte parou. */
 .guide { position: absolute; z-index: 6; width: 0; margin-left: calc(var(--line) / -2); border-left: var(--line) dashed var(--md-sys-color-primary); pointer-events: none; }
