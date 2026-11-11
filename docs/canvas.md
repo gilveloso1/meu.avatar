@@ -238,11 +238,21 @@ menos custo.
   - Apagar um não afeta o outro. O som somado tem até 8 faixas embaixo do grupo.
 - **Corte**: no bloco escolhido, puxar a borda da esquerda ou da direita (sem
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.
+  **O corte fecha o espaço e leva tudo junto** (pedido do dono, 11/11/2026, depois da pesquisa de como
+  o Final Cut, o CapCut, o Premiere e o Resolve tratam o corte; `trim`, `modelo.js`): na base, o começo
+  do elemento fica onde está, o que vem depois na base acompanha, e as imagens e os vídeos das outras
+  trilhas acompanham a partir do ponto do corte, para continuarem sobre o mesmo instante do que está
+  embaixo (os que ficavam sobre o trecho tirado ficam onde estão). Antes, só a trilha do elemento
+  andava, e a cobertura passava a cobrir outro instante. Vale com ou sem vizinho depois, e pelos campos
+  dos Ajustes. A música e os outros sons soltos não acompanham: o dono vai tratá-los de outra forma.
+  **Com Alt, o corte é solto**: só a borda anda, ninguém acompanha e fica o buraco no bloco (a marca
+  `joint` segura o bloco inteiro). Fora da base (uma cobertura), nada mudou: quem vem encostado depois
+  acompanha; sozinha, o começo anda e o fim fica.
   **Alinhado** (pedido do dono, 11/11/2026): quando a ponta que o corte move chega a 8 px (na tela)
   da ponta de um elemento de outra trilha do mesmo bloco (o vídeo de baixo, a cobertura, o som), o
   corte para exatamente nela, uma guia tracejada em primary (um traço do sistema de proporção) aparece de cima a baixo do bloco e o aviso de cima
-  diz "Alinhado": assim não ficam, sem querer, elementos de tamanhos quase iguais. Com Alt, corta
-  livre (`trimAlign`, `modelo.js`).
+  diz "Alinhado": assim não ficam, sem querer, elementos de tamanhos quase iguais. Com Alt, o corte
+  solto também não alinha (`trimAlign`, `modelo.js`).
 
 - **Folha da direita**: abas Prévia e Ajustes (abas principais fixas do M3, como na
   página do vídeo), sem título em cima. Na Prévia, o vídeo 9:16 ocupa a altura que

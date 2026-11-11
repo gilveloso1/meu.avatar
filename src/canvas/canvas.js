@@ -2281,8 +2281,9 @@ vp.addEventListener("pointerdown", (e) => {
       const seconds = dW(ev).x / M.PX;
       // Perto da ponta de um elemento de outra trilha do bloco (8 px na tela), o corte para nela e a
       // guia aparece: os dois ficam do mesmo tamanho. Com Alt, corta livre.
+      // Com Alt, o corte é solto: só a borda anda, ninguém acompanha e fica o buraco (sem alinhar).
       const aligned = ev.altKey ? null : M.trimAlign(base, id, trimEl.dataset.trim, seconds, 8 / view.z);
-      project = aligned?.project ?? M.trim(base, id, trimEl.dataset.trim, seconds);
+      project = aligned?.project ?? M.trim(base, id, trimEl.dataset.trim, seconds, { free: ev.altKey });
       showGuide(aligned);
       renderSoon();
     };

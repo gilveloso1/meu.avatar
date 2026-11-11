@@ -716,13 +716,13 @@ export function snap(project, id, x, y, tol, keep = {}) {
  * com tamanhos quase iguais. A conta de quanto a ponta anda por segundo é medida, não suposta: a
  * velocidade do bloco e o lado do corte mudam a relação.
  */
-export function trimAlign(project, id, side, timelineSeconds, tol) {
+export function trimAlign(project, id, side, timelineSeconds, tol, opts) {
   const ends = (p) => {
     const b = p.blocks.find((o) => o.id === id);
     return [b.x, b.x + width(b)];
   };
   const before = ends(project);
-  const cut = trim(project, id, side, timelineSeconds);
+  const cut = trim(project, id, side, timelineSeconds, opts);
   const after = ends(cut);
   const moved = [0, 1].filter((i) => Math.abs(after[i] - before[i]) > EPS);
   const g = groupIndex(groups(cut)).get(id);
@@ -739,9 +739,9 @@ export function trimAlign(project, id, side, timelineSeconds, tol) {
   const guide = (p) => ({ project: p, x: best.x, top: g.top, bottom: g.bottom });
   if (Math.abs(best.gap) < EPS) return guide(cut);
   const step = 0.01;
-  const perSecond = (ends(trim(project, id, side, timelineSeconds + step))[best.i] - after[best.i]) / step;
+  const perSecond = (ends(trim(project, id, side, timelineSeconds + step, opts))[best.i] - after[best.i]) / step;
   if (Math.abs(perSecond) < EPS) return null;
-  const aligned = trim(project, id, side, timelineSeconds + best.gap / perSecond);
+  const aligned = trim(project, id, side, timelineSeconds + best.gap / perSecond, opts);
   return Math.abs(ends(aligned)[best.i] - best.x) > 0.5 ? null : guide(aligned);
 }
 
@@ -961,34 +961,66 @@ export function arrange(project) {
 }
 
 /**
- * Encurta ou alonga um bloco por uma das pontas. Num grupo, o que vem depois
- * acompanha (sem buraco); solto, a ponta esquerda anda com o corte.
+ * Encurta ou alonga um elemento por uma das pontas, como os editores de vídeo (pesquisa de 11/11/2026:
+ * Final Cut, CapCut, Premiere, Resolve). O corte fecha o espaço e leva junto o que vem depois, em todas
+ * as trilhas de imagem, para nada sair de sincronia; antes, só a trilha do elemento andava, e a cobertura
+ * passava a cobrir outro instante do vídeo de baixo. `free` (Alt na tela) é o corte solto: só a borda
+ * anda, ninguém acompanha e fica o buraco. A música e os outros sons soltos não acompanham (o dono vai
+ * tratar a música de outra forma).
  */
-export function trim(project, id, side, timelineSeconds) {
+export function trim(project, id, side, timelineSeconds, { free = false } = {}) {
   const p = clone(project);
   const b = p.blocks.find((o) => o.id === id);
   // A borda anda no tempo da tela; no arquivo, isso vale a velocidade do bloco.
   const seconds = timelineSeconds * (b.speed ?? 1);
-  const oldEnd = b.x + width(b);
+  const oldX = b.x;
+  const oldW = width(b);
+  const oldEnd = oldX + oldW;
   const max = maxEnd(b);
-  // Na sequência dele (a mesma trilha), quem vem encostado depois acompanha, para não abrir buraco.
-  const track = (sequence(p, id)?.blocks ?? []).filter((o) => o.id !== id);
-  const followed = track.some((o) => near(o.x, oldEnd));
+  const seq = sequence(p, id);
   if (side === "l") {
-    let d;
-    if (b.kind === "image") {
-      const tout = Math.min(Math.max(b.tout - seconds, MIN_LEN), max);
-      d = b.tout - tout;
-      b.tout = tout;
-    } else {
-      const tin = Math.min(Math.max(b.tin + seconds, 0), b.tout - MIN_LEN);
-      d = tin - b.tin;
-      b.tin = tin;
-    }
-    if (!followed) b.x += d * PX;
+    if (b.kind === "image") b.tout = Math.min(Math.max(b.tout - seconds, MIN_LEN), max);
+    else b.tin = Math.min(Math.max(b.tin + seconds, 0), b.tout - MIN_LEN);
   } else b.tout = Math.min(Math.max(b.tout + seconds, b.tin + MIN_LEN), max);
-  const delta = b.x + width(b) - oldEnd;
-  if (followed && delta) for (const o of track) if (o.x >= oldEnd - EPS) p.blocks.find((q) => q.id === o.id).x += delta;
+  // Quanto o fim do elemento anda se o começo dele fica onde está.
+  const delta = width(b) - oldW;
+  if (!delta) return p;
+  if (free) {
+    // Corte solto: só a borda puxada anda (no começo, o fim fica onde está), e ninguém acompanha. Os
+    // outros do bloco levam a marca do buraco, para o bloco não se partir no espaço que sobra.
+    if (side === "l") b.x = oldX - delta;
+    const all = seq ? members(seq.group) : [];
+    if (all.length > 1) {
+      const mark = all.map((o) => o.joint).find(Boolean) ?? newId("j");
+      for (const o of all) p.blocks.find((q) => q.id === o.id).joint = mark;
+    }
+    return p;
+  }
+  const track = (seq?.blocks ?? []).filter((o) => o.id !== id);
+  const move = (o, d) => (p.blocks.find((q) => q.id === o.id).x += d);
+  if (seq?.base) {
+    // Na base, o corte fecha o espaço: o começo do elemento fica onde está, e o que vem depois na base
+    // acompanha (com ou sem buraco no meio). As imagens e os vídeos das outras trilhas acompanham também,
+    // a partir do ponto do corte, para continuarem sobre o mesmo instante do que está embaixo: os que
+    // ficavam sobre o trecho tirado ficam onde estão. Os sons soltos (a música) não saem do lugar.
+    for (const o of track) if (o.x >= oldEnd - EPS) move(o, delta);
+    const from = side === "l" ? oldX + Math.max(-delta, 0) : oldEnd;
+    const g = seq.group;
+    const others = [...g.blocks, ...g.covers].filter((o) => o.id !== id && !seq.blocks.includes(o));
+    const riding = others.filter((o) => o.x >= from - EPS).sort((x, y) => x.x - y.x);
+    const staying = others.filter((o) => !riding.includes(o));
+    for (const o of riding) {
+      // Sem entrar em cima de quem ficou parado na mesma trilha.
+      const wall = Math.max(-Infinity, ...staying.filter((q) => near(q.y, o.y) && q.x < o.x).map((q) => q.x + width(q)));
+      move(o, Math.max(delta, Math.min(wall - o.x, 0)));
+    }
+    return p;
+  }
+  // Fora da base (uma cobertura, um som de outra trilha): quem vem encostado depois acompanha, para não
+  // abrir buraco na cadeia; sozinho, o começo anda e o fim fica onde está.
+  const followed = track.some((o) => near(o.x, oldEnd));
+  if (side === "l" && !followed) b.x = oldX - delta;
+  if (followed) for (const o of track) if (o.x >= oldEnd - EPS) move(o, delta);
   return p;
 }
 
