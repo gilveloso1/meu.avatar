@@ -141,9 +141,7 @@ menos custo.
   trilha (09/11/2026): a animação é transparente e deixa ver a imagem de baixo, como na exportação.
 - **Sem saltos e fácil de pegar** (11/11/2026, do teste de uso com medições, aprovado pelo dono):
   - A linha de reprodução só se pega pela alça de cima; a linha em si não recebe o clique, para não
-    cobrir a borda de corte do começo do bloco. Ela e a alça ficam fora do canvas ampliado, em px da
-    tela (dentro dele, no zoom máximo, viravam frações de px e saíam deformadas), e crescem com o
-    zoom pela raiz dele, até o dobro: 2 px e 12 × 20 até 100%, 4 px e 24 × 40 em 800%.
+    cobrir a borda de corte do começo do bloco.
   - No bloco escolhido, o tocar surge no lugar do ícone do tipo, no rótulo, com a mesma largura e
     altura (é o próprio ícone que vira o botão); o bloco inteiro arrasta.
   - Puxar pela faixa de som só muda a faixa: o vídeo não sai do lugar.
@@ -152,11 +150,28 @@ menos custo.
     lugar livre do que está à vista (`findSpot`), sem mexer na vista; sem lugar, a vista se afasta até
     mostrar tudo.
   - "Organizar" termina com "Ver tudo". Abrir e fechar o painel Arquivos não desloca o que está no canvas.
-  - Afastado, o que se pega e o que se lê têm tamanho mínimo na tela: ponto de ligação de 16 px,
-    borda de corte de 10 px, e o nome do bloco e a aba do grupo crescem (abaixo de 75%, o rótulo
-    mostra só o nome).
+  - O tamanho de cada coisa com o zoom segue o sistema de proporção, abaixo.
   - A ligação solta a até 32 px de um ponto liga nele; no vazio, um aviso diz que não ligou (a linha
     puxada de uma ligação que já existia some, sem aviso: é o gesto de tirar).
+- **Sistema de proporção** (aprovado pelo dono em 11/11/2026; antes cada elemento tinha a sua regra, e
+  a 800% o ponto de ligação tinha 144 px ao lado de uma linha de 4). Três famílias, cada uma com uma
+  regra só (`scale()` e `stroke()`, `canvas.js`; `--ck`, `--sw` e `--lz`, `tela.html`):
+  - **Conteúdo** (blocos, miniaturas, ondas de som, texto do rótulo, card do Final): acompanha o
+    zoom por inteiro. Exceção: afastado, o texto do rótulo não fica menor que uns 10 px na tela, e
+    abaixo de 75% o rótulo mostra só o nome.
+  - **Controles** (ponto de ligação, borda de corte, aba do grupo, ícone das áreas): crescem pela
+    raiz do zoom, de 1 a 2 vezes, e afastados não ficam menores que a 100%. Ponto de ligação: 18 px
+    até 100%, 26 em 200%, 36 a partir de 400%.
+  - **Traços** (seleção, contorno do grupo, divisa das áreas, ligações, guia do corte): a mesma
+    medida, em px inteiros: 2 px até 100%, 3 em 200%, 4 a partir de 400%.
+  - **Cursor de progresso** (a linha de reprodução e a alça): atravessa o bloco de cima a baixo e por
+    isso segue o tamanho dele mais de perto, nos dois sentidos (pedido do dono, 11/11/2026): o zoom
+    elevado a 0,6, de 0,6 a 3,5 vezes. Alça de 12 × 20 e linha de 2 px a 100%; 8 × 13 e 1 px a 50%;
+    42 × 70 e 7 px a 800%. A área de toque em volta da alça não encolhe.
+  Os traços ficam numa camada fora do canvas ampliado (`#lines`, `drawStrokes`), e a linha de
+  reprodução direto no `#vp`: dentro do canvas ampliado, o navegador arredonda para 1 px do canvas
+  tudo o que for mais fino (a borda de 2 px saía com 8 em 800%). Traço ou controle novo entra numa
+  dessas famílias, sem regra própria.
 - **Arrasto leve**: cada arrasto desenha no máximo uma vez por quadro, sem o painel (ele vem
   ao soltar). Sem mudança no lugar do elemento, nada é desenhado; cada elemento, as portas e
   as linhas só tocam a página se algo deles mudou.
@@ -184,7 +199,7 @@ menos custo.
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.
   **Alinhado** (pedido do dono, 11/11/2026): quando a ponta que o corte move chega a 8 px (na tela)
   da ponta de um elemento de outra trilha do mesmo bloco (o vídeo de baixo, a cobertura, o som), o
-  corte para exatamente nela, uma guia tracejada em primary aparece de cima a baixo do bloco e o aviso de cima
+  corte para exatamente nela, uma guia tracejada em primary (um traço do sistema de proporção) aparece de cima a baixo do bloco e o aviso de cima
   diz "Alinhado": assim não ficam, sem querer, elementos de tamanhos quase iguais. Com Alt, corta
   livre (`trimAlign`, `modelo.js`).
 

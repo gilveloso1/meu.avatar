@@ -32,11 +32,10 @@ body { min-height: 0; overflow: hidden; }
 #world {
   --el1: 0 calc(1px * var(--zi, 1)) calc(2px * var(--zi, 1)) 0 rgb(0 0 0 / 0.3), 0 calc(1px * var(--zi, 1)) calc(3px * var(--zi, 1)) calc(1px * var(--zi, 1)) rgb(0 0 0 / 0.15);
   --el3: 0 calc(1px * var(--zi, 1)) calc(3px * var(--zi, 1)) 0 rgb(0 0 0 / 0.3), 0 calc(4px * var(--zi, 1)) calc(8px * var(--zi, 1)) calc(3px * var(--zi, 1)) rgb(0 0 0 / 0.15);
-  --line: calc(2px * var(--zi, 1));
 }
 #wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
-.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: 2; vector-effect: non-scaling-stroke; }
-.wire.is-sel, .wire.is-path { stroke: var(--md-sys-color-primary); stroke-width: 3; }
+.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: var(--sw, 2px); vector-effect: non-scaling-stroke; }
+.wire.is-sel, .wire.is-path { stroke: var(--md-sys-color-primary); stroke-width: calc(var(--sw, 2px) + 1px); }
 .wire--temp { stroke: var(--md-sys-color-primary); stroke-dasharray: 6 4; }
 .wire-hit { fill: none; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; cursor: pointer; pointer-events: stroke; }
 
@@ -51,7 +50,6 @@ body { min-height: 0; overflow: hidden; }
 .blk::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; pointer-events: none; transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
 .blk:hover::after { opacity: var(--md-sys-state-hover-state-layer-opacity); }
 .blk.is-drag { cursor: grabbing; box-shadow: var(--el3); z-index: 1; }
-.blk.is-sel { outline: var(--line) solid var(--md-sys-color-primary); outline-offset: calc(-1 * var(--line)); }
 .blk__label {
   position: absolute; left: 0; right: 0; top: 0; height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 8px;
   font: var(--md-sys-typescale-label-medium); letter-spacing: 0.031rem; white-space: nowrap; pointer-events: none; overflow: hidden;
@@ -105,11 +103,19 @@ body { min-height: 0; overflow: hidden; }
 .gtab .icon { font-size: 18px; color: var(--md-sys-color-primary); }
 .gtab.is-sel { border-color: transparent; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .gtab.is-sel .icon { color: inherit; }
-/* Área do grupo: retângulo tracejado (contorno outline, cantos grandes), em primary quando escolhido. */
-.gframe { position: absolute; border: var(--line) dashed var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-large); pointer-events: none; }
-.gframe.is-sel { border-color: var(--md-sys-color-primary); }
-/* As duas áreas do bloco: a linha entre vídeo e som e o ícone de cada uma, na margem da área. */
-.gsplit { position: absolute; height: 1px; background: var(--md-sys-color-outline-variant); pointer-events: none; }
+/* Os traços (contorno do grupo, divisa entre vídeo e som, seleção, guia do corte) ficam numa camada
+   fora do canvas ampliado, #lines, em px inteiros da tela (--sw, do script): 2 px até 100% de zoom,
+   3 px em 200%, 4 px a partir de 400%. O contorno do grupo é tracejado, em primary quando escolhido. */
+#lines { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; }
+.stroke { position: absolute; box-sizing: border-box; }
+.stroke--frame { border: var(--sw) dashed var(--md-sys-color-outline); }
+.stroke--frame.is-sel { border-color: var(--md-sys-color-primary); }
+.stroke--frame.is-dim { opacity: 0.3; }
+.stroke--sel { border: var(--sw) solid var(--md-sys-color-primary); }
+.stroke--split { background: var(--md-sys-color-outline-variant); }
+/* A guia de alinhamento do corte: em primary, tracejada (a de reprodução é contínua, com a alça). */
+.stroke--guide { width: 0; border-left: var(--sw) dashed var(--md-sys-color-primary); }
+/* As duas áreas do bloco: o ícone de cada uma, na margem da área. */
 .garea { position: absolute; font-size: 16px; color: var(--md-sys-color-on-surface-variant); pointer-events: none; }
 .gtab__play { width: 24px; height: 24px; margin: 0 -8px 0 0; padding: 0; border: 0; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: none; color: var(--md-sys-color-primary); }
 .gtab__play .icon { font-size: 18px; }
@@ -121,31 +127,32 @@ body { min-height: 0; overflow: hidden; }
 .playhead { position: absolute; z-index: 3; width: 2px; border-radius: 1px; background: var(--md-sys-color-primary); box-shadow: 0 0 0 1px var(--md-sys-color-surface-container-lowest); pointer-events: none; }
 /* Só a alça pega a linha (como a do slider do M3: 12 × 20 px), com uma área de toque maior em volta:
    a linha em si não recebe o clique, para não cobrir a borda de corte do bloco que está embaixo.
-   A linha e a alça ficam fora do canvas ampliado (direto no #vp), em px da tela, e crescem com o
-   zoom pela medida que o script dá (--hs, de 1 a 2): não deformam, e não somem perto do bloco grande. */
-.playhead__knob { position: absolute; left: 50%; top: calc(-20px * var(--hs, 1)); width: calc(12px * var(--hs, 1)); height: calc(20px * var(--hs, 1)); transform: translateX(-50%); border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); box-shadow: 0 0 0 2px var(--md-sys-color-surface-container-lowest); pointer-events: auto; cursor: ew-resize; }
+   A linha e a alça ficam fora do canvas ampliado (direto no #vp), em px inteiros da tela, e seguem o
+   tamanho do bloco pela medida que o script dá (--hs, de 0,6 a 3,5): não deformam, não somem perto
+   do bloco grande nem pesam sobre o bloco pequeno. */
+.playhead__knob { position: absolute; left: 50%; top: round(calc(-20px * var(--hs, 1)), 1px); width: round(calc(12px * var(--hs, 1)), 1px); height: round(calc(20px * var(--hs, 1)), 1px); transform: translateX(-50%); border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); box-shadow: 0 0 0 2px var(--md-sys-color-surface-container-lowest); pointer-events: auto; cursor: ew-resize; }
 .playhead__knob::before { content: ""; position: absolute; inset: -8px; }
-.playhead__knob:hover, .playhead.is-drag .playhead__knob { width: calc(16px * var(--hs, 1)); }
-/* Guia de alinhamento do corte: linha fina em primary, tracejada (a de reprodução é primary e
-   contínua, com a alça em cima), de cima a baixo do bloco, na ponta em que o corte parou. */
-.guide { position: absolute; z-index: 6; width: 0; margin-left: calc(var(--line) / -2); border-left: var(--line) dashed var(--md-sys-color-primary); pointer-events: none; }
+.playhead__knob:hover, .playhead.is-drag .playhead__knob { width: round(calc(16px * var(--hs, 1)), 1px); }
 /* Portas: saída em primary (puxa a ligação), entrada no contorno. */
 .port {
   position: absolute; width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full); z-index: 3;
   background: var(--md-sys-color-surface-container-lowest); border: 2px solid var(--md-sys-color-outline);
 }
 .port { cursor: crosshair; }
-/* Com o canvas afastado, o que se pega e o que se lê não encolhem junto (--ps, --ts e --lz vêm do
-   script, pelo zoom): a porta tem no mínimo 16 px na tela, a borda de corte 10 px, e o nome do bloco
-   e a aba do grupo seguem legíveis; de longe, o rótulo mostra só o nome. */
-.port { transform: scale(var(--ps, 1)); }
-.trim { transform: scaleX(var(--ts, 1)); }
+/* Sistema de proporção (docs/canvas.md). Conteúdo (blocos, miniaturas, ondas, texto): acompanha o
+   zoom. Controles (ponto de ligação, borda de corte, aba do grupo, alça da linha): crescem pela raiz
+   do zoom, de 1 a 2 vezes, e afastados não ficam menores que a 100% (--ck, do script, já desfaz o
+   zoom do canvas). Traços: a mesma medida, em px inteiros (--sw), fora do canvas ampliado. O texto do
+   rótulo, afastado, não fica menor que uns 10 px (--lz), e de longe o rótulo mostra só o nome. */
+.port { transform: scale(var(--ck, 1)); }
+.trim { transform: scaleX(var(--ck, 1)); }
+.gtab { transform: scale(var(--ck, 1)); transform-origin: left bottom; }
+.garea { transform: scale(var(--ck, 1)); transform-origin: left top; }
 .blk__label { font-size: calc(12px * var(--lz, 1)); line-height: 1; }
 .blk--audio .blk__label { font-size: calc(12px * min(var(--lz, 1), 1.5)); }
 #world.is-far .blk__dur, #world.is-far .blk__kind { display: none; }
 /* De longe, o ícone do tipo some, menos no bloco escolhido: ali ele é o tocar. */
 #world.is-far .blk.is-sel .blk__kind { display: inline-block; }
-.gtab { transform: scale(var(--lz, 1)); transform-origin: left bottom; }
 .port--out { border-color: var(--md-sys-color-primary); }
 .port:hover { background: var(--md-sys-color-primary); border-color: var(--md-sys-color-primary); }
 /* Bloco final: a saída, em primary (cantos grandes, elevação 1). */
@@ -158,9 +165,8 @@ body { min-height: 0; overflow: hidden; }
 .fin__head > span:last-child { display: flex; flex-direction: column; }
 .fin b { font: var(--md-sys-typescale-title-medium); letter-spacing: 0.009rem; }
 .fin small { font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
-.fin.is-sel { outline: var(--line) solid var(--md-sys-color-primary); outline-offset: var(--line); }
 /* A variação escolhida: o caminho dela fica, e o resto do canvas apaga. */
-#world.has-path :is(.blk, .gframe, .gtab):not(.is-path), #world.has-path .wire:not(.is-path, .wire--temp) { opacity: 0.3; }
+#world.has-path :is(.blk, .gtab):not(.is-path), #world.has-path .wire:not(.is-path, .wire--temp) { opacity: 0.3; }
 
 /* Nome do projeto na barra superior: parece o título; o campo fica no mesmo lugar. */
 .title-edit { display: flex; align-items: center; max-width: 100%; margin-left: -8px; padding: 4px 8px; border: 0; border-radius: var(--md-sys-shape-corner-small); background: none; color: inherit; font: inherit; letter-spacing: inherit; }
@@ -449,8 +455,8 @@ a.xlist__item { color: inherit; text-decoration: none; }
       <div id="world">
         <svg id="wires"></svg>
         <div id="chrome"></div>
-        <div class="guide" id="guide" hidden></div>
       </div>
+      <div id="lines"></div>
     </div>
     <div class="tooltip" id="snapinfo" role="status"></div>
     <div class="canvas-empty" id="canvas-empty" hidden>

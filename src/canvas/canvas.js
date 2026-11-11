@@ -143,10 +143,12 @@ function playhead(t) {
   // A linha fica fora do canvas ampliado, em px da tela: dentro dele, com o zoom no máximo, a linha e a
   // alça viravam frações de px que o navegador arredondava (a linha de 2 px saía com 8, a alça torta).
   // Passa 4 px acima e abaixo do que toca, com qualquer zoom.
-  // Aproximando, a linha e a alça crescem com o canvas, mais devagar que ele (a raiz do zoom, até o
-  // dobro: 2 px e 12 × 20 até 100%; 4 px e 24 × 40 no máximo), sempre em px inteiros.
-  const grow = Math.min(2, Math.max(1, Math.sqrt(view.z)));
-  const line = Math.round(2 * grow);
+  // O cursor de progresso atravessa o bloco de cima a baixo: por isso acompanha o tamanho dele mais
+  // de perto que os outros controles (pedido do dono), nos dois sentidos: o zoom elevado a 0,6, de
+  // 0,6 a 3,5 vezes. Alça de 12 × 20 e linha de 2 px a 100%; 8 × 13 e 1 px a 50%; 42 × 70 e 7 px a
+  // 800%. Sempre em px inteiros da tela; a área de toque em volta da alça não encolhe.
+  const grow = Math.min(3.5, Math.max(0.6, view.z ** 0.6));
+  const line = Math.max(1, Math.round(2 * grow));
   head.style.setProperty("--hs", String(grow));
   if (box) Object.assign(head.style, { width: `${line}px`, left: `${Math.round((box.x + t * M.PX) * view.z + view.x - line / 2)}px`, top: `${Math.round(box.y * view.z + view.y) - 4}px`, height: `${Math.round(box.h * view.z) + 8}px` });
 }
@@ -377,14 +379,42 @@ function sharpen() {
   }
 }
 
+/** A medida dos controles e dos traços na tela: a raiz do zoom, de 1 a 2 vezes o tamanho de 100%. */
+const scale = () => Math.min(2, Math.max(1, Math.sqrt(view.z)));
+/** O traço (linha de reprodução, seleção, contorno do grupo, ligações, guia): 2 px até 100%, 4 px a partir de 400%. */
+const stroke = () => Math.round(2 * scale());
+
+// Os traços ficam fora do canvas ampliado, em px inteiros da tela: dentro dele, o navegador
+// arredonda para 1 px do canvas o que for mais fino (a borda de 2 px saía com 8 no zoom de 800%).
+// O render() guarda as caixas, em medidas do canvas; aqui elas viram px da tela, a cada zoom ou rolagem.
+const lines = $("#lines");
+let strokes = [];
+let guideAt = null;
+function drawStrokes() {
+  const s = stroke();
+  const px = (v) => Math.round(v * view.z);
+  const box = (o, grow = 0) => `left:${px(o.x) + Math.round(view.x) - grow}px;top:${px(o.y) + Math.round(view.y) - grow}px;width:${px(o.w) + 2 * grow}px;height:${px(o.h) + 2 * grow}px`;
+  let html = "";
+  for (const o of strokes) {
+    if (o.kind === "split") html += `<div class="stroke stroke--split" style="${box({ ...o, h: 0 })};height:${Math.round(scale())}px"></div>`;
+    else html += `<div class="stroke stroke--${o.kind} ${o.cls ?? ""}" style="${box(o, o.out ? s : 0)};border-radius:${Math.round((o.r ?? 0) * (o.kind === "frame" ? scale() : view.z)) + (o.out ? s : 0)}px"></div>`;
+  }
+  if (guideAt) html += `<div class="stroke stroke--guide" style="left:${px(guideAt.x) + Math.round(view.x) - Math.round(s / 2)}px;top:${px(guideAt.top) + Math.round(view.y) - 16}px;height:${px(guideAt.bottom - guideAt.top) + 32}px"></div>`;
+  if (lines.innerHTML !== html) lines.innerHTML = html;
+}
+
 function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
   world.style.setProperty("--zi", String(1 / Math.max(1, view.z)));
-  // Afastado, portas, bordas de corte e nomes mantêm um tamanho mínimo na tela (tela.html).
-  world.style.setProperty("--ps", String(Math.max(1, 16 / (20 * view.z))));
-  world.style.setProperty("--ts", String(Math.min(4, Math.max(1, 1 / view.z))));
+  // O sistema de proporção (docs/canvas.md): o conteúdo acompanha o zoom; os controles e os traços
+  // crescem pela raiz dele, de 1 a 2 vezes (scale()), e não encolhem abaixo do tamanho de 100%.
+  // --ck desfaz o zoom do canvas e aplica a medida; --sw é o traço, em px inteiros da tela.
+  world.style.setProperty("--ck", String(scale() / view.z));
+  for (const el of [world, lines]) el.style.setProperty("--sw", `${stroke()}px`);
+  // O texto do rótulo é conteúdo, mas afastado não fica menor que uns 10 px na tela.
   world.style.setProperty("--lz", String(Math.min(2.2, Math.max(1, 0.85 / view.z))));
   world.classList.toggle("is-far", view.z < 0.75);
+  drawStrokes();
   playhead(player.t);
   vp.style.backgroundSize = `${24 * view.z}px ${24 * view.z}px`;
   vp.style.backgroundPosition = `${view.x}px ${view.y}px`;
@@ -506,8 +536,10 @@ function render({ side = true } = {}) {
   const empty = $("#canvas-empty");
   if (empty) empty.hidden = project.blocks.length > 0 || (project.notes?.length ?? 0) > 0;
 
-  // Abas dos grupos, portas e blocos finais.
+  // Abas dos grupos, portas e blocos finais. Os traços (contorno do grupo, divisa das áreas, seleção)
+  // vão para a camada de fora do canvas ampliado (drawStrokes).
   let html = "";
+  const marks = [];
   for (const g of gs) {
     const top = g.top;
     const rowH = g.soloAudio ? M.AUD_H : M.VIS_H;
@@ -517,13 +549,13 @@ function render({ side = true } = {}) {
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
       const bottom = g.bottom;
       const onPath = path?.includes(g) ? "is-path" : "";
-      html += `<div class="gframe ${isSel ? "is-sel" : ""} ${onPath}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD}px;width:${g.w + 2 * FRAME_PAD}px;height:${bottom - top + 2 * FRAME_PAD}px"></div>`;
+      marks.push({ kind: "frame", cls: `${isSel ? "is-sel" : ""} ${path && !onPath ? "is-dim" : ""}`, x: g.x - FRAME_PAD, y: top - FRAME_PAD, w: g.w + 2 * FRAME_PAD, h: bottom - top + 2 * FRAME_PAD, r: 16 });
       html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.label)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o bloco"}" title="${gPlaying ? "Pausar" : "Tocar o bloco"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
     }
     // As duas áreas do bloco: vídeo em cima, som embaixo.
     if (M.hasArea(g) && g.bottom > g.y + M.VIS_H) {
       const side = g.x - FRAME_PAD;
-      html += `<div class="gsplit" style="left:${side}px;top:${g.y + M.VIS_H}px;width:${g.w + 2 * FRAME_PAD}px"></div>`;
+      marks.push({ kind: "split", x: side, y: g.y + M.VIS_H, w: g.w + 2 * FRAME_PAD, h: 0 });
       html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${top + 4}px">movie</span>`;
       html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${g.y + M.VIS_H + 12}px">music_note</span>`;
     }
@@ -555,6 +587,17 @@ function render({ side = true } = {}) {
     const temp = $("#wire-temp")?.getAttribute("d") ?? "";
     wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d="${temp}"/>`;
   }
+
+  // A seleção: a borda por dentro do bloco ou da nota; no Final, por fora, com a folga do traço.
+  const sb = sel.type === "block" && project.blocks.find((b) => b.id === sel.id);
+  if (sb) marks.push({ kind: "sel", x: sb.x, y: sb.y, w: M.width(sb), h: M.height(sb), r: sb.kind === "audio" ? 8 : 12 });
+  const sn = sel.type === "note" && project.notes?.find((n) => n.id === sel.id);
+  if (sn) marks.push({ kind: "sel", x: sn.x, y: sn.y, w: M.NOTE_W, h: M.VIS_H, r: 12 });
+  const sf = sel.type === "final" && project.finals.find((f) => f.id === sel.id);
+  const sfEl = sf && chrome.querySelector(`.fin[data-final="${sf.id}"]`);
+  if (sfEl) marks.push({ kind: "sel", out: true, x: sf.x, y: sf.y, w: sfEl.offsetWidth, h: sfEl.offsetHeight, r: 16 });
+  strokes = marks;
+  drawStrokes();
 
   if (side) renderSide(gs);
   frameRatio();
@@ -1760,10 +1803,9 @@ vp.addEventListener(
  */
 /** A guia de alinhamento do corte: uma linha de cima a baixo do bloco, na ponta em que o corte parou. */
 function showGuide(at) {
-  const el = $("#guide");
-  el.hidden = !at;
+  guideAt = at ? { x: at.x, top: at.top, bottom: at.bottom } : null;
   $("#snapinfo").textContent = at ? "Alinhado" : "";
-  if (at) Object.assign(el.style, { left: `${at.x}px`, top: `${at.top - 16}px`, height: `${at.bottom - at.top + 32}px` });
+  drawStrokes();
 }
 
 /** O ponto de ligação (entrada ou saída) mais perto do mouse, até `reach` px na tela. */
