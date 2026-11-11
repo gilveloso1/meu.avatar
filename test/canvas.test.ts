@@ -93,10 +93,16 @@ describe("projetos do canvas", () => {
       expect(raiz.arquivos.some((a) => a.id === "22222222-2222-4222-8222-222222222222")).toBe(false);
 
       expect((await acervo(id, admin, `?pasta=${pasta}`)).arquivos.map((a) => a.id)).toEqual([naPasta]);
-      // O tipo filtra (e as pastas somem); a busca procura em tudo, também dentro das pastas.
+      // O tipo filtra e mostra tudo daquele tipo, também o que está em pasta (as pastas somem); a busca procura em tudo.
       const audios = await acervo(id, admin, "?tipo=audio");
       expect(audios.arquivos.map((a) => a.id)).toEqual([audio]);
       expect(audios.pastas).toEqual([]);
+      const soVideos = await acervo(id, admin, "?tipo=video");
+      expect(soVideos.arquivos.map((a) => a.id)).toEqual([V1, naPasta]);
+      expect(soVideos.pastas).toEqual([]);
+      // Dentro da pasta aberta, o tipo filtra só o que é dela.
+      expect((await acervo(id, admin, `?pasta=${pasta}&tipo=video`)).arquivos.map((a) => a.id)).toEqual([naPasta]);
+      expect((await acervo(id, admin, `?pasta=${pasta}&tipo=audio`)).arquivos).toEqual([]);
       expect((await acervo(id, admin, "?q=acreditar")).arquivos.map((a) => a.id)).toEqual([naPasta]);
       expect((await get(`/projetos/${id}/acervo?tipo=musica`, admin)).status).toBe(400);
     });
@@ -134,6 +140,9 @@ describe("projetos do canvas", () => {
       expect(dele.pastas).toEqual([{ id: pasta, nome: "Fotos", itens: 1 }]);
       expect(dele.arquivos).toEqual([expect.objectContaining({ id: voz, nome: "Voz.mp3", tipo: "audio", src: `/avatares/${avatar}/arquivos/${voz}` })]);
       expect((await acervo(id, admin, `?fonte=avatar&avatar=${avatar}&pasta=${pasta}`)).arquivos.map((a) => a.id)).toEqual([foto]);
+      // Com um tipo, sem avatar escolhido: todos os ativos daquele tipo, de todos os avatares e pastas, com de quem é.
+      expect((await acervo(id, admin, "?fonte=avatar&tipo=imagem")).arquivos).toEqual([expect.objectContaining({ id: foto, de: "Camila" })]);
+      expect((await acervo(id, admin, `?fonte=avatar&avatar=${avatar}&tipo=imagem`)).arquivos.map((a) => a.id)).toEqual([foto]);
       // A busca sem avatar procura nos ativos de todos e diz de quem é.
       expect((await acervo(id, admin, "?fonte=avatar&q=rosto")).arquivos).toEqual([expect.objectContaining({ id: foto, de: "Camila" })]);
 

@@ -322,8 +322,9 @@ a.xlist__item { color: inherit; text-decoration: none; }
 .files-panel .tabs__tab { flex: 1; padding: 0 8px; }
 .files-panel__tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 8px; }
 .files-panel .search-field { width: auto; }
-.files-panel .chip-set { margin: 0; }
-.files-panel .chip { height: 32px; }
+/* Os três chips de tipo dividem a largura do painel por igual. */
+.files-panel .chip-set { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.files-panel .chip { height: 32px; justify-content: center; padding: 0 8px; }
 .files-panel .crumbs { margin: 0 0 0 -8px; }
 .files-panel .crumbs__path { font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; }
 .files-panel button.crumbs__item { margin: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; cursor: pointer; }
