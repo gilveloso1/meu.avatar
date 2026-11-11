@@ -159,7 +159,7 @@ menos custo.
     puxada de uma ligação que já existia some, sem aviso: é o gesto de tirar).
 - **Sistema de proporção** (aprovado pelo dono em 11/11/2026; antes cada elemento tinha a sua regra, e
   a 800% o ponto de ligação tinha 144 px ao lado de uma linha de 4). Três famílias, cada uma com uma
-  regra só (`scale()` e `stroke()`, `canvas.js`; `--ck`, `--sw` e `--lz`, `tela.html`):
+  regra só (`scale()`, `ctrl()` e `stroke()`, `canvas.js`; `zoomStyle`, `--sw` e `--lz`, `tela.html`):
   - **Conteúdo** (blocos, miniaturas, ondas de som, texto do rótulo, card do Final): acompanha o
     zoom por inteiro. Exceção: afastado, o texto do rótulo e o do card do Final não ficam menores que
     uns 10 px na tela, e abaixo de 75% o rótulo mostra só o nome.
@@ -174,13 +174,46 @@ menos custo.
     isso segue o tamanho dele mais de perto, nos dois sentidos (pedido do dono, 11/11/2026): o zoom
     elevado a 0,6, de 0,6 a 3,5 vezes. Alça de 12 × 20 e linha de 2 px a 100%; 8 × 13 e 1 px a 50%;
     42 × 70 e 7 px a 800%. A área de toque em volta da alça não encolhe.
-  Os traços ficam numa camada fora do canvas ampliado (`#lines`, `drawStrokes`), e a linha de
+  Os traços ficam numa camada fora do canvas ampliado (`#lines`, `drawStrokes`, dentro do `#pan`), e a linha de
   reprodução direto no `#vp`: dentro do canvas ampliado, o navegador arredonda para 1 px do canvas
   tudo o que for mais fino (a borda de 2 px saía com 8 em 800%). Traço ou controle novo entra numa
   dessas famílias, sem regra própria.
 - **Arrasto leve**: cada arrasto desenha no máximo uma vez por quadro, sem o painel (ele vem
   ao soltar). Sem mudança no lugar do elemento, nada é desenhado; cada elemento, as portas e
   as linhas só tocam a página se algo deles mudou.
+- **Canvas leve** (11/11/2026, pedido do dono: mais leve no manuseio e na prévia, sem mudar o que
+  aparece nem como funciona). O que foi feito, e o que cada parte segura:
+  - **Contas guardadas** (`modelo.js`): os grupos, as ligações e as variações do mesmo projeto saem da
+    memória (`remember`), conferidos item a item com tudo o que a conta lê: o projeto às vezes muda no
+    lugar, e a identidade dele não basta. Quem recebe os grupos não os altera. Antes, cada desenho
+    refazia os grupos várias vezes, e o arrasto os refazia a cada quadro.
+  - **Só o que mudou vai para a página** (`patch`, `canvas.js`): as abas, os pontos de ligação, os
+    Finais, as linhas e os traços têm chave; o que ficou igual não é refeito (arrastar um bloco não
+    refaz o card do Final nem as outras linhas), e o que só mudou de lugar anda. O resultado na página
+    é o mesmo de escrever tudo de novo. Elemento novo do `#chrome` entra como `piece`, com chave.
+  - **Rolar sem redesenhar**: enquanto a vista anda, o `#pan` (os pontos do fundo, o `#world` e os
+    traços) vira uma camada do navegador e só ela se desloca, em px inteiros da tela (`moveWorld`); se o
+    passo não der px inteiros, ou passar de 512 px (a folga do fundo de pontos, `GRID_PAD`), a camada
+    recomeça dali. Parado (200 ms depois da roda, ou ao soltar), a camada sai (`restWorld`): a imagem
+    parada é a mesma de antes. Em movimento, o navegador pode encaixar um bloco meio ponto diferente
+    (visto a 50%, com a roda, nos blocos sem som); volta ao parar.
+  - **Zoom**: as medidas que mudam com o zoom ficam em quem as usa (`applyZoom`: a sombra em cada bloco
+    e no Final, a medida em cada controle, `--wsw` no `#wires`, `--lz` no `#blocks`, `--tk` no bloco
+    escolhido), e não no `#world`, onde faziam o navegador recalcular o estilo de tudo a cada quadro.
+    O zoom continua sendo o gesto mais caro: a tela inteira é desenhada de novo em cada passo dele.
+  - **Miniaturas e ondas** (`miniaturas.js`): a imagem vai como endereço curto (`blob:`), e não mais
+    como `data:` com a imagem inteira em texto dentro do estilo do bloco; o vídeo usado para tirar o
+    quadro para de baixar depois dele; e só 4 quadros e 2 ondas são feitos por vez ao abrir. A onda
+    nítida que sai da tela solta a imagem dela (`dropWave`).
+  - **Prévia** (`player.js`): ao trocar o que a prévia toca, o trecho do mesmo arquivo reaproveita o
+    elemento de vídeo, áudio ou imagem que já estava carregado, e o que não serve mais para de baixar
+    (`discard`); antes, cada troca criava todos de novo. Tocando, a cada quadro só se escreve o que
+    mudou (o relógio anda de 0,1 em 0,1 s), e a linha de reprodução tem camada própria. A linha da
+    grade do editor tem altura fechada (`grid-template-rows`), para o quadro da prévia não ser medido
+    duas vezes a cada passo do controle.
+  - **Como conferir**: a mesma sequência de gestos nos dois canvas (o de antes e o novo), com foto em
+    cada estado e comparação ponto a ponto, e o tempo de cada gesto pelo traço do navegador (o
+    desenho fora da linha principal incluído). Mudança nessa parte passa pelas duas conferências.
 - **Nome dos blocos**: Bloco 1, Bloco 2, na ordem em que os elementos entraram; muda nos
   Ajustes (`project.names`, pelo id do primeiro elemento), e vazio volta ao número.
 - **Área e prévia**: o grupo ganha um retângulo tracejado em volta de tudo o

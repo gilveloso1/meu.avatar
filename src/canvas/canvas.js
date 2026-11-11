@@ -12,13 +12,17 @@
  */
 import * as M from "./modelo.js";
 import { Player, clock } from "./player.js";
-import { thumb, sharpWave, probe } from "./miniaturas.js";
+import { thumb, sharpWave, dropWave, probe } from "./miniaturas.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const vp = $("#vp");
+const pan = $("#pan");
+const grid = $("#grid");
 const world = $("#world");
 const wires = $("#wires");
 const chrome = $("#chrome");
+// Os blocos e as notas ficam num contêiner próprio (sem caixa: a posição deles continua sendo a do #world).
+const blocksEl = $("#blocks");
 const side = $("#side");
 const SNAP = { video: "Trilha de vídeo", sound: "Trilha de som" };
 const fmt = (s) => `${s.toFixed(1).replace(".", ",")} s`;
@@ -59,11 +63,15 @@ const pv = {
 const player = new Player(pv.stage, {
   frameSrc: CONFIG.animacao ?? null,
   onTick(t, d) {
-    pv.time.textContent = `${clock(t)} / ${clock(d)}`;
-    pv.slider.max = d;
+    // A cada quadro da prévia: só toca na página o que mudou (o relógio anda de 0,1 em 0,1 s).
+    const time = `${clock(t)} / ${clock(d)}`;
+    if (time !== tick.time) pv.time.textContent = tick.time = time;
+    if (d !== tick.max) pv.slider.max = tick.max = d;
     pv.slider.value = t;
     pv.slider.style.setProperty("--p", `${d ? (t / d) * 100 : 0}%`);
-    chrome.querySelector(".fin__bar")?.style.setProperty("--p", String(d ? t / d : 0));
+    // A barra da variação que toca, no card Final: o elemento fica guardado até o card ser redesenhado.
+    if (tick.bar === undefined) tick.bar = chrome.querySelector(".fin__bar");
+    tick.bar?.style.setProperty("--p", String(d ? t / d : 0));
     playhead(t);
   },
   onEnd: () => {
@@ -71,6 +79,7 @@ const player = new Player(pv.stage, {
     render({ side: false });
   },
 });
+const tick = { time: null, max: null, bar: undefined };
 const setPlayIcon = () => {
   const ended = !player.playing && player.duration && player.t >= player.duration - 0.02;
   pv.play.querySelector(".icon").textContent = player.playing ? "pause" : ended ? "replay" : "play_arrow";
@@ -108,7 +117,7 @@ function loadPreview() {
       title = M.versionName(versionIdx);
     }
   }
-  tl ??= v ? M.timeline(v, M.finalRate(previewFinal())) : { duration: 0, items: [] };
+  tl ??= v ? timelineOf(v, M.finalRate(previewFinal())) : { duration: 0, items: [] };
   const key = JSON.stringify(tl.items.map((i) => [i.block.id, i.block.src, i.block.draft?.fala, i.block.draft?.descricao, i.block.code && M.codeHtml(i.block.code), i.block.tout, i.start, i.len, i.tin, i.speed, i.block.frame, i.block.mute, i.block.vol]));
   pv.title.textContent = title;
   if (key === loadedKey) return playhead(player.t);
@@ -139,7 +148,7 @@ function playhead(t) {
   }
   headBox = box;
   // Aparece sempre que a prévia toca um bloco ou um grupo, para poder arrastar.
-  head.hidden = !box;
+  if (head.hidden !== !box) head.hidden = !box;
   // A linha fica fora do canvas ampliado, em px da tela: dentro dele, com o zoom no máximo, a linha e a
   // alça viravam frações de px que o navegador arredondava (a linha de 2 px saía com 8, a alça torta).
   // Passa 4 px acima e abaixo do que toca, com qualquer zoom.
@@ -149,8 +158,19 @@ function playhead(t) {
   // 800%. Sempre em px inteiros da tela; a área de toque em volta da alça não encolhe.
   const grow = Math.min(3.5, Math.max(0.6, view.z ** 0.6));
   const line = Math.max(1, Math.round(2 * grow));
-  head.style.setProperty("--hs", String(grow));
-  if (box) Object.assign(head.style, { width: `${line}px`, left: `${Math.round((box.x + t * M.PX) * view.z + view.x - line / 2)}px`, top: `${Math.round(box.y * view.z + view.y) - 4}px`, height: `${Math.round(box.h * view.z) + 8}px` });
+  put(head, "--hs", String(grow));
+  if (!box) return;
+  put(head, "width", `${line}px`);
+  put(head, "left", `${Math.round((box.x + t * M.PX) * view.z + view.x - line / 2)}px`);
+  put(head, "top", `${Math.round(box.y * view.z + view.y) - 4}px`);
+  put(head, "height", `${Math.round(box.h * view.z) + 8}px`);
+}
+/** Escreve uma medida no estilo do elemento só quando ela muda (o que foi posto fica guardado nele). */
+function put(el, name, value) {
+  const was = (el.put ??= {});
+  if (was[name] === value) return;
+  was[name] = value;
+  el.style.setProperty(name, value);
 }
 /** Tocar numa variação do Final: destaca o caminho e toca; a que já está na prévia pausa ou continua. */
 function pickVariant(id, i) {
@@ -351,14 +371,19 @@ function sharpen() {
   const top = -view.y / view.z;
   for (const b of project.blocks) {
     const el = blockEls.get(b.id);
-    const m = b.kind === "audio" ? $(".blk__media", el) : M.linked(b) ? $(".blk__wave", el) : null;
+    const m = !el ? null : b.kind === "audio" ? el.parts.media : M.linked(b) ? el.parts.wave : null;
     if (!m) continue;
     const s0 = Math.max(0, (left - b.x) / M.PX);
     const s1 = Math.min(M.len(b), (left + r.width / view.z - b.x) / M.PX);
     const seen = view.z >= SHARP_ZOOM && s1 > s0 && b.y < top + r.height / view.z && b.y + M.height(b) > top;
     if (!seen) {
       m.want = null;
-      if (m.sharp) (m.sharp = null), paintWave(m, b);
+      if (m.sharp) {
+        const old = m.sharp.url;
+        m.sharp = null;
+        paintWave(m, b);
+        dropWave(old);
+      }
       continue;
     }
     const [a, c] = [b.tin + s0 * (b.speed ?? 1), b.tin + s1 * (b.speed ?? 1)];
@@ -369,11 +394,15 @@ function sharpen() {
     m.want = want;
     sharpWave(b.src, want.from, want.to)
       .then((url) => {
-        if (m.want !== want) return;
+        // Chegou tarde (a vista já pediu outro trecho): a imagem não é usada.
+        if (m.want !== want) return dropWave(url);
+        const old = m.sharp?.url;
         m.want = null;
         m.sharp = { ...want, url };
         const now = project.blocks.find((o) => o.id === b.id);
         if (now) paintWave(m, now);
+        // A anterior só sai depois de a nova estar no bloco.
+        if (old && now) dropWave(old);
       })
       .catch(() => {});
   }
@@ -397,42 +426,191 @@ const stroke = () => Math.round(2 * scale());
 const lines = $("#lines");
 let strokes = [];
 let guideAt = null;
+const strokeEls = new Map();
 function drawStrokes() {
   const s = stroke();
   const px = (v) => Math.round(v * view.z);
-  const box = (o, grow = 0) => `left:${px(o.x) + Math.round(view.x) - grow}px;top:${px(o.y) + Math.round(view.y) - grow}px;width:${px(o.w) + 2 * grow}px;height:${px(o.h) + 2 * grow}px`;
-  let html = "";
+  // A camada dos traços anda com o #pan ao rolar (por px inteiros): a conta parte da vista em que ele
+  // foi montado, e os traços ficam como estão, sem serem escritos de novo a cada quadro.
+  const at = panBase ?? view;
+  const [ox, oy] = [Math.round(at.x), Math.round(at.y)];
+  const box = (o, grow = 0) => `left:${px(o.x) + ox - grow}px;top:${px(o.y) + oy - grow}px;width:${px(o.w) + 2 * grow}px;height:${px(o.h) + 2 * grow}px`;
+  const items = [];
   for (const o of strokes) {
-    if (o.kind === "split") html += `<div class="stroke stroke--split" style="${box({ ...o, h: 0 })};height:${Math.round(scale())}px"></div>`;
-    else html += `<div class="stroke stroke--${o.kind} ${o.cls ?? ""}" style="${box(o, o.out ? s : 0)};border-radius:${Math.round((o.r ?? 0) * (o.kind === "frame" ? scale() : view.z)) + (o.out ? s : 0)}px"></div>`;
+    if (o.kind === "split") items.push({ key: o.key, cls: "stroke stroke--split", style: `${box({ ...o, h: 0 })};height:${Math.round(scale())}px` });
+    else items.push({ key: o.key, cls: `stroke stroke--${o.kind} ${o.cls ?? ""}`, style: `${box(o, o.out ? s : 0)};border-radius:${Math.round((o.r ?? 0) * (o.kind === "frame" ? scale() : view.z)) + (o.out ? s : 0)}px` });
   }
-  if (guideAt) html += `<div class="stroke stroke--guide" style="left:${px(guideAt.x) + Math.round(view.x) - Math.round(s / 2)}px;top:${px(guideAt.top) + Math.round(view.y) - 16}px;height:${px(guideAt.bottom - guideAt.top) + 32}px"></div>`;
-  if (lines.innerHTML !== html) lines.innerHTML = html;
+  if (guideAt) items.push({ key: "guide", cls: "stroke stroke--guide", style: `left:${px(guideAt.x) + ox - Math.round(s / 2)}px;top:${px(guideAt.top) + oy - 16}px;height:${px(guideAt.bottom - guideAt.top) + 32}px` });
+  patch(lines, strokeEls, items, makeStroke, updateStroke);
+}
+function makeStroke(item) {
+  const el = document.createElement("div");
+  el.className = item.cls;
+  el.setAttribute("style", item.style);
+  return el;
+}
+function updateStroke(el, was, now) {
+  if (was.cls !== now.cls) el.className = now.cls;
+  if (was.style !== now.style) el.setAttribute("style", now.style);
+  return true;
 }
 
-function applyView() {
-  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
-  world.style.setProperty("--zi", String(1 / Math.max(1, view.z)));
-  // O sistema de proporção (docs/canvas.md): o conteúdo acompanha o zoom; os controles e os traços
-  // crescem pela raiz dele, de 1 a 2 vezes (scale()), e não encolhem abaixo do tamanho de 100%.
-  // --ck desfaz o zoom do canvas e aplica a medida; --sw é o traço, em px inteiros da tela.
-  world.style.setProperty("--ck", String(ctrl() / view.z));
-  // A borda de corte não se vê, só se pega: não encolhe abaixo dos 10 px da tela.
-  world.style.setProperty("--tk", String(scale() / view.z));
-  // O inverso do zoom, para o piso do texto do Final (10 px na tela).
-  world.style.setProperty("--iz", String(1 / view.z));
-  for (const el of [world, lines]) el.style.setProperty("--sw", `${stroke()}px`);
-  // O fio de ligação é desenhado dentro do canvas ampliado: o traço dele vai dividido pelo zoom.
-  world.style.setProperty("--wsw", `${stroke() / view.z}px`);
-  // O texto do rótulo é conteúdo, mas afastado não fica menor que uns 10 px na tela.
-  world.style.setProperty("--lz", String(Math.min(2.2, Math.max(1, 0.85 / view.z))));
-  world.classList.toggle("is-far", view.z < 0.75);
+/**
+ * Deixa em `parent` os elementos de `items`, na ordem, mexendo só no que mudou: o resultado é o mesmo
+ * de escrever tudo de novo, sem refazer o que ficou igual (arrastar um bloco não refaz o card do Final
+ * nem as outras linhas). `known` guarda o elemento de cada chave entre um desenho e outro; `update`
+ * acerta o elemento que já existe e devolve false quando ele precisa ser trocado por um novo (`make`).
+ * Um filho fixo de `parent` que não está em `items` (a linha sendo puxada) fica onde está, por último.
+ * Devolve se algum elemento entrou ou saiu.
+ */
+function patch(parent, known, items, make, update) {
+  let changed = false;
+  const live = new Set();
+  const els = [];
+  for (const item of items) {
+    live.add(item.key);
+    let rec = known.get(item.key);
+    if (rec && !update(rec.el, rec.item, item)) {
+      rec.el.remove();
+      rec = null;
+    }
+    if (!rec) {
+      known.set(item.key, (rec = { el: make(item) }));
+      changed = true;
+    }
+    rec.item = item;
+    els.push(rec.el);
+  }
+  for (const [key, rec] of known) {
+    if (live.has(key)) continue;
+    rec.el.remove();
+    known.delete(key);
+    changed = true;
+  }
+  let at = parent.firstElementChild;
+  for (const el of els) {
+    if (el === at) at = at.nextElementSibling;
+    else parent.insertBefore(el, at);
+  }
+  return changed;
+}
+
+/**
+ * A vista mudou. `moving`: só andou (rolar com o mouse ou a roda), sem zoom. O que depende só do zoom
+ * (as medidas do sistema de proporção, o fundo de pontos, o número da barra) é escrito quando o zoom muda.
+ */
+let shownZoom = null;
+function applyView({ moving = false } = {}) {
+  if (view.z !== shownZoom) {
+    restWorld();
+    shownZoom = view.z;
+    applyZoom();
+  } else if (moving) moveWorld();
+  else restWorld();
   drawStrokes();
   playhead(player.t);
-  vp.style.backgroundSize = `${24 * view.z}px ${24 * view.z}px`;
-  vp.style.backgroundPosition = `${view.x}px ${view.y}px`;
-  $("#zoom").textContent = `${Math.round(view.z * 100)}%`;
   scheduleSharp();
+}
+
+// Rolar: o canvas inteiro (#pan: os pontos do fundo e o #world) vira uma camada do navegador e só ela
+// se desloca; o que está dentro não é desenhado de novo a cada quadro. O deslocamento da camada é
+// sempre de pixels inteiros da tela a partir da vista em que ela foi montada (`panBase`): o desenho sai
+// igual, ponto a ponto, ao de mover o #world. Se o passo não der pixels inteiros, ou passar da folga
+// dos pontos do fundo (GRID_PAD), o #world anda, como antes, e a camada recomeça dali. Parou (ou veio
+// um zoom, um "Ver tudo"), a camada sai e o #world fica na vista de agora.
+let panBase = null;
+let panTimer = 0;
+// Quanto o fundo de pontos passa do canvas para cada lado (o `inset` do #grid, em tela.html).
+const GRID_PAD = 512;
+function worldAt(v) {
+  put(world, "transform", `translate(${v.x}px, ${v.y}px) scale(${view.z})`);
+  // Os pontos do fundo acompanham a vista: o primeiro fica onde ficaria com o fundo no próprio canvas.
+  put(grid, "background-position", `${v.x + GRID_PAD}px ${v.y + GRID_PAD}px`);
+}
+function moveWorld() {
+  clearTimeout(panTimer);
+  panTimer = setTimeout(restWorld, 200);
+  // Inteiro em px da página (os traços são postos em px inteiros) e em px da tela (a camada não pode ficar entre dois pontos).
+  const whole = (n) => Math.abs(n) <= GRID_PAD && Math.abs(n - Math.round(n)) < 1e-6 && Math.abs(n * devicePixelRatio - Math.round(n * devicePixelRatio)) < 1e-6;
+  if (panBase && whole(view.x - panBase.x) && whole(view.y - panBase.y)) return put(pan, "transform", `translate(${Math.round(view.x - panBase.x)}px, ${Math.round(view.y - panBase.y)}px)`);
+  panBase = { x: view.x, y: view.y };
+  pan.classList.add("is-moving");
+  put(pan, "transform", "translate(0px, 0px)");
+  worldAt(view);
+}
+function restWorld() {
+  clearTimeout(panTimer);
+  const moved = !!panBase;
+  if (moved) {
+    panBase = null;
+    pan.classList.remove("is-moving");
+    put(pan, "transform", "");
+  }
+  worldAt(view);
+  // Os traços estavam na conta da camada: voltam à da vista.
+  if (moved) drawStrokes();
+}
+
+/** As medidas que mudam com o zoom, postas perto de quem as usa (ver o comentário do #world, em tela.html). */
+const zoomLabel = $("#zoom");
+function applyZoom() {
+  const z = view.z;
+  // O sistema de proporção (docs/canvas.md): o conteúdo acompanha o zoom; os controles e os traços
+  // crescem pela raiz dele, de 1 a 2 vezes (scale()), e não encolhem abaixo do tamanho de 100%.
+  // Os controles e o Final levam a medida no próprio estilo (zoomStyle); --sw é o traço, em px inteiros da tela.
+  for (const rec of chromeEls.values()) {
+    const style = rec.item.base + zoomStyle(rec.item.kind);
+    if (style === rec.item.style) continue;
+    rec.item.style = style;
+    rec.el.setAttribute("style", style);
+  }
+  put(lines, "--sw", `${stroke()}px`);
+  // O fio de ligação é desenhado dentro do canvas ampliado: o traço dele vai dividido pelo zoom.
+  put(wires, "--wsw", `${stroke() / z}px`);
+  // O texto do rótulo é conteúdo, mas afastado não fica menor que uns 10 px na tela.
+  put(blocksEl, "--lz", String(Math.min(2.2, Math.max(1, 0.85 / z))));
+  world.classList.toggle("is-far", z < 0.75);
+  for (const el of blockEls.values()) shade(el);
+  for (const el of noteEls.values()) shade(el);
+  const chosen = sel.type === "block" && blockEls.get(sel.id);
+  if (chosen) dress(chosen);
+  put(grid, "background-size", `${24 * z}px ${24 * z}px`);
+  zoomLabel.textContent = `${Math.round(z * 100)}%`;
+}
+/**
+ * A sombra com a espessura da tela: acima de 100%, as medidas dela vão divididas pelo zoom (elevação 1
+ * do M3; `lifted`, a 3, do bloco arrastado). Até 100% não há o que pôr: vale a do estilo (tela.html).
+ */
+function shadow(lifted = false) {
+  if (view.z <= 1) return "";
+  const k = 1 / view.z;
+  return lifted ? `0 ${k}px ${3 * k}px 0 rgb(0 0 0 / 0.3), 0 ${4 * k}px ${8 * k}px ${3 * k}px rgb(0 0 0 / 0.15)` : `0 ${k}px ${2 * k}px 0 rgb(0 0 0 / 0.3), 0 ${k}px ${3 * k}px ${k}px rgb(0 0 0 / 0.15)`;
+}
+/** A sombra de um bloco ou de uma nota (e da faixa de som do vídeo), no zoom de agora. */
+function shade(el) {
+  put(el, "box-shadow", shadow(el.classList.contains("is-drag")));
+  if (el.parts.link) put(el.parts.link, "box-shadow", shadow());
+}
+/** Levanta o elemento arrastado (ou o põe de volta): a classe e a sombra mudam juntas. */
+function lift(el, on) {
+  if (!el) return;
+  el.classList.toggle("is-drag", on);
+  shade(el);
+}
+/**
+ * O que o zoom põe no estilo de um elemento do #chrome. Controle (ponto de ligação, aba, ícone das
+ * áreas): a medida, já desfeito o zoom do canvas. Final: a sombra acima de 100% e, bem afastado, o
+ * inverso do zoom para o piso do texto (10 px na tela; até 1,2 o piso não entra, e nada é posto).
+ */
+function zoomStyle(kind) {
+  const z = view.z;
+  if (kind === "ctrl") return `;transform:scale(${ctrl() / z})`;
+  const lifted = shadow();
+  return (lifted ? `;box-shadow:${lifted}` : "") + (1 / z > 1.2 ? `;--iz:${1 / z}` : "");
+}
+/** A borda de corte do bloco escolhido (só ele a tem): não se vê, só se pega, e não encolhe abaixo dos 10 px da tela. */
+function dress(el) {
+  put(el, "--tk", String(scale() / view.z));
 }
 
 /** No arrasto, desenha no máximo uma vez por quadro, sem o painel (ele vem ao soltar). */
@@ -443,8 +621,49 @@ function renderSoon() {
     render({ side: false });
   });
 }
-let chromeHtml = null;
-let wiresHtml = null;
+// Os elementos do #chrome (abas, ícones das áreas, pontos de ligação, Finais) e as linhas, pela chave.
+const chromeEls = new Map();
+const wireEls = new Map();
+const pieceTpl = document.createElement("template");
+/**
+ * Um elemento do #chrome: o tipo ("ctrl", um controle, ou "final"), a marca, os atributos, a posição
+ * (`base`) e o que vai dentro. O estilo é a posição mais o que o zoom põe (zoomStyle).
+ */
+const piece = (key, kind, tag, attrs, base, inner = "") => ({ key, kind, tag, attrs, base, style: base + zoomStyle(kind), inner });
+function makePiece(item) {
+  pieceTpl.innerHTML = `<${item.tag} ${item.attrs} style="${item.style}">${item.inner}</${item.tag}>`;
+  return pieceTpl.content.firstElementChild;
+}
+/** Só a posição mudou: o elemento fica e anda; o resto troca o elemento. */
+function updatePiece(el, was, now) {
+  if (was.tag !== now.tag || was.attrs !== now.attrs || was.inner !== now.inner) return false;
+  if (was.style !== now.style) el.setAttribute("style", now.style);
+  return true;
+}
+function makeWire(item) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  el.setAttribute("class", item.cls);
+  if (item.edge) el.dataset.edge = item.edge;
+  el.setAttribute("d", item.d);
+  return el;
+}
+function updateWire(el, was, now) {
+  if (was.cls !== now.cls) el.setAttribute("class", now.cls);
+  if (was.d !== now.d) el.setAttribute("d", now.d);
+  return true;
+}
+/** A linha do tempo de uma variação, guardada com ela: as variações são as mesmas listas enquanto nada muda no canvas. */
+const timelines = new WeakMap();
+function timelineOf(v, rate = 1) {
+  let byRate = timelines.get(v);
+  if (!byRate) timelines.set(v, (byRate = new Map()));
+  let tl = byRate.get(rate);
+  if (!tl) byRate.set(rate, (tl = M.timeline(v, rate)));
+  return tl;
+}
+const undoButton = $("#undo");
+const redoButton = $("#redo");
+const emptyHint = $("#canvas-empty");
 
 function render({ side = true } = {}) {
   // O bloco escolhido sumiu (desfazer, ou a API tirou): fica sem seleção, em vez de quebrar o painel.
@@ -468,14 +687,16 @@ function render({ side = true } = {}) {
       el = document.createElement("div");
       el.dataset.id = b.id;
       el.innerHTML = `<div class="blk__media"></div><div class="blk__label"><span class="icon blk__kind"></span><span class="blk__name"></span><span class="blk__dur"></span><span class="icon blk__mute">volume_off</span></div><div class="blk__link"><span class="blk__wave"></span></div><i class="trim trim--l" data-trim="l"></i><i class="trim trim--r" data-trim="r"></i>`;
-      world.append(el);
+      // Os pedaços do bloco ficam à mão: nada de procurar por eles a cada desenho.
+      el.parts = { media: $(".blk__media", el), label: $(".blk__label", el), kind: $(".blk__kind", el), name: $(".blk__name", el), dur: $(".blk__dur", el), link: $(".blk__link", el), wave: $(".blk__wave", el) };
+      blocksEl.append(el);
       blockEls.set(b.id, el);
     }
     // A miniatura muda com o arquivo: o rascunho trocado pelo vídeo pronto mantém o mesmo bloco.
     const fonte = b.draft ? `rascunho:${draftText(b)}` : b.code ? "codigo" : b.src;
     if (el.fonte !== fonte) {
       el.fonte = fonte;
-      const m = $(".blk__media", el);
+      const m = el.parts.media;
       m.textContent = "";
       m.style.backgroundImage = "";
       if (!b.draft && !b.code)
@@ -488,7 +709,7 @@ function render({ side = true } = {}) {
       // O vídeo mostra o próprio som numa faixa embaixo, na cor dele.
       if (b.kind === "video" && b.audio !== "none")
         thumb({ kind: "audio", src: b.src, dur: b.dur }).then((u) => {
-          if (u && el.fonte === fonte) setWave($(".blk__wave", el), b.id, u);
+          if (u && el.fonte === fonte) setWave(el.parts.wave, b.id, u);
         });
     }
     const g = idx.get(b.id);
@@ -504,25 +725,36 @@ function render({ side = true } = {}) {
     if (el.drawn === state) continue;
     el.drawn = state;
     el.className = look;
-    Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${M.width(b)}px`, height: `${M.height(b)}px` });
-    if (sound) el.style.setProperty("--link-top", `${sound.y - b.y}px`);
+    shade(el);
+    if (chosen) dress(el);
+    put(el, "left", `${b.x}px`);
+    put(el, "top", `${b.y}px`);
+    put(el, "width", `${M.width(b)}px`);
+    put(el, "height", `${M.height(b)}px`);
+    if (sound) put(el, "--link-top", `${sound.y - b.y}px`);
     const tipo = { video: "video", image: "imagem", audio: "audio" }[b.kind];
-    el.style.setProperty("--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
-    el.style.setProperty("--on", `var(--bloco-${tipo}-on)`);
-    const media = $(".blk__media", el);
-    if (M.linked(b)) paintWave($(".blk__wave", el), b);
+    put(el, "--c", `var(--bloco-${tipo}-${b.tone ?? 1})`);
+    put(el, "--on", `var(--bloco-${tipo}-on)`);
+    const media = el.parts.media;
+    if (M.linked(b)) paintWave(el.parts.wave, b);
     if (b.kind === "audio") paintWave(media, b);
     // O ícone do tipo; no bloco escolhido, o tocar surge no lugar dele, com a mesma largura e altura
     // (é o próprio ícone que vira o botão: mesma posição, mesmo tamanho, mesma cor).
-    const kindEl = $(".blk__kind", el);
+    const kindEl = el.parts.kind;
     kindEl.textContent = chosen ? (playing ? "pause" : "play_arrow") : b.draft ? "edit_note" : b.code ? "animation" : { video: "movie", image: "image", audio: "music_note" }[b.kind];
     if (chosen) Object.assign(kindEl.dataset, { playBlock: b.id }), kindEl.setAttribute("role", "button"), kindEl.setAttribute("aria-label", playing ? "Pausar" : "Tocar"), (kindEl.title = playing ? "Pausar" : "Tocar");
     else delete kindEl.dataset.playBlock, kindEl.removeAttribute("role"), kindEl.removeAttribute("aria-label"), kindEl.removeAttribute("title");
-    $(".blk__name", el).textContent = b.name;
+    if (el.parts.name.textContent !== b.name) el.parts.name.textContent = b.name;
     if (b.draft) media.replaceChildren(Object.assign(document.createElement("span"), { className: "blk__fala", textContent: draftText(b) }));
-    $(".blk__dur", el).textContent = fmt(M.len(b));
+    const dur = fmt(M.len(b));
+    if (el.parts.dur.textContent !== dur) el.parts.dur.textContent = dur;
   }
-  for (const [id, el] of blockEls) if (!seen.has(id)) el.remove(), blockEls.delete(id);
+  for (const [id, el] of blockEls) {
+    if (seen.has(id)) continue;
+    for (const m of [el.parts.media, el.parts.wave]) if (m.sharp) dropWave(m.sharp.url);
+    el.remove();
+    blockEls.delete(id);
+  }
   // Notas: blocos amarelos com o texto no lugar do quadro (como o rascunho), fora dos grupos.
   const notesSeen = new Set();
   for (const n of project.notes ?? []) {
@@ -534,7 +766,8 @@ function render({ side = true } = {}) {
       el.innerHTML = `<div class="blk__media"><span class="blk__fala"></span></div><div class="blk__label"><span class="icon blk__kind">sticky_note_2</span><span class="blk__name">Nota</span></div>`;
       el.style.setProperty("--c", "var(--bloco-nota-1)");
       el.style.setProperty("--on", "var(--bloco-nota-on)");
-      world.append(el);
+      el.parts = { label: $(".blk__label", el), fala: $(".blk__fala", el) };
+      blocksEl.append(el);
       noteEls.set(n.id, el);
     }
     const look = `blk blk--draft blk--nota${sel.type === "note" && sel.id === n.id ? " is-sel" : ""}${el.classList.contains("is-drag") ? " is-drag" : ""}`;
@@ -542,16 +775,16 @@ function render({ side = true } = {}) {
     if (el.drawn === state) continue;
     el.drawn = state;
     el.className = look;
+    shade(el);
     Object.assign(el.style, { left: `${n.x}px`, top: `${n.y}px`, width: `${M.NOTE_W}px`, height: `${M.VIS_H}px` });
-    $(".blk__fala", el).textContent = n.text;
+    if (el.parts.fala.textContent !== n.text) el.parts.fala.textContent = n.text;
   }
   for (const [id, el] of noteEls) if (!notesSeen.has(id)) el.remove(), noteEls.delete(id);
-  const empty = $("#canvas-empty");
-  if (empty) empty.hidden = project.blocks.length > 0 || (project.notes?.length ?? 0) > 0;
+  if (emptyHint) emptyHint.hidden = project.blocks.length > 0 || (project.notes?.length ?? 0) > 0;
 
   // Abas dos grupos, portas e blocos finais. Os traços (contorno do grupo, divisa das áreas, seleção)
   // vão para a camada de fora do canvas ampliado (drawStrokes).
-  let html = "";
+  const pieces = [];
   const marks = [];
   for (const g of gs) {
     const top = g.top;
@@ -562,61 +795,77 @@ function render({ side = true } = {}) {
       // A área do grupo: um retângulo tracejado em volta de tudo o que entra nele.
       const bottom = g.bottom;
       const onPath = path?.includes(g) ? "is-path" : "";
-      marks.push({ kind: "frame", cls: `${isSel ? "is-sel" : ""} ${path && !onPath ? "is-dim" : ""}`, x: g.x - FRAME_PAD, y: top - FRAME_PAD, w: g.w + 2 * FRAME_PAD, h: bottom - top + 2 * FRAME_PAD, r: 16 });
-      html += `<div class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}" style="left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px"><span class="icon">drag_indicator</span>${esc(g.label)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o bloco"}" title="${gPlaying ? "Pausar" : "Tocar o bloco"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button></div>`;
+      marks.push({ key: `frame:${g.id}`, kind: "frame", cls: `${isSel ? "is-sel" : ""} ${path && !onPath ? "is-dim" : ""}`, x: g.x - FRAME_PAD, y: top - FRAME_PAD, w: g.w + 2 * FRAME_PAD, h: bottom - top + 2 * FRAME_PAD, r: 16 });
+      pieces.push(
+        piece(
+          `tab:${g.id}`,
+          "ctrl",
+          "div",
+          `class="gtab ${isSel ? "is-sel" : ""} ${onPath}" data-group="${g.id}"`,
+          `left:${g.x - FRAME_PAD}px;top:${top - FRAME_PAD - 40}px`,
+          `<span class="icon">drag_indicator</span>${esc(g.label)} · ${fmt(g.dur)}<button class="gtab__play interactive" type="button" data-play-group="${g.id}" aria-label="${gPlaying ? "Pausar" : "Tocar o bloco"}" title="${gPlaying ? "Pausar" : "Tocar o bloco"}"><span class="icon">${gPlaying ? "pause" : "play_arrow"}</span></button>`,
+        ),
+      );
     }
     // As duas áreas do bloco: vídeo em cima, som embaixo.
     if (M.hasArea(g) && g.bottom > g.y + M.VIS_H) {
       const side = g.x - FRAME_PAD;
-      marks.push({ kind: "split", x: side, y: g.y + M.VIS_H, w: g.w + 2 * FRAME_PAD, h: 0 });
-      html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${top + 4}px">movie</span>`;
-      html += `<span class="icon garea" aria-hidden="true" style="left:${side + 1}px;top:${g.y + M.VIS_H + 12}px">music_note</span>`;
+      marks.push({ key: `split:${g.id}`, kind: "split", x: side, y: g.y + M.VIS_H, w: g.w + 2 * FRAME_PAD, h: 0 });
+      pieces.push(piece(`video:${g.id}`, "ctrl", "span", `class="icon garea" aria-hidden="true"`, `left:${side + 1}px;top:${top + 4}px`, "movie"));
+      pieces.push(piece(`som:${g.id}`, "ctrl", "span", `class="icon garea" aria-hidden="true"`, `left:${side + 1}px;top:${g.y + M.VIS_H + 12}px`, "music_note"));
     }
-    html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - M.portGap(g) - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
-    html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + M.portGap(g) - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
+    pieces.push(piece(`in:${g.id}`, "ctrl", "div", `class="port port--in" data-group="${g.id}"`, `left:${g.x - M.portGap(g) - 9}px;top:${g.y + rowH / 2 - 9}px`));
+    pieces.push(piece(`out:${g.id}`, "ctrl", "div", `class="port port--out" data-group="${g.id}"`, `left:${g.x + g.w + M.portGap(g) - 9}px;top:${g.y + rowH / 2 - 9}px`));
   }
   for (const f of project.finals) {
     const vs = M.versions(project, f.id, gs);
     const n = vs.length;
     const isSel = sel.type === "final" && sel.id === f.id;
-    html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview, selectionIn(f.id, gs, idx), M.finalRate(f)) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
-    html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - PORT_OUT - 9}px;top:${f.y + 40 - 9}px"></div>`;
+    pieces.push(
+      piece(
+        `final:${f.id}`,
+        "final",
+        "div",
+        `class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}"`,
+        `left:${f.x}px;top:${f.y}px`,
+        `<div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview, selectionIn(f.id, gs, idx), M.finalRate(f)) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}`,
+      ),
+    );
+    pieces.push(piece(`entrada:${f.id}`, "ctrl", "div", `class="port port--in" data-final="${f.id}"`, `left:${f.x - PORT_OUT - 9}px;top:${f.y + 40 - 9}px`));
   }
-  if (html !== chromeHtml) chrome.innerHTML = chromeHtml = html;
+  // Um elemento novo no #chrome pode ser o card que tem a barra da variação: a prévia procura de novo.
+  if (patch(chrome, chromeEls, pieces, makePiece, updatePiece)) tick.bar = undefined;
 
   // Linhas.
-  let svg = "";
+  const paths = [];
   const boxes = M.wireBoxes(project, gs);
   for (const l of M.links(project, gs)) {
     const f = typeof l.to === "string" ? project.finals.find((f) => f.id === l.to) : null;
     const d = M.linkPath(l, project, boxes);
     const on = sel.type === "edge" && sel.id === l.edge.id;
     const onPath = path && M.linkOn(l, path, litFinal);
-    svg += `<path class="wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}" d="${d}"/><path class="wire-hit" data-edge="${l.edge.id}" d="${d}"/>`;
+    paths.push({ key: `fio:${l.edge.id}`, cls: `wire ${on ? "is-sel" : ""} ${onPath ? "is-path" : ""}`, d });
+    paths.push({ key: `toque:${l.edge.id}`, cls: "wire-hit", edge: l.edge.id, d });
   }
-  // A linha sendo puxada fica fora disto: é só o atributo dela que muda.
-  if (svg !== wiresHtml) {
-    wiresHtml = svg;
-    const temp = $("#wire-temp")?.getAttribute("d") ?? "";
-    wires.innerHTML = svg + `<path id="wire-temp" class="wire wire--temp" d="${temp}"/>`;
-  }
+  // A linha sendo puxada (#wire-temp) fica fora disto, por último: é só o atributo dela que muda.
+  patch(wires, wireEls, paths, makeWire, updateWire);
 
   // A seleção: a borda por dentro do bloco ou da nota; no Final, por fora, com a folga do traço.
   const sb = sel.type === "block" && project.blocks.find((b) => b.id === sel.id);
-  if (sb) marks.push({ kind: "sel", x: sb.x, y: sb.y, w: M.width(sb), h: M.height(sb), r: sb.kind === "audio" ? 8 : 12 });
+  if (sb) marks.push({ key: "sel", kind: "sel", x: sb.x, y: sb.y, w: M.width(sb), h: M.height(sb), r: sb.kind === "audio" ? 8 : 12 });
   const sn = sel.type === "note" && project.notes?.find((n) => n.id === sel.id);
-  if (sn) marks.push({ kind: "sel", x: sn.x, y: sn.y, w: M.NOTE_W, h: M.VIS_H, r: 12 });
+  if (sn) marks.push({ key: "sel", kind: "sel", x: sn.x, y: sn.y, w: M.NOTE_W, h: M.VIS_H, r: 12 });
   const sf = sel.type === "final" && project.finals.find((f) => f.id === sel.id);
-  const sfEl = sf && chrome.querySelector(`.fin[data-final="${sf.id}"]`);
-  if (sfEl) marks.push({ kind: "sel", out: true, x: sf.x, y: sf.y, w: sfEl.offsetWidth, h: sfEl.offsetHeight, r: 16 });
+  const sfEl = sf && chromeEls.get(`final:${sf.id}`)?.el;
+  if (sfEl) marks.push({ key: "sel", kind: "sel", out: true, x: sf.x, y: sf.y, w: sfEl.offsetWidth, h: sfEl.offsetHeight, r: 16 });
   strokes = marks;
   drawStrokes();
 
   if (side) renderSide(gs);
   frameRatio();
   loadPreview();
-  $("#undo").disabled = !undo.length;
-  $("#redo").disabled = !redo.length;
+  undoButton.disabled = !undo.length;
+  redoButton.disabled = !redo.length;
   scheduleSharp();
 }
 
@@ -636,7 +885,7 @@ function variantList(vs, active, part, rate = 1) {
   const label = (i) => (style === "full" ? M.versionName(i) : `V. ${i + 1}`);
   const glyph = (i) => (active && i === versionIdx && player.playing ? "pause" : "play_arrow");
   const lead = (i) => `<span class="icon" aria-hidden="true">${glyph(i)}</span>`;
-  const time = (v) => `<span class="xlist__trail">${fmt(M.timeline(v, rate).duration)}</span>`;
+  const time = (v) => `<span class="xlist__trail">${fmt(timelineOf(v, rate).duration)}</span>`;
   const item = (v, i) => {
     const on = active && i === versionIdx;
     const attrs = `class="xlist__item interactive ${part(v) ? "is-part" : ""}" type="button" data-variant="${i}" aria-label="${M.versionName(i)}" aria-current="${on}"`;
@@ -687,7 +936,8 @@ function renderSide(gs) {
   if (sel.type === "final") {
     const vs = M.versions(project, sel.id, gs);
     title = "Final";
-    const durs = vs.map((v) => M.timeline(v, M.finalRate(project.finals.find((f) => f.id === sel.id))).duration);
+    const rate = M.finalRate(project.finals.find((f) => f.id === sel.id));
+    const durs = vs.map((v) => timelineOf(v, rate).duration);
     const [least, most] = [Math.min(...durs), Math.max(...durs)];
     const dur = least === most ? fmt(most) : `${fmt(least).replace(" s", "")} a ${fmt(most)}`;
     h += vs.length ? `<div class="viewer__card"><div>${row("movie", "Variações", vs.length)}${row("schedule", "Duração", dur)}</div></div>` : `<p class="sheet-hint">Ligue um bloco ao Final para ter variações.</p>`;
@@ -1814,7 +2064,7 @@ vp.addEventListener(
     else {
       view.x -= e.deltaX;
       view.y -= e.deltaY;
-      applyView();
+      applyView({ moving: true });
     }
   },
   { passive: false },
@@ -2000,7 +2250,7 @@ vp.addEventListener("pointerdown", (e) => {
     onMove = (ev) => {
       view.x = v0.x + ev.clientX - start.x;
       view.y = v0.y + ev.clientY - start.y;
-      applyView();
+      applyView({ moving: true });
     };
     onUp = (ev) => {
       if (moved) return;
@@ -2055,10 +2305,10 @@ vp.addEventListener("pointerdown", (e) => {
       const d = dW(ev);
       project = structuredClone(base);
       Object.assign(project.notes.find((n) => n.id === id), { x: Math.round(n0.x + d.x), y: Math.round(n0.y + d.y) });
-      noteEls.get(id)?.classList.add("is-drag");
+      lift(noteEls.get(id), true);
       renderSoon();
     };
-    onUp = () => noteEls.get(id)?.classList.remove("is-drag");
+    onUp = () => lift(noteEls.get(id), false);
   } else if (blk) {
     const id = blk.dataset.id;
     const b0 = base.blocks.find((b) => b.id === id);
@@ -2087,12 +2337,12 @@ vp.addEventListener("pointerdown", (e) => {
       placed = at;
       project = M.dropBlock(base, id, s);
       $("#snapinfo").textContent = SNAP[s.mode] ?? "";
-      blockEls.get(id)?.classList.add("is-drag");
+      lift(blockEls.get(id), true);
       renderSoon();
     };
     onUp = () => {
       $("#snapinfo").textContent = "";
-      blockEls.get(id)?.classList.remove("is-drag");
+      lift(blockEls.get(id), false);
       if (moved) render();
     };
   } else if (fin) {
@@ -2144,6 +2394,8 @@ vp.addEventListener("pointerdown", (e) => {
     window.removeEventListener("pointerup", up);
     window.removeEventListener("pointercancel", up);
     vp.classList.remove("is-panning");
+    // A camada de rolar sai ao soltar: o canvas volta a ser desenhado na vista de agora.
+    if (panBase) restWorld();
     onUp(ev);
     if (moved && dropped && !ev.altKey) render(), settle(dropped.kind, dropped.id);
     if (moved) commit(base), render();

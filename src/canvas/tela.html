@@ -9,6 +9,7 @@ html, body { height: 100%; }
 body { min-height: 0; overflow: hidden; }
 .editor { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--layout-config); border-top: 1px solid var(--md-sys-color-outline-variant); }
 .editor .viewer__sheet { border-left: 1px solid var(--md-sys-color-outline-variant); }
+@media (min-width: 840px) { .editor { grid-template-rows: minmax(0, 1fr); } }
 .top-app-bar { flex-wrap: nowrap; }
 .top-app-bar__actions { flex-wrap: wrap; justify-content: flex-end; }
 
@@ -17,6 +18,11 @@ body { min-height: 0; overflow: hidden; }
 #vp {
   position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none;
   background-color: var(--md-sys-color-surface-container);
+}
+/* Os pontos do fundo ficam num elemento próprio, 512 px maior que o canvas para cada lado, dentro do
+   #pan: ao rolar, andam junto com o resto, na mesma camada, sem serem desenhados de novo. */
+#grid {
+  position: absolute; inset: -512px;
   background-image: radial-gradient(circle, var(--md-sys-color-outline-variant) 1px, transparent 1.2px);
 }
 #vp.is-panning { cursor: grabbing; }
@@ -26,13 +32,18 @@ body { min-height: 0; overflow: hidden; }
   border: 2px dashed var(--md-sys-color-primary); border-radius: var(--md-sys-shape-corner-large);
   background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
 }
-#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-/* Com zoom (--zi = 1 / zoom, a partir de 100%), sombras, contornos e linhas mantêm a
-   espessura da tela, sem engrossar e sem passar das bordas dos blocos. */
-#world {
-  --el1: 0 calc(1px * var(--zi, 1)) calc(2px * var(--zi, 1)) 0 rgb(0 0 0 / 0.3), 0 calc(1px * var(--zi, 1)) calc(3px * var(--zi, 1)) calc(1px * var(--zi, 1)) rgb(0 0 0 / 0.15);
-  --el3: 0 calc(1px * var(--zi, 1)) calc(3px * var(--zi, 1)) 0 rgb(0 0 0 / 0.3), 0 calc(4px * var(--zi, 1)) calc(8px * var(--zi, 1)) calc(3px * var(--zi, 1)) rgb(0 0 0 / 0.15);
-}
+/* Rolar o canvas: enquanto a vista anda, o #pan (os pontos do fundo e tudo o que está no canvas) vira
+   uma camada própria e só ela se desloca, em px inteiros da tela: o que está dentro não é desenhado de
+   novo a cada quadro. Parado, não tem efeito nenhum. O clique no vazio continua sendo do #vp. */
+#pan { position: absolute; inset: 0; pointer-events: none; }
+#pan.is-moving { will-change: transform; }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: auto; }
+/* Com zoom, a partir de 100%, sombras, contornos e linhas mantêm a espessura da tela, sem engrossar e
+   sem passar das bordas dos blocos. As medidas que mudam com o zoom ficam em quem as usa, e não no
+   #world: uma medida posta nele fazia o navegador recalcular o estilo de tudo o que está no canvas a
+   cada quadro do zoom, mesmo quando ela só valia para os pontos de ligação. O script (applyZoom, em
+   canvas.js) põe a sombra em cada bloco e no Final (acima de 100%; até lá vale a daqui), a medida em
+   cada controle, --wsw no #wires, --lz no #blocks e --tk no bloco escolhido. */
 #wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
 /* O fio é um traço, mas fica dentro do canvas ampliado (é SVG, que não arredonda traço fino): a
    espessura vem já dividida pelo zoom (--wsw, do script). O non-scaling-stroke não desfaz o zoom do
@@ -47,12 +58,12 @@ body { min-height: 0; overflow: hidden; }
 .blk {
   position: absolute; cursor: grab; isolation: isolate;
   border-radius: var(--md-sys-shape-corner-medium); background: var(--c); color: var(--on);
-  box-shadow: var(--el1);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
   transition: box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
 }
 .blk::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; pointer-events: none; transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
 .blk:hover::after { opacity: var(--md-sys-state-hover-state-layer-opacity); }
-.blk.is-drag { cursor: grabbing; box-shadow: var(--el3); z-index: 1; }
+.blk.is-drag { cursor: grabbing; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15); z-index: 1; }
 .blk__label {
   position: absolute; left: 0; right: 0; top: 0; height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 8px;
   font: var(--md-sys-typescale-label-medium); letter-spacing: 0.031rem; white-space: nowrap; pointer-events: none; overflow: hidden;
@@ -78,7 +89,7 @@ body { min-height: 0; overflow: hidden; }
 /* Áudio vinculado: faixa de 40 px embaixo da imagem, na cor e no tom do vídeo, com a onda dele. */
 /* A onda vai de borda a borda do bloco: o x dela é o mesmo tempo do vídeo (o corte de agora). */
 /* O som do vídeo fica na área de som, na faixa dele; puxar por ela muda a faixa. */
-.blk__link { display: none; position: absolute; left: 0; right: 0; top: var(--link-top); height: 40px; overflow: hidden; border-radius: var(--md-sys-shape-corner-small); background: color-mix(in srgb, var(--on) 10%, var(--c)); box-shadow: var(--el1); cursor: ns-resize; }
+.blk__link { display: none; position: absolute; left: 0; right: 0; top: var(--link-top); height: 40px; overflow: hidden; border-radius: var(--md-sys-shape-corner-small); background: color-mix(in srgb, var(--on) 10%, var(--c)); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15); cursor: ns-resize; }
 .blk__wave { position: absolute; inset: 4px 0; background: var(--on); opacity: 0.55; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .blk.is-linked .blk__link { display: block; }
 .blk.is-linked.is-mute .blk__wave { opacity: 0.2; }
@@ -108,8 +119,9 @@ body { min-height: 0; overflow: hidden; }
 .gtab.is-sel .icon { color: inherit; }
 /* Os traços (contorno do grupo, divisa entre vídeo e som, seleção, guia do corte) ficam numa camada
    fora do canvas ampliado, #lines, em px inteiros da tela (--sw, do script): 2 px até 100% de zoom,
-   3 px em 200%, 4 px a partir de 400%. O contorno do grupo é tracejado, em primary quando escolhido. */
-#lines { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; }
+   3 px em 200%, 4 px a partir de 400%. O contorno do grupo é tracejado, em primary quando escolhido.
+   A camada fica dentro do #pan (sem corte próprio: quem corta é o #vp), para andar com ele ao rolar. */
+#lines { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
 .stroke { position: absolute; box-sizing: border-box; }
 .stroke--frame { border: var(--sw) dashed var(--md-sys-color-outline); }
 .stroke--frame.is-sel { border-color: var(--md-sys-color-primary); }
@@ -126,8 +138,9 @@ body { min-height: 0; overflow: hidden; }
 /* Tocar o bloco escolhido: o ícone do tipo, no rótulo, vira o tocar (e o pausar), no mesmo lugar e
    com a mesma largura e altura; o resto do bloco fica livre para arrastar. */
 .blk__kind[data-play-block] { pointer-events: auto; cursor: pointer; }
-/* Linha de reprodução: 2 px em primary sobre o que a prévia toca. */
-.playhead { position: absolute; z-index: 3; width: 2px; border-radius: 1px; background: var(--md-sys-color-primary); box-shadow: 0 0 0 1px var(--md-sys-color-surface-container-lowest); pointer-events: none; }
+/* Linha de reprodução: 2 px em primary sobre o que a prévia toca. Numa camada própria (will-change):
+   ela anda a cada quadro da prévia, e o canvas embaixo não é desenhado de novo por isso. */
+.playhead { position: absolute; z-index: 3; will-change: transform; width: 2px; border-radius: 1px; background: var(--md-sys-color-primary); box-shadow: 0 0 0 1px var(--md-sys-color-surface-container-lowest); pointer-events: none; }
 /* Só a alça pega a linha (como a do slider do M3: 12 × 20 px), com uma área de toque maior em volta:
    a linha em si não recebe o clique, para não cobrir a borda de corte do bloco que está embaixo.
    A linha e a alça ficam fora do canvas ampliado (direto no #vp), em px inteiros da tela, e seguem o
@@ -144,8 +157,9 @@ body { min-height: 0; overflow: hidden; }
 .port { cursor: crosshair; }
 /* Sistema de proporção (docs/canvas.md). Conteúdo (blocos, miniaturas, ondas, texto): acompanha o
    zoom. Controles (ponto de ligação, aba do grupo, ícone das áreas): aproximando, crescem pela raiz do
-   zoom, de 1 a 2 vezes; afastando, encolhem mais devagar que o canvas (0,66 a 50%). --ck, do script,
-   já desfaz o zoom do canvas; a borda de corte (--tk) não encolhe abaixo de 10 px, porque só se pega. Traços: a mesma medida, em px inteiros (--sw), fora do canvas ampliado. O texto do
+   zoom, de 1 a 2 vezes; afastando, encolhem mais devagar que o canvas (0,66 a 50%). A medida vem do
+   script, já desfeito o zoom do canvas, no estilo de cada controle (zoomStyle, em canvas.js; --ck fica
+   de reserva); a borda de corte (--tk) não encolhe abaixo de 10 px, porque só se pega. Traços: a mesma medida, em px inteiros (--sw), fora do canvas ampliado. O texto do
    rótulo, afastado, não fica menor que uns 10 px (--lz), e de longe o rótulo mostra só o nome. */
 .port { transform: scale(var(--ck, 1)); }
 .trim { transform: scaleX(var(--tk, 1)); }
@@ -162,7 +176,7 @@ body { min-height: 0; overflow: hidden; }
 .fin {
   position: absolute; width: max-content; min-width: 180px; padding: 12px 8px 8px; cursor: grab;
   border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary);
-  box-shadow: var(--el1);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
 }
 .fin__head { display: flex; align-items: center; gap: 16px; height: 56px; padding: 0 8px; }
 .fin__head > span:last-child { display: flex; flex-direction: column; }
@@ -459,11 +473,15 @@ a.xlist__item { color: inherit; text-decoration: none; }
   </aside>
   <div class="canvas">
     <div id="vp">
-      <div id="world">
-        <svg id="wires"></svg>
-        <div id="chrome"></div>
+      <div id="pan">
+        <div id="grid"></div>
+        <div id="world">
+          <svg id="wires"><path id="wire-temp" class="wire wire--temp" d=""/></svg>
+          <div id="chrome"></div>
+          <div id="blocks"></div>
+        </div>
+        <div id="lines"></div>
       </div>
-      <div id="lines"></div>
     </div>
     <div class="tooltip" id="snapinfo" role="status"></div>
     <div class="canvas-empty" id="canvas-empty" hidden>

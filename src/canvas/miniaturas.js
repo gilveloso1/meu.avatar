@@ -9,6 +9,47 @@ const LOW_H = 40;
 const SHARP_H = 80;
 const peaks = new Map();
 
+/**
+ * A imagem de um canvas como endereço curto (blob:), no lugar do data: com a imagem inteira em texto.
+ * A miniatura e a onda ficam no estilo do bloco, e o navegador relia esse texto (dezenas de KB por
+ * bloco) cada vez que recalculava o estilo dele: a cada quadro do zoom, a cada seleção. A imagem é a mesma.
+ */
+function toUrl(canvas, type, quality) {
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error("sem imagem"))), type, quality));
+}
+
+/** A onda nítida que saiu da tela não serve mais: solta a imagem dela. */
+export const dropWave = (url) => URL.revokeObjectURL(url);
+
+/**
+ * Poucos arquivos por vez: abrir um projeto com dezenas de vídeos punha todos para baixar e
+ * decodificar juntos (um vídeo por miniatura, o som inteiro por onda), e a página travava até acabar.
+ */
+function queue(limit) {
+  let running = 0;
+  const waiting = [];
+  const next = () => {
+    if (running >= limit || !waiting.length) return;
+    running++;
+    const { job, resolve, reject } = waiting.shift();
+    // Um arquivo que demora (ou que nunca responde) não segura a vez dos outros: depois de 15 s, o seguinte entra.
+    let held = true;
+    const free = () => {
+      if (!held) return;
+      held = false;
+      running--;
+      next();
+    };
+    const timer = setTimeout(free, 15000);
+    job()
+      .then(resolve, reject)
+      .finally(() => (clearTimeout(timer), free()));
+  };
+  return (job) => new Promise((resolve, reject) => (waiting.push({ job, resolve, reject }), next()));
+}
+const frames = queue(4);
+const sounds = queue(2);
+
 export function thumb(block) {
   const key = block.draft ? `rascunho:${draftLines(block)}` : `${block.kind}:${block.src}`;
   if (!cache.has(key)) cache.set(key, make(block).catch(() => ""));
@@ -23,25 +64,34 @@ async function make(b) {
 }
 
 function frame(src) {
-  return new Promise((resolve, reject) => {
-    const v = document.createElement("video");
-    v.muted = true;
-    v.preload = "auto";
-    v.src = src;
-    v.addEventListener("loadeddata", () => (v.currentTime = Math.min(0.5, v.duration / 2)), { once: true });
-    v.addEventListener(
-      "seeked",
-      () => {
-        const c = document.createElement("canvas");
-        c.height = Math.min(FRAME_H, v.videoHeight);
-        c.width = Math.round((c.height * v.videoWidth) / v.videoHeight);
-        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-        resolve(c.toDataURL("image/jpeg", 0.8));
-      },
-      { once: true },
-    );
-    v.addEventListener("error", reject, { once: true });
-  });
+  return frames(
+    () =>
+      new Promise((resolve, reject) => {
+        const v = document.createElement("video");
+        // Com o quadro na mão (ou o erro), o vídeo para de baixar e solta o decodificador.
+        const release = () => {
+          v.removeAttribute("src");
+          v.load();
+        };
+        v.muted = true;
+        v.preload = "auto";
+        v.src = src;
+        v.addEventListener("loadeddata", () => (v.currentTime = Math.min(0.5, v.duration / 2)), { once: true });
+        v.addEventListener(
+          "seeked",
+          () => {
+            const c = document.createElement("canvas");
+            c.height = Math.min(FRAME_H, v.videoHeight);
+            c.width = Math.round((c.height * v.videoWidth) / v.videoHeight);
+            c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+            release();
+            resolve(toUrl(c, "image/jpeg", 0.8));
+          },
+          { once: true },
+        );
+        v.addEventListener("error", (e) => (release(), reject(e)), { once: true });
+      }),
+  );
 }
 
 /** Os picos do som, um byte por passo de 1/PEAK_PX s: é o que fica guardado de cada áudio. */
@@ -62,7 +112,7 @@ async function readPeaks(src) {
 }
 
 function peaksOf(src) {
-  if (!peaks.has(src)) peaks.set(src, readPeaks(src));
+  if (!peaks.has(src)) peaks.set(src, sounds(() => readPeaks(src)));
   return peaks.get(src);
 }
 
@@ -82,7 +132,7 @@ function draw(p, start, end, width, height) {
     const h = Math.max(1, (peak / 255) * (height - 2));
     ctx.fillRect(x, (height - h) / 2, 1, h);
   }
-  return c.toDataURL();
+  return toUrl(c);
 }
 
 /** A onda do arquivo inteiro, leve: é a que fica no bloco. */
