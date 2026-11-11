@@ -53,6 +53,26 @@ const areas = [
 ];
 const pilha = (a, ...extra) => (a.nome === "vídeo" ? base(a.novo(), ...extra) : base(a.novo(), faixa("m", 0, 0, 10), ...extra));
 
+test("corte alinhado: a ponta para na ponta do elemento de outra trilha, e só perto dela", () => {
+  // A base de 10 s (0 a 10 * PX) e uma cobertura por cima, de 1 s a 7 s.
+  const p = base(el("c", 1 * M.PX, -M.VIS_H, 6));
+  const fim = (q) => { const b = q.blocks.find((o) => o.id === "c"); return b.x + M.width(b); };
+  // Esticar a cobertura até 9,95 s: a 4 px do fim da base (10 s), para nele.
+  const perto = M.trimAlign(p, "c", "r", 2.95, 8);
+  assert.ok(perto);
+  assert.ok(Math.abs(fim(perto.project) - 10 * M.PX) < 0.01);
+  assert.ok(Math.abs(perto.x - 10 * M.PX) < 0.01);
+  // Longe de qualquer ponta (até 8,5 s): não alinha, e o corte comum vale.
+  assert.equal(M.trimAlign(p, "c", "r", 1.5, 8), null);
+  // Pela esquerda: o começo da cobertura chega a 3 px do começo da base e para nele.
+  const esq = M.trimAlign({ ...p, blocks: p.blocks.map((b) => (b.id === "c" ? { ...b, tin: 2, tout: 8, dur: 10 } : b)) }, "c", "l", -(1 * M.PX - 3) / M.PX, 8);
+  assert.ok(esq);
+  assert.ok(Math.abs(esq.project.blocks.find((o) => o.id === "c").x) < 0.01);
+  // A ponta do vizinho da mesma trilha não conta: só as outras trilhas.
+  const seq = base(el("v", 10 * M.PX, 0, 4));
+  assert.equal(M.trimAlign(seq, "v", "r", -0.02, 8), null);
+});
+
 for (const a of areas) {
   test(`${a.nome}: é puxado ao chegar perto e fica na sua área, venha de onde vier`, () => {
     // O vídeo vem de cima ou da própria área de vídeo; o som, de onde vier.

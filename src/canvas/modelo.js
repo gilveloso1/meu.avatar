@@ -610,6 +610,43 @@ export function snap(project, id, x, y, tol, keep = {}) {
   return { x, y, mode: null };
 }
 
+/**
+ * O corte com a ponta alinhada: se a ponta que o corte move chega perto (até `tol`, em unidades do
+ * canvas) da ponta de um elemento de outra trilha do mesmo bloco (o vídeo de baixo, a cobertura, o
+ * som), o corte para exatamente nela. Devolve o projeto cortado e onde fica a guia ({ x, top,
+ * bottom }), ou null quando não há ponta por perto. Serve para não deixar, sem querer, elementos
+ * com tamanhos quase iguais. A conta de quanto a ponta anda por segundo é medida, não suposta: a
+ * velocidade do bloco e o lado do corte mudam a relação.
+ */
+export function trimAlign(project, id, side, timelineSeconds, tol) {
+  const ends = (p) => {
+    const b = p.blocks.find((o) => o.id === id);
+    return [b.x, b.x + width(b)];
+  };
+  const before = ends(project);
+  const cut = trim(project, id, side, timelineSeconds);
+  const after = ends(cut);
+  const moved = [0, 1].filter((i) => Math.abs(after[i] - before[i]) > EPS);
+  const g = groupIndex(groups(cut)).get(id);
+  if (!moved.length || !g) return null;
+  const me = cut.blocks.find((o) => o.id === id);
+  const others = members(g).filter((o) => o.id !== id && Math.abs(o.y - me.y) > EPS).flatMap((o) => [o.x, o.x + width(o)]);
+  let best = null;
+  for (const i of moved)
+    for (const x of others) {
+      const gap = x - after[i];
+      if (Math.abs(gap) <= tol && (!best || Math.abs(gap) < Math.abs(best.gap))) best = { i, x, gap };
+    }
+  if (!best) return null;
+  const guide = (p) => ({ project: p, x: best.x, top: g.top, bottom: g.bottom });
+  if (Math.abs(best.gap) < EPS) return guide(cut);
+  const step = 0.01;
+  const perSecond = (ends(trim(project, id, side, timelineSeconds + step))[best.i] - after[best.i]) / step;
+  if (Math.abs(perSecond) < EPS) return null;
+  const aligned = trim(project, id, side, timelineSeconds + best.gap / perSecond);
+  return Math.abs(ends(aligned)[best.i] - best.x) > 0.5 ? null : guide(aligned);
+}
+
 /** A posição que encosta uma ponta do elemento na ponta mais perto, dentro da mira. */
 function nearestEdge(x, w, edges, tol) {
   let best = x;

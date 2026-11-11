@@ -125,6 +125,9 @@ body { min-height: 0; overflow: hidden; }
 .playhead__knob { position: absolute; left: 50%; top: calc(-20px * var(--zi, 1)); width: calc(12px * var(--zi, 1)); height: calc(20px * var(--zi, 1)); transform: translateX(-50%); border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); box-shadow: 0 0 0 calc(2px * var(--zi, 1)) var(--md-sys-color-surface-container-lowest); pointer-events: auto; cursor: ew-resize; }
 .playhead__knob::before { content: ""; position: absolute; inset: calc(-8px * var(--zi, 1)); }
 .playhead__knob:hover, .playhead.is-drag .playhead__knob { width: calc(16px * var(--zi, 1)); }
+/* Guia de alinhamento do corte: linha fina na cor terciária (para não se confundir com a de
+   reprodução, primary), de cima a baixo do bloco, na ponta em que o corte parou. */
+.guide { position: absolute; z-index: 6; width: var(--line); margin-left: calc(var(--line) / -2); background: var(--md-sys-color-tertiary); pointer-events: none; }
 /* Portas: saída em primary (puxa a ligação), entrada no contorno. */
 .port {
   position: absolute; width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full); z-index: 3;
@@ -445,6 +448,7 @@ a.xlist__item { color: inherit; text-decoration: none; }
       <div id="world">
         <svg id="wires"></svg>
         <div id="chrome"></div>
+        <div class="guide" id="guide" hidden></div>
       </div>
     </div>
     <div class="tooltip" id="snapinfo" role="status"></div>

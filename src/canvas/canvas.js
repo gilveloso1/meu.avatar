@@ -1752,6 +1752,14 @@ vp.addEventListener(
  * Puxar uma ligação de um ponto até outro grupo ou Final. end: a ponta que fica parada, de
  * saída (out) ou de entrada, num grupo (group, o id dele) ou num Final (final).
  */
+/** A guia de alinhamento do corte: uma linha de cima a baixo do bloco, na ponta em que o corte parou. */
+function showGuide(at) {
+  const el = $("#guide");
+  el.hidden = !at;
+  $("#snapinfo").textContent = at ? "Alinhado" : "";
+  if (at) Object.assign(el.style, { left: `${at.x}px`, top: `${at.top - 16}px`, height: `${at.bottom - at.top + 32}px` });
+}
+
 /** O ponto de ligação (entrada ou saída) mais perto do mouse, até `reach` px na tela. */
 function nearestPort(x, y, selector, reach = 32) {
   let best = null;
@@ -1943,9 +1951,15 @@ vp.addEventListener("pointerdown", (e) => {
     const id = trimEl.closest(".blk").dataset.id;
     sel = { type: "block", id };
     onMove = (ev) => {
-      project = M.trim(base, id, trimEl.dataset.trim, dW(ev).x / M.PX);
+      const seconds = dW(ev).x / M.PX;
+      // Perto da ponta de um elemento de outra trilha do bloco (8 px na tela), o corte para nela e a
+      // guia aparece: os dois ficam do mesmo tamanho. Com Alt, corta livre.
+      const aligned = ev.altKey ? null : M.trimAlign(base, id, trimEl.dataset.trim, seconds, 8 / view.z);
+      project = aligned?.project ?? M.trim(base, id, trimEl.dataset.trim, seconds);
+      showGuide(aligned);
       renderSoon();
     };
+    onUp = () => showGuide(null);
   } else if (port) {
     const drag = linkDrag({ out: port.classList.contains("port--out"), group: port.dataset.group, final: port.dataset.final });
     onMove = drag.onMove;
