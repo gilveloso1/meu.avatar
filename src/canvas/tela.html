@@ -303,12 +303,33 @@ a.xlist__item { color: inherit; text-decoration: none; }
 .canvas-empty .empty .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
 /* O ícone grande do estado vazio do site não vale para os ícones dos botões. */
 .canvas-empty .empty .button .icon { font-size: 18px; color: inherit; }
-/* Seus vídeos: diálogo com a lista expressiva; cada item com a miniatura do vídeo. */
+/* Diálogos com lista (exportar e Seus arquivos): a lista expressiva rola por dentro. */
 .library-dialog { width: min(480px, calc(100% - 48px)); }
 .library-dialog .xlist { overflow-y: auto; max-height: 60vh; }
-.xlist__thumb { width: 40px; height: 40px; flex: none; overflow: hidden; border-radius: var(--md-sys-shape-corner-small); background: var(--md-sys-color-surface-container-highest); }
-.xlist__thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.xlist__thumb { width: 40px; height: 40px; flex: none; display: grid; place-items: center; overflow: hidden; border-radius: var(--md-sys-shape-corner-small); background: var(--md-sys-color-surface-container-highest); }
+.xlist__thumb video, .xlist__thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 .xlist__item .icon { color: var(--md-sys-color-primary); }
+/* Seus arquivos: o diálogo básico do M3 na largura máxima (560 px), com altura fixa para a lista
+   não pular a cada troca de origem. De cima para baixo: origem (botões conectados), busca, tipo
+   (chips de filtro), o caminho da pasta aberta e a lista, que rola. */
+.files-dialog { width: min(560px, calc(100% - 48px)); }
+.files-dialog[open] { height: min(720px, calc(100% - 48px)); }
+.files-dialog .segmented-button { display: grid; align-self: stretch; }
+.files-dialog .segmented-button__segment { margin: 0; border: 0; cursor: pointer; }
+.files-dialog .search-field { width: auto; flex: none; background: var(--md-sys-color-surface-container-lowest); }
+.files-dialog .chip-set { margin: 0; flex: none; }
+.files-dialog .crumbs { flex: none; margin-top: -4px; margin-bottom: -4px; }
+.files-dialog button.crumbs__item { margin: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; cursor: pointer; }
+.files-dialog .xlist { flex: 1; min-height: 0; max-height: none; align-content: start; }
+.files-dialog .xlist__item { flex: none; cursor: pointer; }
+.files-dialog .xlist__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-dialog .xlist__item .spinner { position: static; flex: none; width: 24px; height: 24px; }
+.files-dialog .xlist__thumb .icon { font-size: 24px; }
+.files-dialog .xlist__thumb--round { border-radius: var(--md-sys-shape-corner-full); }
+.files-dialog .linear-progress { --progress-gap: var(--md-sys-color-surface-container-high); flex: none; }
+.files-dialog .sheet-hint { margin: auto; text-align: center; }
+.files-dialog .dialog__actions { flex: none; }
+.files-dialog #lib-more { margin-right: auto; }
 </style>
 
 
@@ -324,10 +345,10 @@ a.xlist__item { color: inherit; text-decoration: none; }
     <div class="canvas-empty" id="canvas-empty" hidden>
       <div class="empty">
         <span class="icon" aria-hidden="true">movie</span>
-        <p class="empty__title">Comece pelos seus vídeos</p>
+        <p class="empty__title">Comece pelos seus arquivos</p>
         <p>Traga os ganchos, o corpo e os CTAs, encaixe e ligue ao Final.</p>
         <div class="row">
-          <button class="button button--filled interactive" type="button" data-open-library><span class="icon">video_library</span>Seus vídeos</button>
+          <button class="button button--filled interactive" type="button" data-open-library><span class="icon">photo_library</span>Seus arquivos</button>
           <button class="button button--outlined interactive" type="button" data-open-file><span class="icon">upload</span>Do computador</button>
         </div>
       </div>
@@ -392,11 +413,27 @@ a.xlist__item { color: inherit; text-decoration: none; }
     <a class="button button--filled interactive" id="dlg-zip" hidden><span class="icon">download</span>Baixar todas</a>
   </div>
 </dialog>
-<dialog class="dialog library-dialog" id="lib-dlg" aria-labelledby="lib-title">
-  <h3 id="lib-title">Seus vídeos</h3>
-  <p>Escolha os vídeos prontos que entram no canvas.</p>
+<dialog class="dialog files-dialog" id="lib-dlg" aria-labelledby="lib-title">
+  <h3 id="lib-title">Seus arquivos</h3>
+  <div class="segmented-button" role="group" aria-label="Origem" id="lib-sources">
+    <button class="segmented-button__segment interactive" type="button" data-lib-source="gerado" aria-current="true">Gerados</button>
+    <button class="segmented-button__segment interactive" type="button" data-lib-source="avatar">Avatares</button>
+    <button class="segmented-button__segment interactive" type="button" data-lib-source="projeto">Deste projeto</button>
+  </div>
+  <label class="search-field"><span class="icon" aria-hidden="true">search</span><input class="search-field__input" type="search" id="lib-q" placeholder="Buscar" aria-label="Buscar nos seus arquivos" autocomplete="off"></label>
+  <div class="chip-set" role="group" aria-label="Tipo" id="lib-types">
+    <button class="chip interactive" type="button" data-lib-type="" aria-pressed="true"><span class="icon chip__check">check</span>Tudo</button>
+    <button class="chip interactive" type="button" data-lib-type="video" aria-pressed="false"><span class="icon chip__check">check</span>Vídeos</button>
+    <button class="chip interactive" type="button" data-lib-type="imagem" aria-pressed="false"><span class="icon chip__check">check</span>Imagens</button>
+    <button class="chip interactive" type="button" data-lib-type="audio" aria-pressed="false"><span class="icon chip__check">check</span>Áudios</button>
+  </div>
+  <div class="crumbs" id="lib-crumbs" hidden></div>
+  <div class="linear-progress" id="lib-progress" role="progressbar" aria-label="Carregando" hidden></div>
   <div class="xlist" id="lib-list"></div>
-  <div class="dialog__actions"><button class="button button--text interactive" type="button" id="lib-close">Fechar</button></div>
+  <div class="dialog__actions">
+    <button class="button button--text interactive" type="button" id="lib-more" hidden>Mostrar mais</button>
+    <button class="button button--text interactive" type="button" id="lib-close">Fechar</button>
+  </div>
 </dialog>
 <input type="file" id="file" accept="video/*,image/*,audio/*" multiple hidden>
 <div class="snackbar" id="toast" role="status" hidden><span class="snackbar__text" id="toast-text"></span><div class="linear-progress" id="toast-progress" role="progressbar" aria-label="Enviando" hidden></div></div>

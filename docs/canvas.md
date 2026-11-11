@@ -211,7 +211,7 @@ menos custo.
   Abrir e Apagar (com uma página de confirmação; leva o projeto e os arquivos
   enviados para ele, os vídeos não).
 - **Canvas de um projeto** (`/canvas/<id>`; `/canvas` sozinho leva à lista): a barra
-  tem o nome do projeto, Bloco final, Do computador e Seus vídeos. Salva sozinho
+  tem o nome do projeto, Bloco final, Do computador e Seus arquivos. Salva sozinho
   pouco depois de cada mudança (`POST /projetos/<id>/salvar`, o canvas em JSON, até
   1 MB); se falhar, um aviso. O nome muda na barra superior (um clique no título; sair do campo salva, Esc desiste) ou
   nos Ajustes, sem nada escolhido, onde também ficam os dados do projeto: criado em,
@@ -231,6 +231,21 @@ menos custo.
   continua grupo; linhas não vão junto. Duplicar põe logo embaixo, com "(cópia)" nos blocos. O Colar do
   menu lê a área de transferência pelo navegador, que pode pedir permissão; se não der, o aviso pede o
   Ctrl+V (`copyItems`, `pasteItems` em `modelo.js`).
+- **Seus arquivos** (11/11/2026, no lugar do "Seus vídeos", que só trazia os 100 vídeos gerados mais
+  novos): um seletor só para tudo o que a pessoa pode pôr no projeto. É o diálogo básico do M3 (560
+  px), com a origem em botões conectados (Gerados, Avatares, Deste projeto), a busca, o tipo em chips
+  de filtro (Tudo, Vídeos, Imagens, Áudios) e a lista expressiva, que rola. **Gerados** traz vídeo,
+  imagem e áudio de todos os modelos, com as pastas da aba Vídeos; **Avatares** mostra primeiro os
+  avatares e, dentro de um, as pastas e os ativos dele; **Deste projeto**, os arquivos enviados a
+  ele, mesmo os que nenhum bloco usa (os de outro projeto não entram: a exportação só lê os do
+  próprio). Como nas listas do site, a pasta é um item da lista, antes dos arquivos; a raiz mostra só
+  o que está fora de pasta; a pasta aberta tem o caminho de volta (`.crumbs`); a busca procura em
+  tudo, sem pastas. Tocar num arquivo põe o bloco no canvas, embaixo de tudo, e o diálogo fica
+  aberto para o próximo (o item ganha o check). Vem do servidor em páginas de 24 (`LIBRARY_PAGE`),
+  com "Mostrar mais", por `GET /projetos/<id>/acervo` (`projectLibrary`, `src/site/site.ts`), que usa
+  o mesmo acervo do agente (`src/acervo.ts`); a página do canvas não carrega mais lista nenhuma ao
+  abrir. A duração do vídeo e do áudio é lida no navegador, do cabeçalho do arquivo; a imagem entra
+  com 3 s.
 - **Do computador**: o arquivo vai para o R2 (`projetos/<projeto>/<arquivo>`, tabela
   `project_files`), com os limites do site (imagem 10 MB, vídeo e áudio 50 MB), e o
   bloco usa o endereço de lá; não some ao recarregar.

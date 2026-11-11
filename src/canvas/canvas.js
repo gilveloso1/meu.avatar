@@ -933,35 +933,138 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("[data-open-library]")) openLibrary();
 });
 
-/* ---------- seus vídeos ---------- */
+/* ---------- seus arquivos ---------- */
 
+// O seletor único: o que a pessoa gerou (vídeo, imagem e áudio), os ativos dos avatares e os arquivos
+// deste projeto, com busca, tipo e pastas. Vem do servidor uma página por vez (PROJETO.acervo, o mesmo
+// acervo do agente); no protótipo, sem servidor, só os vídeos do exemplo (CONFIG.videos).
 const lib = $("#lib-dlg");
+const KIND = { video: "video", imagem: "image", audio: "audio" };
+const SOURCES = { gerado: "Gerados", avatar: "Avatares", projeto: "Deste projeto" };
+const EMPTY = { gerado: "Você ainda não gerou nada.", avatar: "Seus avatares ainda não têm arquivos.", projeto: "Este projeto ainda não tem arquivos enviados." };
+// Onde a pessoa está no seletor: a origem, o tipo, a busca e, dentro da origem, o avatar e a pasta abertos.
+let libAt = { fonte: "gerado", tipo: "", q: "", avatar: null, pasta: null };
+let libItems = [];
+let libNext = null;
+let libCall = 0;
+
 function openLibrary() {
-  const videos = CONFIG.videos ?? [];
-  $("#lib-list").innerHTML = videos.length
-    ? videos
-        .map((v, i) => `<button class="xlist__item interactive" type="button" data-lib="${i}"><span class="xlist__thumb"><video src="${esc(v.src)}#t=0.5" preload="metadata" muted playsinline></video></span><span class="xlist__text">${esc(v.name)}</span><span class="xlist__trail">${esc(v.when ?? "")}</span><span class="icon" hidden>check</span></button>`)
-        .join("")
-    : `<p class="sheet-hint">Você ainda não tem vídeos prontos.</p>`;
   lib.showModal();
+  loadLibrary();
 }
+
+/** Uma página do seletor; com `more`, a seguinte, no fim da lista. Só a resposta do último pedido vale. */
+async function loadLibrary(more = false) {
+  const call = ++libCall;
+  const list = $("#lib-list");
+  if (!more) (libItems = []), (libNext = null), (list.innerHTML = ""), (list.scrollTop = 0);
+  $("#lib-more").hidden = true;
+  renderCrumbs();
+  let data;
+  if (!PROJETO?.acervo) {
+    const q = libAt.q.toLowerCase();
+    const videos = libAt.fonte === "gerado" && (!libAt.tipo || libAt.tipo === "video") ? (CONFIG.videos ?? []) : [];
+    data = { arquivos: videos.filter((v) => !q || v.name.toLowerCase().includes(q)).map((v) => ({ id: v.src, nome: v.name, tipo: "video", src: v.src, quando: v.when ?? "" })) };
+  } else {
+    $("#lib-progress").hidden = false;
+    const at = { fonte: libAt.fonte, tipo: libAt.tipo, q: libAt.q, avatar: libAt.avatar?.id ?? "", pasta: libAt.pasta?.id ?? "", continuar: more ? libNext : "" };
+    try {
+      const res = await fetch(`${PROJETO.acervo}?${new URLSearchParams(Object.entries(at).filter(([, v]) => v))}`);
+      if (!res.ok) throw new Error(String(res.status));
+      data = await res.json();
+    } catch {
+      if (call !== libCall) return;
+      $("#lib-progress").hidden = true;
+      if (!more) list.innerHTML = `<p class="sheet-hint">${esc(CONFIG.erros?.acervo ?? "")}</p>`;
+      else toast(CONFIG.erros?.acervo ?? "");
+      return;
+    }
+    if (call !== libCall) return;
+    $("#lib-progress").hidden = true;
+  }
+  const from = libItems.length;
+  libItems.push(...(data.arquivos ?? []));
+  libNext = data.continuar ?? null;
+  const folders = [
+    ...(data.avatares ?? []).map((a) => `<button class="xlist__item interactive" type="button" data-lib-avatar="${esc(a.id)}" data-name="${esc(a.nome)}"><span class="xlist__thumb xlist__thumb--round">${a.foto ? `<img src="${esc(a.foto)}" alt="" loading="lazy">` : `<span class="icon" aria-hidden="true">face</span>`}</span><span class="xlist__text">${esc(a.nome)}</span><span class="xlist__trail">${a.itens}</span></button>`),
+    ...(data.pastas ?? []).map((p) => `<button class="xlist__item interactive" type="button" data-lib-folder="${esc(p.id)}" data-name="${esc(p.nome)}"><span class="xlist__thumb"><span class="icon" aria-hidden="true">folder</span></span><span class="xlist__text">${esc(p.nome)}</span><span class="xlist__trail">${p.itens}</span></button>`),
+  ];
+  const files = (data.arquivos ?? []).map((a, i) => {
+    // O vídeo só baixa o começo, para o quadro; a imagem, quando aparece; o áudio não tem imagem.
+    const thumb = a.tipo === "video" ? `<video src="${esc(a.src)}#t=0.5" preload="metadata" muted playsinline></video>` : a.tipo === "imagem" ? `<img src="${esc(a.src)}" alt="" loading="lazy">` : `<span class="icon" aria-hidden="true">mic</span>`;
+    return `<button class="xlist__item interactive" type="button" data-lib="${from + i}" title="${esc(a.nome)}"><span class="xlist__thumb">${thumb}</span><span class="xlist__text">${esc(a.nome)}</span><span class="xlist__trail">${esc(a.de ?? a.quando ?? "")}</span><span class="icon" hidden data-added>check</span></button>`;
+  });
+  list.insertAdjacentHTML("beforeend", [...folders, ...files].join(""));
+  if (!list.children.length) list.innerHTML = `<p class="sheet-hint">${esc(libAt.q || libAt.tipo || libAt.pasta ? "Nada encontrado." : EMPTY[libAt.fonte])}</p>`;
+  $("#lib-more").hidden = !libNext;
+}
+
+/** O caminho da pasta aberta (Avatares › Touro › Fotos), com a volta em cada parte; na raiz, some. */
+function renderCrumbs() {
+  const el = $("#lib-crumbs");
+  const parts = [libAt.avatar && { name: libAt.avatar.name, go: "avatar" }, libAt.pasta && { name: libAt.pasta.name }].filter(Boolean);
+  el.hidden = !parts.length || !!libAt.q;
+  if (el.hidden) return;
+  const sep = `<span class="icon" aria-hidden="true">chevron_right</span>`;
+  el.innerHTML = `<nav class="crumbs__path" aria-label="Pasta aberta"><button class="crumbs__item interactive" type="button" data-lib-up="raiz">${SOURCES[libAt.fonte]}</button>${parts
+    .map((p, i) => sep + (i === parts.length - 1 ? `<span class="crumbs__item crumbs__item--current" aria-current="page">${esc(p.name)}</span>` : `<button class="crumbs__item interactive" type="button" data-lib-up="${p.go}">${esc(p.name)}</button>`))
+    .join("")}</nav>`;
+}
+
 $("#lib-close")?.addEventListener("click", () => lib.close());
+$("#lib-more")?.addEventListener("click", () => loadLibrary(true));
+$("#lib-sources")?.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-lib-source]");
+  if (!b) return;
+  for (const o of $("#lib-sources").children) o.toggleAttribute("aria-current", o === b);
+  libAt = { ...libAt, fonte: b.dataset.libSource, avatar: null, pasta: null };
+  loadLibrary();
+});
+$("#lib-types")?.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-lib-type]");
+  if (!b) return;
+  for (const o of $("#lib-types").children) o.setAttribute("aria-pressed", String(o === b));
+  libAt = { ...libAt, tipo: b.dataset.libType };
+  loadLibrary();
+});
+let libTyping = 0;
+$("#lib-q")?.addEventListener("input", (e) => {
+  clearTimeout(libTyping);
+  libTyping = setTimeout(() => {
+    libAt = { ...libAt, q: e.target.value.trim() };
+    loadLibrary();
+  }, 250);
+});
+$("#lib-crumbs")?.addEventListener("click", (e) => {
+  const up = e.target.closest("[data-lib-up]")?.dataset.libUp;
+  if (!up) return;
+  libAt = up === "avatar" ? { ...libAt, pasta: null } : { ...libAt, avatar: null, pasta: null };
+  loadLibrary();
+});
 $("#lib-list")?.addEventListener("click", async (e) => {
+  const avatar = e.target.closest("[data-lib-avatar]");
+  const folder = e.target.closest("[data-lib-folder]");
+  if (avatar || folder) {
+    libAt = avatar ? { ...libAt, avatar: { id: avatar.dataset.libAvatar, name: avatar.dataset.name }, pasta: null } : { ...libAt, pasta: { id: folder.dataset.libFolder, name: folder.dataset.name } };
+    return loadLibrary();
+  }
   const item = e.target.closest("[data-lib]");
   if (!item || item.dataset.adding) return;
   item.dataset.adding = "1";
   item.classList.add("is-busy");
   item.insertAdjacentHTML("beforeend", `<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.8"/></svg>`);
-  const v = CONFIG.videos[+item.dataset.lib];
+  const a = libItems[+item.dataset.lib];
+  const kind = KIND[a.tipo];
   try {
-    const dur = await probeUrl(v.src);
+    // A imagem não tem duração: fica 3 s e pode ir até o limite; o vídeo e o áudio dizem a deles.
+    const dur = kind === "image" ? M.IMAGE_MAX : await probeUrl(a.src, kind);
     const r = vp.getBoundingClientRect();
     const at = toWorld(r.left + 80, r.top + 120);
     const before = project;
     project = structuredClone(project);
     // Um embaixo do outro, para não cair em cima do que já está no canvas.
     const y = Math.max(at.y, ...project.blocks.map((b) => b.y + M.height(b) + 48));
-    const b = { id: M.newId("b"), tone: M.nextTone(project, "video", v.src), kind: "video", name: v.name, src: v.src, dur, tin: 0, tout: dur, x: at.x, y, mute: false, vol: 1 };
+    const b = { id: M.newId("b"), tone: M.nextTone(project, kind, a.src), kind, name: a.nome, src: a.src, dur, tin: 0, tout: kind === "image" ? 3 : dur, x: at.x, y, mute: false, vol: 1 };
     project.blocks.push(b);
     const first = M.linkFirst(project, b);
     sel = { type: "block", id: b.id };
@@ -969,21 +1072,22 @@ $("#lib-list")?.addEventListener("click", async (e) => {
     commit(before);
     render();
     if (first) fit();
-    item.querySelector(".icon").hidden = false;
-    toast(`${v.name} entrou no canvas.`);
+    $("[data-added]", item).hidden = false;
+    toast(`${a.nome} entrou no canvas.`);
   } catch {
-    toast(CONFIG.erros?.video ?? "");
+    toast((kind === "video" ? CONFIG.erros?.video : CONFIG.erros?.abrir) ?? "");
   }
   delete item.dataset.adding;
   item.classList.remove("is-busy");
-  item.querySelector(".spinner").remove();
+  $(".spinner", item)?.remove();
 });
 
-function probeUrl(src) {
+/** A duração de um vídeo ou de um áudio pelo endereço (só o cabeçalho do arquivo). */
+function probeUrl(src, kind = "video") {
   return new Promise((resolve, reject) => {
-    const el = document.createElement("video");
+    const el = document.createElement(kind);
     el.preload = "metadata";
-    el.onloadedmetadata = () => resolve(el.duration);
+    el.onloadedmetadata = () => (Number.isFinite(el.duration) && el.duration > 0 ? resolve(el.duration) : reject(new Error("sem duração")));
     el.onerror = reject;
     el.src = src;
   });
@@ -998,7 +1102,7 @@ $("#file").onchange = (e) => {
 /* ---------- arrastar e colar: arquivos entram como blocos; texto vira nota ---------- */
 
 // Onde o mouse está no canvas: o que for colado entra ali. Fora dele, embaixo de tudo o que já está
-// no canvas (como os "Seus vídeos"), para não cair em cima de nada.
+// no canvas (como os "Seus arquivos"), para não cair em cima de nada.
 let pointer = null;
 vp.addEventListener("pointermove", (e) => (pointer = { x: e.clientX, y: e.clientY }));
 vp.addEventListener("pointerleave", () => (pointer = null));

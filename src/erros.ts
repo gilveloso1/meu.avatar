@@ -138,6 +138,8 @@ export const ERROS = {
   canvasArquivo: erro("Não foi possível abrir o arquivo.", "Use MP4, MOV, JPG, PNG, MP3 ou M4A."),
   canvasColar: erro("Não foi possível ler o que foi copiado.", "Use Ctrl+V ou Cmd+V para colar."),
   canvasVideo: erro("Não foi possível abrir este vídeo.", "Tente de novo em instantes."),
+  canvasAbrir: erro("Não foi possível abrir este arquivo.", "Tente de novo em instantes."),
+  canvasAcervo: erro("Não foi possível carregar os seus arquivos.", "Feche e abra de novo."),
   canvasSalvar: erro("Não foi possível salvar o projeto.", "Confira a conexão e continue editando."),
   canvasConflito: erro("O projeto mudou em outro lugar.", "Refaça a última mudança."),
   canvasEnviar: erro("Não foi possível enviar o arquivo.", "Tente de novo em instantes."),

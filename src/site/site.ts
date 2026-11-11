@@ -19,6 +19,7 @@
  * da página só roda com o nonce da CSP.
  */
 import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
+import { filtro, listar } from "../acervo";
 import { handleMcp } from "../mcp";
 import { ENVIO_PATH, guardarAtivo, MAX_AVATAR_DESCRIPTION, usarEnvio } from "../ativos";
 import { type Accounts, INVITE_HOURS, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
@@ -785,7 +786,7 @@ ${folders.length ? moveDialog({ folders, rootLabel: "Ativos" }, { action: `${src
       if (folder?.kind === "projetos") await this.db.conta(user.id).moveProject(project.id, folder.id);
       return redirect(`/canvas/${project.id}`);
     }
-    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|estado|arquivos|apagar|mover|exportar|exportacoes)(?:\/([0-9a-f-]{36})(?:\/(\d+\.mp[34]|todas\.zip))?)?)?$/.exec(path);
+    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|estado|arquivos|acervo|apagar|mover|exportar|exportacoes)(?:\/([0-9a-f-]{36})(?:\/(\d+\.mp[34]|todas\.zip))?)?)?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     // Projeto de outra pessoa (ou que não existe): a página nem existe.
     if (!m || !project || project.user_id !== user.id) return new Response("não encontrado", { status: 404 });
@@ -796,6 +797,7 @@ ${folders.length ? moveDialog({ folders, rootLabel: "Ativos" }, { action: `${src
     if (!action && !post && path.startsWith("/canvas/")) return this.canvasPage(user, project);
     if (action === "salvar" && post) return this.saveProject(request, project);
     if (action === "estado" && !post) return this.projectState(project, url);
+    if (action === "acervo" && !post && !fileId) return this.projectLibrary(user, project, url);
     if (action === "arquivos" && post && !fileId) return this.uploadProjectFile(request, project);
     if (action === "arquivos" && !post && fileId) {
       const file = await this.db.projectFile(project.id, fileId);
@@ -904,32 +906,78 @@ ${error ? snackbar(error) : ""}`;
     return html(page(`Apagar projeto · ${SITE_NAME}`, body, { bar: { user, back: "/projetos", title: "Apagar projeto" } }));
   }
 
-  /** O canvas de um projeto, com os vídeos prontos de quem usa e o que já estava salvo. */
+  /**
+   * "Seus arquivos" do canvas: o que a pessoa pode pôr no projeto, uma página por vez, do mesmo
+   * acervo do agente (src/acervo.ts). Três origens: o que os modelos geraram (vídeo, imagem e áudio,
+   * com as pastas da aba Vídeos), os ativos de um avatar (com as pastas dele) e os arquivos enviados
+   * a este projeto (os de outro projeto não entram: a exportação só lê os do próprio). Como nas
+   * listas do site, a raiz mostra as pastas e o que está fora delas, e a busca procura em tudo.
+   */
+  private async projectLibrary(user: User, project: Project, url: URL): Promise<Response> {
+    const p = url.searchParams;
+    const fonte = p.get("fonte") ?? "gerado";
+    const q = (p.get("q") ?? "").trim();
+    const pasta = p.get("pasta") ?? "";
+    const avatarId = p.get("avatar") ?? "";
+    const conta = this.db.conta(user.id);
+    // Avatares, sem busca: primeiro se escolhe o avatar.
+    if (fonte === "avatar" && !avatarId && !q) {
+      const [avatars, assets] = await Promise.all([this.db.avatarsByUser(user.id), this.db.assetsByUser(user.id)]);
+      const avatares = avatars.map((a) => ({ id: a.id, nome: a.name, foto: a.photo_asset ? `/avatares/${a.id}/arquivos/${a.photo_asset}` : null, itens: assets.filter((x) => x.avatar_id === a.id).length }));
+      return Response.json({ avatares: avatares.filter((a) => a.itens), arquivos: [] });
+    }
+    const avatar = fonte === "avatar" && avatarId ? await this.db.avatarById(avatarId) : null;
+    if (fonte === "avatar" && avatarId && avatar?.user_id !== user.id) return new Response("não encontrado", { status: 404 });
+    const params = new URLSearchParams({ fonte, limite: String(LIBRARY_PAGE), q });
+    for (const k of ["tipo", "continuar"]) if (p.get(k)) params.set(k, p.get(k)!);
+    if (fonte === "projeto") params.set("projeto", project.id);
+    if (avatar) params.set("avatar", avatar.id);
+    if (pasta && !q) params.set("pasta", pasta);
+    const f = filtro(params, user);
+    if ("erro" in f) return Response.json({ erro: f.erro }, { status: 400 });
+    const raiz = !pasta && !q && fonte !== "projeto";
+    const lista = await listar(this.db, user, { ...f, foraDePasta: raiz }, url);
+    // As pastas vêm antes dos arquivos, só na raiz e na primeira página.
+    let pastas: { id: string; nome: string; itens: number }[] = [];
+    if (raiz && !p.get("continuar") && !p.get("tipo")) {
+      if (avatar) {
+        const assets = await this.db.assetsByAvatar(avatar.id);
+        pastas = (await this.db.folders(avatar.id)).map((x) => ({ id: x.id, nome: x.name, itens: assets.filter((a) => a.folder_id === x.id).length }));
+      } else if (fonte === "gerado") {
+        const n = await conta.folderCounts("videos", STRUCTURES.filter((s) => canUse(s, user)).map((s) => s.id));
+        pastas = (await conta.folders("videos")).map((x) => ({ id: x.id, nome: x.name, itens: n.get(x.id) ?? 0 }));
+      }
+    }
+    const padrao = { video: "Vídeo", imagem: "Imagem", audio: "Áudio" };
+    const arquivos = lista.arquivos.map((a) => ({
+      id: a.id,
+      nome: a.nome ?? ((a.fala ?? a.descricao ?? "").replace(/\[[^\]]*\]/g, " ").trim().split(/\s+/).slice(0, 6).join(" ") || padrao[a.tipo]),
+      tipo: a.tipo,
+      src: a.src,
+      quando: formatDate(a.criado),
+      ...(a.avatar && fonte === "avatar" && !avatar ? { de: a.avatar.nome } : {}),
+    }));
+    return Response.json({ pastas: pastas.filter((x) => x.itens), arquivos, ...(lista.continuar ? { continuar: lista.continuar } : {}) }, { headers: { "cache-control": "private, no-store" } });
+  }
+
+  /** O canvas de um projeto, com o que já estava salvo; os arquivos da pessoa vêm depois, pelo "Seus arquivos". */
   private async canvasPage(user: User, project: Project): Promise<Response> {
-    // Só os vídeos prontos (imagem e áudio não são vídeo; os que falharam não entram): os 100 mais novos.
-    const usable = STRUCTURES.filter((s) => canUse(s, user) && !madeAtOnce(s));
-    const videos = (await this.db.conta(user.id).ready(usable.map((s) => s.id), 0, 100))
-      .map((v) => ({
-        id: v.id,
-        name: v.name ?? (v.prompt.trim().split(/\s+/).slice(0, 6).join(" ") || "Vídeo"),
-        src: `/videos/${v.id}.mp4`,
-        when: formatDate(v.created_at),
-      }));
     let data: unknown = null;
     try {
       data = JSON.parse(project.data);
     } catch {}
     const latest = await this.db.latestExport(project.id, true);
     const config = {
-      videos,
       animacao: ANIMACAO_SRC,
-      projeto: { id: project.id, name: project.name, data, criado: formatDate(project.created_at), modificado: formatDate(project.updated_at), autor: user.name, revisao: project.revision, salvar: `/projetos/${project.id}/salvar`, estado: `/projetos/${project.id}/estado`, arquivos: `/projetos/${project.id}/arquivos`, exportar: `/projetos/${project.id}/exportar` },
+      projeto: { id: project.id, name: project.name, data, criado: formatDate(project.created_at), modificado: formatDate(project.updated_at), autor: user.name, revisao: project.revision, salvar: `/projetos/${project.id}/salvar`, estado: `/projetos/${project.id}/estado`, arquivos: `/projetos/${project.id}/arquivos`, acervo: `/projetos/${project.id}/acervo`, exportar: `/projetos/${project.id}/exportar` },
       exportacao: latest ? this.exports.state(project, latest) : null,
       limites: { imagem: MAX_IMAGE_BYTES, video: MAX_VIDEO_BYTES },
       erros: {
         arquivo: ERROS.canvasArquivo,
         colar: ERROS.canvasColar,
         video: ERROS.canvasVideo,
+        abrir: ERROS.canvasAbrir,
+        acervo: ERROS.canvasAcervo,
         salvar: ERROS.canvasSalvar,
         conflito: ERROS.canvasConflito,
         enviar: ERROS.canvasEnviar,
@@ -945,7 +993,7 @@ ${error ? snackbar(error) : ""}`;
     };
     const actions = `<button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
     <button class="button button--tonal interactive" type="button" data-open-file><span class="icon">upload</span>Do computador</button>
-    <button class="button button--filled interactive" type="button" data-open-library><span class="icon">video_library</span>Seus vídeos</button>`;
+    <button class="button button--filled interactive" type="button" data-open-library><span class="icon">photo_library</span>Seus arquivos</button>`;
     // O JSON vai num bloco de dados (não executa); "<" escapado para não fechar a tag.
     const body = `${CANVAS_STYLE}
 ${CANVAS_BODY}
@@ -2487,6 +2535,8 @@ const AUDIO_THUMB = `<span class="frame__placeholder"><span class="icon-tile ico
 
 /** Quantas pastas um avatar pode ter. */
 export { MAX_FOLDERS };
+/** Quantos arquivos o "Seus arquivos" do canvas traz por vez. */
+export const LIBRARY_PAGE = 24;
 
 /** A lista de ativos do avatar, ou uma pasta dele aberta. */
 const folderHref = (avatarId: string, folderId: string | null) => `/avatares/${avatarId}${folderId ? `?pasta=${folderId}` : ""}`;

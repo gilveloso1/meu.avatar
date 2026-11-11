@@ -1292,24 +1292,27 @@ export class ContaDb {
    * página por vez; com `avatar`, só os gerados com ele. Os filtros de página são os de toda lista
    * do agente (`Pagina`).
    */
-  async readyVideos(structures: string[], f: Pagina & { avatar?: string; folder?: string }): Promise<Video[]> {
+  async readyVideos(structures: string[], f: Pagina & { avatar?: string; folder?: string | null }): Promise<Video[]> {
     if (!structures.length) return [];
     const binds: (string | number)[] = [this.userId, like(f.q ?? "")];
     const bind = (v: string | number) => `?${binds.push(v)}`;
     const where = [`structure IN (${structures.map(bind).join(", ")})`, "status = 'completed'", "video_key IS NOT NULL", "(prompt LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\')"];
     if (f.avatar) where.push(`avatar_id = ${bind(f.avatar)}`);
-    if (f.folder) where.push(`folder_id = ${bind(f.folder)}`);
+    // A pasta: o id (só os dela), null (só os de fora de pasta) ou nada (todos).
+    if (f.folder === null) where.push("folder_id IS NULL");
+    else if (f.folder) where.push(`folder_id = ${bind(f.folder)}`);
     return (await this.d1.prepare(`SELECT * FROM videos WHERE user_id = ?1 AND ${[...where, ...pagina(f, bind)].join(" AND ")} ORDER BY created_at DESC, id DESC LIMIT ${bind(f.limite)}`).bind(...binds).all<Video>()).results;
   }
 
   /** Os ativos dos avatares da conta, com o nome do avatar, uma página por vez (como `readyVideos`). */
-  async assetsPage(f: Pagina & { kind?: AssetKind; avatar?: string; folder?: string }): Promise<(AvatarAsset & { avatar_name: string })[]> {
+  async assetsPage(f: Pagina & { kind?: AssetKind; avatar?: string; folder?: string | null }): Promise<(AvatarAsset & { avatar_name: string })[]> {
     const binds: (string | number)[] = [this.userId, like(f.q ?? "")];
     const bind = (v: string | number) => `?${binds.push(v)}`;
     const where = ["x.name LIKE ?2 ESCAPE '\\'"];
     if (f.kind) where.push(`x.kind = ${bind(f.kind)}`);
     if (f.avatar) where.push(`x.avatar_id = ${bind(f.avatar)}`);
-    if (f.folder) where.push(`x.folder_id = ${bind(f.folder)}`);
+    if (f.folder === null) where.push("x.folder_id IS NULL");
+    else if (f.folder) where.push(`x.folder_id = ${bind(f.folder)}`);
     return (
       await this.d1
         .prepare(`SELECT x.*, a.name AS avatar_name FROM avatar_assets x JOIN avatars a ON a.id = x.avatar_id WHERE a.user_id = ?1 AND ${[...where, ...pagina(f, bind, "x.")].join(" AND ")} ORDER BY x.created_at DESC, x.id DESC LIMIT ${bind(f.limite)}`)
