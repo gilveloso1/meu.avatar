@@ -374,6 +374,8 @@ function sharpen() {
 function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
   world.style.setProperty("--zi", String(1 / Math.max(1, view.z)));
+  // O inverso do zoom, em qualquer zoom: o que tem de ter sempre o mesmo tamanho na tela (a linha de reprodução e a alça).
+  world.style.setProperty("--iz", String(1 / view.z));
   // Afastado, portas, bordas de corte e nomes mantêm um tamanho mínimo na tela (tela.html).
   world.style.setProperty("--ps", String(Math.max(1, 16 / (20 * view.z))));
   world.style.setProperty("--ts", String(Math.min(4, Math.max(1, 1 / view.z))));
@@ -448,7 +450,10 @@ function render({ side = true } = {}) {
     // Só mexe no elemento se algo mudou: arrastar um bloco não redesenha os outros.
     // O som do vídeo fica na área de som, na faixa dele.
     const sound = g?.sounds.find((s) => s.block === b);
-    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}|${b.src}|${b.draft?.fala}|${b.draft?.descricao}`;
+    // O bloco escolhido mostra o tocar ou o pausar no lugar do ícone: tocar também redesenha o bloco.
+    const chosen = sel.type === "block" && sel.id === b.id;
+    const playing = chosen && player.playing && preview?.type === "block" && preview.id === b.id;
+    const state = `${look}|${b.x}|${b.y}|${b.tin}|${b.tout}|${b.dur}|${b.name}|${b.tone}|${b.audio}|${sound?.y}|${b.src}|${b.draft?.fala}|${b.draft?.descricao}|${playing}`;
     if (el.drawn === state) continue;
     el.drawn = state;
     el.className = look;
@@ -460,7 +465,12 @@ function render({ side = true } = {}) {
     const media = $(".blk__media", el);
     if (M.linked(b)) paintWave($(".blk__wave", el), b);
     if (b.kind === "audio") paintWave(media, b);
-    $(".blk__kind", el).textContent = b.draft ? "edit_note" : b.code ? "animation" : { video: "movie", image: "image", audio: "music_note" }[b.kind];
+    // O ícone do tipo; no bloco escolhido, o tocar surge no lugar dele, com a mesma largura e altura
+    // (é o próprio ícone que vira o botão: mesma posição, mesmo tamanho, mesma cor).
+    const kindEl = $(".blk__kind", el);
+    kindEl.textContent = chosen ? (playing ? "pause" : "play_arrow") : b.draft ? "edit_note" : b.code ? "animation" : { video: "movie", image: "image", audio: "music_note" }[b.kind];
+    if (chosen) Object.assign(kindEl.dataset, { playBlock: b.id }), kindEl.setAttribute("role", "button"), kindEl.setAttribute("aria-label", playing ? "Pausar" : "Tocar"), (kindEl.title = playing ? "Pausar" : "Tocar");
+    else delete kindEl.dataset.playBlock, kindEl.removeAttribute("role"), kindEl.removeAttribute("aria-label"), kindEl.removeAttribute("title");
     $(".blk__name", el).textContent = b.name;
     if (b.draft) media.replaceChildren(Object.assign(document.createElement("span"), { className: "blk__fala", textContent: draftText(b) }));
     $(".blk__dur", el).textContent = fmt(M.len(b));
@@ -515,14 +525,6 @@ function render({ side = true } = {}) {
     }
     html += `<div class="port port--in" data-group="${g.id}" style="left:${g.x - PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
     html += `<div class="port port--out" data-group="${g.id}" style="left:${g.x + g.w + PORT_OUT - 9}px;top:${g.y + rowH / 2 - 9}px"></div>`;
-  }
-  // Bloco escolhido: o botão de tocar só ele, no canto do rótulo (o meio do bloco fica para arrastar).
-  const sb = sel.type === "block" && project.blocks.find((b) => b.id === sel.id);
-  if (sb) {
-    const w = M.width(sb);
-    const cy = sb.y + (sb.kind === "audio" ? 10 : 14);
-    const playing = player.playing && preview?.type === "block" && preview.id === sb.id;
-    html += `<button class="blk-play interactive" type="button" data-play-block="${sb.id}" style="left:${sb.x + Math.min(16, w / 2)}px;top:${cy}px" aria-label="${playing ? "Pausar" : "Tocar"}" title="${playing ? "Pausar" : "Tocar"}"><span class="icon">${playing ? "pause" : "play_arrow"}</span></button>`;
   }
   for (const f of project.finals) {
     const vs = M.versions(project, f.id, gs);
@@ -861,7 +863,7 @@ function removeSelection() {
   if (sel.type === "group") {
     const g = M.groups(project).find((g) => g.id === sel.id);
     if (g) project = M.removeItems(project, M.members(g).map((b) => b.id));
-  } else if (sel.type) project = M.removeItems(project, [sel.id]);
+  } else if (sel.type) project = M.removeKeeping(project, [sel.id]);
   commit(before);
   sel = { type: null };
   render();

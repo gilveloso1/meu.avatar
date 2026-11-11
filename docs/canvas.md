@@ -55,6 +55,13 @@ menos custo.
   prévia e faz outro vídeo na próxima exportação, sem mexer no código.
 - **Juntar**: blocos encostados lado a lado formam uma sequência fixa (corte
   seco), como numa linha do tempo. Juntos, viram um grupo.
+- **Buraco no bloco** (pedido do dono, 11/11/2026): apagar um elemento do meio de um bloco não o
+  parte em dois: os que ficam continuam no mesmo bloco, com o espaço vazio, para arrastar os outros
+  ou pôr um novo ali. Os elementos que ficam levam a mesma marca (`joint`, `removeKeeping` em
+  `modelo.js`), e `groups` junta quem tem a mesma marca na mesma altura; o elemento solto fora do
+  bloco perde a marca, e o que encaixa num bloco marcado a ganha. Enquanto o buraco estiver na
+  sequência de vídeo, aquele trecho sai sobre fundo preto (o aviso `sem_video_de_base` do agente).
+  Pelos comandos do agente nada mudou: `remover` com `fechar` encosta, e sem ele o grupo se parte.
 - **Sobrepor**: um bloco em cima de outro cobre a imagem dele naquele trecho,
   como um corte para o b-roll; arrastar para os lados escolhe o momento. Um
   b-roll também pode ficar entre dois blocos, como trecho próprio.
@@ -135,7 +142,8 @@ menos custo.
 - **Sem saltos e fácil de pegar** (11/11/2026, do teste de uso com medições, aprovado pelo dono):
   - A linha de reprodução só se pega pela alça de cima; a linha em si não recebe o clique, para não
     cobrir a borda de corte do começo do bloco.
-  - O botão de tocar do bloco escolhido fica no canto do rótulo, pequeno; o bloco inteiro arrasta.
+  - No bloco escolhido, o tocar surge no lugar do ícone do tipo, no rótulo, com a mesma largura e
+    altura (é o próprio ícone que vira o botão); o bloco inteiro arrasta.
   - Puxar pela faixa de som só muda a faixa: o vídeo não sai do lugar.
   - Soltar um grupo ou o Final em cima de outro elemento o leva ao lugar livre mais perto (`settle`,
     `canvas.js`); com Alt, fica onde foi solto. O que entra pelo painel Arquivos ou pelo envio cai num
@@ -154,7 +162,7 @@ menos custo.
   Ajustes (`project.names`, pelo id do primeiro elemento), e vazio volta ao número.
 - **Área e prévia**: o grupo ganha um retângulo tracejado em volta de tudo o
   que entra nele (sequência, coberturas e som), com o chip do nome em cima. O
-  bloco escolhido tem o botão de tocar no canto do rótulo; o chip do grupo também. A prévia
+  bloco escolhido tem o tocar no lugar do ícone do tipo; o chip do grupo também tem o seu. A prévia
   toca só aquilo, e uma linha em primary anda sobre o bloco ou o grupo; a
   linha tem uma alça em cima e pode ser arrastada. Tocando, o botão vira pausar.
   Clicar num ponto vazio dentro da área de um grupo escolhe o grupo e leva a linha

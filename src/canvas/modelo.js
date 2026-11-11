@@ -182,7 +182,8 @@ export function groups(project) {
         const all = members(o);
         const x0 = Math.min(...all.map((b) => b.x));
         const x1 = Math.max(...all.map((b) => b.x + width(b)));
-        if (!overlapX(x0, x1, lo, hi) && !near(x0, hi) && !near(x1, lo)) return false;
+        // Encostam, um fica sobre o outro, ou são do mesmo bloco com um buraco no meio (`joint`).
+        if (!overlapX(x0, x1, lo, hi) && !near(x0, hi) && !near(x1, lo) && !sameJoint(edge, all)) return false;
         // Sem trilha vazia no meio da área de vídeo: longe assim, é só coincidência de altura.
         const top = Math.max(...[...g.blocks, ...g.covers].map((b) => trackIn(b, g)), -1);
         const fits = (b) => trackIn(b, g) >= 0 && (!visual(b) || trackIn(b, g) <= top + 1);
@@ -225,6 +226,17 @@ function soundFirst(g, order) {
   g.soloAudio = true;
   g.id = first.id;
 }
+
+/**
+ * O buraco no bloco (pedido do dono, 11/11/2026): quando um elemento sai do meio de um bloco, os que
+ * ficam levam a mesma marca (`joint`) e seguem no mesmo bloco, com o espaço vazio entre eles, para a
+ * pessoa arrastar os outros ou pôr um novo ali. Sem a marca, o bloco é só geometria (quem encosta), e
+ * tirar um elemento do meio o partia em dois. A marca sai do elemento que é solto fora do bloco.
+ */
+const sameJoint = (a, b) => {
+  const marks = new Set(a.map((o) => o.joint).filter(Boolean));
+  return marks.size > 0 && b.some((o) => o.joint && marks.has(o.joint));
+};
 
 const single = (b, blocks = [], covers = [], audios = []) => ({ id: b.id, blocks, covers, audios, x: b.x, y: b.y, w: width(b), h: VIS_H });
 export const members = (g) => [...g.blocks, ...g.covers, ...g.audios];
@@ -663,6 +675,29 @@ export function dropBlock(project, id, s) {
   const b = p.blocks.find((o) => o.id === id);
   b.x = s.x;
   b.y = s.y;
+  // Encaixado num bloco com buraco, passa a ser dele; solto fora de qualquer bloco, deixa o de antes.
+  const mark = s.mode && s.group ? members(s.group).map((o) => o.joint).find(Boolean) : null;
+  if (mark) b.joint = mark;
+  else delete b.joint;
+  return p;
+}
+
+/**
+ * Tira elementos (como removeItems) sem partir o bloco: os que ficam no bloco de quem saiu levam a
+ * mesma marca e continuam juntos, com o buraco. É o apagar da tela; os comandos do agente seguem com
+ * removeItems (lá, `fechar` encosta a sequência, e sem ele o grupo se parte, com o aviso).
+ */
+export function removeKeeping(project, ids) {
+  const gone = new Set(ids);
+  const stay = new Map();
+  for (const g of groups(project)) {
+    const rest = members(g).filter((b) => !gone.has(b.id));
+    if (rest.length < 2 || rest.length === members(g).length) continue;
+    const mark = rest.map((b) => b.joint).find(Boolean) ?? newId("j");
+    for (const b of rest) stay.set(b.id, mark);
+  }
+  const p = removeItems(project, ids);
+  for (const b of p.blocks) if (stay.has(b.id)) b.joint = stay.get(b.id);
   return p;
 }
 
@@ -1079,8 +1114,11 @@ export function pasteItems(project, items, at, { suffix = false } = {}) {
   const dx = Math.round(at.x - box.x), dy = Math.round(at.y - box.y);
   const empty = !p.blocks.length && !p.finals.length;
   const ids = [];
+  // A cópia de um bloco com buraco é outro bloco: a marca dele é nova, para não se juntar ao original.
+  const marks = new Map();
+  const mark = (j) => marks.get(j) ?? marks.set(j, newId("j")).get(j);
   for (const b of items.blocks) {
-    const c = { ...clone(b), id: newId("b"), x: b.x + dx, y: b.y + dy, ...(suffix ? { name: `${b.name} (cópia)` } : {}) };
+    const c = { ...clone(b), id: newId("b"), x: b.x + dx, y: b.y + dy, ...(suffix ? { name: `${b.name} (cópia)` } : {}), ...(b.joint ? { joint: mark(b.joint) } : {}) };
     p.blocks.push(c);
     ids.push(c.id);
   }

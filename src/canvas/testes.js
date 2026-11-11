@@ -73,6 +73,35 @@ test("corte alinhado: a ponta para na ponta do elemento de outra trilha, e só p
   assert.equal(M.trimAlign(seq, "v", "r", -0.02, 8), null);
 });
 
+test("buraco no bloco: tirar o do meio pela tela mantém o bloco, e o agente segue partindo", () => {
+  // Três vídeos em sequência (0, 200 e 400) e um som embaixo do terceiro.
+  const p = base(el("c", 400, 0), faixa("s", 420, 0, 2));
+  assert.equal(M.groups(p).length, 1);
+  const q = M.removeKeeping(p, ["b"]);
+  const gs = M.groups(q);
+  assert.equal(gs.length, 1);
+  assert.deepEqual(gs[0].blocks.map((b) => b.id), ["a", "c"]);
+  assert.deepEqual([gs[0].x, gs[0].w], [0, 400 + M.width(q.blocks.find((b) => b.id === "c"))]);
+  assert.equal(gs[0].audios.length, 1);
+  // Pelos comandos (removeItems), o grupo se parte como antes.
+  assert.equal(M.groups(M.removeItems(p, ["b"])).length, 2);
+  // Tirar da ponta não deixa buraco nem marca; o bloco de um elemento só também não.
+  assert.equal(M.removeKeeping(base(), ["b"]).blocks[0].joint, undefined);
+  // Um elemento novo encaixa no buraco e passa a ser do bloco; solto fora, deixa o bloco.
+  const novo = { ...q, blocks: [...q.blocks, el("n", 2000, 2000)] };
+  const s = M.snap(novo, "n", 205, 4, 16);
+  assert.deepEqual([s.mode, s.x, s.y], ["video", 200, 0]);
+  const cheio = M.dropBlock(novo, "n", s);
+  assert.equal(cheio.blocks.find((b) => b.id === "n").joint, q.blocks[0].joint);
+  assert.deepEqual(M.groups(cheio)[0].blocks.map((b) => b.id), ["a", "n", "c"]);
+  const fora = M.dropBlock(q, "c", { x: 3000, y: 0, mode: null });
+  assert.equal(fora.blocks.find((b) => b.id === "c").joint, undefined);
+  assert.equal(M.groups(fora).length, 2);
+  // A cópia do bloco com buraco é outro bloco, com a marca dela.
+  const copia = M.pasteItems(q, { blocks: q.blocks, notes: [], finals: [] }, { x: 0, y: 900 });
+  assert.equal(M.groups(copia.project).length, 2);
+});
+
 for (const a of areas) {
   test(`${a.nome}: é puxado ao chegar perto e fica na sua área, venha de onde vier`, () => {
     // O vídeo vem de cima ou da própria área de vídeo; o som, de onde vier.
