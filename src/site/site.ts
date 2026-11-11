@@ -22,7 +22,7 @@ import { Api, API_PATH, bearerToken, PROJECT_API_PATH } from "../api";
 import { handleMcp } from "../mcp";
 import { ENVIO_PATH, guardarAtivo, MAX_AVATAR_DESCRIPTION, usarEnvio } from "../ativos";
 import { type Accounts, INVITE_HOURS, PASSWORD_MAX, PASSWORD_MIN, SESSION_DAYS } from "../auth";
-import type { AccountRow, AssetKind, Avatar, AvatarAsset, Db, Folder, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
+import type { AccountFolder, AccountRow, AssetKind, Avatar, AvatarAsset, Db, Folder, FolderKind, PanelFailure, PanelStats, PanelToken, Project, User, Video, VideoStatus } from "../db";
 import { type CustosExternos, type CustosApi, FRANQUIA, type Limite, type Valor } from "../custos";
 import { ERROS, PARTES } from "../erros";
 import { pode } from "../permissoes";
@@ -243,6 +243,11 @@ export class Site {
 
     // Avatares: os ativos de cada avatar, sem depender de nenhum modelo.
     if (/^\/avatares(\/|$)/.test(path)) return this.avatars(request, user, path, url);
+    // As pastas da conta (aba Vídeos e Projetos) e o "Mover para" de um vídeo.
+    const folder = /^\/pastas(?:\/([0-9a-f-]{36})\/(nome|apagar))?$/.exec(path);
+    if (post && folder) return this.accountFolder(request, user, folder[1], folder[2]);
+    const moveVideo = /^\/videos\/([0-9a-f-]{36})\/mover$/.exec(path);
+    if (post && moveVideo) return this.moveToFolder(request, user, "videos", moveVideo[1]!);
     const saveToAvatar = /^\/videos\/([0-9a-f-]{36})\/salvar-avatar$/.exec(path);
     if (post && saveToAvatar) return this.saveVideoToAvatar(request, user, saveToAvatar[1]!);
     const rename = /^\/videos\/([0-9a-f-]{36})\/nome$/.exec(path);
@@ -341,7 +346,7 @@ export class Site {
         const folders = await this.db.folders(avatar.id);
         if (to && !folders.some((f) => f.id === to)) return new Response("não encontrado", { status: 404 });
         await this.db.moveAsset(avatar.id, asset.id, to || null);
-        return movedTo(request, form, avatar, folders, asset.folder_id);
+        return movedTo(request, form, `/avatares/${avatar.id}`, folderHref(avatar.id, folders.some((f) => f.id === asset.folder_id) ? asset.folder_id : null));
       }
       if (assetAction === "/apagar" && !post) return this.deleteAssetPage(user, avatar, asset);
       if (assetAction === "/apagar" && post) {
@@ -510,7 +515,7 @@ ${error ? snackbar(error) : ""}`;
     </div>
   </aside>
 </main>
-${folders.length ? moveDialog(folders, { action: `${src}/mover`, at: asset.folder_id, back: `${src}/ver` }) : ""}`;
+${folders.length ? moveDialog({ folders, rootLabel: "Ativos" }, { action: `${src}/mover`, at: asset.folder_id, back: `${src}/ver` }) : ""}`;
     return html(page(`${asset.name} · ${SITE_NAME}`, body, { bar: { user, back, title: avatar.name } }));
   }
 
@@ -579,7 +584,7 @@ ${folders.length ? moveDialog(folders, { action: `${src}/mover`, at: asset.folde
     if (action === "/nome") {
       if (!name) return this.avatarPage(user, avatar, ERROS.pastaNome, undefined, undefined, folder.id);
       await this.db.renameFolder(avatar.id, folder.id, name);
-      return movedTo(request, form, avatar, folders, null);
+      return movedTo(request, form, `/avatares/${avatar.id}`, folderHref(avatar.id, null));
     }
     if (action === "/apagar") {
       // A pessoa escolhe: os itens são apagados junto, ou voltam para a lista de ativos.
@@ -773,9 +778,12 @@ ${folders.length ? moveDialog(folders, { action: `${src}/mover`, at: asset.folde
     if (path === "/projetos") {
       if (!post) return this.projectsPage(user, url);
       const project = await this.db.insertProject({ id: crypto.randomUUID(), user_id: user.id, name: "Projeto sem nome", data: EMPTY_PROJECT });
+      // Criado de dentro de uma pasta, o projeto fica nela.
+      const folder = await this.db.conta(user.id).folder(url.searchParams.get("pasta") ?? "");
+      if (folder?.kind === "projetos") await this.db.conta(user.id).moveProject(project.id, folder.id);
       return redirect(`/canvas/${project.id}`);
     }
-    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|estado|arquivos|apagar|exportar|exportacoes)(?:\/([0-9a-f-]{36})(?:\/(\d+\.mp[34]|todas\.zip))?)?)?$/.exec(path);
+    const m = /^\/(?:canvas|projetos)\/([0-9a-f-]{36})(?:\/(salvar|estado|arquivos|apagar|mover|exportar|exportacoes)(?:\/([0-9a-f-]{36})(?:\/(\d+\.mp[34]|todas\.zip))?)?)?$/.exec(path);
     const project = m ? await this.db.projectById(m[1]!) : null;
     // Projeto de outra pessoa (ou que não existe): a página nem existe.
     if (!m || !project || project.user_id !== user.id) return new Response("não encontrado", { status: 404 });
@@ -791,6 +799,7 @@ ${folders.length ? moveDialog(folders, { action: `${src}/mover`, at: asset.folde
       const file = await this.db.projectFile(project.id, fileId);
       return file ? this.object(request, file.key, "private, max-age=86400", url.searchParams.has("baixar") ? file.name : undefined) : new Response("não encontrado", { status: 404 });
     }
+    if (action === "mover" && post && !fileId) return this.moveToFolder(request, user, "projetos", project.id);
     if (action === "apagar") {
       if (!post) return this.deleteProjectPage(user, project);
       const keys = await this.db.deleteProject(project.id);
@@ -801,9 +810,45 @@ ${folders.length ? moveDialog(folders, { action: `${src}/mover`, at: asset.folde
   }
 
   /** A lista dos projetos da pessoa (o editado por último primeiro), com a busca pelo nome. */
-  private async projectsPage(user: User, url: URL): Promise<Response> {
+  private async projectsPage(user: User, url: URL, error?: string): Promise<Response> {
     const q = (url.searchParams.get("q") ?? "").trim();
-    const projects = await this.db.projectsByUser(user.id, q);
+    const all = await this.db.projectsByUser(user.id, q);
+    // As pastas de Projetos: fora de pasta, as pastas e os projetos que não estão em nenhuma; com uma
+    // aberta (?pasta=), só os dela. A busca procura em tudo, sem pastas.
+    const folders = await this.db.conta(user.id).folders("projetos");
+    const current = q ? null : (folders.find((f) => f.id === url.searchParams.get("pasta")) ?? null);
+    const inFolder = (p: Project) => (folders.some((f) => f.id === p.folder_id) ? p.folder_id : null);
+    const projects = q ? all : all.filter((p) => inFolder(p) === (current?.id ?? null));
+    const ui: FolderUi = {
+      root: "/projetos",
+      rootLabel: "Projetos",
+      base: "/pastas",
+      kind: "projetos",
+      folders,
+      current,
+      count: (id) => all.filter((p) => p.folder_id === id).length,
+      unit: (n) => (n === 1 ? "1 projeto" : `${n} projetos`),
+      deleteItems: true,
+    };
+    const here = `/projetos${url.search}`;
+    // A pasta é um card da mesma grade, antes dos projetos, com o ícone de pasta.
+    const folderCards = q || current
+      ? []
+      : folders.map((f) =>
+          tileCard({
+            href: folderOpen(ui, f.id),
+            tile: FOLDER_TILE,
+            headline: f.name,
+            supporting: ui.unit(ui.count(f.id)),
+            hidden: "Pasta",
+            attrs: `data-drop="${f.id}" ${folderData(ui, f)}`,
+            menu: [
+              { label: "Abrir", icon: "folder_open", href: folderOpen(ui, f.id) },
+              { label: "Renomear", icon: "edit", href: "", act: "renomear" },
+              { label: "Apagar pasta", icon: "delete", href: "", act: "apagar" },
+            ],
+          }),
+        );
     const cards = projects.map((p, i) => {
       const blocks = (() => {
         try {
@@ -817,18 +862,28 @@ ${folders.length ? moveDialog(folders, { action: `${src}/mover`, at: asset.folde
         tile: `<span class="icon-tile icon-tile--large icon-tile--${MODEL_TONES[i % MODEL_TONES.length]}" aria-hidden="true"><span class="icon">video_library</span></span>`,
         headline: p.name,
         supporting: `${blocks === 1 ? "1 bloco" : `${blocks} blocos`} · editado em ${formatDate(p.updated_at)}`,
+        // Com pastas, o projeto pode ser movido: arrastando para a pasta ou pelo menu.
+        attrs: folders.length && !q ? `draggable="true" data-move="/projetos/${p.id}/mover" data-at="${current?.id ?? ""}" data-name="${esc(p.name)}"` : undefined,
         menu: [
           { label: "Abrir", icon: "video_library", href: `/canvas/${p.id}` },
+          ...(folders.length && !q ? [{ label: "Mover para", icon: "drive_file_move", href: "", act: "mover" }] : []),
           { label: "Apagar", icon: "delete", href: `/projetos/${p.id}/apagar` },
         ],
       });
     });
+    const empty = current
+      ? emptyState("folder_open", "Pasta vazia", "Mova projetos para cá ou toque em Novo projeto.")
+      : q
+        ? emptyState("search", "Nenhum projeto encontrado", `Nada com “${q}” no nome.`)
+        : emptyState("video_library", "Nenhum projeto ainda", "Toque em Novo projeto para começar.");
     const body = `
-<main class="page" id="conteudo">
-  ${pageHead("Projetos", cards.length, "Monte várias variações dos seus vídeos num canvas.", fab("add", "Novo projeto", { post: "/projetos" }))}
-  ${cards.length ? `<div class="tile-grid">${cards.join("")}</div>` : q ? emptyState("search", "Nenhum projeto encontrado", `Nada com “${q}” no nome.`) : emptyState("video_library", "Nenhum projeto ainda", "Toque em Novo projeto para começar.")}
-</main>`;
-    return html(page(`Projetos · ${SITE_NAME}`, body, { bar: { user, tab: "projetos", search: { action: "/projetos", label: "Pesquisar projetos", q } } }));
+<main class="page" id="conteudo" data-folders>
+  ${pageHead("Projetos", cards.length, "Monte várias variações dos seus vídeos num canvas.", `${q ? "" : newFolderButton(ui)}${fab("add", "Novo projeto", { post: `/projetos${current ? `?pasta=${current.id}` : ""}` })}`)}
+  ${q ? "" : folderLead(ui, here)}
+  ${cards.length || folderCards.length ? `<div class="tile-grid">${folderCards.join("")}${cards.join("")}</div>` : empty}
+</main>
+${error ? snackbar(error) : ""}`;
+    return html(page(`Projetos · ${SITE_NAME}`, body, { bar: { user, tab: "projetos", search: { action: "/projetos", label: "Pesquisar projetos", q } } }), error ? 400 : 200);
   }
 
   /** Confirmação antes de apagar: o projeto e os arquivos enviados para ele somem; os vídeos não. */
@@ -1015,17 +1070,86 @@ ${CANVAS_BODY}
     return Response.json({ src: `/projetos/${project.id}/arquivos/${id}`, ...(kind === "video" ? { som: temSom(bytes, type) } : {}) }, { status: 201 });
   }
 
+  /**
+   * As pastas da conta (simples, sem pasta dentro de pasta), da aba Vídeos e de Projetos: criar
+   * (POST /pastas, com `tipo`), renomear (/nome) e apagar (/apagar). Apagar devolve os itens à
+   * lista; em Projetos, com `itens=apagar`, os projetos da pasta são apagados junto. Vídeo gerado
+   * não se apaga no site: os da pasta sempre voltam para a lista.
+   */
+  private async accountFolder(request: Request, user: User, id: string | undefined, action: string | undefined): Promise<Response> {
+    const conta = this.db.conta(user.id);
+    const form = await request.formData();
+    const name = String(form.get("nome") ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NAME);
+    const root = (kind: FolderKind) => (kind === "videos" ? "/videos" : "/projetos");
+    const allowed = (kind: FolderKind) => kind === "videos" || pode(user, "usar:canvas");
+    const invalid = (kind: FolderKind, error: string) => (kind === "videos" ? this.videosPage(user, new URL("/videos", request.url), error) : this.projectsPage(user, new URL("/projetos", request.url), error));
+    if (!id) {
+      const kind = form.get("tipo");
+      if ((kind !== "videos" && kind !== "projetos") || !allowed(kind)) return new Response("não encontrado", { status: 404 });
+      if (!name) return invalid(kind, ERROS.pastaNome);
+      if (!(await conta.insertFolder(crypto.randomUUID(), kind, name, MAX_FOLDERS))) return invalid(kind, ERROS.pastasDemaisLista);
+      return movedTo(request, form, root(kind), root(kind));
+    }
+    const folder = await conta.folder(id);
+    if (!folder || !allowed(folder.kind)) return new Response("não encontrado", { status: 404 });
+    if (action === "nome") {
+      if (!name) return invalid(folder.kind, ERROS.pastaNome);
+      await conta.renameFolder(folder.id, name);
+      return movedTo(request, form, root(folder.kind), root(folder.kind));
+    }
+    if (folder.kind === "projetos" && form.get("itens") === "apagar") {
+      for (const project of await conta.projectsInFolder(folder.id)) {
+        const keys = await this.db.deleteProject(project);
+        if (keys.length) await this.media.delete(keys);
+      }
+    }
+    await conta.deleteFolder(folder);
+    return redirect(root(folder.kind));
+  }
+
+  /** "Mover para" de um vídeo ou de um projeto: vai para uma pasta da lista dele, ou para fora de pasta. */
+  private async moveToFolder(request: Request, user: User, kind: FolderKind, id: string): Promise<Response> {
+    const conta = this.db.conta(user.id);
+    const form = await request.formData();
+    const to = String(form.get("destino") ?? "");
+    const folder = to ? await conta.folder(to) : null;
+    // Pasta de outra conta, ou da outra lista, não serve de destino.
+    if (to && folder?.kind !== kind) return new Response("não encontrado", { status: 404 });
+    const moved = kind === "videos" ? await conta.moveVideo(id, folder?.id ?? null) : await conta.moveProject(id, folder?.id ?? null);
+    if (!moved) return new Response("não encontrado", { status: 404 });
+    const root = kind === "videos" ? "/videos" : "/projetos";
+    return movedTo(request, form, kind === "videos" ? ["/videos", "/video"] : root, root);
+  }
+
   /** Os vídeos de todos os modelos que a pessoa pode usar, com filtro por status, busca pela fala e grade ou lista. */
-  private async videosPage(user: User, url: URL): Promise<Response> {
+  private async videosPage(user: User, url: URL, error?: string): Promise<Response> {
     const q = (url.searchParams.get("q") ?? "").trim();
     // ?modelo= (do menu do card do modelo) só restringe; nunca mostra modelo que a pessoa não pode usar.
     const only = url.searchParams.get("modelo") ?? "";
     const usable = STRUCTURES.filter((s) => canUse(s, user) && !madeAtOnce(s) && (!only || (s.family ?? s.id) === only));
-    const list = await this.db.conta(user.id).videos(usable.map((s) => s.id), q, pageNumber(url), LIST_PAGE);
+    const conta = this.db.conta(user.id);
+    const ids = usable.map((s) => s.id);
+    // As pastas da aba Vídeos: fora de pasta, a lista traz as pastas e os vídeos que não estão em nenhuma;
+    // com uma aberta (?pasta=), só os dela. A busca procura em tudo, sem pastas.
+    const [folders, counts] = await Promise.all([conta.folders("videos"), conta.folderCounts("videos", ids)]);
+    const current = q ? null : (folders.find((f) => f.id === url.searchParams.get("pasta")) ?? null);
+    const list = await conta.videos(ids, q, pageNumber(url), LIST_PAGE, q ? undefined : (current?.id ?? null));
     const videos = list.items;
     const waiting = videos.some((v) => cardStatus(v).kind === "busy");
     // A mesma lista da página do modelo (filtro, ordem, vista e agrupamento no navegador); a busca pela fala fica no servidor.
     const from = `/videos${url.search}`;
+    const ui: FolderUi = {
+      root: `/videos${only ? `?modelo=${encodeURIComponent(only)}` : ""}`,
+      rootLabel: "Vídeos",
+      base: "/pastas",
+      kind: "videos",
+      folders,
+      current,
+      count: (id) => counts.get(id) ?? 0,
+      unit: (n) => (n === 1 ? "1 vídeo" : `${n} vídeos`),
+      // Vídeo gerado não se apaga no site: os da pasta sempre voltam para a lista.
+      deleteItems: false,
+    };
     const body = `
 <main class="page" id="conteudo">
   ${videoLibrary(videos, {
@@ -1035,16 +1159,23 @@ ${CANVAS_BODY}
     pages: { total: list.total, page: list.page, from: withoutPage(url) },
     heading: "h1",
     intro: only ? "Os vídeos que você gerou com este modelo." : "Todos os vídeos que você gerou.",
-    action: fab("add", "Novo vídeo", { href: "/" }),
-    empty: q || only ? emptyState("search", "Nenhum vídeo encontrado", "Tente outra busca.") : emptyState("movie", "Nenhum vídeo ainda", "Escolha um modelo para gerar o primeiro."),
+    action: `${q ? "" : newFolderButton(ui)}${fab("add", "Novo vídeo", { href: "/" })}`,
+    empty: current
+      ? emptyState("folder_open", "Pasta vazia", "Mova vídeos para cá.")
+      : q || only
+        ? emptyState("search", "Nenhum vídeo encontrado", "Tente outra busca.")
+        : emptyState("movie", "Nenhum vídeo ainda", "Escolha um modelo para gerar o primeiro."),
     structureOf: (v) => structureById(v.structure)!,
+    folders: q ? undefined : { ui, here: from, page: list.page },
   })}
-</main>`;
+</main>
+${error ? snackbar(error) : ""}`;
     return html(
       page(`Vídeos · ${SITE_NAME}`, body, {
         refresh: waiting,
         bar: { user, tab: "videos", search: { action: "/videos", label: "Pesquisar pela fala", q, keep: { modelo: only } } },
       }),
+      error ? 400 : 200,
     );
   }
 
@@ -1342,6 +1473,10 @@ ${error ? snackbar(error) : ""}`;
     // "Usar para gerar": só quando a página foi aberta de um modelo que aceita este tipo; volta para ele com o arquivo no painel.
     const useIn = mine ? await this.useTarget(v, from, user) : null;
     const useButton = useIn ? `<a class="button button--outlined interactive viewer__save" href="/modelo/${useIn}?usar=gerado:${v.id}"><span class="icon">auto_awesome</span>Usar para gerar</a>` : "";
+    // "Mover para": só o vídeo que aparece na aba Vídeos (imagem e áudio ficam na página do modelo), quando há pastas.
+    const videoFolders = mine && !madeAtOnce(structure) ? await this.db.conta(user.id).folders("videos") : [];
+    const moveButton = videoFolders.length ? `<button class="button button--outlined interactive viewer__save" type="button" data-dialog-open="mover"><span class="icon">drive_file_move</span>Mover para</button>` : "";
+    const movingDialog = videoFolders.length ? moveDialog({ folders: videoFolders, rootLabel: "Vídeos" }, { action: `/videos/${v.id}/mover`, at: v.folder_id, back: `/video/${v.id}${url.search}` }) : "";
     const saveDialog = mine && v.video_key
       ? avatarDialog({
           id: "salvar-avatar",
@@ -1367,6 +1502,7 @@ ${error ? snackbar(error) : ""}`;
             .join("")}
           ${detailsCard("Detalhes", details.map((d) => ({ icon: DETAIL_ICONS[d.term] ?? "info", term: d.term, value: d.description })))}
           ${saveButton}
+          ${moveButton}
           ${useButton}
         </div>`;
     const body = `
@@ -1412,6 +1548,7 @@ ${error ? snackbar(error) : ""}`;
   </aside>
 </main>
 ${saveDialog}
+${movingDialog}
 ${quick ? `<form id="edicao-rapida" method="post" action="/videos/${v.id}/edicao-rapida" hidden></form><script nonce="${NONCE}">${PREVIEW_SCRIPT}</script>` : ""}
 ${error ? snackbar(error) : ""}`;
     return html(page(`${v.name ? `${v.name} · ` : ""}${image ? "Imagem" : audio ? "Áudio" : "Vídeo"} · ${structure.name} · ${SITE_NAME}`, body, { refresh: status.kind === "busy", bar: { user, back, title: structure.name } }), error ? 400 : 200);
@@ -1648,6 +1785,8 @@ interface MenuItem {
   download?: boolean;
   /** A ação muda algo no servidor: vira um formulário POST para href (como o Sair). */
   post?: boolean;
+  /** Em vez de um link: uma ação do script da página sobre o card (`data-card-act`: mover, renomear, apagar). */
+  act?: string;
 }
 
 /** Menu do M3 aberto por um botão de ícone (três pontos); fecha ao escolher ou ao tocar fora (SCRIPT). */
@@ -1656,7 +1795,9 @@ function overflowMenu(label: string, items: MenuItem[]): string {
       <summary class="icon-button interactive" aria-label="${esc(label)}" title="Mais opções"><span class="icon">more_vert</span></summary>
       <div class="menu__list">${items
         .map((i) =>
-          i.post
+          i.act
+            ? `<button class="menu__item interactive" type="button" data-card-act="${i.act}"><span class="icon">${i.icon}</span>${esc(i.label)}</button>`
+            : i.post
             ? `<form method="post" action="${esc(i.href)}"><button class="menu__item interactive" type="submit"><span class="icon">${i.icon}</span>${esc(i.label)}</button></form>`
             : `<a class="menu__item interactive" href="${esc(i.href)}"${i.download ? " download" : ""}><span class="icon">${i.icon}</span>${esc(i.label)}</a>`,
         )
@@ -1679,9 +1820,9 @@ function assetKind(type: string): AssetKind | null {
   return mediaType(type)?.kind ?? null;
 }
 
-function tileCard(c: { href: string; tile: string; headline: string; supporting: string; hidden?: string; badge?: { label: string; title: string }; menu: MenuItem[] }): string {
+function tileCard(c: { href: string; tile: string; headline: string; supporting: string; hidden?: string; badge?: { label: string; title: string }; menu: MenuItem[]; attrs?: string }): string {
   return `
-    <article class="tile-card">
+    <article class="tile-card"${c.attrs ? ` ${c.attrs}` : ""}>
       <div class="tile-card__top">
         ${c.tile}
         ${c.badge ? `<span class="badge-chip" title="${esc(c.badge.title)}">${esc(c.badge.label)}</span>` : ""}
@@ -1906,6 +2047,8 @@ interface LibraryOptions {
   audio?: boolean;
   /** A lista vem uma página por vez: quantos são ao todo, a página e o endereço sem ela. */
   pages?: { total: number; page: number; from: string };
+  /** As pastas da lista (só a aba Vídeos): os vídeos podem ser movidos, e as pastas vêm antes deles na primeira página. */
+  folders?: { ui: FolderUi; here: string; page: number };
 }
 
 /** Quantos vídeos cabem numa página das listas (`videoLibrary`). */
@@ -2224,11 +2367,16 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
   };
   const dragRef = (v: Video, structure: Structure) => (o.mine !== undefined && v.user_id === o.mine && v.status === "completed" && v.video_key ? ` data-ref="${esc(JSON.stringify(generatedPick(v, structure)))}"` : "");
   const thumb = (v: Video, status: ReturnType<typeof cardStatus>) => (v.video_key ? outputThumb(v, o.structureOf(v)) : `<span class="frame__placeholder">${statusTile(status, true)}</span>`);
+  const ui = o.folders?.ui;
+  // Só o dono move o vídeo: para uma pasta, ou de volta para a lista.
+  const moving = (v: Video) => (ui ? ` data-move="/videos/${v.id}/mover" data-at="${ui.current?.id ?? ""}" data-name="${esc(videoTitle(v))}"` : "");
   return library({
     key: o.key,
     head,
     action: o.action,
     empty: o.empty,
+    lead: ui ? folderLead(ui, o.folders!.here) : undefined,
+    first: ui && !ui.current && ui.folders.length && o.folders!.page === 1 ? folderItems(ui) : undefined,
     items: videos,
     total: o.pages?.total,
     pager: o.pages ? pager(o.pages.total, o.pages.page, o.pages.from, LIST_PAGE) : "",
@@ -2240,11 +2388,11 @@ function videoLibrary(videos: Video[], o: LibraryOptions): string {
       const status = cardStatus(v);
       const structure = o.structureOf(v);
       const label = esc([videoTitle(v), status.kind === "done" ? null : status.label, formatDate(v.created_at), structure.name, durationLabel(v, structure)].filter(Boolean).join(" · "));
-      return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}"${dragRef(v, structure)} aria-label="${label}" title="${label}"><span class="frame__media">${thumb(v, status)}</span></a>`;
+      return `<a class="frame interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" data-video="${v.id}" data-kind="${status.kind}"${dragRef(v, structure)}${moving(v)} aria-label="${label}" title="${label}"><span class="frame__media">${thumb(v, status)}</span></a>`;
     },
     row: (v) => {
       const status = cardStatus(v), structure = o.structureOf(v);
-      return `<a class="vrow interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" role="row" data-video="${v.id}" data-kind="${status.kind}"${dragRef(v, structure)}>
+      return `<a class="vrow interactive" href="/video/${v.id}?de=${encodeURIComponent(o.from)}" role="row" data-video="${v.id}" data-kind="${status.kind}"${dragRef(v, structure)}${moving(v)}>
           <span class="vrow__thumb" role="cell">${thumb(v, status)}</span>
           <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(videoTitle(v))}</span><span class="vrow__support">${esc(status.kind === "done" ? [formatDate(v.created_at), structure.name, durationLabel(v, structure)].join(" · ") : status.label)}</span></span>
           <span class="vrow__status vrow__status--${status.kind}" role="cell"><span class="icon">${status.kind === "done" ? "check_circle" : status.icon}</span>${esc(status.label.replace(/ · .*/, ""))}</span>
@@ -2341,51 +2489,81 @@ export const MAX_FOLDERS = 200;
 /** A lista de ativos do avatar, ou uma pasta dele aberta. */
 const folderHref = (avatarId: string, folderId: string | null) => `/avatares/${avatarId}${folderId ? `?pasta=${folderId}` : ""}`;
 
-/** Depois de mover ou renomear: o script (arrastar) recebe 204; sem ele, volta de onde veio. */
-function movedTo(request: Request, form: FormData, avatar: Avatar, folders: Folder[], fallback: string | null): Response {
+/** Depois de criar, mover ou renomear: o script (arrastar) recebe 204; sem ele, volta de onde veio (`de`, só dentro de `scope`) ou para a lista. */
+function movedTo(request: Request, form: FormData, scope: string | string[], fallback: string): Response {
   if (request.headers.get("x-fetch")) return new Response(null, { status: 204, headers: SECURITY_HEADERS });
   const back = sitePath(String(form.get("de") ?? ""));
-  if (back?.startsWith(`/avatares/${avatar.id}`)) return redirect(back);
-  const from = String(form.get("volta") ?? "");
-  return redirect(folderHref(avatar.id, folders.some((f) => f.id === from) ? from : fallback));
+  const inside = (p: string) => back === p || back?.startsWith(`${p}/`) || back?.startsWith(`${p}?`);
+  return redirect(back && [scope].flat().some(inside) ? back : fallback);
 }
 
 /**
- * "Mover para" (M3: diálogo básico com lista): a lista de ativos e as pastas do avatar. Na lista
- * do avatar, o script diz qual ativo está sendo movido e desliga onde ele já está; na página do
- * ativo, o diálogo vem pronto (`action`, `at`).
+ * Onde ficam as pastas de uma lista (os ativos de um avatar, a aba Vídeos ou Projetos), para o
+ * mesmo componente servir às três: os endereços, os nomes e o que apagar a pasta oferece.
  */
-function moveDialog(folders: Folder[], o: { action?: string; at?: string | null; back?: string; volta?: string } = {}): string {
+interface FolderUi {
+  /** A lista sem pasta aberta ("/avatares/<id>", "/videos", "/projetos") e o nome dela no caminho. */
+  root: string;
+  rootLabel: string;
+  /** Onde se cria (POST) e, com o id, se renomeia (/nome) e se apaga (/apagar) uma pasta. */
+  base: string;
+  /** O campo `tipo` das pastas da conta ("videos" ou "projetos"); no avatar, não há. */
+  kind?: string;
+  folders: { id: string; name: string; created_at: string }[];
+  current: { id: string; name: string } | null;
+  /** Quantos itens a pasta tem nesta lista. */
+  count: (folderId: string) => number;
+  /** Como dizer a quantidade ("1 item", "3 vídeos"). */
+  unit: (n: number) => string;
+  /** Apagar a pasta pode apagar os itens junto ("Apagar tudo"); sem isto, eles sempre voltam para a lista. */
+  deleteItems: boolean;
+}
+
+/** A lista aberta numa pasta. */
+const folderOpen = (ui: FolderUi, id: string) => `${ui.root}${ui.root.includes("?") ? "&" : "?"}pasta=${id}`;
+const folderData = (ui: FolderUi, f: { id: string; name: string }) => `data-folder="${ui.base}/${f.id}" data-name="${esc(f.name)}" data-count="${ui.count(f.id)}"`;
+
+/**
+ * "Mover para" (M3: diálogo básico com lista): a lista e as pastas dela. Na lista, o script diz
+ * qual item está sendo movido e desliga onde ele já está; na página do item, o diálogo vem pronto
+ * (`action`, `at`).
+ */
+function moveDialog(ui: Pick<FolderUi, "folders" | "rootLabel">, o: { action?: string; at?: string | null; back?: string } = {}): string {
   const option = (id: string, name: string) =>
     `<li><button class="avatar-option interactive" type="submit" name="destino" value="${id}"${o.action && (o.at ?? "") === id ? " disabled" : ""}><span class="icon-tile icon-tile--secondary" aria-hidden="true"><span class="icon">${id ? "folder" : "photo_library"}</span></span><span class="avatar-option__text"><span class="vrow__headline">${esc(name)}</span></span></button></li>`;
   return `<dialog class="dialog" id="mover" aria-labelledby="mover-titulo">
     <h2 class="dialog__title" id="mover-titulo">Mover para</h2>
     <form method="post" action="${o.action ?? ""}" data-move-form>
-      ${o.back ? `<input type="hidden" name="de" value="${esc(o.back)}">` : ""}
-      <input type="hidden" name="volta" value="${o.volta ?? ""}">
-      <ul class="dialog__list">${option("", "Ativos")}${folders.map((f) => option(f.id, f.name)).join("")}</ul>
+      <input type="hidden" name="de" value="${esc(o.back ?? "")}">
+      <ul class="dialog__list">${option("", ui.rootLabel)}${ui.folders.map((f) => option(f.id, f.name)).join("")}</ul>
     </form>
     <form class="dialog__actions" method="dialog"><button class="button button--text interactive" type="submit">Cancelar</button></form>
   </dialog>`;
 }
 
-const FOLDER_THUMB = `<span class="frame__placeholder"><span class="icon-tile icon-tile--large icon-tile--secondary" aria-hidden="true"><span class="icon">folder</span></span></span>`;
+const FOLDER_TILE = `<span class="icon-tile icon-tile--large icon-tile--secondary" aria-hidden="true"><span class="icon">folder</span></span>`;
+const FOLDER_THUMB = `<span class="frame__placeholder">${FOLDER_TILE}</span>`;
 const itemCount = (n: number) => (n === 1 ? "1 item" : `${n} itens`);
 
+/** O botão "Nova pasta", ao lado do botão principal da lista; só fora de pasta (não há pasta dentro de pasta). */
+const newFolderButton = (ui: FolderUi) => (ui.current ? "" : `<button class="button button--tonal interactive" type="button" data-folder-new><span class="icon">create_new_folder</span>Nova pasta</button>`);
+
 /**
- * As pastas na lista de ativos do avatar (simples, sem pasta dentro de pasta). Fora de pasta, cada
- * uma é um item da própria lista (`folderItems`); dentro de uma, este é o caminho de volta, com
- * renomear e apagar. Aqui também ficam o menu do item e os diálogos de nome, mover e apagar.
+ * As pastas de uma lista (simples, sem pasta dentro de pasta). Fora de pasta, cada uma é um item
+ * da própria lista (`folderItems`, ou um card em Projetos); dentro de uma, este é o caminho de
+ * volta, com renomear e apagar. Aqui também ficam o menu do item e os diálogos de nome, mover e
+ * apagar. `here` é o endereço da página, para voltar a ela depois de mover ou renomear.
  */
-function folderLead(avatar: Avatar, assets: AvatarAsset[], folders: Folder[], current: Folder | null): string {
-  const data = (f: Folder) => `data-folder="/avatares/${avatar.id}/pastas/${f.id}" data-name="${esc(f.name)}" data-count="${assets.filter((a) => a.folder_id === f.id).length}"`;
+function folderLead(ui: FolderUi, here: string): string {
+  const { current } = ui;
   const crumbs = current
-    ? `<div class="crumbs" ${data(current)}>
-        <nav class="crumbs__path" aria-label="Pasta aberta"><a class="crumbs__item interactive" href="${folderHref(avatar.id, null)}" data-drop="">Ativos</a><span class="icon" aria-hidden="true">chevron_right</span><span class="crumbs__item crumbs__item--current" aria-current="page">${esc(current.name)}</span></nav>
+    ? `<div class="crumbs" ${folderData(ui, current)}>
+        <nav class="crumbs__path" aria-label="Pasta aberta"><a class="crumbs__item interactive" href="${ui.root}" data-drop="">${esc(ui.rootLabel)}</a><span class="icon" aria-hidden="true">chevron_right</span><span class="crumbs__item crumbs__item--current" aria-current="page">${esc(current.name)}</span></nav>
         <button class="icon-button interactive" type="button" data-folder-act="renomear" aria-label="Renomear pasta" title="Renomear pasta"><span class="icon">edit</span></button>
         <button class="icon-button interactive" type="button" data-folder-act="apagar" aria-label="Apagar pasta" title="Apagar pasta"><span class="icon">delete</span></button>
       </div>`
     : "";
+  const back = `<input type="hidden" name="de" value="${esc(here)}">`;
   return `${crumbs}
       <div class="menu__list context-menu" popover="manual" role="menu" aria-label="Opções" data-item-menu>
         <button class="menu__item interactive" type="button" role="menuitem" data-act="renomear"><span class="icon">edit</span>Renomear</button>
@@ -2394,8 +2572,9 @@ function folderLead(avatar: Avatar, assets: AvatarAsset[], folders: Folder[], cu
       </div>
       <dialog class="dialog" id="pasta-nome" aria-labelledby="pasta-nome-titulo">
         <h2 class="dialog__title" id="pasta-nome-titulo" data-label-new="Nova pasta" data-label-rename="Renomear pasta">Nova pasta</h2>
-        <form class="dialog__form" method="post" action="/avatares/${avatar.id}/pastas" data-new-action="/avatares/${avatar.id}/pastas" id="pasta-nome-form">
-          <input type="hidden" name="volta" value="${current?.id ?? ""}">
+        <form class="dialog__form" method="post" action="${ui.base}" data-new-action="${ui.base}" id="pasta-nome-form">
+          ${ui.kind ? `<input type="hidden" name="tipo" value="${ui.kind}">` : ""}
+          ${back}
           ${textField("nome", "Nome da pasta", `type="text" maxlength="${MAX_NAME}" autocomplete="off" required`).replace('id="nome"', 'id="pasta-nome-campo"').replace('for="nome"', 'for="pasta-nome-campo"')}
         </form>
         <div class="dialog__actions">
@@ -2406,42 +2585,41 @@ function folderLead(avatar: Avatar, assets: AvatarAsset[], folders: Folder[], cu
       </dialog>
       <dialog class="dialog" id="pasta-apagar" aria-labelledby="pasta-apagar-titulo">
         <h2 class="dialog__title" id="pasta-apagar-titulo">Apagar a pasta?</h2>
-        <p class="dialog__text" data-with-items="Apagar os itens também?" data-empty="A pasta está vazia.">A pasta está vazia.</p>
+        <p class="dialog__text" data-with-items="${ui.deleteItems ? "Apagar os itens também?" : "Os itens voltam para a lista."}" data-empty="A pasta está vazia.">A pasta está vazia.</p>
         <form method="post" action="" id="pasta-apagar-form"></form>
         <div class="dialog__actions">
           <button class="button button--text interactive dialog__start" type="submit" form="pasta-apagar-fechar">Cancelar</button>
-          <button class="button button--text interactive" type="submit" form="pasta-apagar-form" name="itens" value="manter" data-label-keep="Manter os itens" data-label-empty="Apagar pasta">Apagar pasta</button>
-          <button class="button button--filled interactive" type="submit" form="pasta-apagar-form" name="itens" value="apagar" hidden><span class="icon">delete</span>Apagar tudo</button>
+          <button class="button button--text interactive" type="submit" form="pasta-apagar-form" name="itens" value="manter" data-label-keep="${ui.deleteItems ? "Manter os itens" : "Apagar pasta"}" data-label-empty="Apagar pasta"${ui.deleteItems ? "" : " data-only"}>Apagar pasta</button>
+          ${ui.deleteItems ? `<button class="button button--filled interactive" type="submit" form="pasta-apagar-form" name="itens" value="apagar" hidden><span class="icon">delete</span>Apagar tudo</button>` : ""}
         </div>
         <form method="dialog" id="pasta-apagar-fechar"></form>
       </dialog>
-      ${moveDialog(folders, { volta: current?.id ?? "" })}`;
+      ${moveDialog(ui, { back: here })}`;
 }
 
 /**
- * As pastas como itens da lista de ativos, antes dos arquivos: o mesmo card e a mesma linha, com o
- * ícone de pasta no lugar da imagem. Tocar abre; o botão direito tem renomear e apagar; soltar um
- * ativo em cima move para ela.
+ * As pastas como itens de uma lista (`library`), antes dos arquivos: o mesmo card e a mesma linha,
+ * com o ícone de pasta no lugar da imagem. Tocar abre; o botão direito tem renomear e apagar;
+ * soltar um item em cima move para ela.
  */
-function folderItems(avatar: Avatar, assets: AvatarAsset[], folders: Folder[]): { frames: string; rows: string } {
-  const item = (f: Folder) => {
-    const n = assets.filter((a) => a.folder_id === f.id).length;
-    const attrs = `href="${folderHref(avatar.id, f.id)}" data-kind="pasta" data-drop="${f.id}" data-folder="/avatares/${avatar.id}/pastas/${f.id}" data-name="${esc(f.name)}" data-count="${n}" draggable="false"`;
-    const label = esc(`Pasta ${f.name}, ${itemCount(n)}`);
+function folderItems(ui: FolderUi): { frames: string; rows: string } {
+  const item = (f: FolderUi["folders"][number]) => {
+    const n = ui.unit(ui.count(f.id));
+    const attrs = `href="${folderOpen(ui, f.id)}" data-kind="pasta" data-drop="${f.id}" ${folderData(ui, f)} draggable="false"`;
     return {
-      frame: `<a class="frame frame--folder interactive" ${attrs} aria-label="${label}" title="${esc(f.name)}"><span class="frame__media">${FOLDER_THUMB}<span class="frame__caption"><span class="frame__name">${esc(f.name)}</span><span class="frame__count">${itemCount(n)}</span></span></span></a>`,
+      frame: `<a class="frame frame--folder interactive" ${attrs} aria-label="${esc(`Pasta ${f.name}, ${n}`)}" title="${esc(f.name)}"><span class="frame__media">${FOLDER_THUMB}<span class="frame__caption"><span class="frame__name">${esc(f.name)}</span><span class="frame__count">${n}</span></span></span></a>`,
       row: `<a class="vrow interactive" ${attrs} role="row">
           <span class="vrow__thumb" role="cell">${FOLDER_THUMB}</span>
-          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(f.name)}</span><span class="vrow__support">${itemCount(n)}</span></span>
+          <span class="vrow__text" role="cell"><span class="vrow__headline">${esc(f.name)}</span><span class="vrow__support">${n}</span></span>
           <span class="vrow__status vrow__status--done" role="cell"><span class="icon">folder</span>Pasta</span>
-          <span role="cell">${itemCount(n)}</span>
+          <span role="cell">${n}</span>
           <span class="vrow__wide" role="cell">—</span>
           <span class="vrow__wide" role="cell">—</span>
           <span role="cell">${esc(formatDate(f.created_at))}</span>
         </a>`,
     };
   };
-  const items = folders.map(item);
+  const items = ui.folders.map(item);
   return { frames: items.map((i) => i.frame).join(""), rows: items.map((i) => i.row).join("") };
 }
 
@@ -2450,7 +2628,11 @@ function assetLibrary(all: AvatarAsset[], o: { key: string; avatar?: Avatar; src
   // Com pastas, a lista mostra o que está na pasta aberta ou, fora de pasta, as pastas e o que não está em nenhuma.
   const here = o.folders?.current?.id ?? null;
   const assets = o.folders ? all.filter((a) => (o.folders!.all.some((f) => f.id === a.folder_id) ? a.folder_id : null) === here) : all;
-  const moving = (a: AvatarAsset) => (avatar && o.folders ? ` data-move="/avatares/${avatar.id}/arquivos/${a.id}/mover" data-at="${here ?? ""}" data-name="${esc(a.name)}"` : "");
+  const ui: FolderUi | null =
+    avatar && o.folders
+      ? { root: `/avatares/${avatar.id}`, rootLabel: "Ativos", base: `/avatares/${avatar.id}/pastas`, folders: o.folders.all, current: o.folders.current, count: (id) => all.filter((a) => a.folder_id === id).length, unit: itemCount, deleteItems: true }
+      : null;
+  const moving = (a: AvatarAsset) => (avatar && ui ? ` data-move="/avatares/${avatar.id}/arquivos/${a.id}/mover" data-at="${here ?? ""}" data-name="${esc(a.name)}"` : "");
   const src = o.src ?? ((a: AvatarAsset) => `/avatares/${avatar!.id}/arquivos/${a.id}`);
   const href = o.href ?? ((a: AvatarAsset) => `${src(a)}/ver`);
   const thumb = (a: AvatarAsset) => assetThumb(a, src(a));
@@ -2459,10 +2641,10 @@ function assetLibrary(all: AvatarAsset[], o: { key: string; avatar?: Avatar; src
     head: (count) => `<h2 class="library__title">Ativos <span class="pane__count"${count ? " data-library-count" : ""}>${count || 0}</span></h2>`,
     // No avatar ainda não salvo não há onde guardar arquivos.
     action: avatar
-      ? `${o.folders && !here ? `<button class="button button--tonal interactive" type="button" data-folder-new><span class="icon">create_new_folder</span>Nova pasta</button>` : ""}${fabUpload("upload", "Adicionar arquivo", `/avatares/${avatar.id}/arquivos${here ? `?pasta=${here}` : ""}`, ASSET_ACCEPT)}`
+      ? `${ui ? newFolderButton(ui) : ""}${fabUpload("upload", "Adicionar arquivo", `/avatares/${avatar.id}/arquivos${here ? `?pasta=${here}` : ""}`, ASSET_ACCEPT)}`
       : undefined,
-    lead: avatar && o.folders ? folderLead(avatar, all, o.folders.all, o.folders.current) : undefined,
-    first: avatar && o.folders && !here && o.folders.all.length ? folderItems(avatar, all, o.folders.all) : undefined,
+    lead: avatar && ui ? folderLead(ui, folderHref(avatar.id, here)) : undefined,
+    first: ui && !here && ui.folders.length ? folderItems(ui) : undefined,
     empty: here ? emptyState("folder_open", "Pasta vazia", "Envie arquivos ou mova ativos para cá.") : emptyState("face", "Nenhum ativo ainda", "Envie arquivos ou salve o que um modelo criar."),
     items: assets,
     date: (a) => a.created_at,
@@ -3783,109 +3965,106 @@ const SCRIPT = `(() => {
   };
   initLibrary(document.querySelector("[data-library]"));
 
-  // Pastas dos ativos (página do avatar): o menu do item (botão direito), os diálogos de nome, de
-  // mover e de apagar, e arrastar um ativo para dentro de uma pasta (ou de volta para a lista).
-  const itemMenu = document.querySelector("[data-item-menu]");
-  if (itemMenu) {
-    const box = itemMenu.closest(".library"), moveDialog = document.getElementById("mover"), moveForm = moveDialog.querySelector("[data-move-form]");
-    const nameDialog = document.getElementById("pasta-nome"), nameForm = document.getElementById("pasta-nome-form"), delDialog = document.getElementById("pasta-apagar");
-    // O item tocado: um ativo (move) ou uma pasta (folder, com o nome e quantos itens tem).
+  // Pastas (ativos do avatar, aba Vídeos e Projetos): o menu do item (botão direito ou o menu do
+  // card), os diálogos de nome, de mover e de apagar, e arrastar um item para dentro de uma pasta
+  // (ou de volta para a lista). Tudo pelo documento: a lista de vídeos troca de página sem recarregar.
+  if (document.querySelector("[data-item-menu]")) {
+    const one = (sel) => document.querySelector(sel);
+    // O item tocado: o que se move (move) ou uma pasta (folder, com o nome e quantos itens tem).
     const read = (el) => ({ move: el.dataset.move || "", folder: el.dataset.folder || "", name: el.dataset.name || "", at: el.dataset.at || "", count: Number(el.dataset.count) || 0 });
     let item = null;
     const naming = (rename) => {
-      const title = nameDialog.querySelector(".dialog__title"), ok = nameDialog.querySelector("button[data-label-new]");
+      const dialog = one("#pasta-nome"), form = one("#pasta-nome-form"), title = dialog.querySelector(".dialog__title"), ok = dialog.querySelector("button[data-label-new]");
       title.textContent = rename ? title.dataset.labelRename : title.dataset.labelNew;
       ok.textContent = rename ? ok.dataset.labelRename : ok.dataset.labelNew;
-      nameForm.action = rename ? item.folder + "/nome" : nameForm.dataset.newAction;
-      nameForm.elements.nome.value = rename ? item.name : "";
-      nameDialog.showModal();
-      nameForm.elements.nome.select();
+      form.action = rename ? item.folder + "/nome" : form.dataset.newAction;
+      form.elements.nome.value = rename ? item.name : "";
+      dialog.showModal();
+      form.elements.nome.select();
     };
-    // Apagar pergunta dos itens: apagar junto ou devolver à lista. Pasta vazia, só confirma.
+    // Apagar diz quantos itens a pasta tem e dá as opções (apagar junto, onde a lista deixa, ou devolver à lista).
     const deleting = () => {
-      const text = delDialog.querySelector(".dialog__text"), keep = delDialog.querySelector('[name=itens][value="manter"]'), all = delDialog.querySelector('[name=itens][value="apagar"]');
-      delDialog.querySelector(".dialog__title").textContent = "Apagar a pasta “" + item.name + "”?";
+      const dialog = one("#pasta-apagar"), text = dialog.querySelector(".dialog__text"), keep = dialog.querySelector('[name=itens][value="manter"]'), all = dialog.querySelector('[name=itens][value="apagar"]');
+      const only = !item.count || keep.hasAttribute("data-only");
+      dialog.querySelector(".dialog__title").textContent = "Apagar a pasta “" + item.name + "”?";
       text.textContent = item.count ? (item.count === 1 ? "A pasta tem 1 item. " : "A pasta tem " + item.count + " itens. ") + text.dataset.withItems : text.dataset.empty;
       keep.textContent = item.count ? keep.dataset.labelKeep : keep.dataset.labelEmpty;
-      keep.classList.toggle("button--filled", !item.count);
-      keep.classList.toggle("button--text", !!item.count);
-      all.hidden = !item.count;
-      document.getElementById("pasta-apagar-form").action = item.folder + "/apagar";
-      delDialog.showModal();
+      keep.classList.toggle("button--filled", only);
+      keep.classList.toggle("button--text", !only);
+      if (all) all.hidden = !item.count;
+      one("#pasta-apagar-form").action = item.folder + "/apagar";
+      dialog.showModal();
     };
     const act = (name) => {
       if (name === "renomear") naming(true);
       else if (name === "apagar") deleting();
       else {
-        moveForm.action = item.move;
-        // Onde o ativo já está fica desligado.
-        for (const o of moveForm.querySelectorAll("[name=destino]")) o.disabled = o.value === item.at;
-        moveDialog.showModal();
+        const form = one("#mover [data-move-form]");
+        form.action = item.move;
+        // Onde o item já está fica desligado.
+        for (const o of form.querySelectorAll("[name=destino]")) o.disabled = o.value === item.at;
+        one("#mover").showModal();
       }
     };
+    const menu = () => one("[data-item-menu]");
+    const open = () => { const m = menu(); return m && m.matches(":popover-open") ? m : null; };
     // O menu fecha por aqui (popover manual): o próprio botão direito que o abre o fecharia, ao soltar.
-    document.addEventListener("pointerdown", (e) => { if (itemMenu.matches(":popover-open") && !itemMenu.contains(e.target)) itemMenu.hidePopover(); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && itemMenu.matches(":popover-open")) itemMenu.hidePopover(); });
-    box.addEventListener("contextmenu", (e) => {
-      const el = e.target.closest("[data-move], [data-folder]");
-      if (!el) return;
+    document.addEventListener("pointerdown", (e) => { const m = open(); if (m && !m.contains(e.target)) m.hidePopover(); });
+    document.addEventListener("keydown", (e) => { const m = open(); if (m && e.key === "Escape") m.hidePopover(); });
+    document.addEventListener("contextmenu", (e) => {
+      const el = e.target.closest && e.target.closest("[data-move], [data-folder]"), m = menu();
+      if (!el || !m || el.classList.contains("crumbs")) return;
       e.preventDefault();
       item = read(el);
-      // O ativo se move; a pasta muda de nome e pode ser apagada.
-      for (const b of itemMenu.querySelectorAll("[data-act]")) b.hidden = (b.dataset.act === "mover") === !!item.folder;
-      itemMenu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - 232)) + "px";
-      itemMenu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - 120)) + "px";
-      itemMenu.showPopover();
-      itemMenu.querySelector(".menu__item:not([hidden])").focus();
+      // O item se move; a pasta muda de nome e pode ser apagada.
+      for (const b of m.querySelectorAll("[data-act]")) b.hidden = (b.dataset.act === "mover") === !!item.folder;
+      m.style.left = Math.max(8, Math.min(e.clientX, innerWidth - 232)) + "px";
+      m.style.top = Math.max(8, Math.min(e.clientY, innerHeight - 120)) + "px";
+      m.showPopover();
+      m.querySelector(".menu__item:not([hidden])").focus();
     });
-    itemMenu.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-act]");
-      if (!b || !item) return;
-      itemMenu.hidePopover();
-      act(b.dataset.act);
+    document.addEventListener("click", (e) => {
+      const t = e.target.closest && e.target.closest("[data-act], [data-folder-act], [data-card-act], [data-folder-new]");
+      if (!t) return;
+      // No menu do botão direito, o item já foi lido; ao lado do caminho e no menu do card, é o que está em volta.
+      if (t.dataset.act) { if (!item || !t.closest("[data-item-menu]")) return; menu().hidePopover(); return act(t.dataset.act); }
+      if (t.hasAttribute("data-folder-new")) return naming(false);
+      item = read(t.closest("[data-move], [data-folder]"));
+      act(t.dataset.folderAct || t.dataset.cardAct);
     });
-    // Dentro da pasta: renomear e apagar ficam ao lado do caminho.
-    box.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-folder-act]");
-      if (!b) return;
-      item = read(b.closest("[data-folder]"));
-      act(b.dataset.folderAct);
-    });
-    const newFolder = box.querySelector("[data-folder-new]");
-    if (newFolder) newFolder.addEventListener("click", () => naming(false));
 
     let dragging = null;
-    box.addEventListener("dragstart", (e) => {
+    document.addEventListener("dragstart", (e) => {
       const el = e.target.closest && e.target.closest("[data-move]");
       if (!el) return;
       dragging = read(el);
       e.dataTransfer.setData("application/x-meu-avatar-mover", dragging.move);
-      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.effectAllowed = "copyMove";
     });
-    const dropOff = () => { for (const d of box.querySelectorAll(".is-drop")) d.classList.remove("is-drop"); };
-    box.addEventListener("dragend", () => { dragging = null; dropOff(); });
-    // Onde o ativo pode cair: uma pasta ou, de dentro de uma, "Ativos" no caminho; nunca onde ele já está.
+    const dropOff = () => { for (const d of document.querySelectorAll(".is-drop")) d.classList.remove("is-drop"); };
+    document.addEventListener("dragend", () => { dragging = null; dropOff(); });
+    // Onde o item pode cair: uma pasta ou, de dentro de uma, a lista no caminho; nunca onde ele já está.
     const target = (e) => {
       const d = dragging && e.target.closest && e.target.closest("[data-drop]");
       return d && d.dataset.drop !== dragging.at ? d : null;
     };
-    box.addEventListener("dragover", (e) => {
+    document.addEventListener("dragover", (e) => {
       const d = target(e);
       if (!d) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       d.classList.add("is-drop");
     });
-    box.addEventListener("dragleave", (e) => {
+    document.addEventListener("dragleave", (e) => {
       const d = e.target.closest && e.target.closest("[data-drop]");
       if (d && !d.contains(e.relatedTarget)) d.classList.remove("is-drop");
     });
-    box.addEventListener("drop", async (e) => {
+    document.addEventListener("drop", async (e) => {
       const d = target(e), moved = dragging;
       if (!d) return;
       e.preventDefault();
       dropOff();
-      box.insertAdjacentHTML("afterbegin", '<span class="linear-progress" role="progressbar" aria-label="Movendo"></span>');
+      d.closest(".library, [data-folders]").insertAdjacentHTML("afterbegin", '<span class="linear-progress" role="progressbar" aria-label="Movendo"></span>');
       try { await fetch(moved.move, { method: "POST", headers: { "x-fetch": "1" }, body: new URLSearchParams({ destino: d.dataset.drop }) }); } catch {}
       location.reload();
     });

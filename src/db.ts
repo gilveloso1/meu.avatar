@@ -53,6 +53,8 @@ export interface Video {
   prep_started_at: string | null;
   /** Última conferência do agendamento no provedor (openVideos). */
   checked_at: string | null;
+  /** A pasta da aba Vídeos em que o vídeo está (account_folders); vazio, fora de pasta. */
+  folder_id: string | null;
   /** O avatar usado para gerar (null com arquivo solto). */
   avatar_id: string | null;
   /** O nome dado pela pessoa (Renomear); null: as telas mostram a fala. */
@@ -168,8 +170,22 @@ export interface Project {
   data: string;
   /** Sobe a cada mudança: quem salva diz de qual revisão partiu. */
   revision: number;
+  /** A pasta da lista de Projetos em que o projeto está (account_folders); vazio, fora de pasta. */
+  folder_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** De que lista é uma pasta da conta: a aba Vídeos ou Projetos. */
+export type FolderKind = "videos" | "projetos";
+
+/** Pasta da conta (simples, sem pasta dentro de pasta), na aba Vídeos ou em Projetos. */
+export interface AccountFolder {
+  id: string;
+  user_id: number;
+  kind: FolderKind;
+  name: string;
+  created_at: string;
 }
 
 /** Arquivo enviado do computador para um projeto (no R2, em key). */
@@ -1099,6 +1115,7 @@ export class Db {
       this.d1.prepare("DELETE FROM videos"),
       this.d1.prepare("DELETE FROM avatar_assets"),
       this.d1.prepare("DELETE FROM folders"),
+      this.d1.prepare("DELETE FROM account_folders"),
       this.d1.prepare("DELETE FROM avatars"),
       this.d1.prepare("DELETE FROM voices"),
       this.d1.prepare("UPDATE config SET value = 'openrouter' WHERE key = 'plataforma.heygen'"),
@@ -1167,19 +1184,85 @@ export class ContaDb {
   /**
    * Os vídeos das estruturas, os mais novos primeiro, uma página por vez; com `q`, só os que têm o
    * trecho na fala ou no nome. `total` conta todos, e a página além da última vira a última.
+   * `folder`: o id de uma pasta (só os dela), null (só os de fora de pasta) ou nada (todos, como
+   * nas páginas dos modelos, que não têm pastas).
    */
-  async videos(structures: string[], q = "", page = 1, size = 100): Promise<{ items: Video[]; total: number; page: number }> {
+  async videos(structures: string[], q = "", page = 1, size = 100, folder?: string | null): Promise<{ items: Video[]; total: number; page: number }> {
     if (!structures.length) return { items: [], total: 0, page: 1 };
     // Os modelos entram a partir de `first`: a contagem não tem o tamanho nem o começo da página.
-    const rest = (first: number) => `structure IN (${structures.map((_, i) => `?${i + first}`).join(", ")}) AND (prompt LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\')`;
-    const count = await this.d1.prepare(`SELECT COUNT(*) AS n FROM videos WHERE user_id = ?1 AND ${rest(3)}`).bind(this.userId, like(q), ...structures).first<{ n: number }>();
+    const rest = (first: number) =>
+      `structure IN (${structures.map((_, i) => `?${i + first}`).join(", ")}) AND (prompt LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\')${folder === undefined ? "" : folder === null ? " AND folder_id IS NULL" : ` AND folder_id = ?${first + structures.length}`}`;
+    const pasta = folder ? [folder] : [];
+    const count = await this.d1.prepare(`SELECT COUNT(*) AS n FROM videos WHERE user_id = ?1 AND ${rest(3)}`).bind(this.userId, like(q), ...structures, ...pasta).first<{ n: number }>();
     const total = count?.n ?? 0;
     const current = Math.min(Math.max(1, Math.floor(page) || 1), Math.max(1, Math.ceil(total / size)));
     const { results } = await this.d1
       .prepare(`SELECT * FROM videos WHERE user_id = ?1 AND ${rest(5)} ORDER BY created_at DESC, rowid DESC LIMIT ?3 OFFSET ?4`)
-      .bind(this.userId, like(q), size, (current - 1) * size, ...structures)
+      .bind(this.userId, like(q), size, (current - 1) * size, ...structures, ...pasta)
       .all<Video>();
     return { items: results, total, page: current };
+  }
+
+  // --- Pastas da conta: a aba Vídeos e Projetos (simples, sem pasta dentro de pasta) ---
+
+  /** As pastas de uma lista, pelo nome. */
+  async folders(kind: FolderKind): Promise<AccountFolder[]> {
+    return (await this.d1.prepare("SELECT * FROM account_folders WHERE user_id = ?1 AND kind = ?2 ORDER BY name COLLATE NOCASE, created_at").bind(this.userId, kind).all<AccountFolder>()).results;
+  }
+
+  /** A pasta, se é desta conta. */
+  folder(id: string): Promise<AccountFolder | null> {
+    return this.d1.prepare("SELECT * FROM account_folders WHERE user_id = ?1 AND id = ?2").bind(this.userId, id).first<AccountFolder>();
+  }
+
+  /** Cria a pasta, se a lista ainda tem menos de `max` (conferido na mesma instrução). Falso se já estava cheia. */
+  async insertFolder(id: string, kind: FolderKind, name: string, max: number, now = new Date()): Promise<boolean> {
+    const r = await this.d1
+      .prepare("INSERT INTO account_folders (id, user_id, kind, name, created_at) SELECT ?2, ?1, ?3, ?4, ?5 WHERE (SELECT COUNT(*) FROM account_folders WHERE user_id = ?1 AND kind = ?3) < ?6")
+      .bind(this.userId, id, kind, name, now.toISOString(), max)
+      .run();
+    return r.meta.changes > 0;
+  }
+
+  async renameFolder(id: string, name: string): Promise<void> {
+    await this.d1.prepare("UPDATE account_folders SET name = ?3 WHERE user_id = ?1 AND id = ?2").bind(this.userId, id, name).run();
+  }
+
+  /** Apaga só a pasta: os vídeos ou os projetos dela voltam para a lista. Nada mais é apagado. */
+  async deleteFolder(folder: AccountFolder): Promise<void> {
+    const table = folder.kind === "videos" ? "videos" : "projects";
+    await this.d1.batch([
+      this.d1.prepare(`UPDATE ${table} SET folder_id = NULL WHERE user_id = ?1 AND folder_id = ?2`).bind(this.userId, folder.id),
+      this.d1.prepare("DELETE FROM account_folders WHERE user_id = ?1 AND id = ?2").bind(this.userId, folder.id),
+    ]);
+  }
+
+  /** Quantos itens cada pasta da lista tem; nos vídeos, só os das estruturas dadas. */
+  async folderCounts(kind: FolderKind, structures: string[] = []): Promise<Map<string, number>> {
+    if (kind === "videos" && !structures.length) return new Map();
+    const sql =
+      kind === "videos"
+        ? `SELECT folder_id, COUNT(*) AS n FROM videos WHERE user_id = ?1 AND folder_id IS NOT NULL AND structure IN (${structures.map((_, i) => `?${i + 2}`).join(", ")}) GROUP BY folder_id`
+        : "SELECT folder_id, COUNT(*) AS n FROM projects WHERE user_id = ?1 AND folder_id IS NOT NULL GROUP BY folder_id";
+    const { results } = await this.d1.prepare(sql).bind(this.userId, ...(kind === "videos" ? structures : [])).all<{ folder_id: string; n: number }>();
+    return new Map(results.map((r) => [r.folder_id, r.n]));
+  }
+
+  /** Põe o vídeo numa pasta (ou fora de pasta), sem mexer no updated_at (não é uma mudança do vídeo). Falso se o vídeo não é desta conta. */
+  async moveVideo(id: string, folderId: string | null): Promise<boolean> {
+    const r = await this.d1.prepare("UPDATE videos SET folder_id = ?3 WHERE user_id = ?1 AND id = ?2").bind(this.userId, id, folderId).run();
+    return r.meta.changes > 0;
+  }
+
+  /** Põe o projeto numa pasta (ou fora de pasta), sem contar como edição do projeto. */
+  async moveProject(id: string, folderId: string | null): Promise<boolean> {
+    const r = await this.d1.prepare("UPDATE projects SET folder_id = ?3 WHERE user_id = ?1 AND id = ?2").bind(this.userId, id, folderId).run();
+    return r.meta.changes > 0;
+  }
+
+  /** Os projetos de uma pasta da conta (para apagar junto com ela). */
+  async projectsInFolder(folderId: string): Promise<string[]> {
+    return (await this.d1.prepare("SELECT id FROM projects WHERE user_id = ?1 AND folder_id = ?2").bind(this.userId, folderId).all<{ id: string }>()).results.map((r) => r.id);
   }
 
   /**

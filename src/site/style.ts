@@ -1202,6 +1202,9 @@ button.asset-upload { background: none; }
   .vrow__status { font-size: 0; }
   .vrow__status .icon { font-size: 24px; }
   /* O FAB do M3 no celular: preso no canto de baixo, por cima da lista. */
+  /* Com "Nova pasta", as vistas e o botão descem para a linha de baixo do título. */
+  .library__head { flex-wrap: wrap; }
+  .library__end { flex: none; }
   .library__end .fab { position: fixed; right: 16px; bottom: 16px; z-index: 5; box-shadow: var(--md-sys-elevation-level3, var(--md-sys-elevation-level2)); }
 }
 
