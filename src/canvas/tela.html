@@ -34,10 +34,13 @@ body { min-height: 0; overflow: hidden; }
   --el3: 0 calc(1px * var(--zi, 1)) calc(3px * var(--zi, 1)) 0 rgb(0 0 0 / 0.3), 0 calc(4px * var(--zi, 1)) calc(8px * var(--zi, 1)) calc(3px * var(--zi, 1)) rgb(0 0 0 / 0.15);
 }
 #wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
-.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: var(--sw, 2px); vector-effect: non-scaling-stroke; }
-.wire.is-sel, .wire.is-path { stroke: var(--md-sys-color-primary); stroke-width: calc(var(--sw, 2px) + 1px); }
+/* O fio é um traço, mas fica dentro do canvas ampliado (é SVG, que não arredonda traço fino): a
+   espessura vem já dividida pelo zoom (--wsw, do script). O non-scaling-stroke não desfaz o zoom do
+   canvas, que é uma transformação de CSS fora do SVG: a 800%, o fio de 4 px saía com 32. */
+.wire { fill: none; stroke: var(--md-sys-color-outline); stroke-width: var(--wsw, 2px); }
+.wire.is-sel, .wire.is-path { stroke: var(--md-sys-color-primary); stroke-width: calc(var(--wsw, 2px) * 1.5); }
 .wire--temp { stroke: var(--md-sys-color-primary); stroke-dasharray: 6 4; }
-.wire-hit { fill: none; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; cursor: pointer; pointer-events: stroke; }
+.wire-hit { fill: none; stroke: transparent; stroke-width: calc(var(--wsw, 2px) * 7); cursor: pointer; pointer-events: stroke; }
 
 /* Bloco: cor do tipo e tom do arquivo (--c e --on vêm do script, de --bloco-<tipo>-<tom>),
    cantos médios (12 px), elevação 1; arrastando, elevação 3. */

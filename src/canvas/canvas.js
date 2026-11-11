@@ -422,6 +422,8 @@ function applyView() {
   // O inverso do zoom, para o piso do texto do Final (10 px na tela).
   world.style.setProperty("--iz", String(1 / view.z));
   for (const el of [world, lines]) el.style.setProperty("--sw", `${stroke()}px`);
+  // O fio de ligação é desenhado dentro do canvas ampliado: o traço dele vai dividido pelo zoom.
+  world.style.setProperty("--wsw", `${stroke() / view.z}px`);
   // O texto do rótulo é conteúdo, mas afastado não fica menor que uns 10 px na tela.
   world.style.setProperty("--lz", String(Math.min(2.2, Math.max(1, 0.85 / view.z))));
   world.classList.toggle("is-far", view.z < 0.75);
@@ -578,7 +580,7 @@ function render({ side = true } = {}) {
     const n = vs.length;
     const isSel = sel.type === "final" && sel.id === f.id;
     html += `<div class="fin ${isSel ? "is-sel" : ""}" data-final="${f.id}" style="left:${f.x}px;top:${f.y}px"><div class="fin__head"><span class="icon">flag</span><span><b>Final</b><small>${n} ${n === 1 ? "variação" : "variações"}</small></span></div>${n ? variantList(vs, f === pf && !preview, selectionIn(f.id, gs, idx), M.finalRate(f)) : ""}${M.overLimit(project, f.id, gs) ? `<p class="fin__hint">${esc(CONFIG.erros?.exportarLimite ?? "")}</p>` : ""}</div>`;
-    html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - 9}px;top:${f.y + 40 - 9}px"></div>`;
+    html += `<div class="port port--in" data-final="${f.id}" style="left:${f.x - PORT_OUT - 9}px;top:${f.y + 40 - 9}px"></div>`;
   }
   if (html !== chromeHtml) chrome.innerHTML = chromeHtml = html;
 

@@ -734,7 +734,8 @@ const WIRE_PAD = 8;
 const portY = (g) => g.y + (g.soloAudio ? AUD_H : VIS_H) / 2;
 export const outPoint = (g) => ({ x: g.x + g.w + portGap(g), y: portY(g) });
 export const inPoint = (g) => ({ x: g.x - portGap(g), y: portY(g) });
-export const finalPoint = (f) => ({ x: f.x, y: f.y + 40 });
+// A entrada do Final segue o padrão dos outros elementos: fora do card, à mesma distância (antes ficava em cima da borda dele).
+export const finalPoint = (f) => ({ x: f.x - PORT_OUT, y: f.y + 40 });
 export function curve(a, b) {
   const k = Math.max(40, Math.abs(b.x - a.x) / 2);
   return `M${a.x},${a.y} C${a.x + k},${a.y} ${b.x - k},${b.y} ${b.x},${b.y}`;

@@ -106,7 +106,8 @@ menos custo.
   ligado a ele; os seguintes ficam soltos.
 - **Ponto de ligação fora do contorno** (pedido do dono, 11/11/2026): no bloco com área, a entrada e
   a saída ficam fora do contorno tracejado, a 14 px dele (`portGap`, `modelo.js`); no elemento solto,
-  a 14 px do próprio elemento, como antes.
+  a 14 px do próprio elemento, como antes. A entrada do Final segue o mesmo padrão: fora do card, a
+  14 px dele (ficava em cima da borda).
 - **Ligações**: puxa-se de um ponto de saída para uma entrada, ou de uma entrada para uma
   saída. Puxar a linha solta a ponta mais perto: num ponto ela liga de novo, no vazio ela
   some. Clique na linha e Delete apaga. `linkProblem` (`modelo.js`) recusa ligar um grupo a
