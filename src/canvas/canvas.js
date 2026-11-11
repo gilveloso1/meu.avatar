@@ -933,31 +933,51 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("[data-open-library]")) openLibrary();
 });
 
-/* ---------- seus arquivos ---------- */
+/* ---------- arquivos ---------- */
 
-// O seletor único: o que a pessoa gerou (vídeo, imagem e áudio), os ativos dos avatares e os arquivos
-// deste projeto, com busca, tipo e pastas. Vem do servidor uma página por vez (PROJETO.acervo, o mesmo
-// acervo do agente); no protótipo, sem servidor, só os vídeos do exemplo (CONFIG.videos).
-const lib = $("#lib-dlg");
+// O painel Arquivos (folha lateral à esquerda): o que a pessoa gerou (vídeo, imagem e áudio), os
+// ativos dos avatares e os arquivos deste projeto, com busca, tipo e pastas. Convive com o canvas:
+// arrasta-se o arquivo até o ponto em que ele entra, ou toca-se nele. Vem do servidor uma página por
+// vez (PROJETO.acervo, o mesmo acervo do agente); no protótipo, sem servidor, só os vídeos do exemplo.
+const lib = $("#lib");
 const KIND = { video: "video", imagem: "image", audio: "audio" };
-const SOURCES = { gerado: "Gerados", avatar: "Avatares", projeto: "Deste projeto" };
+const SOURCES = { gerado: "Gerados", avatar: "Avatares", projeto: "Projeto" };
 const EMPTY = { gerado: "Você ainda não gerou nada.", avatar: "Seus avatares ainda não têm arquivos.", projeto: "Este projeto ainda não tem arquivos enviados." };
-// Onde a pessoa está no seletor: a origem, o tipo, a busca e, dentro da origem, o avatar e a pasta abertos.
+const LIB_DRAG = "application/x-meu-avatar-arquivo";
+// Onde a pessoa está no painel: a origem, o tipo, a busca e, dentro da origem, o avatar e a pasta abertos.
 let libAt = { fonte: "gerado", tipo: "", q: "", avatar: null, pasta: null };
 let libItems = [];
 let libNext = null;
 let libCall = 0;
+let libLoaded = false;
 
-function openLibrary() {
-  lib.showModal();
-  loadLibrary();
+/** Abre ou fecha o painel; o canvas encolhe para dar lugar, e a escolha fica lembrada. */
+function showLibrary(open) {
+  lib.hidden = !open;
+  $(".editor").classList.toggle("has-files", open);
+  for (const b of document.querySelectorAll("[data-open-library]")) b.setAttribute("aria-expanded", String(open));
+  try {
+    localStorage.setItem("canvas-arquivos", open ? "1" : "0");
+  } catch {}
+  if (open && !libLoaded) loadLibrary();
 }
+const openLibrary = () => showLibrary(lib.hidden);
 
-/** Uma página do seletor; com `more`, a seguinte, no fim da lista. Só a resposta do último pedido vale. */
+/** Os blocos do canvas pelo endereço do arquivo: o card do que já entrou ganha o selo. */
+const inCanvas = () => new Set(project.blocks.map((b) => b.src));
+
+/** Uma página do painel; com `more`, a seguinte, no fim da lista. Só a resposta do último pedido vale. */
 async function loadLibrary(more = false) {
+  libLoaded = true;
   const call = ++libCall;
-  const list = $("#lib-list");
-  if (!more) (libItems = []), (libNext = null), (list.innerHTML = ""), (list.scrollTop = 0);
+  const [folders, grid, audios, empty] = [$("#lib-folders"), $("#lib-grid"), $("#lib-audios"), $("#lib-empty")];
+  if (!more) {
+    libItems = [];
+    libNext = null;
+    for (const el of [folders, grid, audios]) el.innerHTML = "";
+    $("#lib-body").scrollTop = 0;
+  }
+  empty.hidden = true;
   $("#lib-more").hidden = true;
   renderCrumbs();
   let data;
@@ -975,27 +995,39 @@ async function loadLibrary(more = false) {
     } catch {
       if (call !== libCall) return;
       $("#lib-progress").hidden = true;
-      if (!more) list.innerHTML = `<p class="sheet-hint">${esc(CONFIG.erros?.acervo ?? "")}</p>`;
-      else toast(CONFIG.erros?.acervo ?? "");
+      if (more) return toast(CONFIG.erros?.acervo ?? "");
+      empty.textContent = CONFIG.erros?.acervo ?? "";
+      empty.hidden = false;
       return;
     }
     if (call !== libCall) return;
     $("#lib-progress").hidden = true;
   }
   const from = libItems.length;
+  const used = inCanvas();
   libItems.push(...(data.arquivos ?? []));
   libNext = data.continuar ?? null;
-  const folders = [
-    ...(data.avatares ?? []).map((a) => `<button class="xlist__item interactive" type="button" data-lib-avatar="${esc(a.id)}" data-name="${esc(a.nome)}"><span class="xlist__thumb xlist__thumb--round">${a.foto ? `<img src="${esc(a.foto)}" alt="" loading="lazy">` : `<span class="icon" aria-hidden="true">face</span>`}</span><span class="xlist__text">${esc(a.nome)}</span><span class="xlist__trail">${a.itens}</span></button>`),
-    ...(data.pastas ?? []).map((p) => `<button class="xlist__item interactive" type="button" data-lib-folder="${esc(p.id)}" data-name="${esc(p.nome)}"><span class="xlist__thumb"><span class="icon" aria-hidden="true">folder</span></span><span class="xlist__text">${esc(p.nome)}</span><span class="xlist__trail">${p.itens}</span></button>`),
-  ];
-  const files = (data.arquivos ?? []).map((a, i) => {
-    // O vídeo só baixa o começo, para o quadro; a imagem, quando aparece; o áudio não tem imagem.
-    const thumb = a.tipo === "video" ? `<video src="${esc(a.src)}#t=0.5" preload="metadata" muted playsinline></video>` : a.tipo === "imagem" ? `<img src="${esc(a.src)}" alt="" loading="lazy">` : `<span class="icon" aria-hidden="true">mic</span>`;
-    return `<button class="xlist__item interactive" type="button" data-lib="${from + i}" title="${esc(a.nome)}"><span class="xlist__thumb">${thumb}</span><span class="xlist__text">${esc(a.nome)}</span><span class="xlist__trail">${esc(a.de ?? a.quando ?? "")}</span><span class="icon" hidden data-added>check</span></button>`;
+  const row = (attr, thumb, name, trail) => `<button class="xlist__item interactive" type="button" ${attr} title="${esc(name)}">${thumb}<span class="xlist__text">${esc(name)}</span><span class="xlist__trail">${esc(trail)}</span></button>`;
+  const icon = (name, round = false) => `<span class="xlist__thumb${round ? " xlist__thumb--round" : ""}"><span class="icon" aria-hidden="true">${name}</span></span>`;
+  folders.insertAdjacentHTML(
+    "beforeend",
+    [
+      ...(data.avatares ?? []).map((a) => row(`data-lib-avatar="${esc(a.id)}" data-name="${esc(a.nome)}"`, a.foto ? `<span class="xlist__thumb xlist__thumb--round"><img src="${esc(a.foto)}" alt="" loading="lazy"></span>` : icon("face", true), a.nome, a.itens)),
+      ...(data.pastas ?? []).map((p) => row(`data-lib-folder="${esc(p.id)}" data-name="${esc(p.nome)}"`, icon("folder"), p.nome, p.itens)),
+    ].join(""),
+  );
+  const badge = (a) => (used.has(a.src) ? `<span class="ftile__badge" title="Já está no canvas"><span class="icon" aria-hidden="true">check</span></span>` : "");
+  (data.arquivos ?? []).forEach((a, i) => {
+    const n = from + i;
+    if (a.tipo === "audio") return audios.insertAdjacentHTML("beforeend", row(`data-lib="${n}" draggable="true"`, icon("mic"), a.nome, a.de ?? a.quando ?? ""));
+    // O vídeo só baixa o começo, para o quadro; a imagem, quando aparece.
+    const media = a.tipo === "video" ? `<video src="${esc(a.src)}#t=0.5" preload="metadata" muted playsinline></video>` : `<img src="${esc(a.src)}" alt="" loading="lazy" draggable="false">`;
+    grid.insertAdjacentHTML("beforeend", `<button class="ftile" type="button" data-lib="${n}" draggable="true" title="${esc(a.nome)}"><span class="ftile__media">${media}${badge(a)}</span><span class="ftile__name">${esc(a.nome)}</span></button>`);
   });
-  list.insertAdjacentHTML("beforeend", [...folders, ...files].join(""));
-  if (!list.children.length) list.innerHTML = `<p class="sheet-hint">${esc(libAt.q || libAt.tipo || libAt.pasta ? "Nada encontrado." : EMPTY[libAt.fonte])}</p>`;
+  if (!folders.children.length && !grid.children.length && !audios.children.length) {
+    empty.textContent = libAt.q || libAt.tipo || libAt.pasta ? "Nada encontrado." : EMPTY[libAt.fonte];
+    empty.hidden = false;
+  }
   $("#lib-more").hidden = !libNext;
 }
 
@@ -1011,20 +1043,69 @@ function renderCrumbs() {
     .join("")}</nav>`;
 }
 
-$("#lib-close")?.addEventListener("click", () => lib.close());
+/**
+ * Põe um arquivo do painel no canvas. Com `at` (onde foi solto), ali; tocado, no meio do que está à
+ * vista, ou embaixo de tudo se ali já houver algo (para não cair em cima de um bloco).
+ */
+async function addFromLibrary(a, at = null) {
+  const kind = KIND[a.tipo];
+  // A imagem não tem duração: fica 3 s e pode ir até o limite; o vídeo e o áudio dizem a deles.
+  const dur = kind === "image" ? M.IMAGE_MAX : await probeUrl(a.src, kind);
+  const before = project;
+  project = structuredClone(project);
+  const b = { id: M.newId("b"), tone: M.nextTone(project, kind, a.src), kind, name: a.nome, src: a.src, dur, tin: 0, tout: kind === "image" ? 3 : dur, x: 0, y: 0, mute: false, vol: 1 };
+  const r = vp.getBoundingClientRect();
+  const mid = toWorld(r.left + r.width / 2, r.top + r.height / 2);
+  const spot = at ?? { x: mid.x - M.width(b) / 2, y: mid.y - M.height(b) / 2 };
+  const [w, h] = [M.width(b), M.height(b)];
+  const taken = !at && project.blocks.some((o) => o.x < spot.x + w + 24 && o.x + M.width(o) + 24 > spot.x && o.y < spot.y + h + 48 && o.y + M.height(o) + 48 > spot.y);
+  b.x = spot.x;
+  b.y = taken ? Math.max(...project.blocks.map((o) => o.y + M.height(o) + 48)) : spot.y;
+  project.blocks.push(b);
+  const first = M.linkFirst(project, b);
+  sel = { type: "block", id: b.id };
+  preview = { type: "block", id: b.id };
+  commit(before);
+  render();
+  if (first) fit();
+  for (const el of lib.querySelectorAll(".ftile[data-lib]")) if (libItems[+el.dataset.lib]?.src === a.src && !$(".ftile__badge", el)) $(".ftile__media", el).insertAdjacentHTML("beforeend", `<span class="ftile__badge" title="Já está no canvas"><span class="icon" aria-hidden="true">check</span></span>`);
+  toast(`${a.nome} entrou no canvas.`);
+}
+
+/** O arquivo tocado ou solto entra no canvas, com o indicador no próprio item enquanto a duração é lida. */
+async function pickFromLibrary(item, at = null) {
+  if (!item || item.dataset.adding) return;
+  const a = libItems[+item.dataset.lib];
+  if (!a) return;
+  item.dataset.adding = "1";
+  item.classList.add("is-busy");
+  ($(".ftile__media", item) ?? item).insertAdjacentHTML("beforeend", `<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.8"/></svg>`);
+  try {
+    await addFromLibrary(a, at);
+  } catch {
+    toast((a.tipo === "video" ? CONFIG.erros?.video : CONFIG.erros?.abrir) ?? "");
+  }
+  delete item.dataset.adding;
+  item.classList.remove("is-busy");
+  $(".spinner", item)?.remove();
+}
+
+$("#lib-close")?.addEventListener("click", () => showLibrary(false));
 $("#lib-more")?.addEventListener("click", () => loadLibrary(true));
 $("#lib-sources")?.addEventListener("click", (e) => {
   const b = e.target.closest("[data-lib-source]");
   if (!b) return;
-  for (const o of $("#lib-sources").children) o.toggleAttribute("aria-current", o === b);
+  for (const o of $("#lib-sources").children) o.setAttribute("aria-selected", String(o === b));
   libAt = { ...libAt, fonte: b.dataset.libSource, avatar: null, pasta: null };
   loadLibrary();
 });
+// Chips de filtro: um por vez, e tocar no escolhido volta a mostrar tudo.
 $("#lib-types")?.addEventListener("click", (e) => {
   const b = e.target.closest("[data-lib-type]");
   if (!b) return;
-  for (const o of $("#lib-types").children) o.setAttribute("aria-pressed", String(o === b));
-  libAt = { ...libAt, tipo: b.dataset.libType };
+  const on = b.getAttribute("aria-pressed") !== "true";
+  for (const o of $("#lib-types").children) o.setAttribute("aria-pressed", String(on && o === b));
+  libAt = { ...libAt, tipo: on ? b.dataset.libType : "" };
   loadLibrary();
 });
 let libTyping = 0;
@@ -1041,46 +1122,25 @@ $("#lib-crumbs")?.addEventListener("click", (e) => {
   libAt = up === "avatar" ? { ...libAt, pasta: null } : { ...libAt, avatar: null, pasta: null };
   loadLibrary();
 });
-$("#lib-list")?.addEventListener("click", async (e) => {
+$("#lib-body")?.addEventListener("click", (e) => {
   const avatar = e.target.closest("[data-lib-avatar]");
   const folder = e.target.closest("[data-lib-folder]");
   if (avatar || folder) {
     libAt = avatar ? { ...libAt, avatar: { id: avatar.dataset.libAvatar, name: avatar.dataset.name }, pasta: null } : { ...libAt, pasta: { id: folder.dataset.libFolder, name: folder.dataset.name } };
     return loadLibrary();
   }
-  const item = e.target.closest("[data-lib]");
-  if (!item || item.dataset.adding) return;
-  item.dataset.adding = "1";
-  item.classList.add("is-busy");
-  item.insertAdjacentHTML("beforeend", `<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.8"/></svg>`);
-  const a = libItems[+item.dataset.lib];
-  const kind = KIND[a.tipo];
-  try {
-    // A imagem não tem duração: fica 3 s e pode ir até o limite; o vídeo e o áudio dizem a deles.
-    const dur = kind === "image" ? M.IMAGE_MAX : await probeUrl(a.src, kind);
-    const r = vp.getBoundingClientRect();
-    const at = toWorld(r.left + 80, r.top + 120);
-    const before = project;
-    project = structuredClone(project);
-    // Um embaixo do outro, para não cair em cima do que já está no canvas.
-    const y = Math.max(at.y, ...project.blocks.map((b) => b.y + M.height(b) + 48));
-    const b = { id: M.newId("b"), tone: M.nextTone(project, kind, a.src), kind, name: a.nome, src: a.src, dur, tin: 0, tout: kind === "image" ? 3 : dur, x: at.x, y, mute: false, vol: 1 };
-    project.blocks.push(b);
-    const first = M.linkFirst(project, b);
-    sel = { type: "block", id: b.id };
-    preview = { type: "block", id: b.id };
-    commit(before);
-    render();
-    if (first) fit();
-    $("[data-added]", item).hidden = false;
-    toast(`${a.nome} entrou no canvas.`);
-  } catch {
-    toast((kind === "video" ? CONFIG.erros?.video : CONFIG.erros?.abrir) ?? "");
-  }
-  delete item.dataset.adding;
-  item.classList.remove("is-busy");
-  $(".spinner", item)?.remove();
+  pickFromLibrary(e.target.closest("[data-lib]"));
 });
+// Arrastar para o canvas: o item leva só a posição dele na lista; quem solta é o canvas (drop, abaixo).
+$("#lib-body")?.addEventListener("dragstart", (e) => {
+  const item = e.target.closest?.("[data-lib]");
+  if (!item) return;
+  e.dataTransfer.setData(LIB_DRAG, item.dataset.lib);
+  e.dataTransfer.effectAllowed = "copy";
+});
+try {
+  if (localStorage.getItem("canvas-arquivos") === "1") showLibrary(true);
+} catch {}
 
 /** A duração de um vídeo ou de um áudio pelo endereço (só o cabeçalho do arquivo). */
 function probeUrl(src, kind = "video") {
@@ -1102,7 +1162,7 @@ $("#file").onchange = (e) => {
 /* ---------- arrastar e colar: arquivos entram como blocos; texto vira nota ---------- */
 
 // Onde o mouse está no canvas: o que for colado entra ali. Fora dele, embaixo de tudo o que já está
-// no canvas (como os "Seus arquivos"), para não cair em cima de nada.
+// no canvas, para não cair em cima de nada.
 let pointer = null;
 vp.addEventListener("pointermove", (e) => (pointer = { x: e.clientX, y: e.clientY }));
 vp.addEventListener("pointerleave", () => (pointer = null));
@@ -1131,7 +1191,7 @@ function bringIn(files, at) {
   if (ok.length) importFiles(ok.map((f) => (/^image\.\w+$/.test(f.name) ? new File([f], `Imagem colada.${f.name.split(".").pop()}`, { type: f.type }) : f)), at);
 }
 
-const carries = (e) => [...(e.dataTransfer?.types ?? [])].some((t) => t === "Files" || t === "text/plain");
+const carries = (e) => [...(e.dataTransfer?.types ?? [])].some((t) => t === "Files" || t === "text/plain" || t === LIB_DRAG);
 const typing = (el) => el?.closest?.("input, textarea, [contenteditable]");
 // O aviso de soltar fica no canvas enquanto algo de fora passa por cima da página.
 let dragDepth = 0;
@@ -1151,6 +1211,9 @@ document.addEventListener("drop", (e) => {
   dropping(false);
   if (!carries(e) || typing(e.target)) return;
   e.preventDefault();
+  // Um arquivo do painel Arquivos: só entra solto no canvas (solto de volta no painel, nada acontece).
+  const fromLib = e.dataTransfer.getData(LIB_DRAG);
+  if (fromLib) return vp.contains(e.target) ? pickFromLibrary(lib.querySelector(`[data-lib="${CSS.escape(fromLib)}"]`), toWorld(e.clientX, e.clientY)) : undefined;
   const at = vp.contains(e.target) ? toWorld(e.clientX, e.clientY) : dropPoint();
   if (e.dataTransfer.files.length) return bringIn([...e.dataTransfer.files], at);
   const text = e.dataTransfer.getData("text/plain").trim();

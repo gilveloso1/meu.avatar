@@ -438,9 +438,12 @@ Fora da ordem acima, pedido pelo dono: uma página com os números do site, só 
 
 ## Pendências pequenas
 
-- **Canvas**: o "Seus arquivos" (11/11/2026, [canvas.md](canvas.md)) não sabe se um vídeo enviado
-  (de avatar ou do projeto) tem som: ele entra com a camada de áudio, mesmo o WebM mudo. Também não
-  escolhe vários de uma vez, e os arquivos sem uso do projeto só se apagam pelo agente (`limpar_arquivos`).
+- **Canvas**: o painel Arquivos (11/11/2026, [canvas.md](canvas.md)) tem a etapa 1 feita (painel à
+  esquerda, abas, grade e arrastar para o canvas). Faltam: etapa 2, a prévia ao passar o mouse (o
+  vídeo mudo no card, ouvir o áudio) e a duração no card; etapa 3, o "Do computador" dentro do painel
+  e a escolha de vários de uma vez. Também: o card não enquadra o rosto como as listas do site; o
+  vídeo enviado (de avatar ou do projeto) entra com a camada de áudio mesmo sem som; e os arquivos
+  sem uso do projeto só se apagam pelo agente (`limpar_arquivos`).
 - **Canvas**: velocidade e enquadramento ainda não têm campos nos Ajustes (só pela API, a prévia
   mostra), e o fundo desfocado da prévia não acompanha o zoom (o da exportação, sim).
 

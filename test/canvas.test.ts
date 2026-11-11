@@ -34,7 +34,7 @@ async function novo(session: string): Promise<string> {
 const config = (page: string) => JSON.parse(/<script type="application\/json" id="canvas-config">([\s\S]*?)<\/script>/.exec(page)![1]!);
 
 describe("projetos do canvas", () => {
-  it("Novo projeto abre o canvas com o projeto e as frases do catálogo; os arquivos vêm depois, pelo Seus arquivos", async () => {
+  it("Novo projeto abre o canvas com o projeto e as frases do catálogo; os arquivos vêm depois, pelo painel Arquivos", async () => {
     const admin = await cookie();
     await videos();
     const id = await novo(admin);
@@ -42,16 +42,18 @@ describe("projetos do canvas", () => {
     expect(res.status).toBe(200);
     const page = await res.text();
     const c = config(page);
-    // A página não carrega mais a lista de vídeos: o seletor pede uma página por vez.
+    // A página não carrega mais a lista de vídeos: o painel Arquivos pede uma página por vez.
     expect(c.videos).toBeUndefined();
-    expect(page).toContain("Seus arquivos");
+    // O painel vem fechado, à esquerda do canvas, e o botão da barra o abre.
+    expect(page).toMatch(/<aside class="files-panel" id="lib"[^>]* hidden>/);
+    expect(page).toContain('data-open-library aria-controls="lib" aria-expanded="false"');
     expect(c.projeto).toMatchObject({ id, name: "Projeto sem nome", data: { blocks: [], edges: [] }, salvar: `/projetos/${id}/salvar`, arquivos: `/projetos/${id}/arquivos`, acervo: `/projetos/${id}/acervo` });
     expect(c.erros).toMatchObject({ arquivo: ERROS.canvasArquivo, salvar: ERROS.canvasSalvar, nome: ERROS.projetoNome, abrir: ERROS.canvasAbrir, acervo: ERROS.canvasAcervo });
     expect(res.headers.get("content-security-policy")).toContain("img-src 'self' blob: data:");
     expect(res.headers.get("content-security-policy")).toContain("connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com blob:");
   });
 
-  describe("Seus arquivos (o seletor do canvas)", () => {
+  describe("Arquivos (o painel do canvas)", () => {
     const V1 = "11111111-1111-4111-8111-111111111111";
     type Arquivo = { id: string; nome: string; tipo: string; src: string; quando: string; de?: string };
     type Lista = { pastas?: { id: string; nome: string; itens: number }[]; avatares?: { id: string; nome: string; foto: string | null; itens: number }[]; arquivos: Arquivo[]; continuar?: string };

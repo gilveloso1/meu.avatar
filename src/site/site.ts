@@ -907,7 +907,7 @@ ${error ? snackbar(error) : ""}`;
   }
 
   /**
-   * "Seus arquivos" do canvas: o que a pessoa pode pôr no projeto, uma página por vez, do mesmo
+   * O painel Arquivos do canvas: o que a pessoa pode pôr no projeto, uma página por vez, do mesmo
    * acervo do agente (src/acervo.ts). Três origens: o que os modelos geraram (vídeo, imagem e áudio,
    * com as pastas da aba Vídeos), os ativos de um avatar (com as pastas dele) e os arquivos enviados
    * a este projeto (os de outro projeto não entram: a exportação só lê os do próprio). Como nas
@@ -960,7 +960,7 @@ ${error ? snackbar(error) : ""}`;
     return Response.json({ pastas: pastas.filter((x) => x.itens), arquivos, ...(lista.continuar ? { continuar: lista.continuar } : {}) }, { headers: { "cache-control": "private, no-store" } });
   }
 
-  /** O canvas de um projeto, com o que já estava salvo; os arquivos da pessoa vêm depois, pelo "Seus arquivos". */
+  /** O canvas de um projeto, com o que já estava salvo; os arquivos da pessoa vêm depois, pelo painel Arquivos. */
   private async canvasPage(user: User, project: Project): Promise<Response> {
     let data: unknown = null;
     try {
@@ -993,7 +993,7 @@ ${error ? snackbar(error) : ""}`;
     };
     const actions = `<button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
     <button class="button button--tonal interactive" type="button" data-open-file><span class="icon">upload</span>Do computador</button>
-    <button class="button button--filled interactive" type="button" data-open-library><span class="icon">photo_library</span>Seus arquivos</button>`;
+    <button class="button button--filled interactive" type="button" data-open-library aria-controls="lib" aria-expanded="false"><span class="icon">photo_library</span>Arquivos</button>`;
     // O JSON vai num bloco de dados (não executa); "<" escapado para não fechar a tag.
     const body = `${CANVAS_STYLE}
 ${CANVAS_BODY}
@@ -2535,7 +2535,7 @@ const AUDIO_THUMB = `<span class="frame__placeholder"><span class="icon-tile ico
 
 /** Quantas pastas um avatar pode ter. */
 export { MAX_FOLDERS };
-/** Quantos arquivos o "Seus arquivos" do canvas traz por vez. */
+/** Quantos arquivos o painel Arquivos do canvas traz por vez. */
 export const LIBRARY_PAGE = 24;
 
 /** A lista de ativos do avatar, ou uma pasta dele aberta. */

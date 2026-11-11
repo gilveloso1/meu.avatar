@@ -303,37 +303,99 @@ a.xlist__item { color: inherit; text-decoration: none; }
 .canvas-empty .empty .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
 /* O ícone grande do estado vazio do site não vale para os ícones dos botões. */
 .canvas-empty .empty .button .icon { font-size: 18px; color: inherit; }
-/* Diálogos com lista (exportar e Seus arquivos): a lista expressiva rola por dentro. */
+/* O diálogo de exportar: a lista expressiva rola por dentro. A miniatura de 40 px serve às listas do Arquivos. */
 .library-dialog { width: min(480px, calc(100% - 48px)); }
 .library-dialog .xlist { overflow-y: auto; max-height: 60vh; }
 .xlist__thumb { width: 40px; height: 40px; flex: none; display: grid; place-items: center; overflow: hidden; border-radius: var(--md-sys-shape-corner-small); background: var(--md-sys-color-surface-container-highest); }
 .xlist__thumb video, .xlist__thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 .xlist__item .icon { color: var(--md-sys-color-primary); }
-/* Seus arquivos: o diálogo básico do M3 na largura máxima (560 px), com altura fixa para a lista
-   não pular a cada troca de origem. De cima para baixo: origem (botões conectados), busca, tipo
-   (chips de filtro), o caminho da pasta aberta e a lista, que rola. */
-.files-dialog { width: min(560px, calc(100% - 48px)); }
-.files-dialog[open] { height: min(720px, calc(100% - 48px)); }
-.files-dialog .segmented-button { display: grid; align-self: stretch; }
-.files-dialog .segmented-button__segment { margin: 0; border: 0; cursor: pointer; }
-.files-dialog .search-field { width: auto; flex: none; background: var(--md-sys-color-surface-container-lowest); }
-.files-dialog .chip-set { margin: 0; flex: none; }
-.files-dialog .crumbs { flex: none; margin-top: -4px; margin-bottom: -4px; }
-.files-dialog button.crumbs__item { margin: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; cursor: pointer; }
-.files-dialog .xlist { flex: 1; min-height: 0; max-height: none; align-content: start; }
-.files-dialog .xlist__item { flex: none; cursor: pointer; }
-.files-dialog .xlist__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.files-dialog .xlist__item .spinner { position: static; flex: none; width: 24px; height: 24px; }
-.files-dialog .xlist__thumb .icon { font-size: 24px; }
-.files-dialog .xlist__thumb--round { border-radius: var(--md-sys-shape-corner-full); }
-.files-dialog .linear-progress { --progress-gap: var(--md-sys-color-surface-container-high); flex: none; }
-.files-dialog .sheet-hint { margin: auto; text-align: center; }
-.files-dialog .dialog__actions { flex: none; }
-.files-dialog #lib-more { margin-right: auto; }
+/* Arquivos: folha lateral padrão do M3, presa à esquerda do canvas (320 px, até 400 no M3), que
+   convive com ele e rola por dentro; o canvas encolhe para dar lugar. De cima para baixo: título e
+   fechar, a origem em abas (as mesmas da folha da direita), busca, tipo em chips de filtro, o caminho
+   da pasta aberta e o conteúdo: pastas e avatares em lista, vídeos e imagens em grade, áudios em lista. */
+.editor.has-files { grid-template-columns: var(--files-width) minmax(0, 1fr) var(--layout-config); }
+.editor { --files-width: 320px; }
+.files-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--md-sys-color-outline-variant); background: var(--md-sys-color-surface-container-low); }
+.files-panel__head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 64px; padding: 0 12px 0 24px; }
+.files-panel__head h2 { margin: 0; font: var(--md-sys-typescale-title-large); }
+.files-panel .tabs { flex: none; }
+.files-panel .tabs__tab { flex: 1; padding: 0 8px; }
+.files-panel__tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 8px; }
+.files-panel .search-field { width: auto; }
+.files-panel .chip-set { margin: 0; }
+.files-panel .chip { height: 32px; }
+.files-panel .crumbs { margin: 0 0 0 -8px; }
+.files-panel .crumbs__path { font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; }
+.files-panel button.crumbs__item { margin: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; cursor: pointer; }
+.files-panel .crumbs__item { padding: 6px 8px; }
+.files-panel .linear-progress { --progress-gap: var(--md-sys-color-surface-container-low); flex: none; margin: 0 16px; }
+.files-panel__body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 8px 16px 24px; }
+.files-panel__body > :empty { display: none; }
+.files-panel .xlist__item { cursor: pointer; min-height: 48px; padding: 4px 12px 4px 4px; gap: 12px; font: var(--md-sys-typescale-body-medium); letter-spacing: 0.016rem; }
+.files-panel .xlist__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-panel .xlist__thumb .icon { font-size: 24px; }
+.files-panel .xlist__thumb--round { border-radius: var(--md-sys-shape-corner-full); }
+.files-panel .xlist__item .spinner { position: static; flex: none; width: 24px; height: 24px; }
+.files-panel .sheet-hint { margin: 24px 8px; text-align: center; }
+.files-panel #lib-more { align-self: center; }
+/* A grade: três colunas de cards quadrados só com a imagem (cantos de 12 px, como o card do M3) e o
+   nome embaixo, numa linha. Arrasta-se o card para o canvas; tocar também põe. */
+.fgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ftile { position: relative; display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; border: 0; background: none; color: var(--md-sys-color-on-surface); text-align: left; cursor: grab; }
+.ftile:active { cursor: grabbing; }
+.ftile__media { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: var(--md-sys-shape-corner-medium); background: var(--md-sys-color-surface-container-highest); }
+.ftile__media video, .ftile__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 25%; pointer-events: none; }
+.ftile__media::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--md-sys-color-on-surface); opacity: 0; transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
+.ftile:hover .ftile__media::after { opacity: var(--md-sys-state-hover-state-layer-opacity); }
+.ftile:focus-visible { outline: 0; }
+.ftile:focus-visible .ftile__media { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
+.ftile__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--md-sys-typescale-label-medium); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
+/* O que já entrou no canvas: o selo de check no canto do card. */
+.ftile__badge { position: absolute; top: 6px; right: 6px; z-index: 1; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.ftile__badge .icon { font-size: 16px; }
+.ftile .spinner { position: absolute; z-index: 1; top: calc(50% - 22px); left: calc(50% - 12px); width: 24px; height: 24px; color: var(--md-sys-color-on-primary); }
+/* Tela estreita: os dois painéis não cabem ao lado do canvas; o Arquivos passa por cima dele. */
+@media (max-width: 1199px) {
+  .editor.has-files { grid-template-columns: minmax(0, 1fr) var(--layout-config); }
+  .editor { position: relative; }
+  .files-panel { position: absolute; z-index: 6; left: 0; top: 0; bottom: 0; width: min(var(--files-width), 100%); box-shadow: var(--md-sys-elevation-level1); }
+}
+@media (max-width: 839px) {
+  .editor.has-files { grid-template-columns: 1fr; }
+  .files-panel { bottom: auto; height: 70vh; }
+}
 </style>
 
 
 <main class="editor">
+  <aside class="files-panel" id="lib" aria-labelledby="lib-title" hidden>
+    <div class="files-panel__head">
+      <h2 id="lib-title">Arquivos</h2>
+      <button class="icon-button interactive" type="button" id="lib-close" aria-label="Fechar" title="Fechar"><span class="icon">close</span></button>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Origem" id="lib-sources">
+      <button class="tabs__tab interactive" type="button" role="tab" data-lib-source="gerado" aria-selected="true"><span class="tabs__content">Gerados</span></button>
+      <button class="tabs__tab interactive" type="button" role="tab" data-lib-source="avatar" aria-selected="false"><span class="tabs__content">Avatares</span></button>
+      <button class="tabs__tab interactive" type="button" role="tab" data-lib-source="projeto" aria-selected="false"><span class="tabs__content">Projeto</span></button>
+    </div>
+    <div class="files-panel__tools">
+      <label class="search-field"><span class="icon" aria-hidden="true">search</span><input class="search-field__input" type="search" id="lib-q" placeholder="Buscar" aria-label="Buscar nos seus arquivos" autocomplete="off"></label>
+      <div class="chip-set" role="group" aria-label="Tipo" id="lib-types">
+        <button class="chip interactive" type="button" data-lib-type="video" aria-pressed="false"><span class="icon chip__check">check</span>Vídeos</button>
+        <button class="chip interactive" type="button" data-lib-type="imagem" aria-pressed="false"><span class="icon chip__check">check</span>Imagens</button>
+        <button class="chip interactive" type="button" data-lib-type="audio" aria-pressed="false"><span class="icon chip__check">check</span>Áudios</button>
+      </div>
+      <div class="crumbs" id="lib-crumbs" hidden></div>
+    </div>
+    <div class="linear-progress" id="lib-progress" role="progressbar" aria-label="Carregando" hidden></div>
+    <div class="files-panel__body" id="lib-body">
+      <div class="xlist" id="lib-folders"></div>
+      <div class="fgrid" id="lib-grid"></div>
+      <div class="xlist" id="lib-audios"></div>
+      <p class="sheet-hint" id="lib-empty" hidden></p>
+      <button class="button button--text interactive" type="button" id="lib-more" hidden>Mostrar mais</button>
+    </div>
+  </aside>
   <div class="canvas">
     <div id="vp">
       <div id="world">
@@ -348,7 +410,7 @@ a.xlist__item { color: inherit; text-decoration: none; }
         <p class="empty__title">Comece pelos seus arquivos</p>
         <p>Traga os ganchos, o corpo e os CTAs, encaixe e ligue ao Final.</p>
         <div class="row">
-          <button class="button button--filled interactive" type="button" data-open-library><span class="icon">photo_library</span>Seus arquivos</button>
+          <button class="button button--filled interactive" type="button" data-open-library><span class="icon">photo_library</span>Arquivos</button>
           <button class="button button--outlined interactive" type="button" data-open-file><span class="icon">upload</span>Do computador</button>
         </div>
       </div>
@@ -411,28 +473,6 @@ a.xlist__item { color: inherit; text-decoration: none; }
   <div class="dialog__actions">
     <button class="button button--text interactive" type="button" id="dlg-close">Fechar</button>
     <a class="button button--filled interactive" id="dlg-zip" hidden><span class="icon">download</span>Baixar todas</a>
-  </div>
-</dialog>
-<dialog class="dialog files-dialog" id="lib-dlg" aria-labelledby="lib-title">
-  <h3 id="lib-title">Seus arquivos</h3>
-  <div class="segmented-button" role="group" aria-label="Origem" id="lib-sources">
-    <button class="segmented-button__segment interactive" type="button" data-lib-source="gerado" aria-current="true">Gerados</button>
-    <button class="segmented-button__segment interactive" type="button" data-lib-source="avatar">Avatares</button>
-    <button class="segmented-button__segment interactive" type="button" data-lib-source="projeto">Deste projeto</button>
-  </div>
-  <label class="search-field"><span class="icon" aria-hidden="true">search</span><input class="search-field__input" type="search" id="lib-q" placeholder="Buscar" aria-label="Buscar nos seus arquivos" autocomplete="off"></label>
-  <div class="chip-set" role="group" aria-label="Tipo" id="lib-types">
-    <button class="chip interactive" type="button" data-lib-type="" aria-pressed="true"><span class="icon chip__check">check</span>Tudo</button>
-    <button class="chip interactive" type="button" data-lib-type="video" aria-pressed="false"><span class="icon chip__check">check</span>Vídeos</button>
-    <button class="chip interactive" type="button" data-lib-type="imagem" aria-pressed="false"><span class="icon chip__check">check</span>Imagens</button>
-    <button class="chip interactive" type="button" data-lib-type="audio" aria-pressed="false"><span class="icon chip__check">check</span>Áudios</button>
-  </div>
-  <div class="crumbs" id="lib-crumbs" hidden></div>
-  <div class="linear-progress" id="lib-progress" role="progressbar" aria-label="Carregando" hidden></div>
-  <div class="xlist" id="lib-list"></div>
-  <div class="dialog__actions">
-    <button class="button button--text interactive" type="button" id="lib-more" hidden>Mostrar mais</button>
-    <button class="button button--text interactive" type="button" id="lib-close">Fechar</button>
   </div>
 </dialog>
 <input type="file" id="file" accept="video/*,image/*,audio/*" multiple hidden>
