@@ -181,3 +181,138 @@ describe("segurança do link de envio", () => {
     expect((await env.MIDIA.list({ prefix: "envios/" })).objects).toHaveLength(antes);
   });
 });
+
+describe("pastas dos ativos pelo agente", () => {
+  it("o ativo entra na pasta por url e pelo link, a pasta aparece nas listas e ele muda de pasta", async () => {
+    const { avatar } = dados<{ avatar: { id: string } }>(await ferramenta("criar_avatar", { nome: "Touro" }));
+    const outro = dados<{ avatar: { id: string } }>(await ferramenta("criar_avatar", { nome: "Urso" })).avatar.id;
+    expect(dados<{ erro: string }>(await ferramenta("criar_pasta", { de: "avatar", nome: "Fotos" })).erro).toBe("nao_encontrado");
+    const fotos = dados<{ pasta: { id: string; nome: string; avatar: { nome: string } } }>(await ferramenta("criar_pasta", { de: "avatar", avatar: avatar.id, nome: "Fotos" })).pasta;
+    expect(fotos).toMatchObject({ nome: "Fotos", avatar: { nome: "Touro" } });
+    const doOutro = dados<{ pasta: { id: string } }>(await ferramenta("criar_pasta", { de: "avatar", avatar: outro, nome: "Do Urso" })).pasta.id;
+
+    // A pasta de outro avatar não serve; a certa guarda o ativo.
+    expect(dados<{ erro: string }>(await ferramenta("enviar_ativo", { avatar: avatar.id, url: "https://arquivos.exemplo.com/touro.png", pasta: doOutro })).erro).toBe("pasta_inexistente");
+    expect(dados<{ erro: string }>(await ferramenta("enviar_ativo", { avatar: avatar.id, pasta: doOutro })).erro).toBe("pasta_inexistente");
+    const { ativo } = dados<{ ativo: Ativo & { pasta?: { id: string; nome: string } } }>(await ferramenta("enviar_ativo", { avatar: avatar.id, url: "https://arquivos.exemplo.com/touro.png", pasta: fotos.id }));
+    expect(ativo.pasta).toEqual({ id: fotos.id, nome: "Fotos" });
+    const { envio } = dados<Envio>(await ferramenta("enviar_ativo", { avatar: avatar.id, nome: "voz.mp3", tipo: "audio/mpeg", pasta: fotos.id }));
+    const pelolink = ((await (await enviar(envio.url, MP3, "audio/mpeg")).json()) as { ativo: string }).ativo;
+    expect(await env.DB.prepare("SELECT folder_id FROM avatar_assets WHERE id = ?").bind(pelolink).first()).toEqual({ folder_id: fotos.id });
+
+    type Lista = { avatares: { id: string; pastas?: { nome: string }[]; ativos: { id: string; pasta?: { nome: string } }[] }[] };
+    const touro = dados<Lista>(await ferramenta("listar_avatares", { busca: "Touro" })).avatares[0]!;
+    expect(touro.pastas).toEqual([{ id: fotos.id, nome: "Fotos" }]);
+    expect(touro.ativos.map((a) => a.pasta?.nome)).toEqual(["Fotos", "Fotos"]);
+    expect(dados<{ arquivos: { id: string }[] }>(await ferramenta("listar_arquivos", { pasta: fotos.id })).arquivos.map((a) => a.id).sort()).toEqual([ativo.id, pelolink].sort());
+    expect(dados<{ pastas: { nome: string; itens: number }[] }>(await ferramenta("listar_pastas", { de: "avatar", avatar: avatar.id })).pastas).toEqual([expect.objectContaining({ nome: "Fotos", itens: 2 })]);
+
+    // Mover: só entre as pastas do mesmo avatar; sem pasta, volta para a lista.
+    expect(dados<{ erro: string }>(await ferramenta("mover_para_pasta", { de: "avatar", avatar: avatar.id, itens: [ativo.id], pasta: doOutro })).erro).toBe("pasta_inexistente");
+    expect(dados<{ erro: string }>(await ferramenta("mover_para_pasta", { de: "avatar", avatar: outro, itens: [ativo.id], pasta: doOutro })).erro).toBe("itens_inexistentes");
+    expect(dados(await ferramenta("mover_para_pasta", { de: "avatar", avatar: avatar.id, itens: [ativo.id] }))).toMatchObject({ movidos: [ativo.id], pasta: null });
+    expect(await env.DB.prepare("SELECT folder_id FROM avatar_assets WHERE id = ?").bind(ativo.id).first()).toEqual({ folder_id: null });
+  });
+
+  it("a pasta apagada depois do link não segura o envio: o ativo fica fora de pasta", async () => {
+    const { avatar } = dados<{ avatar: { id: string } }>(await ferramenta("criar_avatar", { nome: "Touro" }));
+    const pasta = dados<{ pasta: { id: string } }>(await ferramenta("criar_pasta", { de: "avatar", avatar: avatar.id, nome: "Some" })).pasta.id;
+    const { envio } = dados<Envio>(await ferramenta("enviar_ativo", { avatar: avatar.id, pasta }));
+    await env.DB.prepare("DELETE FROM folders WHERE id = ?").bind(pasta).run();
+    const res = await enviar(envio.url, PNG, "image/png");
+    expect(res.status).toBe(201);
+    expect(await env.DB.prepare("SELECT folder_id FROM avatar_assets WHERE id = ?").bind(((await res.json()) as { ativo: string }).ativo).first()).toEqual({ folder_id: null });
+  });
+});
+
+describe("link de envio do projeto", () => {
+  const WEBM = new TextEncoder().encode("webm-do-computador");
+  const projeto = async (nome = "Campanha") => dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome }));
+  const link = async (id: string, args: Record<string, unknown> = {}) => dados<Envio>(await ferramenta("enviar_arquivo", { projeto: id, ...args })).envio;
+  const arquivos = async (id: string) => (await env.DB.prepare("SELECT COUNT(*) AS n FROM project_files WHERE project_id = ?").bind(id).first<{ n: number }>())!.n;
+
+  it("recebe o arquivo do computador, sem token, e ele entra no projeto com o adicionar", async () => {
+    const { id, revisao } = await projeto();
+    const envio = await link(id, { nome: "Depoimento.mp3", tipo: "audio/mpeg" });
+    expect(envio.url).toMatch(new RegExp(`^${SITE}/envio/[0-9a-f]{64}$`));
+    expect(envio.comando).toContain(envio.url);
+    expect(envio.comando).toContain("content-type: audio/mpeg");
+    expect(envio.comando).not.toContain("Bearer");
+    expect(Date.parse(envio.expira) - Date.now()).toBeLessThanOrEqual(ENVIO_MS);
+
+    const res = await enviar(envio.url, MP3, "audio/mpeg");
+    expect(res.status).toBe(201);
+    const guardado = (await res.json()) as { arquivo: string; projeto: string; src: string; usar: { arquivo: string } };
+    expect(guardado).toMatchObject({ projeto: id, src: `/projetos/${id}/arquivos/${guardado.arquivo}`, usar: { arquivo: guardado.arquivo } });
+    const lista = dados<{ arquivos: { id: string; nome: string; tipo: string }[] }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["arquivos"] })).arquivos;
+    expect(lista).toEqual([expect.objectContaining({ id: guardado.arquivo, nome: "Depoimento.mp3", tipo: "audio" })]);
+    expect((await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", ...guardado.usar, dur: 3 }] })).isError).toBeFalsy();
+    // Um envio só: o mesmo link não serve de novo.
+    expect((await enviar(envio.url, MP3, "audio/mpeg")).status).toBe(404);
+    expect(await arquivos(id)).toBe(1);
+  });
+
+  it("vídeo diz se tem som; tipo fora da lista, vazio e grande demais são recusados, e o link some", async () => {
+    const { id } = await projeto();
+    const video = (await (await enviar((await link(id)).url, WEBM, "video/webm")).json()) as { som?: boolean | null };
+    expect("som" in video).toBe(true);
+    for (const [corpo, tipo, status, erro] of [
+      ["<svg onload=alert(1)>", "image/svg+xml", 415, "tipo_invalido"],
+      ["<html></html>", "text/html", 415, "tipo_invalido"],
+      ["", "image/png", 400, "arquivo_vazio"],
+    ] as const) {
+      const { url } = await link(id);
+      const res = await enviar(url, corpo, tipo);
+      expect(res.status, tipo).toBe(status);
+      expect(((await res.json()) as { erro: string }).erro).toBe(erro);
+      expect((await enviar(url, PNG, "image/png")).status).toBe(404);
+    }
+    const { url } = await link(id);
+    const grande = await enviar(url, PNG, "image/png", { "content-length": String(11 * 1024 * 1024) });
+    expect(grande.status).toBe(413);
+    expect(await arquivos(id)).toBe(1);
+    // GET não envia nada.
+    expect((await call(new Request((await link(id)).url))).status).toBe(405);
+  });
+
+  it("vencido, projeto apagado, de outra conta, conta suspensa ou sem a API: o link não vale", async () => {
+    await memberCookie();
+    const membro = (await env.DB.prepare("SELECT id FROM users WHERE email = 'membro@exemplo.com'").first<{ id: number }>())!.id;
+    const { id } = await projeto();
+    const vencido = await criarEnvio(env.MIDIA, await admin(), { projeto: id }, "", "", Date.now() - ENVIO_MS - 1000);
+    expect((await enviar(`${SITE}/envio/${vencido.codigo}`, PNG, "image/png")).status).toBe(404);
+
+    // O ticket de uma conta para o projeto de outra, e o de uma conta sem a API (só por dentro).
+    const cruzado = await criarEnvio(env.MIDIA, membro, { projeto: id }, "", "");
+    expect((await enviar(`${SITE}/envio/${cruzado.codigo}`, PNG, "image/png")).status).toBe(404);
+
+    let l = await link(id);
+    await env.DB.prepare("UPDATE projects SET user_id = ? WHERE id = ?").bind(membro, id).run();
+    expect((await enviar(l.url, PNG, "image/png")).status).toBe(404);
+    await env.DB.prepare("UPDATE projects SET user_id = ? WHERE id = ?").bind(await admin(), id).run();
+
+    l = await link(id);
+    await env.DB.prepare("UPDATE users SET permissoes = ? WHERE id = ?").bind(JSON.stringify(["suspensa"]), await admin()).run();
+    expect((await enviar(l.url, PNG, "image/png")).status).toBe(404);
+    await env.DB.prepare("UPDATE users SET permissoes = '[]' WHERE id = ?").bind(await admin()).run();
+
+    l = await link(id);
+    expect(dados<{ apagado: boolean }>(await ferramenta("apagar_projeto", { projeto: id, confirmar: true })).apagado).toBe(true);
+    expect((await enviar(l.url, PNG, "image/png")).status).toBe(404);
+    expect(await arquivos(id)).toBe(0);
+    expect((await env.MIDIA.list({ prefix: `projetos/${id}/` })).objects).toHaveLength(0);
+  });
+
+  it("projeto de outra conta não gera link, e conta sem a API não chega à rota", async () => {
+    await memberCookie();
+    const { id } = await projeto("Alheio");
+    await env.DB.prepare("UPDATE projects SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com') WHERE id = ?").bind(id).run();
+    const antes = (await env.MIDIA.list({ prefix: "envios/" })).objects.length;
+    const r = await ferramenta("enviar_arquivo", { projeto: id });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("nao_encontrado");
+    await env.DB.prepare("INSERT INTO api_tokens (id, user_id, name, token_hash, created_at) SELECT ?, id, 'teste', ?, ? FROM users WHERE email = 'membro@exemplo.com'").bind(crypto.randomUUID(), await sha256("ma_membro"), new Date().toISOString()).run();
+    expect((await call(new Request(`${SITE}/api/v1/projetos/${id}/envio`, { method: "POST", body: "{}", headers: { authorization: "Bearer ma_membro" } }))).status).toBe(404);
+    expect((await env.MIDIA.list({ prefix: "envios/" })).objects).toHaveLength(antes);
+  });
+});

@@ -7,16 +7,19 @@
  * Segue a revisão 2026-07-28: cada pedido traz a versão e as capacidades em _meta, sem
  * handshake. Quem chega com `initialize` ou sem esse _meta é cliente de antes dela, e
  * recebe o protocolo antigo no mesmo endereço, sem cabeçalhos novos.
+ *
+ * Custo fixo de contexto (11/11/2026): as instruções e a lista de ferramentas vão em toda
+ * conversa, usadas ou não (eram uns 39 mil caracteres). Aqui fica só o que o agente precisa para
+ * escolher a ferramenta e montar a chamada; as regras e os casos de cada assunto ficam em AJUDA,
+ * que o agente lê pela ferramenta ajuda quando vai usar. Regra nova entra em AJUDA, não na descrição.
  */
 import { FONTES } from "./render";
-import { STRUCTURES } from "./structures";
-import { EMOTIONS } from "./structures/voz";
 
 const ATUAL = "2026-07-28";
 const VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const META_VERSAO = "io.modelcontextprotocol/protocolVersion";
 const META_CAPACIDADES = "io.modelcontextprotocol/clientCapabilities";
-const SERVIDOR = { name: "meu-avatar", version: "1.14.0" };
+const SERVIDOR = { name: "meu-avatar", version: "1.15.0" };
 /**
  * A lista de ferramentas não depende de quem pede. Curto: com 1 h, uma sessão aberta antes de
  * publicar seguiu com a descrição velha (sem rascunho e trocar) no teste de 02/11/2026.
@@ -25,204 +28,281 @@ export const CACHE = { ttlMs: 5 * 60_000, cacheScope: "public" };
 /** O arquivo vai em base64 na mensagem: acima disso, use a rota de arquivos direto. */
 const MAX_BASE64 = 14 * 1024 * 1024;
 
-const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. Antes de cortar, olhe: use ver_quadros, ver_silencios e ver_transcricao, e confira as bordas do vídeo de origem. O campo revisao vem de ver_projeto; se editar_projeto devolver conflito, a resposta já traz o projeto como está agora (grupos, Finais, avisos e a revisão nova): compare com o que você tinha e refaça o lote sobre ela. Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Depois de editar, olhe os avisos novos em mudou: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. Onde já houver texto na tela, a legenda não se repete. Para ver como uma cena sai, com todas as camadas, use ver_cena, sem exportar. Depois de exportar, confira o resultado: o href de cada versão serve de src em ver_quadros e ver_silencios. Antes de criar uma animação, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. Para conferir uma animação em código, use inspecionar_animacao: o texto aponta título que quebrou, elemento cortado ou fora da tela, texto sobre texto, fonte, erro de script e parâmetro sem valor; peça quadros: true só se o texto não bastar. Exportar usa o contêiner, sem créditos de modelo. Gerar vídeo, imagem e áudio gasta créditos e não tem modelo padrão: veja em listar_modelos quando usar cada um, os campos e o preço, e escolha o modelo com a pessoa. Todo gerar_video, gerar_imagem e gerar_audio é em dois passos: a primeira chamada, sem confirmacao, só simula e devolve o custo e o código; mostre à pessoa o modelo, o pedido (texto, voz, duração, formato) e o custo, e só com o sim dela chame de novo com os mesmos campos e a confirmacao. Pedido mudou, simule de novo. As vozes de um modelo vêm de listar_vozes com o mesmo modelo. O vídeo leva minutos: acompanhe com acompanhar_video e, pronto, ponha no projeto com adicionar {video}. A imagem volta para você olhar antes de usar e entra com adicionar {imagem}; o áudio entra com adicionar {audio} ou vira a fala do gerar_video {audio}. Ferramenta nova: se uma ferramenta citada aqui, numa descrição ou pela pessoa não estiver na sua lista, ela foi publicada depois que você conectou; veja listar_ferramentas e chame com usar_ferramenta, sem pedir para reconectar.`;
+const INSTRUCOES = `Edita vídeos nos projetos do Meu Avatar. O fluxo: ver_projeto (traz a revisao e as notas da pessoa: leia antes de editar), editar_projeto com um lote de comandos e, depois, os avisos novos em mudou. Em conflito, a resposta já traz o projeto como está agora: refaça o lote sobre a revisão nova. Antes de cortar, olhe: ver_quadros, ver_silencios e ver_transcricao. Para ver como uma cena sai, com todas as camadas, ver_cena, sem exportar; depois de exportar, o href de cada versão serve de src nas ferramentas de ver. Roteiro: um grupo por cena, de preferência até uns 30 s, em ordem até o Final com ordenar. Antes de criar uma animação, procure uma já feita com listar_animacoes e parta dela. Gerar vídeo, imagem e áudio gasta créditos, não tem modelo padrão (listar_modelos) e é em dois passos: a primeira chamada só simula e devolve o custo e a confirmacao; mostre à pessoa o modelo, o pedido e o custo e só gere com o sim dela. Apagar (apagar_projeto, limpar_arquivos) também só com o sim da pessoa. Exportar usa o contêiner, sem créditos de modelo. As regras de cada assunto ficam fora daqui, para poupar contexto: na primeira vez que for usar um deles na conversa, leia ajuda {assunto}: "comandos" (cada comando do editar_projeto, ou o nome de um só), "cenas" (roteiro, variações e avisos), "animacoes" (o HTML, parâmetros, reuso e inspeção), "legenda", "gerar" (modelos, vozes e os dois passos) e "arquivos" (acervo, pastas, envio e download). Ferramenta citada que não está na sua lista foi publicada depois que você conectou: veja listar_ferramentas e chame com usar_ferramenta, sem pedir para reconectar.`;
 
-const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro e diz em comando a posição do que falhou, a partir de 0. Cada um tem "tipo":
-adicionar {video|arquivo|ativo|imagem|audio, nome, inicio, fim, semSom, dur (obrigatório em vídeo e áudio de arquivo e de ativo enviado), depois: bloco | sobre: bloco, em: segundos} (imagem: o id de gerar_imagem; a imagem fica na tela de inicio a fim, 3 s sem fim; audio: o id de um áudio gerado, de listar_arquivos; depois encadeia som com som e imagem ou vídeo com imagem ou vídeo: falas de áudio em sequência formam a base de um grupo só de som)
-adicionar {html, duracao: 0,5 a 60, parametros, nome, esticar, depois: bloco | sobre: bloco, em: segundos} (animação em código, guardada no projeto: títulos, selos, gráficos, legendas; as regras do HTML são as do renderizar_html; sem nome, Animação 1, Animação 2...; a tela mostra na prévia, e a exportação faz o vídeo dela; por cima de uma fala, estica ou encolhe com ela, a não ser com esticar: false)
-adicionar {animacao: {projeto, bloco}, parametros, duracao, nome, depois: bloco | sobre: bloco, em: segundos} (copia uma animação já feita, de listar_animacoes: o código, os parametros, a duração, a escala e o nome; o que vier aqui muda, e os parametros se juntam aos dela; a cópia é independente)
-editarCodigo {bloco, html | trocas: [{de, para}], parametros, esticar} (troca o código de uma animação inteiro ou só trechos; cada de aparece uma vez só no código, como está; leia o código com ver_projeto incluir: codigo; esticar liga ou desliga para as próximas mudanças da fala, sem mudar a duração de agora; se ele trouxer escala, os tempos do código são os de antes dela: as trocas a mantêm, e o html inteiro novo volta a escala a 1, escrito para a duração atual)
-parametros: {chave: texto ou número}, até 30, os valores que mudam sem reescrever o código (nome, preço, cor da marca): no HTML, {{chave}} fora dos scripts vira o valor; nos scripts, params.chave. Em editarCodigo, junta aos que já existem, e null tira. Faça o template uma vez e repita o bloco só trocando parametros; a pessoa também troca os valores nos Ajustes do canvas.
-rascunho {fala, descricao, duracao: 0,5 a 30, nome, depois: bloco | sobre: bloco, em: segundos} (o lugar de um vídeo que ainda não existe: um cartão com a fala; fala é o que será dito, para gerar o vídeo ou o áudio; descricao, o resto: a cena, o enquadramento, referências; as duas são opcionais, pode ficar em branco; sem nome, Texto 1, Texto 2...; a exportação espera a troca)
-nota {texto, perto: bloco, nota ou Final} (texto solto no canvas, como um post-it amarelo: briefing, roteiro, referências, o que falta fazer; fica fora dos vídeos e da exportação; com perto, logo acima dele; sem perto, embaixo de tudo; até 10 mil caracteres, com as quebras de linha)
-editarNota {nota, texto} (troca o texto de uma nota; as notas e os ids vêm em ver_projeto; para apagar, remover {ids})
-renomear {bloco, nome} ou {grupo, nome} (com grupo, o nome da cena, como Cena 1, no lugar de Bloco 1; vale o id de qualquer bloco dele)
-trocar {bloco, video|arquivo|ativo|imagem|audio, inicio, fim, dur, nome, aparar} (põe o arquivo no lugar do bloco, como o vídeo pronto no do rascunho; áudio só por áudio; sem inicio nem fim, o vídeo ou o áudio entra sem o silêncio das pontas, e aparar: false o põe inteiro; o que está em cima fica e a sequência acompanha; no lugar de um rascunho, a camada vai para o mesmo ponto na proporção do bloco, já aparado; sem nome, o bloco fica com o nome do arquivo)
-cortar {bloco, inicio, fim | duracao} (duracao no lugar de fim: o que fica a partir do início; num rascunho, cortar {bloco, duracao: 3} deixa 3 s)
-dividir {bloco, em}
-mover {bloco, depois|antes} (põe o bloco em outra posição, também em outro grupo: assim se juntam dois grupos; áudio só entre áudios; a fala cortada em pedaços anda inteira, e depois dela, em mover e adicionar, é depois do último pedaço)
-velocidade {bloco, velocidade: 0,25 a 4}
-removerPausas {bloco?, pausa: curta|media|longa | acima: 0,1 a 5} (vídeo ou áudio; sem bloco, a fala de cada grupo: os vídeos e áudios das bases; acima: toda pausa maior que esses segundos fica com eles, 60% depois da fala e o resto antes da seguinte (no começo do bloco, só a parte de antes; no fim, só a de depois); corte menor que 0,08 s não é feito, nem o que deixaria pedaço menor que 0,5 s; pausa: a regra da Edição rápida; o bloco vira vários, com o mesmo nome, e os novos ids vêm em criados)
-removerTrechos {bloco, trechos: [[inicio, fim], ...]} (segundos do arquivo, como os de ver_transcricao; o resto encosta)
-enquadrar {bloco, zoom: 1 a 8, focoX, focoY: 0 a 1, rosto: true, chaves: [{t, zoom, focoX, focoY}], encaixe: preencher|caber|desfocar, recorte: {esquerda, topo, direita, base}, espelharH, espelharV, girar: 0|90|180|270, limpar}
-ligar {de, para} (de e para: id de um bloco do grupo, ou o de um Final; o grupo tem o id do primeiro bloco dele; encadeia os grupos na ordem do Final, não junta: para juntar dois grupos, mover; soma uma ligação, não troca a que existe: cada saída de um grupo vira uma variação; para a sequência das cenas, ordenar)
-ordenar {grupos: [ids de um bloco de cada grupo, na ordem], final} (liga as cenas nessa ordem e a última ao Final, no lugar das ligações entre elas e das delas ao Final, inclusive a automática do primeiro bloco; ligações de fora, como ganchos que chegam à primeira, ficam; sem final, o único que houver)
-remover {ids, fechar} (ids de blocos, Finais, ligações, como as de ligacoes, ou notas; fechar: true encosta a sequência onde o bloco saiu; sem ele, tirar um bloco do meio parte o grupo em dois; tirar o primeiro bloco muda o id do grupo para o do bloco seguinte, e o nome e as ligações (com o mesmo id) vão junto, sem voltar em mudou; a resposta diz em gruposComIdNovo)
-som {bloco, volume: 0 a 4, mudo}
-final {id, resolucao, formato, velocidade}
-organizar {}
-Em adicionar, rascunho, nota e dividir, rotulo: "nome" permite citar esse bloco como "@nome" nos comandos seguintes do mesmo lote (em bloco, depois, antes, sobre, de, para, grupo, nota, perto, grupos e ids).
-Com sobre, em conta do começo do bloco citado (o do primeiro bloco é o do grupo) e pode passar dele até o fim do grupo. A camada fica presa ao ponto da fala em que começa: cortar, velocidade, removerPausas, removerTrechos e trocar no bloco de baixo a levam junto, sem refazer. A animação em código também leva o fim e estica ou encolhe com a fala; vídeo, imagem e som mantêm a duração.
-Vídeo de arquivo sem faixa de som (o WebM do render) entra sem a camada de áudio sozinho; semSom faz o mesmo com qualquer vídeo.
-O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele. Tempos de inicio, fim e o em de dividir são do arquivo; o em de sobre e o t das chaves são do bloco.`;
+/** Onde o bloco novo entra: vale para adicionar e rascunho. */
+const POS = "depois: bloco | sobre: bloco, em: segundos";
 
-const RENDER = `Regras do HTML: anime só pela linha do tempo tl (GSAP 3, já criada e pausada), com tempos em segundos: tl.to(...), tl.fromTo(..., 1.2), tl.set(..., 3); nada de setTimeout, requestAnimationFrame, Math.random ou relógio. Posicione dentro de #root (position: relative, do tamanho do Final; cor padrão branca, fonte padrão Inter). Sem internet: nada de link, CDN ou imagem externa. Fontes, pelo nome no CSS: ${FONTES.join(", ")}; emojis saem coloridos em qualquer uma. Desfoque grande, 3D e vídeo dentro do HTML ficam lentos. Se falhar, render_falhou traz o log em detalhe.`;
+/**
+ * Cada comando do editar_projeto: a assinatura (vai na descrição da ferramenta, em toda conversa) e
+ * as regras e os casos (só na ajuda, quando o agente pede). Comando novo entra aqui, com as duas.
+ */
+const COMANDO: { tipo: string; assinatura: string; nota?: string; regras: string }[] = [
+  {
+    tipo: "adicionar",
+    assinatura: `{video|arquivo|ativo|imagem|audio: id, nome, inicio, fim, semSom, dur, ${POS}}`,
+    nota: "bloco de um arquivo; dur é obrigatório em vídeo e áudio de arquivo e de ativo enviado",
+    regras:
+      "imagem: o id de gerar_imagem; a imagem fica na tela de inicio a fim, 3 s sem fim. audio: o id de um áudio gerado, de listar_arquivos. depois encadeia som com som e imagem ou vídeo com imagem ou vídeo: falas de áudio em sequência formam a base de um grupo só de som; depois de uma fala cortada em pedaços é depois do último pedaço. Sem depois nem sobre: bloco solto, uma cena nova. Vídeo de arquivo sem faixa de som (o WebM do render) entra sem a camada de áudio sozinho; semSom faz o mesmo com qualquer vídeo.",
+  },
+  {
+    tipo: "adicionar (animação)",
+    assinatura: `{html, duracao: 0,5 a 60, parametros, nome, esticar, ${POS}}`,
+    nota: "animação em código, guardada no projeto",
+    regras:
+      "Títulos, selos, gráficos, legendas; as regras do HTML estão em ajuda {assunto: \"animacoes\"}. Sem nome, Animação 1, Animação 2... A tela mostra na prévia, e a exportação faz o vídeo dela; por cima de uma fala, estica ou encolhe com ela, a não ser com esticar: false.",
+  },
+  {
+    tipo: "adicionar (cópia)",
+    assinatura: `{animacao: {projeto, bloco}, parametros, duracao, nome, ${POS}}`,
+    nota: "copia uma animação de listar_animacoes",
+    regras: "Copia o código, os parametros, a duração, a escala e o nome; o que vier aqui muda, e os parametros se juntam aos dela. A cópia é independente.",
+  },
+  {
+    tipo: "editarCodigo",
+    assinatura: "{bloco, html | trocas: [{de, para}], parametros, esticar}",
+    regras:
+      "Troca o código de uma animação inteiro ou só trechos; cada de aparece uma vez só no código, como está; leia o código com ver_projeto incluir: codigo. esticar liga ou desliga para as próximas mudanças da fala, sem mudar a duração de agora. Se o código trouxer escala, os tempos dele são os de antes dela: as trocas a mantêm, e o html inteiro novo volta a escala a 1, escrito para a duração atual.",
+  },
+  {
+    tipo: "rascunho",
+    assinatura: `{fala, descricao, duracao: 0,5 a 30, nome, ${POS}}`,
+    nota: "o lugar de um vídeo que ainda não existe; a exportação espera a troca",
+    regras: "Um cartão com a fala. fala é o que será dito, para gerar o vídeo ou o áudio; descricao, o resto: a cena, o enquadramento, referências. As duas são opcionais, pode ficar em branco. Sem nome, Texto 1, Texto 2...",
+  },
+  {
+    tipo: "trocar",
+    assinatura: "{bloco, video|arquivo|ativo|imagem|audio: id, inicio, fim, dur, nome, aparar}",
+    nota: "o arquivo no lugar do bloco, como o vídeo pronto no do rascunho",
+    regras:
+      "Áudio só por áudio. Sem inicio nem fim, o vídeo ou o áudio entra sem o silêncio das pontas, e aparar: false o põe inteiro. O que está em cima fica e a sequência acompanha; no lugar de um rascunho, a camada vai para o mesmo ponto na proporção do bloco, já aparado. Sem nome, o bloco fica com o nome do arquivo.",
+  },
+  { tipo: "nota", assinatura: "{texto, perto}", nota: "texto solto no canvas, fora da exportação", regras: "Como um post-it amarelo: briefing, roteiro, referências, o que falta fazer. perto: um bloco, nota ou Final (fica logo acima dele); sem perto, embaixo de tudo. Até 10 mil caracteres, com as quebras de linha." },
+  { tipo: "editarNota", assinatura: "{nota, texto}", regras: "Troca o texto de uma nota; as notas e os ids vêm em ver_projeto. Para apagar, remover {ids}." },
+  { tipo: "renomear", assinatura: "{bloco | grupo, nome}", regras: "Com grupo, o nome da cena, como Cena 1, no lugar de Bloco 1; vale o id de qualquer bloco dele." },
+  { tipo: "cortar", assinatura: "{bloco, inicio, fim | duracao}", regras: "duracao no lugar de fim: o que fica a partir do início; num rascunho, cortar {bloco, duracao: 3} deixa 3 s." },
+  { tipo: "dividir", assinatura: "{bloco, em}", regras: "Dois blocos, no instante em do arquivo; 0,5 s no mínimo de cada lado." },
+  {
+    tipo: "mover",
+    assinatura: "{bloco, depois | antes}",
+    nota: "também para outro grupo: assim se juntam dois",
+    regras: "Põe o bloco em outra posição, sem buraco. Áudio só entre áudios. A fala cortada em pedaços anda inteira, e depois dela, em mover e adicionar, é depois do último pedaço.",
+  },
+  { tipo: "velocidade", assinatura: "{bloco, velocidade: 0,25 a 4}", regras: "Mantém o tom da voz; o resto da sequência acompanha." },
+  {
+    tipo: "removerPausas",
+    assinatura: "{bloco?, pausa: curta|media|longa | acima: 0,1 a 5}",
+    regras:
+      "Vídeo ou áudio; sem bloco, a fala de cada grupo: os vídeos e áudios das bases. acima: toda pausa maior que esses segundos fica com eles, 60% depois da fala e o resto antes da seguinte (no começo do bloco, só a parte de antes; no fim, só a de depois); corte menor que 0,08 s não é feito, nem o que deixaria pedaço menor que 0,5 s. pausa: a regra da Edição rápida. O bloco vira vários, com o mesmo nome, e os novos ids vêm em criados.",
+  },
+  { tipo: "removerTrechos", assinatura: "{bloco, trechos: [[inicio, fim], ...]}", regras: "Segundos do arquivo, como os de ver_transcricao; o resto encosta. Sobra menor que 0,5 s é recusada: junte-a ao trecho do lado." },
+  {
+    tipo: "enquadrar",
+    assinatura: "{bloco, zoom: 1 a 8, focoX, focoY: 0 a 1, rosto: true, chaves: [{t, zoom, focoX, focoY}], encaixe: preencher|caber|desfocar, recorte: {esquerda, topo, direita, base}, espelharH, espelharV, girar: 0|90|180|270, limpar}",
+    regras: "Só muda o que vier. rosto: o ponto entre os olhos. t é o tempo do bloco (negativo continua um movimento do bloco anterior); entre as chaves, a curva é suave. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela.",
+  },
+  {
+    tipo: "ligar",
+    assinatura: "{de, para}",
+    nota: "soma uma ligação: cada saída de um grupo vira uma variação",
+    regras:
+      "de e para: id de um bloco do grupo, ou o de um Final; o grupo tem o id do primeiro bloco dele. Encadeia os grupos na ordem do Final, não junta: para juntar dois grupos, mover. Soma, não troca a ligação que existe; para a sequência das cenas, ordenar. Recusa círculo, repetida e passar de 48 variações.",
+  },
+  {
+    tipo: "ordenar",
+    assinatura: "{grupos: [um bloco de cada grupo, na ordem], final}",
+    nota: "as cenas em sequência até o Final",
+    regras: "Liga as cenas nessa ordem e a última ao Final, no lugar das ligações entre elas e das delas ao Final, inclusive a automática do primeiro bloco; ligações de fora, como ganchos que chegam à primeira, ficam. Sem final, o único que houver.",
+  },
+  {
+    tipo: "remover",
+    assinatura: "{ids, fechar}",
+    nota: "blocos, Finais, ligações ou notas; fechar: true encosta a sequência, sem ele o grupo se parte em dois",
+    regras:
+      "ids de blocos, Finais, ligações (as de ligacoes) ou notas. Tirar o primeiro bloco muda o id do grupo para o do bloco seguinte, e o nome e as ligações (com o mesmo id) vão junto, sem voltar em mudou; a resposta diz em gruposComIdNovo.",
+  },
+  { tipo: "som", assinatura: "{bloco, volume: 0 a 4, mudo}", regras: "Volume do bloco." },
+  { tipo: "final", assinatura: "{id, resolucao, formato, velocidade}", nota: "sem id, cria outro Final", regras: "Muda um Final; a velocidade vale para todas as variações dele." },
+  { tipo: "organizar", assinatura: "{}", regras: "O mesmo Organizar da tela." },
+];
+
+/** O que vale para todos os comandos: curto, na descrição; com os casos, na ajuda. */
+const GERAL = `Em adicionar, rascunho, nota e dividir, rotulo: "nome" permite citar esse bloco como "@nome" nos comandos seguintes do mesmo lote. O grupo tem o id do primeiro bloco dele. Com sobre, em conta do começo do bloco citado, e a camada segue o ponto da fala quando o bloco de baixo muda. inicio, fim e o em de dividir são segundos do arquivo; o em de sobre e o t das chaves, do bloco. O primeiro bloco de um projeto vazio já traz o Final "final", ligado a ele.`;
+const GERAL_REGRAS = `O "@nome" do rotulo vale em bloco, depois, antes, sobre, de, para, grupo, nota, perto, grupos e ids. Com sobre, em pode passar do bloco citado até o fim do grupo (o do primeiro bloco é o do grupo). A camada fica presa ao ponto da fala em que começa: cortar, velocidade, removerPausas, removerTrechos e trocar no bloco de baixo a levam junto, sem refazer. A animação em código também leva o fim e estica ou encolhe com a fala; vídeo, imagem e som mantêm a duração. parametros: {chave: texto ou número}, até 30, os valores que mudam sem reescrever o código (nome, preço, cor da marca): no HTML, {{chave}} fora dos scripts vira o valor; nos scripts, params.chave. Em editarCodigo, junta aos que já existem, e null tira. Faça o template uma vez e repita o bloco só trocando parametros; a pessoa também troca os valores nos Ajustes do canvas.`;
+
+const COMANDOS = `Lista de comandos, aplicados em ordem; um erro desfaz o lote inteiro e diz em comando a posição do que falhou, a partir de 0. Cada um tem "tipo" (a primeira palavra):
+${COMANDO.map((c) => `${c.tipo.split(" ")[0]} ${c.assinatura}${c.nota ? ` (${c.nota})` : ""}`).join("\n")}
+${GERAL} As regras e os casos de cada comando: ajuda {assunto: "comandos"} ou o nome de um comando.`;
+
+const RENDER = `Regras do HTML: mande só o conteúdo (elementos, <style> e <script>); a página, o tamanho do Final e o fundo transparente já existem. Anime só pela linha do tempo tl (GSAP 3, já criada e pausada), com tempos em segundos: tl.to(...), tl.fromTo(..., 1.2), tl.set(..., 3); nada de setTimeout, requestAnimationFrame, Math.random ou relógio. Posicione dentro de #root (position: relative, do tamanho do Final; cor padrão branca, fonte padrão Inter). Sem internet: nada de link, CDN ou imagem externa. Fontes, pelo nome no CSS: ${FONTES.join(", ")}; emojis saem coloridos em qualquer uma. Desfoque grande, 3D e vídeo dentro do HTML ficam lentos. Até 60 s. Se falhar, render_falhou traz o log em detalhe.`;
+
+/**
+ * O que saiu das instruções e das descrições: o agente lê pela ferramenta ajuda, só o assunto que
+ * vai usar. Cada comando também é um assunto, pelo tipo.
+ */
+const AJUDA: Record<string, string> = {
+  comandos: `Comandos do editar_projeto, aplicados em ordem; um erro desfaz o lote inteiro e diz em comando a posição do que falhou, a partir de 0. Cada um tem "tipo" (a primeira palavra).\n${COMANDO.map((c) => `${c.tipo.split(" ")[0]} ${c.assinatura}: ${c.nota ? `${c.nota}. ` : ""}${c.regras}`).join("\n")}\n${GERAL} ${GERAL_REGRAS}`,
+  cenas: `Roteiro com cenas: um grupo por cena, de preferência até uns 30 s (um rascunho ou adicionar sem depois nem sobre abre uma cena nova), e as cenas em ordem até o Final com ordenar {grupos: [...]} (o Final monta a sequência; não é preciso juntar). O lote pode criar as cenas, dar nome e ordenar de uma vez, com rotulo; para mudar a ordem depois, ordenar de novo. Dê nome às cenas com renomear {grupo, nome}. Assim cada edição só mexe no tempo da cena dela e a legenda cabe por grupo; uma cena mais longa pode passar dos 30 s, sem cortar uma fala ou uma cobertura no meio (a cobertura não passa de um grupo para o outro). Para tirar uma fala do meio de uma cena, use remover com fechar: true; sem ele, o grupo se parte em dois (aviso grupo_partido). Variações: cada saída de um grupo (ligar) vira uma variação do Final: 3 ganchos ligados a um corpo e o corpo a 2 CTAs dão 6 vídeos, até 48 por Final. Avisos em mudou e no ver_projeto: sem_video_de_base quer dizer que aquele trecho sai sobre fundo preto, salvo se uma cobertura opaca o preencher; rascunho é uma fala que ainda espera o vídeo (a exportação é recusada até a troca); final_sem_variacao, nenhum grupo chega a esse Final. A resposta do editar_projeto traz só o que o lote mudou: os grupos novos ou alterados com só os blocos novos ou alterados (os que só andaram vêm em andaram, uma faixa de..ate por deslocamento; sem blocos, o grupo só mudou de nome ou de duração), as ligações e os Finais novos ou alterados, os removidos, gruposComIdNovo [{de, para}] quando o grupo só trocou de id (o primeiro bloco saiu), os avisos novos ou que mudaram de valor e os resolvidos; avisosPendentes conta os que restam. O ver_cena monta a cena no servidor na primeira vez (segundos a uns minutos, conforme as animações): a resposta diz montando, com feitos de total; chame de novo com uns 20 s entre as chamadas. O que é montado serve para a exportação depois; mudou a cena, monta de novo. Exportar: cada animação e cada cena levam de segundos a uns 2 min; acompanhe com acompanhar_exportacao, com uns 20 s entre as chamadas, e não comece outra da mesma versão enquanto esta anda. Pronta, cada versão traz baixar, um link que funciona sem token por 1 hora (baixarAte; perguntar de novo renova), para baixar no terminal (curl -L -o "<arquivo>" "<baixar>") ou passar à pessoa; com mais de uma versão, baixarZip traz todas. som é só o som da versão em MP3: serve de audio no gerar_video, para o avatar falar a fala montada no canvas; baixarSom é o link sem token dele.`,
+  animacoes: `Animação em código: adicionar {html, duracao} guarda o código no projeto, a prévia do canvas roda e a exportação faz o vídeo; renderizar_html só quando precisar do arquivo WebM (depois, adicionar {arquivo, dur, sobre, em}). ${RENDER} Reuso: antes de criar, procure com listar_animacoes uma já feita no mesmo projeto ou nos projetos do mesmo avatar. Se uma se encaixa bem, parta dela sem perguntar, com adicionar {animacao}: troque os parametros, ajuste com editarCodigo, acrescente o que faltar. Se o pedido é muito diferente e nada do projeto ou do avatar se encaixa, pergunte à pessoa antes: criar uma nova ou partir de uma animação de outro projeto (de outro avatar, que pode ser outra marca sem relação com este). Leve na pergunta a sua análise de custo e benefício e uma recomendação: reaproveitar o código com mudanças profundas também vale. O trabalho de cada agente fica para o próximo. ${GERAL_REGRAS.slice(GERAL_REGRAS.indexOf("parametros:"))} Inspeção: inspecionar_animacao abre o código no navegador do render, sem fazer vídeo, e mede cada instante; barato, em texto. Volta problemas [{tipo, alvo, t, detalhe}] (quebrou, palavra_partida, fora_da_tela, cortado_pelo_pai, texto_cortado, texto_sobre_texto, fonte, erro_de_script, passa_do_bloco, parametro_sem_valor); instantes com os elementos visíveis no primeiro ("seletor x,y LxA op0.5 2linhas \\"texto\\"", em px do Final) e depois só o que mudou e o que saiu; linhaDoTempo com cada tween ("início-fim alvo propriedades"); duracao do bloco e da animação. Os tempos são os da página, já com a escala (a animação que esticou com a fala mostra os tempos esticados). Para conferir as linhas de um texto, marque-o com data-linhas="1" (ou o número que cabe). Peça quadros: true só se o texto não bastar.`,
+  legenda: `legendar faz a legenda palavra a palavra de um grupo, pronta: as palavras vêm da transcrição dos blocos que falam, já no tempo do grupo (corte e velocidade valem), e entram no projeto como uma animação em código por cima do grupo, que a prévia mostra e a exportação renderiza. Responde como o editar_projeto, com a revisão nova, o id em criados e as palavras e trechos em legenda. Faça depois dos cortes; se o grupo mudar, chame de novo com bloco: o id da legenda, e o código e o tempo dela são trocados, sem pôr outra. Use simular: true para ver palavras e trechos sem mexer no projeto; corrija a grafia (a da tela é o português correto) e mande as palavras de volta em palavras ([{palavra, inicio, fim}], em segundos do grupo). Padrão do caso aprovado: Inter Black de 44 px, maiúsculas, palavra dita em verde, no máximo duas linhas, a 80% da altura. estilo muda {fonte, tamanho (numa tela de 720 de largura), cor, destaque, maiusculas, altura (0 topo a 1 base)}; fontes: ${FONTES.join(", ")}. Onde já houver texto na tela, a legenda não se repete: passe o intervalo em semTexto ([[de, ate]], segundos do grupo). fontes: os ids dos blocos que falam; sem isso, os de vídeo da sequência com som. Até 60 s por grupo. O tamanho da letra segue o Final (final, ou o primeiro): mudou o formato, legende de novo.`,
+  gerar: `Gerar vídeo, imagem e áudio gasta créditos e não tem modelo padrão: veja em listar_modelos quando usar cada um, os campos que aceita (e o que cada um é nele), os obrigatórios, as durações, resoluções e formatos e o preço, e escolha o modelo com a pessoa. Dois passos em todo gerar_*: sem confirmacao, a chamada só simula (confere o pedido e devolve o custo estimado e o código de confirmacao, sem gastar); mostre à pessoa o modelo, o pedido (texto, voz, duração, formato) e o custo e, só com o sim dela, chame de novo com os mesmos campos e a confirmacao. O código gera uma vez só e vale por 20 min: para gerar de novo, depois do prazo ou com o pedido mudado, simule e pergunte outra vez. Vozes: listar_vozes com o mesmo modelo (as prontas, português primeiro, e as clonadas da conta, com a voz de cada avatar que tem gravação, onde o modelo clona); uma clonada com clonarNoPrimeiroUso ainda será clonada, e o pedido leva consentimento: true, quando a pessoa confirmou que a voz é dela ou que tem autorização. Vídeo: leva minutos; acompanhe com acompanhar_video (de novo em uns 30 s enquanto estiver gerando) e, pronto, ponha no projeto com adicionar {video} ou trocar. foto é o src da imagem do primeiro quadro: a foto de um ativo de listar_avatares, um arquivo do projeto ou uma imagem gerada ("/videos/<id>.png"); referencias são src de imagens que guiam a cena, sem virar quadro, e não vão com foto nem ultimoQuadro; audio é o src de um áudio (mp3 ou wav) que é a fala: um de gerar_audio ou o som de uma exportação deste projeto. Imagem: volta para você olhar antes de usar e entra com adicionar {imagem: id} (ou trocar); se não ficou boa, refaça com outra descrição ou com ela mesma em referencias (na ordem, imagem 1, imagem 2...: diga na descrição o que vem de cada uma). Áudio: sai na hora; as emoções do texto estão no campo texto do modelo, em listar_modelos; entra no projeto com adicionar {audio: id} ou vira a fala do gerar_video {audio: src}. Tudo o que é gerado fica também na lista do modelo no site.`,
+  arquivos: `listar_arquivos junta o acervo da conta numa lista só, do mais novo ao mais antigo: os vídeos, imagens e áudios que os modelos geraram (fonte gerado, com modelo, a fala ou a descrição e, quando houve, avatar), os ativos dos avatares (fonte avatar) e os arquivos enviados aos projetos (fonte projeto). Cada item traz id, nome, tipo, src (serve nas ferramentas de ver e nos campos de arquivo do gerar_*), usar (o que vai no adicionar ou no trocar para pôr no projeto), pasta {id, nome} quando está numa e, para baixar, arquivo (o nome com a extensão), mime e baixar (o endereço, com o mesmo token). O filtro modelo só traz o que ele gerou; avatar, os ativos dele e o que foi gerado com ele; projeto, os enviados a ele; pasta, os de uma pasta. Pastas: simples, sem pasta dentro de pasta, em três listas: "videos" (os gerados, como na aba Vídeos do site), "projetos" e "avatar" (os ativos de um avatar; pede o avatar). listar_pastas diz as pastas e quantos itens cada uma tem; criar_pasta cria; mover_para_pasta põe itens numa pasta da mesma lista ou, sem pasta, fora de pasta; criar_projeto {pasta} e enviar_ativo {pasta} já criam dentro dela. É a organização da pessoa: respeite as pastas que existem e pergunte antes de reorganizar. Enviar um arquivo: com url (um endereço público), o servidor baixa, em enviar_arquivo (para o projeto) e enviar_ativo (para um avatar). Arquivo que só está no computador: chame sem url e a resposta traz um link de envio e o comando curl: rode no terminal trocando o caminho do arquivo e o tipo; não precisa de token, vale por 30 min e para um arquivo só (se falhar, peça outro link). Sem terminal, passe o comando à pessoa. Tipos: jpeg, png, webp (até 10 MB), mp4, mov, webm, mp3, wav, m4a e ogg (até 50 MB); SVG e HTML não entram. WebM com transparência serve de camada sobre o vídeo. No avatar, uso: "foto" faz da imagem a foto principal e uso: "voz", do áudio a voz para clonagem. Apagar: limpar_arquivos mostra os arquivos do projeto que nenhum bloco usa e só apaga com apagar: true; apagar_projeto mostra o que sairia e só apaga com confirmar: true, depois do sim da pessoa (não tem volta; os vídeos gerados e os ativos dos avatares ficam). Durante uma exportação, os dois recusam.`,
+};
+for (const c of COMANDO) {
+  const tipo = c.tipo.split(" ")[0]!;
+  const linha = `${tipo} ${c.assinatura}: ${c.nota ? `${c.nota}. ` : ""}${c.regras}`;
+  AJUDA[tipo] = AJUDA[tipo] ? `${AJUDA[tipo]}\n${linha}` : linha;
+}
+/** Os assuntos que não são um comando só, na ordem em que a ajuda os oferece. */
+const ASSUNTOS = ["comandos", "cenas", "animacoes", "legenda", "gerar", "arquivos"];
 
 const texto = (descricao: string) => ({ type: "string", description: descricao });
+const inteiro = (descricao: string) => ({ type: "integer", description: descricao });
+const numeros = (descricao: string) => ({ type: "array", items: { type: "number" }, description: descricao });
+const textos = (descricao: string) => ({ type: "array", items: { type: "string" }, description: descricao });
 const objeto = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
 const projeto = texto("Id do projeto.");
-const src = texto('Endereço do arquivo: o src de um item de listar_arquivos (vídeo, imagem ou áudio), o src de um ativo de listar_avatares, um arquivo de ver_projeto (incluir: arquivos) ou o href de uma exportação pronta.');
+const src = texto("src de um arquivo (de listar_arquivos, listar_avatares ou ver_projeto) ou o href de uma exportação.");
+const final = texto("Id do Final que dá o tamanho; sem isso, o primeiro.");
 
 /** Os dois passos de toda ferramenta que gasta créditos: simular, perguntar à pessoa, gerar. */
-const DOIS_PASSOS =
-  "Dois passos: sem confirmacao, só simula (confere o pedido e devolve o custo estimado e o código de confirmacao, sem gastar); mostre à pessoa o modelo, o pedido e o custo e, só com o sim dela, chame de novo com os mesmos campos e a confirmacao. O código gera uma vez só e vale por 20 min: para gerar de novo ou depois do prazo, simule e pergunte outra vez. Os campos que o modelo aceita estão em listar_modelos.";
-const MODELO = (tipo: string) => texto(`Id de um modelo de listar_modelos {tipo: "${tipo}"}, escolhido com a pessoa. Sem padrão.`);
-const CONFIRMACAO = texto("O código da simulação, depois do sim da pessoa (uso único, 20 min). Sem isso, a chamada só simula.");
-const CONSENTIMENTO = { type: "boolean", description: "true quando a pessoa confirmou que a voz é dela ou que tem autorização: a voz de um avatar no primeiro uso." };
+const DOIS_PASSOS = "Gasta créditos. Dois passos: sem confirmacao, só simula e devolve o custo e o código; com o sim da pessoa, repita com os mesmos campos e a confirmacao.";
+const MODELO = (tipo: string) => texto(`Id de listar_modelos {tipo: "${tipo}"}, escolhido com a pessoa.`);
+const CONFIRMACAO = texto("O código da simulação, depois do sim da pessoa.");
+const CONSENTIMENTO = { type: "boolean", description: "true quando a pessoa confirmou que a voz é dela ou autorizada (voz de avatar no primeiro uso)." };
+const DE = texto('A lista: "videos" (os gerados), "projetos" ou "avatar" (os ativos de um avatar).');
 
 const FERRAMENTAS = [
   {
+    name: "ajuda",
+    description: `As regras e os casos de um assunto, que não vão nas descrições para poupar contexto. Leia antes de usar o assunto pela primeira vez na conversa. Assuntos: ${ASSUNTOS.join(", ")}, ou o nome de um comando do editar_projeto.`,
+    inputSchema: objeto({ assunto: texto(`Um de: ${ASSUNTOS.join(", ")}; ou um comando, como "trocar".`) }, ["assunto"]),
+  },
+  {
     name: "listar_arquivos",
-    description: `Os arquivos da conta, numa lista só, do mais novo ao mais antigo, 20 por vez: os vídeos e imagens que os modelos geraram, os ativos dos avatares (fotos, vídeos e áudios) e os arquivos enviados aos projetos. Cada item diz o tipo, a fonte (gerado, avatar ou projeto), de quem é (modelo, avatar ou projeto), a fala ou a descrição do gerado, usar (o que vai no adicionar para pôr no projeto) e, para baixar, arquivo (o nome com a extensão), mime e baixar (o endereço, com o mesmo token). Filtre por tipo, fonte, modelo, avatar, projeto, busca e data; continuar traz os próximos. Modelos: ${STRUCTURES.map((s) => `${s.id} (${s.name})`).join(", ")}.`,
+    description: "Os arquivos da conta numa lista só, do mais novo ao mais antigo, 20 por vez: gerados pelos modelos, ativos dos avatares e enviados aos projetos. Cada item traz tipo, fonte, de quem é, a pasta, src, usar (o que vai no adicionar) e baixar.",
     inputSchema: objeto({
       tipo: texto('"video", "imagem" ou "audio".'),
-      fonte: texto('"gerado" (pelos modelos), "avatar" (os ativos) ou "projeto" (os enviados aos projetos).'),
+      fonte: texto('"gerado", "avatar" ou "projeto".'),
       modelo: texto("Id do modelo: só o que ele gerou."),
-      avatar: texto("Id do avatar: os ativos dele e o que foi gerado com ele."),
-      projeto: texto("Id do projeto: só os arquivos enviados a ele."),
+      avatar: texto("Id do avatar: os ativos dele e o gerado com ele."),
+      projeto: texto("Id do projeto: os enviados a ele."),
+      pasta: texto("Id de uma pasta (listar_pastas): só os dela."),
       busca: texto("Parte do nome, da fala ou da descrição."),
-      desde: texto('Data, como "2026-11-02" (UTC): só os feitos nesse dia ou depois.'),
-      ate: texto('Data, como "2026-11-02" (UTC): só os feitos até o fim desse dia.'),
-      limite: { type: "integer", description: "Quantos por vez, de 1 a 100; sem isso, 20." },
-      continuar: texto("O continuar da resposta anterior, para a página seguinte."),
+      desde: texto('Data, como "2026-11-02" (UTC).'),
+      ate: texto("Data: até o fim desse dia."),
+      limite: inteiro("De 1 a 100; sem isso, 20."),
+      continuar: texto("O continuar da resposta anterior."),
     }),
   },
-  { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios); o id de um ativo entra num projeto com adicionar {ativo}. De cada ativo: arquivo (o nome com a extensão), mime, tamanho em bytes e baixar (o endereço, com o mesmo token).", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
+  { name: "listar_avatares", description: "Avatares da conta com os ativos (fotos, vídeos e áudios) e as pastas; o id de um ativo entra num projeto com adicionar {ativo}.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
   {
     name: "criar_avatar",
-    description: "Cria um avatar (um personagem ou uma pessoa) com nome e descrição; os arquivos entram depois com enviar_ativo. Antes, veja em listar_avatares se ele já existe.",
-    inputSchema: objeto({ nome: texto("Nome do avatar, até 120 caracteres."), descricao: texto("Quem é, até 500 caracteres. Opcional.") }, ["nome"]),
+    description: "Cria um avatar (um personagem ou uma pessoa); os arquivos entram depois com enviar_ativo. Antes, veja em listar_avatares se ele já existe.",
+    inputSchema: objeto({ nome: texto("Até 120 caracteres."), descricao: texto("Quem é, até 500 caracteres.") }, ["nome"]),
   },
   {
     name: "editar_avatar",
-    description: 'Muda o nome, a descrição ou qual ativo enviado é a foto principal (uma imagem) ou a voz para clonagem (um áudio, a gravação que o gerar_audio e o gerar_video usam como "Voz de <avatar>"). Ids dos ativos em listar_avatares; "" tira a foto ou a voz. O que não vier fica como está.',
+    description: 'Muda o nome, a descrição ou qual ativo enviado é a foto principal ou a voz para clonagem; "" tira. O que não vier fica como está.',
     inputSchema: objeto({ avatar: texto("Id do avatar."), nome: texto("Nome novo."), descricao: texto("Descrição nova."), foto: texto("Id de uma imagem enviada ao avatar."), voz: texto("Id de um áudio enviado ao avatar.") }, ["avatar"]),
   },
   {
     name: "enviar_ativo",
-    description:
-      'Põe um arquivo (imagem, vídeo ou áudio) nos ativos de um avatar, sem base64. Com url (um endereço público), o site baixa e guarda, e a resposta traz o ativo. Sem url, a resposta traz um link de envio e o comando curl: rode no terminal trocando o caminho do arquivo e o tipo; não precisa de token, vale por 30 min e para um arquivo só (se falhar, peça outro link). Com uso: "voz", o áudio vira a voz para clonagem; com uso: "foto", a imagem vira a foto principal. Tipos: jpeg, png, webp, mp4, mov, webm, mp3, wav, m4a e ogg; imagem até 10 MB, vídeo e áudio até 50 MB.',
+    description: "Põe um arquivo (imagem, vídeo ou áudio) nos ativos de um avatar. Com url (pública), o site baixa. Sem url, vem um link de envio e o comando curl para mandar o arquivo do computador, sem token (30 min, um arquivo).",
     inputSchema: objeto(
       {
         avatar: texto("Id do avatar."),
-        url: texto("Endereço público (https) do arquivo. Sem ele, vem o link de envio."),
-        nome: texto("Nome do ativo, como aparece na tela, como \"Voz do Touro.mp3\"."),
-        uso: texto('"foto" (a imagem vira a foto principal) ou "voz" (o áudio vira a voz para clonagem). Opcional.'),
-        tipo: texto('Tipo do arquivo, como "audio/mpeg" ou "image/png": com url, no lugar do que o endereço disser; sem url, já entra no comando.'),
+        url: texto("Endereço público (https) do arquivo."),
+        nome: texto("Nome do ativo na tela."),
+        uso: texto('"foto" (vira a foto principal) ou "voz" (vira a voz para clonagem).'),
+        tipo: texto('Tipo do arquivo, como "audio/mpeg".'),
+        pasta: texto("Id de uma pasta do avatar (listar_pastas)."),
       },
       ["avatar"],
     ),
   },
   {
     name: "listar_vozes",
-    description: "Vozes de um modelo que fala (os que têm o campo voz em listar_modelos): as prontas, português primeiro, e as clonadas da conta, com a voz de cada avatar que tem gravação (onde o modelo clona). O id de uma delas vai em voz, no gerar_video ou no gerar_audio com o mesmo modelo. Uma clonada com clonarNoPrimeiroUso ainda será clonada: o pedido leva consentimento: true.",
-    inputSchema: objeto(
-      {
-        modelo: texto("Id do modelo, de listar_modelos."),
-        busca: texto("Parte do nome da voz."),
-        idioma: texto('Parte do idioma, como "Português" ou "Multilíngue".'),
-        genero: texto('"feminina" ou "masculina".'),
-        limite: { type: "integer", description: "Quantas prontas, de 1 a 100; sem isso, 30." },
-      },
-      ["modelo"],
-    ),
+    description: "Vozes de um modelo que fala: as prontas e as clonadas da conta. O id vai em voz, no gerar_video ou no gerar_audio com o mesmo modelo.",
+    inputSchema: objeto({ modelo: texto("Id do modelo, de listar_modelos."), busca: texto("Parte do nome."), idioma: texto('Parte do idioma, como "Português".'), genero: texto('"feminina" ou "masculina".'), limite: inteiro("Quantas prontas, de 1 a 100; sem isso, 30.") }, ["modelo"]),
   },
   {
     name: "listar_animacoes",
-    description: "Animações em código já feitas nos projetos da conta, para reusar com adicionar {animacao: {projeto, bloco}}: do mesmo projeto, dos projetos que usam um avatar ou pela busca. Cada uma traz o projeto, o bloco, o nome, a duração, o texto na tela e os parametros, sem o código (leia com ver_projeto incluir: codigo).",
-    inputSchema: objeto({
-      projeto: texto("Só as deste projeto."),
-      avatar: texto("Só as dos projetos que usam este avatar (vídeos e ativos dele), de listar_avatares."),
-      busca: texto("Parte do nome, do texto na tela ou de um valor de parâmetro."),
-      limite: { type: "integer", description: "Quantas, de 1 a 100; sem isso, 20, do projeto editado por último ao mais antigo." },
-    }),
+    description: "Animações em código já feitas nos projetos da conta, para reusar com adicionar {animacao: {projeto, bloco}}. Sem o código (leia com ver_projeto incluir: codigo).",
+    inputSchema: objeto({ projeto: texto("Só as deste projeto."), avatar: texto("Só as dos projetos que usam este avatar."), busca: texto("Parte do nome, do texto na tela ou de um parâmetro."), limite: inteiro("De 1 a 100; sem isso, 20.") }),
   },
-  { name: "listar_projetos", description: "Projetos da conta, o editado por último primeiro.", inputSchema: objeto({ busca: texto("Parte do nome.") }) },
-  { name: "criar_projeto", description: "Cria um projeto vazio.", inputSchema: objeto({ nome: texto("Nome do projeto.") }, ["nome"]) },
+  { name: "listar_projetos", description: "Projetos da conta, o editado por último primeiro, com a pasta de cada um.", inputSchema: objeto({ busca: texto("Parte do nome."), pasta: texto("Id de uma pasta de projetos: só os dela.") }) },
+  { name: "criar_projeto", description: "Cria um projeto vazio.", inputSchema: objeto({ nome: texto("Nome do projeto."), pasta: texto("Id de uma pasta de projetos (listar_pastas).") }, ["nome"]) },
+  {
+    name: "apagar_projeto",
+    description: "Apaga um projeto, com os arquivos enviados a ele e as exportações (os vídeos gerados e os ativos ficam). Não tem volta. Dois passos: sem confirmar, só mostra o que sairia; mostre à pessoa e só com o sim dela chame com confirmar: true.",
+    inputSchema: objeto({ projeto, confirmar: { type: "boolean", description: "true só depois do sim da pessoa." } }, ["projeto"]),
+  },
+  {
+    name: "listar_pastas",
+    description: "As pastas da conta, com quantos itens cada uma tem: dos vídeos gerados, dos projetos e dos ativos de cada avatar.",
+    inputSchema: objeto({ de: DE, avatar: texto("Id do avatar: só as pastas dele.") }),
+  },
+  {
+    name: "criar_pasta",
+    description: "Cria uma pasta numa lista (sem pasta dentro de pasta).",
+    inputSchema: objeto({ de: DE, nome: texto("Nome da pasta."), avatar: texto('Id do avatar, com de: "avatar".') }, ["de", "nome"]),
+  },
+  {
+    name: "mover_para_pasta",
+    description: "Põe itens numa pasta da lista deles ou, sem pasta, fora de pasta. Não apaga nem copia nada.",
+    inputSchema: objeto({ de: DE, itens: textos("Ids dos vídeos gerados, dos projetos ou dos ativos, até 100."), pasta: texto("Id da pasta; sem isso, fora de pasta."), avatar: texto('Id do avatar, com de: "avatar".') }, ["de", "itens"]),
+  },
   {
     name: "ver_projeto",
-    description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo), ligações (id, de, para: grupo ou Final), Finais com as variações, avisos e as notas da pessoa (texto solto no canvas, como briefing e referências: leia antes de editar; remover {ids} tira uma). Os arquivos, o código das animações e o canvas inteiro são grandes: peça em incluir só quando precisar.",
-    inputSchema: objeto({ projeto, incluir: { type: "array", items: { type: "string", enum: ["arquivos", "codigo", "canvas"] }, description: "arquivos: os arquivos do projeto (id e src para adicionar); codigo: o HTML de cada animação, para editar com editarCodigo, com escala quando ela esticou ou encolheu com a fala (os tempos do código são os de antes) e esticar: false quando não estica; canvas: o modelo inteiro, com posições e ajustes de cada bloco." } }, ["projeto"]),
+    description: "Revisão, grupos com os blocos (tipo, camada, início e fim no grupo), ligações, Finais com as variações, avisos e as notas da pessoa. Os arquivos, o código das animações e o canvas inteiro são grandes: peça em incluir só quando precisar.",
+    inputSchema: objeto({ projeto, incluir: { type: "array", items: { type: "string", enum: ["arquivos", "codigo", "canvas"] }, description: "arquivos: os do projeto; codigo: o HTML de cada animação; canvas: o modelo inteiro." } }, ["projeto"]),
   },
   {
     name: "editar_projeto",
-    description: "Aplica um lote de comandos sobre uma revisão. A tela de quem estiver com o projeto aberto acompanha sozinha. A resposta traz só o que o lote mudou: revisão, ids criados e, em mudou, os grupos novos ou alterados com só os blocos novos ou alterados (os que só andaram vêm em andaram, uma faixa de..ate por deslocamento; sem blocos, o grupo só mudou de nome ou de duração), as ligações e os Finais novos ou alterados, os removidos, gruposComIdNovo [{de, para}] quando o grupo só trocou de id (o primeiro bloco saiu), os avisos novos ou que mudaram de valor (rascunho sem a fala; grupo_partido quando um bloco tirado do meio partiu o grupo; final_sem_variacao quando nenhum grupo chega a um Final) e os resolvidos; avisosPendentes conta os que restam. O projeto inteiro fica no ver_projeto.",
-    inputSchema: objeto({ projeto, revisao: { type: "integer", description: "A revisão lida em ver_projeto." }, comandos: { type: "array", items: { type: "object" }, description: COMANDOS } }, ["projeto", "revisao", "comandos"]),
+    description: "Aplica um lote de comandos sobre uma revisão; a tela de quem está com o projeto aberto acompanha. A resposta traz a revisão nova, os ids criados e, em mudou, só o que o lote mexeu, com os avisos novos.",
+    inputSchema: objeto({ projeto, revisao: inteiro("A revisão lida em ver_projeto."), comandos: { type: "array", items: { type: "object" }, description: COMANDOS } }, ["projeto", "revisao", "comandos"]),
   },
-  {
-    name: "ver_quadros",
-    description: "Mostra até 12 instantes de um arquivo, lado a lado, para ver o vídeo.",
-    inputSchema: objeto({ projeto, src, instantes: { type: "array", items: { type: "number" }, description: "Segundos do arquivo." } }, ["projeto", "src", "instantes"]),
-  },
+  { name: "ver_quadros", description: "Mostra até 12 instantes de um arquivo, lado a lado, para ver o vídeo.", inputSchema: objeto({ projeto, src, instantes: numeros("Segundos do arquivo.") }, ["projeto", "src", "instantes"]) },
   {
     name: "ver_cena",
-    description:
-      "Mostra até 12 instantes de uma cena (grupo) montada como na exportação, com todas as camadas (base, imagens e vídeos por cima, animações, legenda), lado a lado, sem exportar o vídeo. Instantes em segundos do grupo, como inicio e fim em ver_projeto. A primeira vez a cena é montada no servidor (segundos a uns minutos, conforme as animações): a resposta diz montando, com feitos de total; chame de novo com uns 20 s entre as chamadas. O que é montado serve para a exportação depois. Mudou a cena, monta de novo.",
-    inputSchema: objeto({ projeto, grupo: texto("Id do grupo (ou de qualquer bloco dele), de ver_projeto."), instantes: { type: "array", items: { type: "number" }, description: "Segundos do grupo." }, final: texto("Id do Final, que dá o tamanho, o formato e a velocidade; sem ele, o primeiro.") }, ["projeto", "grupo", "instantes"]),
+    description: "Mostra até 12 instantes de uma cena (grupo) montada como na exportação, com todas as camadas, sem exportar. Na primeira vez responde montando: chame de novo em uns 20 s.",
+    inputSchema: objeto({ projeto, grupo: texto("Id do grupo (ou de um bloco dele)."), instantes: numeros("Segundos do grupo."), final }, ["projeto", "grupo", "instantes"]),
   },
   {
     name: "inspecionar_animacao",
-    description:
-      'Abre o código de uma animação (bloco do ver_projeto) no navegador do render, sem fazer vídeo, e mede cada instante; barato, em texto. Volta: problemas [{tipo, alvo, t, detalhe}] (quebrou, palavra_partida, fora_da_tela, cortado_pelo_pai, texto_cortado, texto_sobre_texto, fonte, erro_de_script, passa_do_bloco); instantes com os elementos visíveis no primeiro ("seletor x,y LxA op0.5 2linhas \"texto\"", em px do Final) e depois só o que mudou e o que saiu; linhaDoTempo com cada tween ("início-fim alvo propriedades"); duracao do bloco e da animação. Os tempos são os da página, já com a escala (a animação que esticou com a fala mostra os tempos esticados). Para conferir as linhas de um texto, marque-o com data-linhas="1" (ou o número que cabe).',
-    inputSchema: objeto(
-      {
-        projeto,
-        bloco: texto("Id do bloco de animação."),
-        instantes: { type: "array", items: { type: "number" }, description: "Até 12 segundos do bloco; sem isso, o começo, os quartos e o fim." },
-        quadros: { type: "boolean", description: "Traz também os instantes lado a lado em imagem (custa mais); só quando o texto não bastar." },
-        final: texto("Id do Final cujo tamanho vale; sem isso, o primeiro."),
-      },
-      ["projeto", "bloco"],
-    ),
+    description: "Abre o código de uma animação no navegador do render, sem fazer vídeo, e responde em texto: problemas (texto que quebrou, cortado, fora da tela, fonte, erro de script), o que está visível em cada instante e a linha do tempo.",
+    inputSchema: objeto({ projeto, bloco: texto("Id do bloco de animação."), instantes: numeros("Até 12 segundos do bloco; sem isso, o começo, os quartos e o fim."), quadros: { type: "boolean", description: "Traz também a imagem (custa mais); só se o texto não bastar." }, final }, ["projeto", "bloco"]),
   },
-  {
-    name: "ver_transcricao",
-    description: "A fala de um arquivo com o tempo de cada palavra, para editar pelo texto: tirar vícios, repetições e frases com removerTrechos. Os tempos são aproximados: confira as bordas com ver_silencios.",
-    inputSchema: objeto({ projeto, src }, ["projeto", "src"]),
-  },
-  { name: "ver_silencios", description: "Duração e silêncios de um arquivo, com a regra da Edição rápida; som: false quando o arquivo não tem áudio (nada a cortar).", inputSchema: objeto({ projeto, src }, ["projeto", "src"]) },
+  { name: "ver_transcricao", description: "A fala de um arquivo com o tempo de cada palavra, para editar pelo texto (removerTrechos). Os tempos são aproximados: confira as bordas com ver_silencios.", inputSchema: objeto({ projeto, src }, ["projeto", "src"]) },
+  { name: "ver_silencios", description: "Duração e silêncios de um arquivo; som: false quando ele não tem áudio.", inputSchema: objeto({ projeto, src }, ["projeto", "src"]) },
   {
     name: "enviar_arquivo",
-    description:
-      "Guarda um arquivo no projeto: JPG, PNG ou WebP (até 10 MB); MP4, MOV, WebM, MP3, M4A, WAV ou OGG (até 50 MB). Mande url (o servidor baixa; o melhor caminho para uma imagem da web ou um link público) ou base64 (até 10 MB). SVG e HTML não entram. WebM com transparência serve de camada sobre o vídeo. Depois, ponha no projeto com adicionar {arquivo: id do src}.",
-    inputSchema: objeto(
-      {
-        projeto,
-        url: texto("Endereço público (http ou https) do arquivo; o servidor baixa. Sem url, mande base64."),
-        nome: texto("Nome do arquivo; com url, sem isso, o fim do endereço."),
-        tipo: texto('Tipo, como "image/png" ou "video/webm"; com url, sem isso, o que o endereço disser.'),
-        base64: texto("Conteúdo em base64, quando não houver url."),
-      },
-      ["projeto"],
-    ),
+    description: "Guarda um arquivo (imagem, vídeo ou áudio) no projeto; depois, adicionar {arquivo: id}. Com url, o servidor baixa. Sem url nem base64, vem um link de envio e o comando curl para mandar o arquivo do computador, sem token (30 min, um arquivo).",
+    inputSchema: objeto({ projeto, url: texto("Endereço público do arquivo."), nome: texto("Nome do arquivo."), tipo: texto('Tipo, como "image/png".'), base64: texto("O conteúdo em base64 (até 10 MB), se não houver url nem terminal.") }, ["projeto"]),
   },
-  {
-    name: "listar_modelos",
-    description:
-      "Os modelos que geram vídeo, imagem e áudio, os que a conta pode usar: para cada um, quando usar, os campos que aceita (e o que cada um é nele), os obrigatórios, as durações, resoluções e formatos e o preço. Leia antes de gerar e escolha com a pessoa: não há modelo padrão.",
-    inputSchema: objeto({ tipo: texto('"video", "imagem" ou "audio"; sem isso, todos.') }),
-  },
+  { name: "listar_modelos", description: "Os modelos que geram vídeo, imagem e áudio: quando usar cada um, os campos que aceita, as opções e o preço. Leia antes de gerar e escolha com a pessoa: não há modelo padrão.", inputSchema: objeto({ tipo: texto('"video", "imagem" ou "audio"; sem isso, todos.') }) },
   {
     name: "gerar_video",
-    description: `Gera um vídeo com o modelo escolhido (gasta créditos). ${DOIS_PASSOS} O vídeo leva minutos: a resposta traz o id para o acompanhar_video. Fica também na lista do modelo no site.`,
+    description: `Gera um vídeo com o modelo escolhido; leva minutos (acompanhar_video). ${DOIS_PASSOS} Os campos que o modelo aceita estão em listar_modelos.`,
     inputSchema: objeto(
       {
         modelo: MODELO("video"),
         projeto,
-        cena: texto("A cena, o movimento ou os gestos, conforme o modelo (listar_modelos)."),
+        cena: texto("A cena, o movimento ou os gestos."),
         fala: texto("O que a pessoa fala."),
-        voz: texto("Id de uma voz de listar_vozes com o mesmo modelo."),
-        idioma: texto('Idioma da fala: "pt-BR", "en-US" ou "es".'),
+        voz: texto("Id de listar_vozes com o mesmo modelo."),
+        idioma: texto('"pt-BR", "en-US" ou "es".'),
         estilo: texto("Estilo do prompt pronto, nos modelos que têm."),
-        foto: texto('src da imagem do primeiro quadro: a foto de um ativo de listar_avatares, um arquivo do projeto ou uma imagem gerada ("/videos/<id>.png").'),
+        foto: texto("src da imagem do primeiro quadro."),
         ultimoQuadro: texto("src da imagem do último quadro."),
-        referencias: { type: "array", items: { type: "string" }, description: "src de imagens que guiam a cena, sem virar quadro. Não vão com foto nem ultimoQuadro." },
-        audio: texto("src de um áudio (mp3 ou wav) que é a fala: um de gerar_audio ou o som de uma exportação deste projeto."),
+        referencias: textos("src de imagens que guiam a cena; não vão com foto nem ultimoQuadro."),
+        audio: texto("src de um áudio que é a fala."),
         som: { type: "boolean", description: "false para sair sem som." },
-        semente: { type: "integer", description: "Para repetir um resultado parecido." },
+        semente: inteiro("Para repetir um resultado parecido."),
         expressividade: texto('"low", "medium" ou "high".'),
         consentimento: CONSENTIMENTO,
-        duracao: { type: "integer", description: "Segundos, um dos aceitos pelo modelo." },
+        duracao: inteiro("Segundos, um dos aceitos pelo modelo."),
         resolucao: texto("Uma das resoluções do modelo."),
         formato: texto("Um dos formatos do modelo; sem isso, o do Final."),
         final: texto("Id do Final cujo formato vale; sem isso, o primeiro."),
@@ -233,13 +313,13 @@ const FERRAMENTAS = [
   },
   {
     name: "gerar_imagem",
-    description: `Gera uma imagem com o modelo escolhido (gasta créditos) e devolve o id, o src e a própria imagem, para você conferir antes de usar. ${DOIS_PASSOS} Ponha no projeto com adicionar {imagem: id} (ou trocar); se não ficou boa, refaça com outra descrição ou com ela mesma em referencias. Fica também na lista do modelo no site.`,
+    description: `Gera uma imagem e a devolve para você conferir; entra no projeto com adicionar {imagem: id}. ${DOIS_PASSOS}`,
     inputSchema: objeto(
       {
         modelo: MODELO("imagem"),
         projeto,
         descricao: texto("A cena: quem aparece, onde, a luz e o enquadramento."),
-        referencias: { type: "array", items: { type: "string" }, description: 'src de imagens, na ordem (imagem 1, imagem 2...): a foto de um ativo, um arquivo do projeto ou outra imagem gerada ("/videos/<id>.png"); diga na descrição o que vem de cada uma.' },
+        referencias: textos("src de imagens, na ordem (imagem 1, imagem 2...); diga na descrição o que vem de cada uma."),
         resolucao: texto("Uma das resoluções do modelo."),
         formato: texto("Um dos formatos do modelo; sem isso, o do Final."),
         final: texto("Id do Final cujo formato vale; sem isso, o primeiro."),
@@ -250,79 +330,47 @@ const FERRAMENTAS = [
   },
   {
     name: "gerar_audio",
-    description: `Gera uma fala (MP3) com o modelo de fala escolhido (gasta créditos, bem pouco) e devolve o id, o src, a duração e o custo: sai na hora. ${DOIS_PASSOS} Ponha a fala no projeto com adicionar {audio: id} ou faça o avatar falar com ela no gerar_video {audio: src}. Fica também na lista do modelo no site.`,
-    inputSchema: objeto(
-      {
-        modelo: MODELO("audio"),
-        texto: texto(`O que a voz lê. Emoções entre colchetes, em inglês, antes do trecho: ${EMOTIONS.map((e) => `[${e.value}]`).join(", ")}; duas seguidas, como [whispers, laughs].`),
-        voz: texto("Id de uma voz de listar_vozes com o mesmo modelo (pronta ou clonada)."),
-        consentimento: CONSENTIMENTO,
-        confirmacao: CONFIRMACAO,
-      },
-      ["modelo", "texto", "voz"],
-    ),
+    description: `Gera uma fala (MP3), na hora; entra no projeto com adicionar {audio: id} ou vira a fala do gerar_video {audio: src}. ${DOIS_PASSOS}`,
+    inputSchema: objeto({ modelo: MODELO("audio"), texto: texto("O que a voz lê; as emoções aceitas estão no campo texto do modelo, em listar_modelos."), voz: texto("Id de listar_vozes com o mesmo modelo."), consentimento: CONSENTIMENTO, confirmacao: CONFIRMACAO }, ["modelo", "texto", "voz"]),
   },
-  {
-    name: "acompanhar_video",
-    description: "O andamento de um vídeo do gerar_video: gerando, pronto ou falhou. Pronto, traz o src (serve em ver_quadros e ver_transcricao), a duração e usar (vai no adicionar). Chame de novo em uns 30 s enquanto estiver gerando.",
-    inputSchema: objeto({ video: texto("Id do vídeo.") }, ["video"]),
-  },
+  { name: "acompanhar_video", description: "O andamento de um vídeo do gerar_video: gerando (chame de novo em uns 30 s), pronto (com o src e o usar do adicionar) ou falhou.", inputSchema: objeto({ video: texto("Id do vídeo.") }, ["video"]) },
   {
     name: "renderizar_html",
-    description: `Faz um vídeo transparente (WebM) de uma composição em HTML e o guarda no projeto; depois, ponha-o sobre o vídeo com adicionar {arquivo, dur, sobre, em}. Só quando precisar do arquivo: para pôr uma animação no projeto, adicionar {html, duracao} guarda o código, e a exportação faz o vídeo. ${RENDER}`,
-    inputSchema: objeto(
-      {
-        projeto,
-        nome: texto('Nome do arquivo, como "legenda.webm".'),
-        html: texto("Só o conteúdo: elementos, <style> e <script>. A página, o tamanho e o fundo transparente já existem."),
-        duracao: { type: "number", description: "Segundos do vídeo, até 60." },
-        final: texto("Id do Final cujo tamanho vale; sem isso, o primeiro."),
-      },
-      ["projeto", "html", "duracao"],
-    ),
+    description: 'Faz um vídeo transparente (WebM) de um HTML e o guarda no projeto. Só quando precisar do arquivo: para pôr uma animação no projeto, use adicionar {html, duracao}. As regras do HTML: ajuda {assunto: "animacoes"}.',
+    inputSchema: objeto({ projeto, nome: texto('Nome do arquivo, como "legenda.webm".'), html: texto("Só o conteúdo: elementos, <style> e <script>."), duracao: { type: "number", description: "Segundos, até 60." }, final }, ["projeto", "html", "duracao"]),
   },
   {
     name: "legendar",
-    description: `Legenda palavra a palavra de um grupo, pronta: as palavras vêm da transcrição dos blocos que falam, já no tempo do grupo (corte e velocidade valem), e entram no projeto como uma animação em código por cima do grupo, que a prévia mostra e a exportação renderiza. Responde como o editar_projeto, com a revisão nova, o id em criados e as palavras e trechos em legenda. Faça depois dos cortes; se o grupo mudar, chame de novo com bloco: o id da legenda, e o código e o tempo dela são trocados. Use simular: true para ver palavras e trechos sem fazer o vídeo; corrija a grafia (a da tela é o português correto) e mande as palavras de volta em palavras. Padrão do caso aprovado: Inter Black de 44 px, maiúsculas, palavra dita em verde, no máximo duas linhas. Onde já houver texto na tela, passe o intervalo em semTexto.`,
+    description: 'Legenda palavra a palavra de um grupo, pela transcrição, como uma animação por cima dele. Faça depois dos cortes; se o grupo mudar, chame de novo com bloco. O estilo e a correção da grafia: ajuda {assunto: "legenda"}.',
     inputSchema: objeto(
       {
         projeto,
-        grupo: texto("Id do grupo, de ver_projeto."),
-        revisao: { type: "integer", description: "A revisão lida em ver_projeto; obrigatória sem simular." },
-        bloco: texto("Id de uma legenda que já está no projeto, para trocar o código dela em vez de pôr outra."),
+        grupo: texto("Id do grupo."),
+        revisao: inteiro("A revisão lida em ver_projeto; obrigatória sem simular."),
+        bloco: texto("Id de uma legenda que já existe, para trocá-la."),
         nome: texto('Nome do bloco; sem isso, "Legenda".'),
         simular: { type: "boolean", description: "Só devolve palavras e trechos, sem mexer no projeto." },
-        palavras: { type: "array", items: { type: "object" }, description: "[{palavra, inicio, fim}] em segundos do grupo, como simular devolve; sem isso, a transcrição." },
+        palavras: { type: "array", items: { type: "object" }, description: "[{palavra, inicio, fim}], como simular devolve." },
         semTexto: { type: "array", items: { type: "array", items: { type: "number" } }, description: "[[de, ate]] em segundos do grupo onde já há texto na tela." },
-        fontes: { type: "array", items: { type: "string" }, description: "Ids dos blocos que falam; sem isso, os de vídeo da sequência com som." },
-        estilo: { type: "object", description: `{fonte, tamanho (numa tela de 720 de largura), cor, destaque, maiusculas, altura (0 topo a 1 base)}. Fontes: ${FONTES.join(", ")}.` },
-        final: texto("Id do Final cujo tamanho vale; sem isso, o primeiro."),
+        fontes: textos("Ids dos blocos que falam."),
+        estilo: { type: "object", description: "{fonte, tamanho, cor, destaque, maiusculas, altura}." },
+        final,
       },
       ["projeto", "grupo"],
     ),
   },
-  {
-    name: "limpar_arquivos",
-    description: "Os arquivos do projeto que nenhum bloco usa (como os WebMs de animações refeitas), com o tamanho. Com apagar: true, apaga de vez. Confira a lista antes; durante uma exportação, recusa.",
-    inputSchema: objeto({ projeto, apagar: { type: "boolean", description: "Apaga de vez os arquivos da lista; sem isso, só mostra." } }, ["projeto"]),
-  },
-  {
-    name: "exportar",
-    description: "Começa a exportação de um Final; ela anda sozinha no servidor (cada animação e cada cena levam de segundos a uns 2 min). Acompanhe com acompanhar_exportacao, com uns 20 s entre as chamadas, até ficar pronta. Não comece outra da mesma versão enquanto esta anda.",
-    inputSchema: objeto({ projeto, final: texto("Id do Final."), versoes: { type: "array", items: { type: "integer" }, description: "Posições das variações; sem isso, todas." } }, ["projeto", "final"]),
-  },
-  { name: "acompanhar_exportacao", description: "Devolve o andamento da exportação (feitos de total), que anda sozinha no servidor. Pronta, cada versão traz baixar: um link que funciona sem token por 1 hora (baixarAte; perguntar de novo renova), para baixar no terminal (curl -L -o \"<arquivo>\" \"<baixar>\") ou passar à pessoa; arquivo é o nome do vídeo. Com mais de uma versão, baixarZip traz todas num ZIP. O href serve de src em ver_quadros e ver_silencios. som é só o som da versão em MP3 (feito no primeiro pedido, uns segundos): serve de audio no gerar_video, para o avatar falar a fala montada no canvas; baixarSom é o link sem token dele e arquivoSom o nome.", inputSchema: objeto({ projeto, exportacao: texto("Id da exportação.") }, ["projeto", "exportacao"]) },
+  { name: "limpar_arquivos", description: "Os arquivos do projeto que nenhum bloco usa, com o tamanho. Só apaga com apagar: true, depois de conferir a lista.", inputSchema: objeto({ projeto, apagar: { type: "boolean", description: "Apaga de vez os da lista." } }, ["projeto"]) },
+  { name: "exportar", description: "Começa a exportação de um Final; ela anda sozinha no servidor. Acompanhe com acompanhar_exportacao, com uns 20 s entre as chamadas.", inputSchema: objeto({ projeto, final: texto("Id do Final."), versoes: { type: "array", items: { type: "integer" }, description: "Posições das variações; sem isso, todas." } }, ["projeto", "final"]) },
+  { name: "acompanhar_exportacao", description: "O andamento da exportação. Pronta, cada versão traz baixar (link sem token, 1 hora), href (serve de src nas ferramentas de ver) e som (o MP3 dela, que serve de audio no gerar_video).", inputSchema: objeto({ projeto, exportacao: texto("Id da exportação.") }, ["projeto", "exportacao"]) },
   {
     name: "listar_ferramentas",
-    description:
-      "As ferramentas do servidor agora, inclusive as publicadas depois que você conectou (a sua lista não se atualiza sozinha no meio da conversa). Sem nome, o nome e a primeira frase de cada uma; com nome, a descrição inteira e os parâmetros. Chame a que não estiver na sua lista com usar_ferramenta.",
-    inputSchema: objeto({ nome: texto("Nome de uma ferramenta: traz a descrição inteira e os parâmetros."), busca: texto("Parte do nome ou da descrição.") }),
+    description: "As ferramentas do servidor agora, inclusive as publicadas depois que você conectou. Com nome, a descrição inteira e os parâmetros. Chame a que não estiver na sua lista com usar_ferramenta.",
+    inputSchema: objeto({ nome: texto("Nome de uma ferramenta."), busca: texto("Parte do nome ou da descrição.") }),
   },
   {
     name: "usar_ferramenta",
-    description:
-      "Chama qualquer ferramenta do servidor pelo nome, com os argumentos dela: serve para as que não estão na sua lista porque foram publicadas depois que você conectou. Veja os parâmetros em listar_ferramentas {nome}. A resposta é a da própria ferramenta, com as mesmas regras e o mesmo custo.",
-    inputSchema: objeto({ nome: texto("Nome da ferramenta, como gerar_audio."), argumentos: { type: "object", description: "Os argumentos da ferramenta, como ela pede." } }, ["nome"]),
+    description: "Chama qualquer ferramenta do servidor pelo nome: serve para as que não estão na sua lista. A resposta, as regras e o custo são os da própria ferramenta.",
+    inputSchema: objeto({ nome: texto("Nome da ferramenta."), argumentos: { type: "object", description: "Os argumentos dela." } }, ["nome"]),
   },
 ];
 
@@ -402,7 +450,7 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
   const site = `/projetos/${seguro(a.projeto)}`;
   switch (nome) {
     case "listar_arquivos":
-      return chama("GET", `/api/v1/arquivos?${new URLSearchParams(Object.entries({ tipo: a.tipo, fonte: a.fonte, modelo: a.modelo, avatar: a.avatar, projeto: a.projeto, q: a.busca, desde: a.desde, ate: a.ate, limite: a.limite, continuar: a.continuar }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
+      return chama("GET", `/api/v1/arquivos?${new URLSearchParams(Object.entries({ tipo: a.tipo, fonte: a.fonte, modelo: a.modelo, avatar: a.avatar, projeto: a.projeto, pasta: a.pasta, q: a.busca, desde: a.desde, ate: a.ate, limite: a.limite, continuar: a.continuar }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "listar_avatares":
       return chama("GET", `/api/v1/avatares?q=${seguro(a.busca ?? "")}`);
     case "criar_avatar":
@@ -411,15 +459,23 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
       return chama("POST", `/api/v1/avatares/${seguro(a.avatar)}`, json({ nome: a.nome, descricao: a.descricao, foto: a.foto, voz: a.voz }));
     case "enviar_ativo": {
       const destino = `/api/v1/avatares/${seguro(a.avatar)}`;
-      if (typeof a.url === "string" && a.url) return baixar(a, chama, `${destino}/arquivos?uso=${seguro(a.uso ?? "")}`);
-      return chama("POST", `${destino}/envio`, json({ nome: a.nome, uso: a.uso, tipo: a.tipo }));
+      if (typeof a.url === "string" && a.url) return baixar(a, chama, `${destino}/arquivos?uso=${seguro(a.uso ?? "")}&pasta=${seguro(a.pasta ?? "")}`);
+      return chama("POST", `${destino}/envio`, json({ nome: a.nome, uso: a.uso, tipo: a.tipo, pasta: a.pasta }));
     }
     case "listar_animacoes":
       return chama("GET", `/api/v1/animacoes?${new URLSearchParams(Object.entries({ projeto: a.projeto, avatar: a.avatar, q: a.busca, limite: a.limite }).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`);
     case "listar_projetos":
-      return chama("GET", `/api/v1/projetos?q=${seguro(a.busca ?? "")}`);
+      return chama("GET", `/api/v1/projetos?q=${seguro(a.busca ?? "")}&pasta=${seguro(a.pasta ?? "")}`);
     case "criar_projeto":
-      return chama("POST", "/api/v1/projetos", json({ nome: a.nome }));
+      return chama("POST", "/api/v1/projetos", json({ nome: a.nome, pasta: a.pasta }));
+    case "apagar_projeto":
+      return chama("POST", `${p}/apagar`, json({ confirmar: a.confirmar }));
+    case "listar_pastas":
+      return chama("GET", `/api/v1/pastas?de=${seguro(a.de ?? "")}&avatar=${seguro(a.avatar ?? "")}`);
+    case "criar_pasta":
+      return chama("POST", "/api/v1/pastas", json({ de: a.de, nome: a.nome, avatar: a.avatar }));
+    case "mover_para_pasta":
+      return chama("POST", "/api/v1/pastas/mover", json({ de: a.de, itens: a.itens, pasta: a.pasta, avatar: a.avatar }));
     case "ver_projeto":
       return chama("GET", `${p}?incluir=${seguro(Array.isArray(a.incluir) ? a.incluir.join(",") : "")}`);
     case "editar_projeto":
@@ -459,7 +515,8 @@ function pedido(nome: string, a: Args, chama: Interna): Promise<Response> | null
     case "enviar_arquivo": {
       if (typeof a.url === "string" && a.url) return baixar(a, chama, `${site}/arquivos`);
       const conteudo = typeof a.base64 === "string" ? a.base64 : "";
-      if (!conteudo) return Promise.resolve(Response.json({ erro: "arquivo_obrigatorio" }, { status: 400 }));
+      // Sem url nem base64: o link de envio, para o arquivo que só está no computador (um curl, sem token).
+      if (!conteudo) return chama("POST", `${p}/envio`, json({ nome: a.nome, tipo: a.tipo }));
       if (conteudo.length > MAX_BASE64) return Promise.resolve(Response.json({ erro: "arquivo_grande_demais" }, { status: 413 }));
       let bytes: Uint8Array;
       try {
@@ -524,8 +581,17 @@ function listarFerramentas(a: Args): Record<string, unknown> {
   return { content: [{ type: "text", text: json({ versao: SERVIDOR.version, ferramentas: lista }) }] };
 }
 
+/** ajuda: as regras de um assunto (ou de um comando), que não vão nas descrições para não pesar em toda conversa. */
+function ajuda(a: Args): Record<string, unknown> {
+  const assunto = typeof a.assunto === "string" ? a.assunto.trim() : "";
+  const achado = Object.keys(AJUDA).find((k) => k.toLowerCase() === assunto.toLowerCase());
+  if (!achado) return { content: [{ type: "text", text: json({ erro: "assunto_inexistente", assuntos: ASSUNTOS, comandos: Object.keys(AJUDA).filter((k) => !ASSUNTOS.includes(k)) }) }], isError: true };
+  return { content: [{ type: "text", text: AJUDA[achado]! }] };
+}
+
 async function chamar(params: Args, chama: Interna): Promise<Resposta> {
   const args = (params.arguments ?? {}) as Args;
+  if (params.name === "ajuda") return { result: ajuda(args) };
   if (params.name === "listar_ferramentas") return { result: listarFerramentas(args) };
   if (params.name === "usar_ferramenta") {
     const nome = typeof args.nome === "string" ? args.nome : "";

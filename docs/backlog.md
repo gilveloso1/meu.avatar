@@ -21,11 +21,9 @@ corrigido no mesmo PR). Vem antes do resto, nesta ordem.
 3. **Links sem token**: `/baixar/...mp3` liga o contêiner e grava no R2 no primeiro pedido (a regra
    é "só lê") e vale para conta suspensa; `/envio/<código>` aceita dois envios simultâneos; bilhete
    de envio não usado fica em `envios/` para sempre (falta a regra de expiração no R2).
-4. **`listar_arquivos` do MCP** mostra na descrição todos os modelos, inclusive os de teste, a
-   qualquer conta com API. Tirar a lista e apontar para o `listar_modelos`.
-5. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
+4. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
    `docs/operacao.md` dizem 20. Escolher um.
-6. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
+5. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
    clonada do Fish nem o vídeo de origem; e a voz clonada é gravada antes da validação (sobra voz órfã).
 
 ### 2. Telas (aprovadas: mudar só com o sim do dono)
@@ -141,9 +139,10 @@ Próximos passos, nesta ordem:
      é cortado, acelerado ou perde pausas e trechos, o `trocar` tira o silêncio das pontas e leva a
      camada na proporção, e o `removerPausas` aceita `acima` em segundos. A animação em código
      estica ou encolhe com a fala (feito em 05/11/2026). Faltam o mesmo acompanhamento nos cortes feitos
-     na tela do canvas, um aviso quando um corte tira o ponto em que a camada começava (hoje ela vai
-     para o começo ou o fim do bloco, calada) e apagar um projeto pelo MCP (o teste de 05/11/2026
-     deixou o projeto "Teste MCP tempo (agente) 05/11" na conta).
+     na tela do canvas e um aviso quando um corte tira o ponto em que a camada começava (hoje ela vai
+     para o começo ou o fim do bloco, calada). Apagar um projeto pelo MCP: feito em 11/11/2026
+     (`apagar_projeto`, em dois passos); o "Teste MCP tempo (agente) 05/11" segue na conta, para a
+     pessoa decidir.
    - *Ver o resultado* (feito em 09/11/2026): `ver_cena` mostra quadros de uma cena montada como na
      exportação, com todas as camadas, sem exportar o vídeo (a animação sozinha também se vê pelo
      `inspecionar_animacao`).
@@ -245,9 +244,10 @@ produtos em cena; sem títulos ou texto na geração e sem o "pega e mostra".
    arrastando ou pelo "Mover para", e apagar pergunta dos itens (na aba Vídeos, eles sempre voltam
    para a lista: vídeo gerado não se apaga no site). As páginas dos modelos ficam sem pastas, por
    decisão do dono. Falta, se o dono pedir: apagar vídeo gerado (hoje não existe no site, e o
-   custo do painel sai da tabela de vídeos); escolher vários itens e mover de uma vez; as pastas
-   para o agente (`listar_avatares` e `listar_arquivos` dizerem a pasta, `enviar_ativo` escolher a
-   pasta); e o painel do modelo ("Adicionar avatar") mostrar os ativos por pasta.
+   custo do painel sai da tabela de vídeos); escolher vários itens e mover de uma vez; e o painel
+   do modelo ("Adicionar avatar") mostrar os ativos por pasta. As pastas para o agente: feito em
+   11/11/2026 (`listar_pastas`, `criar_pasta`, `mover_para_pasta`, a `pasta` em cada item e em
+   `criar_projeto` e `enviar_ativo`; renomear e apagar pasta seguem só no site).
 
 ## Onde estamos (25/10/2026)
 

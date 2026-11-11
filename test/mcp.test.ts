@@ -137,7 +137,7 @@ describe("protocolo", () => {
     const { result } = await legado("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
     expect(result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "meu-avatar" } });
     expect((await legado("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-11-25");
-    expect((await legado("tools/list")).result.tools).toHaveLength(29);
+    expect((await legado("tools/list")).result.tools).toHaveLength(34);
     expect((await legado("ping")).result).toEqual({});
   });
 
@@ -155,8 +155,37 @@ describe("protocolo", () => {
 
   it("lista as ferramentas com esquema", async () => {
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { type: string } }[] };
-    expect(tools.map((t) => t.name)).toEqual(["listar_arquivos", "listar_avatares", "criar_avatar", "editar_avatar", "enviar_ativo", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "ver_projeto", "editar_projeto", "ver_quadros", "ver_cena", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "listar_modelos", "gerar_video", "gerar_imagem", "gerar_audio", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao", "listar_ferramentas", "usar_ferramenta"]);
+    expect(tools.map((t) => t.name)).toEqual(["ajuda", "listar_arquivos", "listar_avatares", "criar_avatar", "editar_avatar", "enviar_ativo", "listar_vozes", "listar_animacoes", "listar_projetos", "criar_projeto", "apagar_projeto", "listar_pastas", "criar_pasta", "mover_para_pasta", "ver_projeto", "editar_projeto", "ver_quadros", "ver_cena", "inspecionar_animacao", "ver_transcricao", "ver_silencios", "enviar_arquivo", "listar_modelos", "gerar_video", "gerar_imagem", "gerar_audio", "acompanhar_video", "renderizar_html", "legendar", "limpar_arquivos", "exportar", "acompanhar_exportacao", "listar_ferramentas", "usar_ferramenta"]);
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
+  });
+
+  it("o custo fixo de contexto fica no teto: as instruções e a lista de ferramentas vão em toda conversa", async () => {
+    const { tools } = (await rpc("tools/list")).result as { tools: unknown[] };
+    const { instructions } = (await rpc("server/discover")).result as { instructions: string };
+    // Eram uns 39 mil caracteres (11/11/2026). Regra nova vai para a ajuda, não para a descrição.
+    expect(instructions.length).toBeLessThanOrEqual(1800);
+    expect(JSON.stringify(tools).length).toBeLessThanOrEqual(26_000);
+  });
+
+  it("ajuda traz as regras de um assunto ou de um comando; assunto que não existe diz os que há", async () => {
+    const comandos = (await ferramenta("ajuda", { assunto: "comandos" })).content[0]!.text!;
+    // Tudo o que saiu da descrição do editar_projeto segue ao alcance do agente.
+    for (const parte of ["removerPausas", "60% depois da fala", "gruposComIdNovo", "params.chave", "aparar: false"]) expect(comandos).toContain(parte);
+    const trocar = (await ferramenta("ajuda", { assunto: "Trocar" })).content[0]!.text!;
+    expect(trocar).toContain("silêncio das pontas");
+    expect(trocar.length).toBeLessThan(comandos.length / 5);
+    // Os três adicionar vêm juntos.
+    expect((await ferramenta("ajuda", { assunto: "adicionar" })).content[0]!.text!.split("\n")).toHaveLength(3);
+    for (const assunto of ["cenas", "animacoes", "legenda", "gerar", "arquivos"]) expect((await ferramenta("ajuda", { assunto })).isError, assunto).toBeFalsy();
+    expect((await ferramenta("ajuda", { assunto: "animacoes" })).content[0]!.text).toContain("tl.fromTo");
+    const fora = await ferramenta("ajuda", { assunto: "segredos" });
+    expect(fora.isError).toBe(true);
+    expect(dados<{ erro: string; assuntos: string[]; comandos: string[] }>(fora)).toMatchObject({ erro: "assunto_inexistente", assuntos: expect.arrayContaining(["comandos", "arquivos"]), comandos: expect.arrayContaining(["trocar", "ordenar"]) });
+    // A descrição do editar_projeto segue com a assinatura de cada comando e aponta a ajuda.
+    const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { properties: { comandos?: { description: string } } } }[] };
+    const descricao = tools.find((t) => t.name === "editar_projeto")!.inputSchema.properties.comandos!.description;
+    for (const tipo of ["adicionar", "editarCodigo", "rascunho", "trocar", "nota", "editarNota", "renomear", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "ordenar", "remover", "som", "final", "organizar"]) expect(descricao, tipo).toContain(`\n${tipo} {`);
+    expect(descricao).toContain("ajuda {assunto");
   });
 });
 
@@ -255,8 +284,8 @@ describe("ferramentas", () => {
     expect(dados<{ src: string }>(ok).src).toContain(`/projetos/${id}/arquivos/`);
     expect(dados<{ arquivos: { nome: string }[] }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["arquivos"] })).arquivos[0]!.nome).toBe("camada ação.webm");
     expect((await ferramenta("enviar_arquivo", { projeto: id, nome: "x", tipo: "video/webm", base64: "@@@" })).isError).toBe(true);
-    // Sem arquivo nenhum: o erro diz isso, não "grande demais"; sem nome, o arquivo não se chama "undefined".
-    expect(dados<{ erro: string }>(await ferramenta("enviar_arquivo", { projeto: id })).erro).toBe("arquivo_obrigatorio");
+    // Sem arquivo nenhum: vem o link de envio (o arquivo do computador); sem nome, o arquivo não se chama "undefined".
+    expect(dados<{ envio: { url: string } }>(await ferramenta("enviar_arquivo", { projeto: id })).envio.url).toMatch(new RegExp(`^${SITE}/envio/[0-9a-f]{64}$`));
     await ferramenta("enviar_arquivo", { projeto: id, tipo: "video/webm", base64: btoa("webm") });
     expect(dados<{ arquivos: { nome: string }[] }>(await ferramenta("ver_projeto", { projeto: id, incluir: ["arquivos"] })).arquivos.map((f) => f.nome)).not.toContain("undefined");
   });
@@ -277,6 +306,103 @@ describe("ferramentas", () => {
 });
 
 describe("ferramentas publicadas depois de conectar", () => {
+  it("apagar_projeto só mostra o que sairia; com confirmar: true, apaga o projeto e os arquivos dele", async () => {
+    const { id, revisao } = dados<{ id: string; revisao: number }>(await ferramenta("criar_projeto", { nome: "Teste do agente" }));
+    const arquivo = dados<{ src: string }>(await ferramenta("enviar_arquivo", { projeto: id, nome: "camada.webm", tipo: "video/webm", base64: btoa("webm") })).src;
+    await ferramenta("editar_projeto", { projeto: id, revisao, comandos: [{ tipo: "adicionar", arquivo: arquivo.split("/").pop(), dur: 2 }, { tipo: "adicionar", video: VIDEO }] });
+    const antes = dados<{ projeto: Record<string, unknown>; apagado: boolean; proximo: string }>(await ferramenta("apagar_projeto", { projeto: id }));
+    expect(antes).toMatchObject({ projeto: { id, nome: "Teste do agente", blocos: 2, arquivos: 1, tamanho: 4 }, apagado: false });
+    expect(antes.proximo).toContain("sim dela");
+    // "true" em texto não é o sim: só o booleano apaga.
+    expect(dados<{ apagado: boolean }>(await ferramenta("apagar_projeto", { projeto: id, confirmar: "true" })).apagado).toBe(false);
+    expect(dados<{ nome: string }>(await ferramenta("ver_projeto", { projeto: id })).nome).toBe("Teste do agente");
+    expect((await env.MIDIA.list({ prefix: `projetos/${id}/` })).objects).toHaveLength(1);
+
+    expect(dados<{ apagado: boolean }>(await ferramenta("apagar_projeto", { projeto: id, confirmar: true })).apagado).toBe(true);
+    expect((await ferramenta("ver_projeto", { projeto: id })).isError).toBe(true);
+    expect((await env.MIDIA.list({ prefix: `projetos/${id}/` })).objects).toHaveLength(0);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM project_files WHERE project_id = ?").bind(id).first()).toEqual({ n: 0 });
+    // O vídeo gerado que estava no projeto fica na conta.
+    expect(dados<{ arquivos: { id: string }[] }>(await ferramenta("listar_arquivos", { tipo: "video", fonte: "gerado" })).arquivos.map((v) => v.id)).toEqual([VIDEO]);
+    // Apagar de novo: o projeto não existe mais.
+    expect((await ferramenta("apagar_projeto", { projeto: id, confirmar: true })).content[0]!.text).toContain("nao_encontrado");
+  });
+
+  it("apagar_projeto não apaga projeto de outra conta nem durante uma exportação", async () => {
+    const alheio = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Dela" })).id;
+    await memberCookie();
+    await env.DB.prepare("UPDATE projects SET user_id = (SELECT id FROM users WHERE email = 'membro@exemplo.com') WHERE id = ?").bind(alheio).run();
+    const r = await ferramenta("apagar_projeto", { projeto: alheio, confirmar: true });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("nao_encontrado");
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM projects WHERE id = ?").bind(alheio).first()).toEqual({ n: 1 });
+
+    const meu = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Exportando" })).id;
+    await env.DB.prepare("INSERT INTO exports (id, project_id, total, plan, created_at, expires_at) VALUES (?, ?, 1, '{}', ?, ?)").bind(crypto.randomUUID(), meu, new Date().toISOString(), new Date(Date.now() + 3_600_000).toISOString()).run();
+    const ocupado = await ferramenta("apagar_projeto", { projeto: meu, confirmar: true });
+    expect(ocupado.isError).toBe(true);
+    expect(ocupado.content[0]!.text).toContain("exportando");
+    expect(dados<{ nome: string }>(await ferramenta("ver_projeto", { projeto: meu })).nome).toBe("Exportando");
+  });
+
+  it("pastas: o agente lista, cria, põe projetos e vídeos nelas e filtra por pasta", async () => {
+    type Pasta = { id: string; nome: string; de: string; itens: number };
+    expect(dados<{ pastas: Pasta[] }>(await ferramenta("listar_pastas")).pastas).toEqual([]);
+    expect(dados<{ erro: string }>(await ferramenta("criar_pasta", { de: "lixo", nome: "X" })).erro).toBe("de_invalido");
+    expect(dados<{ erro: string }>(await ferramenta("criar_pasta", { de: "projetos", nome: "  " })).erro).toBe("nome_obrigatorio");
+    const clientes = dados<{ pasta: Pasta }>(await ferramenta("criar_pasta", { de: "projetos", nome: " Clientes " })).pasta;
+    expect(clientes).toMatchObject({ nome: "Clientes", de: "projetos", itens: 0 });
+    const ganchos = dados<{ pasta: Pasta }>(await ferramenta("criar_pasta", { de: "videos", nome: "Ganchos" })).pasta;
+
+    // O projeto nasce na pasta; outro vai para ela depois e volta para fora.
+    const dentro = dados<{ id: string; pasta: { id: string; nome: string } }>(await ferramenta("criar_projeto", { nome: "Campanha", pasta: clientes.id }));
+    expect(dentro.pasta).toEqual({ id: clientes.id, nome: "Clientes" });
+    const solto = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Solto" })).id;
+    // Pasta da outra lista não serve para projeto.
+    expect(dados<{ erro: string }>(await ferramenta("criar_projeto", { nome: "X", pasta: ganchos.id })).erro).toBe("pasta_inexistente");
+    expect(dados<{ erro: string }>(await ferramenta("mover_para_pasta", { de: "projetos", itens: [solto], pasta: ganchos.id })).erro).toBe("pasta_inexistente");
+    expect(dados(await ferramenta("mover_para_pasta", { de: "projetos", itens: [solto, crypto.randomUUID()], pasta: clientes.id }))).toMatchObject({ movidos: [solto], pasta: { id: clientes.id, nome: "Clientes" }, naoEncontrados: [expect.any(String)] });
+    type Projeto = { id: string; nome: string; pasta?: { id: string; nome: string } };
+    const naPasta = dados<{ projetos: Projeto[] }>(await ferramenta("listar_projetos", { pasta: clientes.id })).projetos;
+    expect(naPasta.map((p) => p.nome).sort()).toEqual(["Campanha", "Solto"]);
+    expect(naPasta.every((p) => p.pasta?.nome === "Clientes")).toBe(true);
+    expect(dados(await ferramenta("mover_para_pasta", { de: "projetos", itens: [solto] }))).toMatchObject({ movidos: [solto], pasta: null });
+    expect(dados<{ projetos: Projeto[] }>(await ferramenta("listar_projetos")).projetos.find((p) => p.id === solto)!.pasta).toBeUndefined();
+
+    // O vídeo gerado: a pasta aparece no item e filtra a lista.
+    expect(dados<{ arquivos: { pasta?: unknown }[] }>(await ferramenta("listar_arquivos", { tipo: "video" })).arquivos[0]!.pasta).toBeUndefined();
+    expect(dados(await ferramenta("mover_para_pasta", { de: "videos", itens: [VIDEO], pasta: ganchos.id }))).toMatchObject({ movidos: [VIDEO] });
+    expect(dados<{ arquivos: { id: string; pasta?: unknown }[] }>(await ferramenta("listar_arquivos", { pasta: ganchos.id })).arquivos).toEqual([expect.objectContaining({ id: VIDEO, pasta: { id: ganchos.id, nome: "Ganchos" } })]);
+    expect(dados<{ arquivos: unknown[] }>(await ferramenta("listar_arquivos", { pasta: clientes.id })).arquivos).toEqual([]);
+    expect(dados<{ pastas: Pasta[] }>(await ferramenta("listar_pastas")).pastas.map((p) => [p.nome, p.de, p.itens])).toEqual([["Ganchos", "videos", 1], ["Clientes", "projetos", 1]]);
+    expect(dados<{ pastas: Pasta[] }>(await ferramenta("listar_pastas", { de: "projetos" })).pastas.map((p) => p.nome)).toEqual(["Clientes"]);
+    expect(dados<{ erro: string }>(await ferramenta("mover_para_pasta", { de: "videos", itens: [] })).erro).toBe("itens_invalidos");
+    expect(dados<{ erro: string }>(await ferramenta("mover_para_pasta", { de: "videos", itens: [crypto.randomUUID()] })).erro).toBe("itens_inexistentes");
+  });
+
+  it("pastas e itens de outra conta não existem para o agente", async () => {
+    await memberCookie();
+    const membro = (await env.DB.prepare("SELECT id FROM users WHERE email = 'membro@exemplo.com'").first<{ id: number }>())!.id;
+    const agora = new Date().toISOString();
+    const [pastaDela, videoDela] = [crypto.randomUUID(), crypto.randomUUID()];
+    await env.DB.prepare("INSERT INTO account_folders (id, user_id, kind, name, created_at) VALUES (?, ?, 'videos', 'Dela', ?)").bind(pastaDela, membro, agora).run();
+    await env.DB.prepare("INSERT INTO videos (user_id, id, status, prompt, model, duration, resolution, aspect_ratio, video_key, structure, folder_id, created_at, updated_at) VALUES (?, ?, 'completed', 'Dela', 'alibaba/wan-3.0', 10, '480p', '9:16', ?, 'wan', ?, ?, ?)").bind(membro, videoDela, `videos/${videoDela}.mp4`, pastaDela, agora, agora).run();
+    const projetoDela = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Dela" })).id;
+    await env.DB.prepare("UPDATE projects SET user_id = ? WHERE id = ?").bind(membro, projetoDela).run();
+    const minha = dados<{ pasta: { id: string } }>(await ferramenta("criar_pasta", { de: "videos", nome: "Minha" })).pasta.id;
+    const meus = dados<{ pasta: { id: string } }>(await ferramenta("criar_pasta", { de: "projetos", nome: "Meus" })).pasta.id;
+
+    expect(dados<{ pastas: { nome: string }[] }>(await ferramenta("listar_pastas")).pastas.map((p) => p.nome)).toEqual(["Minha", "Meus"]);
+    // A pasta dela não é destino, nem filtro; o vídeo e o projeto dela não se movem.
+    expect(dados<{ erro: string }>(await ferramenta("mover_para_pasta", { de: "videos", itens: [VIDEO], pasta: pastaDela })).erro).toBe("pasta_inexistente");
+    expect(dados<{ arquivos: unknown[] }>(await ferramenta("listar_arquivos", { pasta: pastaDela })).arquivos).toEqual([]);
+    expect(dados<{ erro: string }>(await ferramenta("mover_para_pasta", { de: "videos", itens: [videoDela], pasta: minha })).erro).toBe("itens_inexistentes");
+    expect(dados<{ erro: string }>(await ferramenta("mover_para_pasta", { de: "projetos", itens: [projetoDela], pasta: meus })).erro).toBe("itens_inexistentes");
+    expect(await env.DB.prepare("SELECT folder_id FROM videos WHERE id = ?").bind(videoDela).first()).toEqual({ folder_id: pastaDela });
+    expect(await env.DB.prepare("SELECT folder_id FROM projects WHERE id = ?").bind(projetoDela).first()).toEqual({ folder_id: null });
+    expect(dados<{ erro: string }>(await ferramenta("listar_projetos", { pasta: pastaDela })).erro).toBe("pasta_inexistente");
+  });
+
   it("listar_ferramentas traz todas, curtas, e uma inteira pelo nome", async () => {
     const { ferramentas } = dados<{ ferramentas: { nome: string; descricao: string }[] }>(await ferramenta("listar_ferramentas"));
     const nomes = ferramentas.map((f) => f.nome);
@@ -286,7 +412,7 @@ describe("ferramentas publicadas depois de conectar", () => {
     expect(Math.max(...ferramentas.map((f) => f.descricao.length))).toBeLessThanOrEqual(240);
     const uma = dados<{ nome: string; descricao: string; parametros: { required: string[] } }>(await ferramenta("listar_ferramentas", { nome: "gerar_audio" }));
     expect(uma.parametros.required).toEqual(["modelo", "texto", "voz"]);
-    expect(uma.descricao.length).toBeGreaterThan(240);
+    expect(uma.descricao.length).toBeGreaterThan(100);
     expect(dados<{ ferramentas: { nome: string }[] }>(await ferramenta("listar_ferramentas", { busca: "avatar" })).ferramentas.map((f) => f.nome)).toContain("criar_avatar");
     expect((await ferramenta("listar_ferramentas", { nome: "nao_existe" })).isError).toBe(true);
   });

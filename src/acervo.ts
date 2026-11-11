@@ -28,6 +28,8 @@ export interface Item {
   modelo?: Ref;
   avatar?: Ref;
   projeto?: Ref;
+  /** A pasta em que o arquivo está: da aba Vídeos (o gerado) ou do avatar (o ativo). Fora de pasta, não vem. */
+  pasta?: Ref;
   fala?: string;
   descricao?: string;
   duracao?: number;
@@ -50,7 +52,7 @@ export function paraBaixar(nome: string, mime: string, src: string, url: URL): P
 }
 
 /** Um vídeo, imagem ou áudio gerado (pronto, com arquivo). */
-export function itemGerado(v: Video, url: URL, avatar: Ref | null): Item {
+export function itemGerado(v: Video, url: URL, avatar: Ref | null, pasta: Ref | null = null): Item {
   const structure = structureById(v.structure);
   const imagem = !!structure && makesImage(structure);
   const tipo = structure ? outputKind(structure) : "video";
@@ -62,6 +64,7 @@ export function itemGerado(v: Video, url: URL, avatar: Ref | null): Item {
     fonte: "gerado",
     modelo: { id: v.structure ?? "", nome: structure?.name ?? v.structure ?? "" },
     ...(avatar ? { avatar } : {}),
+    ...(pasta ? { pasta } : {}),
     ...(imagem ? { descricao: v.prompt } : { fala: v.prompt, duracao: v.duration }),
     resolucao: v.resolution,
     formato: v.aspect_ratio,
@@ -73,9 +76,9 @@ export function itemGerado(v: Video, url: URL, avatar: Ref | null): Item {
 }
 
 /** Um ativo de avatar. */
-export function itemAtivo(x: AvatarAsset, avatar: string, url: URL): Item {
+export function itemAtivo(x: AvatarAsset, avatar: string, url: URL, pasta: Ref | null = null): Item {
   const src = `/avatares/${x.avatar_id}/arquivos/${x.id}`;
-  return { id: x.id, nome: x.name, tipo: x.kind, fonte: "avatar", avatar: { id: x.avatar_id, nome: avatar }, tamanho: x.size, criado: x.created_at, src, ...paraBaixar(x.name, x.type, src, url), usar: { ativo: x.id } };
+  return { id: x.id, nome: x.name, tipo: x.kind, fonte: "avatar", avatar: { id: x.avatar_id, nome: avatar }, ...(pasta ? { pasta } : {}), tamanho: x.size, criado: x.created_at, src, ...paraBaixar(x.name, x.type, src, url), usar: { ativo: x.id } };
 }
 
 /** Um arquivo enviado a um projeto. */
@@ -91,7 +94,15 @@ export interface Filtro extends Pagina {
   modelo?: string;
   avatar?: string;
   projeto?: string;
+  /** Só os arquivos de uma pasta: da aba Vídeos (gerados) ou de um avatar (ativos). */
+  pasta?: string;
 }
+
+/** O nome de cada pasta pelo id, para o item dizer onde o arquivo está. */
+export const pastaDe = (pastas: { id: string; name: string }[]) => {
+  const nomes = new Map(pastas.map((p) => [p.id, p.name]));
+  return (id: string | null): Ref | null => (id && nomes.has(id) ? { id, nome: nomes.get(id)! } : null);
+};
 
 /** "2026-11-02" ou uma data ISO, no fuso UTC; um dia só vale inteiro no ate. Null se não é data. */
 function data(v: string, ate: boolean): string | null {
@@ -128,6 +139,7 @@ export function filtro(p: URLSearchParams, user: User): Filtro | { erro: string 
     modelo,
     avatar: p.get("avatar") || undefined,
     projeto: p.get("projeto") || undefined,
+    pasta: p.get("pasta") || undefined,
   };
 }
 
@@ -142,16 +154,20 @@ export async function listar(db: Db, user: User, f: Filtro, url: URL): Promise<{
   const quer = (fonte: Fonte) => !f.fonte || f.fonte === fonte;
   // O modelo só gera; o projeto só tem os enviados a ele; o avatar tem os ativos e os gerados com ele.
   const structures = STRUCTURES.filter((s) => canUse(s, user) && (!f.modelo || s.id === f.modelo) && (!f.tipo || f.tipo === outputKind(s))).map((s) => s.id);
-  const [gerados, ativos, enviados, avatares] = await Promise.all([
-    quer("gerado") && !f.projeto ? conta.readyVideos(structures, pagina) : [],
-    quer("avatar") && !f.modelo && !f.projeto ? conta.assetsPage({ ...pagina, kind: f.tipo }) : [],
-    quer("projeto") && !f.modelo && !f.avatar ? conta.projectFilesPage({ ...pagina, types: f.tipo ? Object.keys(MEDIA_TYPES).filter((t) => MEDIA_TYPES[t]!.kind === f.tipo) : undefined, project: f.projeto }) : [],
+  // A pasta é da aba Vídeos ou de um avatar: os arquivos dos projetos não têm pasta.
+  const [gerados, ativos, enviados, avatares, pastasDeVideos, pastasDeAvatares] = await Promise.all([
+    quer("gerado") && !f.projeto ? conta.readyVideos(structures, { ...pagina, folder: f.pasta }) : [],
+    quer("avatar") && !f.modelo && !f.projeto ? conta.assetsPage({ ...pagina, kind: f.tipo, folder: f.pasta }) : [],
+    quer("projeto") && !f.modelo && !f.avatar && !f.pasta ? conta.projectFilesPage({ ...pagina, types: f.tipo ? Object.keys(MEDIA_TYPES).filter((t) => MEDIA_TYPES[t]!.kind === f.tipo) : undefined, project: f.projeto }) : [],
     db.avatarsByUser(user.id),
+    conta.folders("videos"),
+    db.foldersByUser(user.id),
   ]);
+  const pasta = pastaDe([...pastasDeVideos, ...pastasDeAvatares]);
   const nomes = new Map(avatares.map((a) => [a.id, a.name]));
   const todos = [
-    ...gerados.map((v) => itemGerado(v, url, v.avatar_id && nomes.has(v.avatar_id) ? { id: v.avatar_id, nome: nomes.get(v.avatar_id)! } : null)),
-    ...ativos.map((x) => itemAtivo(x, x.avatar_name, url)),
+    ...gerados.map((v) => itemGerado(v, url, v.avatar_id && nomes.has(v.avatar_id) ? { id: v.avatar_id, nome: nomes.get(v.avatar_id)! } : null, pasta(v.folder_id))),
+    ...ativos.map((x) => itemAtivo(x, x.avatar_name, url, pasta(x.folder_id))),
     ...enviados.map((e) => itemProjeto(e, e.project_name, url)),
   ].sort((a, b) => (a.criado === b.criado ? (a.id < b.id ? 1 : -1) : a.criado < b.criado ? 1 : -1));
   const arquivos = todos.slice(0, f.limite);
