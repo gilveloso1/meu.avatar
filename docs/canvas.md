@@ -174,7 +174,7 @@ menos custo.
   desenho; o cursor vira a seta de redimensionar). A borda de seleção vai por dentro.
   **Alinhado** (pedido do dono, 11/11/2026): quando a ponta que o corte move chega a 8 px (na tela)
   da ponta de um elemento de outra trilha do mesmo bloco (o vídeo de baixo, a cobertura, o som), o
-  corte para exatamente nela, uma guia terciária aparece de cima a baixo do bloco e o aviso de cima
+  corte para exatamente nela, uma guia tracejada em primary aparece de cima a baixo do bloco e o aviso de cima
   diz "Alinhado": assim não ficam, sem querer, elementos de tamanhos quase iguais. Com Alt, corta
   livre (`trimAlign`, `modelo.js`).
 
