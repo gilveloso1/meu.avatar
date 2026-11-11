@@ -223,7 +223,8 @@ menos custo.
   exportação: a ligação que passaria disso é recusada, com um aviso. Projeto antigo com
   mais ligações mostra as 48 primeiras e o aviso no card.
   Os botões de baixo (Exportar, Duplicar, Excluir) só aparecem na aba Ajustes.
-- **Barra de baixo**: desfazer, refazer, zoom, Organizar, Ver tudo e Info, em 48 px. A Info
+- **Barra de baixo**: desfazer, refazer, zoom, Organizar, Ver tudo e Info, em 48 px. Os botões + e −
+  do zoom andam de 25 em 25, de 50% a 800% (de um zoom quebrado, vão ao múltiplo de 25 seguinte). A Info
   abre um tooltip rico do M3 com os gestos, que ficam fora do canvas. A roda do
   mouse com Ctrl dá cerca de 23% por giro, e o zoom anda até lá em alguns quadros.
 - **Organizar**: cada grupo numa coluna, depois de tudo o que vem antes dele, e os Finais na
@@ -235,7 +236,8 @@ menos custo.
   faz a curva nos últimos 120 px (`linkPath`, `modelo.js`).
 - **Zoom no bloco**: dois cliques num bloco ampliam o canvas até ele ocupar a
   largura (a proporção não muda; se não cabe na altura, fica à vista a onda, embaixo).
-  O zoom vai até 800%. "Ver tudo" volta. Com zoom, sombras, contornos, linhas, a linha
+  O zoom vai de 50% a 800% (o mínimo era 15%; o dono fixou em 50% em 11/11/2026). "Ver tudo" volta;
+  se o projeto não cabe nem a 50%, mostra a partir do canto de cima, à esquerda. Com zoom, sombras, contornos, linhas, a linha
   de reprodução e o botão de tocar mantêm o tamanho da tela; a onda fica dentro dos
   cantos do bloco.
 - **Memória da onda**: de cada áudio fica guardado só um byte por passo de 1/480 s. O bloco

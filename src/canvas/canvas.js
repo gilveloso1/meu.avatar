@@ -1492,8 +1492,16 @@ $("#reset")?.addEventListener("click", () => {
   fit();
   render();
 });
-$("#zoom-in").onclick = () => zoomAt(1.2);
-$("#zoom-out").onclick = () => zoomAt(1 / 1.2);
+// Os botões + e − andam de 25 em 25 (50%, 75%, 100%... 800%): de um zoom quebrado, como 112%, o + vai
+// a 125% e o − a 100% (pedido do dono, 11/11/2026; antes multiplicavam por 1,2 e davam números soltos).
+const ZOOM_STEP = 0.25;
+const zoomTo = (dir) => {
+  const steps = view.z / ZOOM_STEP;
+  const next = (dir > 0 ? Math.floor(steps + 1e-6) + 1 : Math.ceil(steps - 1e-6) - 1) * ZOOM_STEP;
+  zoomAt(next / view.z);
+};
+$("#zoom-in").onclick = () => zoomTo(1);
+$("#zoom-out").onclick = () => zoomTo(-1);
 $("#fit").onclick = () => fit();
 // Info: o tooltip sobe do botão, 8 px acima da barra, sem sair da janela.
 $("#info-tip").addEventListener("toggle", (e) => {
@@ -1512,7 +1520,8 @@ $("#arrange").onclick = () => {
   fit();
 };
 
-const ZOOM_MIN = 0.15;
+// O zoom vai de 50% a 800% (o mínimo era 15%; o dono fixou em 50% em 11/11/2026: abaixo disso nada se lia nem se pegava).
+const ZOOM_MIN = 0.5;
 const FIT_Y = 88;
 // Até 800%: dá para ver a onda do som de perto para cortar.
 const ZOOM_MAX = 8;
@@ -1595,9 +1604,10 @@ function fit() {
   const w = Math.max(...xs) - x0;
   const h = Math.max(...ys) - y0;
   // Centralizado, com folga para a barra de baixo (80 px) igual em cima e embaixo.
-  view.z = Math.min(1.2, (r.width - 80) / w, (r.height - 2 * FIT_Y) / h);
-  view.x = (r.width - w * view.z) / 2 - x0 * view.z;
-  view.y = (r.height - h * view.z) / 2 - y0 * view.z;
+  view.z = Math.max(ZOOM_MIN, Math.min(1.2, (r.width - 80) / w, (r.height - 2 * FIT_Y) / h));
+  // Cabe: no meio. Não cabe nem no zoom mínimo: começa pelo canto de cima, à esquerda, e o resto se alcança rolando.
+  view.x = w * view.z <= r.width - 80 ? (r.width - w * view.z) / 2 - x0 * view.z : 40 - x0 * view.z;
+  view.y = h * view.z <= r.height - 2 * FIT_Y ? (r.height - h * view.z) / 2 - y0 * view.z : FIT_Y - y0 * view.z;
   applyView();
 }
 
