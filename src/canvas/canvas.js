@@ -921,6 +921,8 @@ async function importFiles(files, at) {
       toast(err?.message && err.message !== "[object Event]" ? err.message : (CONFIG.erros?.arquivo ?? ""));
     }
   }
+  // O que foi enviado passa a ser do projeto: a aba Projeto do painel mostra na hora.
+  if (PROJETO && !lib.hidden && libAt.fonte === "projeto") loadLibrary();
 }
 
 const toWorld = (cx, cy) => {
@@ -950,6 +952,9 @@ let libItems = [];
 let libNext = null;
 let libCall = 0;
 let libLoaded = false;
+// Os escolhidos para entrar de uma vez (a posição de cada um em libItems).
+const libPicked = new Set();
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /** Abre ou fecha o painel; o canvas encolhe para dar lugar, e a escolha fica lembrada. */
 function showLibrary(open) {
@@ -976,6 +981,8 @@ async function loadLibrary(more = false) {
     libNext = null;
     for (const el of [folders, grid, audios]) el.innerHTML = "";
     $("#lib-body").scrollTop = 0;
+    libPicked.clear();
+    showPicked();
   }
   empty.hidden = true;
   $("#lib-more").hidden = true;
@@ -1016,13 +1023,21 @@ async function loadLibrary(more = false) {
       ...(data.pastas ?? []).map((p) => row(`data-lib-folder="${esc(p.id)}" data-name="${esc(p.nome)}"`, icon("folder"), p.nome, p.itens)),
     ].join(""),
   );
-  const badge = (a) => (used.has(a.src) ? `<span class="ftile__badge" title="Já está no canvas"><span class="icon" aria-hidden="true">check</span></span>` : "");
+  const badge = (a) => (used.has(a.src) ? `<span class="ftile__badge" title="Já está no canvas"><span class="icon" aria-hidden="true">layers</span></span>` : "");
   (data.arquivos ?? []).forEach((a, i) => {
     const n = from + i;
-    if (a.tipo === "audio") return audios.insertAdjacentHTML("beforeend", row(`data-lib="${n}" draggable="true"`, icon("mic"), a.nome, a.de ?? a.quando ?? ""));
-    // O vídeo só baixa o começo, para o quadro; a imagem, quando aparece.
-    const media = a.tipo === "video" ? `<video src="${esc(a.src)}#t=0.5" preload="metadata" muted playsinline></video>` : `<img src="${esc(a.src)}" alt="" loading="lazy" draggable="false">`;
-    grid.insertAdjacentHTML("beforeend", `<button class="ftile" type="button" data-lib="${n}" draggable="true" title="${esc(a.nome)}"><span class="ftile__media">${media}${badge(a)}</span><span class="ftile__name">${esc(a.nome)}</span></button>`);
+    // O áudio: ouvir antes de pôr (o botão), o nome (põe no canvas) e a duração, que chega com o cabeçalho do arquivo.
+    if (a.tipo === "audio")
+      return audios.insertAdjacentHTML(
+        "beforeend",
+        `<div class="xlist__item frow" data-lib="${n}" draggable="true" title="${esc(a.nome)}"><button class="icon-button interactive" type="button" data-lib-play aria-label="Ouvir" title="Ouvir"><span class="icon">play_arrow</span></button><button class="frow__main" type="button"><span class="xlist__text">${esc(a.nome)}</span><span class="xlist__trail" data-dur>${esc(a.de ?? "")}</span></button><audio src="${esc(a.src)}" preload="metadata"></audio></div>`,
+      );
+    // O vídeo só baixa o começo, para o quadro e a duração; a imagem, quando aparece.
+    const media = a.tipo === "video" ? `<video src="${esc(a.src)}#t=0.5" preload="metadata" muted playsinline loop></video><span class="ftile__dur" data-dur></span>` : `<img src="${esc(a.src)}" alt="" loading="lazy" draggable="false">`;
+    grid.insertAdjacentHTML(
+      "beforeend",
+      `<button class="ftile" type="button" data-lib="${n}" draggable="true" title="${esc(a.nome)}"><span class="ftile__media">${media}<span class="ftile__pick" data-lib-pick title="Escolher"><span class="icon" aria-hidden="true">check</span></span>${badge(a)}</span><span class="ftile__name">${esc(a.nome)}</span></button>`,
+    );
   });
   if (!folders.children.length && !grid.children.length && !audios.children.length) {
     empty.textContent = libAt.q || libAt.tipo || libAt.pasta ? "Nada encontrado." : EMPTY[libAt.fonte];
@@ -1047,10 +1062,10 @@ function renderCrumbs() {
  * Põe um arquivo do painel no canvas. Com `at` (onde foi solto), ali; tocado, no meio do que está à
  * vista, ou embaixo de tudo se ali já houver algo (para não cair em cima de um bloco).
  */
-async function addFromLibrary(a, at = null) {
+async function addFromLibrary(a, at = null, quiet = false, free = !at) {
   const kind = KIND[a.tipo];
-  // A imagem não tem duração: fica 3 s e pode ir até o limite; o vídeo e o áudio dizem a deles.
-  const dur = kind === "image" ? M.IMAGE_MAX : await probeUrl(a.src, kind);
+  // A imagem não tem duração: fica 3 s e pode ir até o limite; o vídeo e o áudio dizem a deles (o card já leu).
+  const dur = kind === "image" ? M.IMAGE_MAX : (a.dur ?? (await probeUrl(a.src, kind)));
   const before = project;
   project = structuredClone(project);
   const b = { id: M.newId("b"), tone: M.nextTone(project, kind, a.src), kind, name: a.nome, src: a.src, dur, tin: 0, tout: kind === "image" ? 3 : dur, x: 0, y: 0, mute: false, vol: 1 };
@@ -1058,9 +1073,10 @@ async function addFromLibrary(a, at = null) {
   const mid = toWorld(r.left + r.width / 2, r.top + r.height / 2);
   const spot = at ?? { x: mid.x - M.width(b) / 2, y: mid.y - M.height(b) / 2 };
   const [w, h] = [M.width(b), M.height(b)];
-  const taken = !at && project.blocks.some((o) => o.x < spot.x + w + 24 && o.x + M.width(o) + 24 > spot.x && o.y < spot.y + h + 48 && o.y + M.height(o) + 48 > spot.y);
   b.x = spot.x;
-  b.y = taken ? Math.max(...project.blocks.map((o) => o.y + M.height(o) + 48)) : spot.y;
+  b.y = spot.y;
+  // Fora do ponto em que foi solto, o bloco desce até um lugar livre, para não cair em cima de outro.
+  for (let hit; free && (hit = project.blocks.find((o) => o.x < b.x + w + 24 && o.x + M.width(o) + 24 > b.x && o.y < b.y + h + 48 && o.y + M.height(o) + 48 > b.y)); ) b.y = hit.y + M.height(hit) + 48;
   project.blocks.push(b);
   const first = M.linkFirst(project, b);
   sel = { type: "block", id: b.id };
@@ -1068,8 +1084,66 @@ async function addFromLibrary(a, at = null) {
   commit(before);
   render();
   if (first) fit();
-  for (const el of lib.querySelectorAll(".ftile[data-lib]")) if (libItems[+el.dataset.lib]?.src === a.src && !$(".ftile__badge", el)) $(".ftile__media", el).insertAdjacentHTML("beforeend", `<span class="ftile__badge" title="Já está no canvas"><span class="icon" aria-hidden="true">check</span></span>`);
-  toast(`${a.nome} entrou no canvas.`);
+  else reveal(b);
+  for (const el of lib.querySelectorAll(".ftile[data-lib]")) if (libItems[+el.dataset.lib]?.src === a.src && !$(".ftile__badge", el)) $(".ftile__media", el).insertAdjacentHTML("beforeend", `<span class="ftile__badge" title="Já está no canvas"><span class="icon" aria-hidden="true">layers</span></span>`);
+  if (!quiet) toast(`${a.nome} entrou no canvas.`);
+  return b;
+}
+
+/** Leva a vista até o bloco, se ele ficou fora dela (sem mexer no zoom). */
+function reveal(b) {
+  const r = vp.getBoundingClientRect();
+  const [x, y, w, h] = [b.x * view.z + view.x, b.y * view.z + view.y, M.width(b) * view.z, M.height(b) * view.z];
+  if (x >= 0 && y >= 0 && x + w <= r.width && y + h <= r.height - 80) return;
+  view.x = r.width / 2 - (b.x + M.width(b) / 2) * view.z;
+  view.y = r.height / 2 - (b.y + M.height(b) / 2) * view.z;
+  applyView();
+}
+
+/** Os escolhidos entram de uma vez, um embaixo do outro a partir do ponto (ou do meio da vista). */
+async function addPicked(at = null) {
+  const list = [...libPicked].sort((a, b) => a - b).map((i) => libItems[i]).filter(Boolean);
+  libPicked.clear();
+  showPicked();
+  let spot = at;
+  let n = 0;
+  for (const a of list) {
+    try {
+      // O primeiro fica onde foi solto; os seguintes descem a partir dele, sem cobrir nada.
+      const b = await addFromLibrary(a, spot, true, n > 0 || !at);
+      spot = { x: b.x, y: b.y + M.height(b) + 48 };
+      n++;
+    } catch {}
+  }
+  toast(n === list.length ? `${n} arquivos entraram no canvas.` : (CONFIG.erros?.abrir ?? ""));
+}
+
+/** Marca ou desmarca um item; com algum escolhido, o pé do painel mostra quantos são e o "Inserir". */
+function togglePicked(item) {
+  const i = +item.dataset.lib;
+  libPicked.has(i) ? libPicked.delete(i) : libPicked.add(i);
+  showPicked();
+}
+function showPicked() {
+  for (const el of lib.querySelectorAll("[data-lib]")) el.classList.toggle("is-picked", libPicked.has(+el.dataset.lib));
+  lib.classList.toggle("is-picking", libPicked.size > 0);
+  $("#lib-pick").hidden = !libPicked.size;
+  $("#lib-foot").hidden = !!libPicked.size;
+  $("#lib-count").textContent = libPicked.size === 1 ? "1 escolhido" : `${libPicked.size} escolhidos`;
+}
+
+/** Ouvir um áudio do painel: um por vez; o botão vira pausar enquanto toca. */
+function listen(item) {
+  const audio = $("audio", item);
+  for (const o of lib.querySelectorAll(".frow audio")) if (o !== audio) o.pause();
+  if (audio.paused) audio.play().catch(() => toast(CONFIG.erros?.abrir ?? ""));
+  else audio.pause();
+}
+function playingIcon(audio, on) {
+  const b = $("[data-lib-play]", audio.closest(".frow"));
+  $(".icon", b).textContent = on ? "pause" : "play_arrow";
+  b.setAttribute("aria-label", on ? "Pausar" : "Ouvir");
+  b.title = on ? "Pausar" : "Ouvir";
 }
 
 /** O arquivo tocado ou solto entra no canvas, com o indicador no próprio item enquanto a duração é lida. */
@@ -1129,14 +1203,55 @@ $("#lib-body")?.addEventListener("click", (e) => {
     libAt = avatar ? { ...libAt, avatar: { id: avatar.dataset.libAvatar, name: avatar.dataset.name }, pasta: null } : { ...libAt, pasta: { id: folder.dataset.libFolder, name: folder.dataset.name } };
     return loadLibrary();
   }
-  pickFromLibrary(e.target.closest("[data-lib]"));
+  const item = e.target.closest("[data-lib]");
+  if (!item) return;
+  if (e.target.closest("[data-lib-play]")) return listen(item);
+  // O círculo do card, Ctrl ou Cmd, ou qualquer toque com algum já escolhido: marca em vez de pôr.
+  if (e.target.closest("[data-lib-pick]") || e.ctrlKey || e.metaKey || libPicked.size) return togglePicked(item);
+  pickFromLibrary(item);
 });
+$("#lib-clear")?.addEventListener("click", () => (libPicked.clear(), showPicked()));
+$("#lib-add")?.addEventListener("click", () => addPicked());
+// O cabeçalho de cada vídeo e áudio diz a duração: vai para o card e poupa a leitura na hora de pôr.
+// (Os eventos de mídia não sobem: são ouvidos na descida.)
+$("#lib-body")?.addEventListener(
+  "loadedmetadata",
+  (e) => {
+    const item = e.target.closest?.("[data-lib]");
+    const a = item && libItems[+item.dataset.lib];
+    if (!a || !Number.isFinite(e.target.duration) || !(e.target.duration > 0)) return;
+    a.dur = e.target.duration;
+    const el = $("[data-dur]", item);
+    if (el && !el.textContent) el.textContent = mmss(a.dur);
+  },
+  true,
+);
+for (const [type, on] of [["play", true], ["pause", false], ["ended", false]]) $("#lib-body")?.addEventListener(type, (e) => e.target.tagName === "AUDIO" && playingIcon(e.target, on), true);
+// Com o mouse em cima, o vídeo toca mudo no próprio card; ao sair, volta ao quadro do começo.
+$("#lib-body")?.addEventListener(
+  "mouseenter",
+  (e) => {
+    const video = e.target.matches?.(".ftile") && $("video", e.target);
+    if (video) (video.currentTime = 0), video.play().catch(() => {});
+  },
+  true,
+);
+$("#lib-body")?.addEventListener(
+  "mouseleave",
+  (e) => {
+    const video = e.target.matches?.(".ftile") && $("video", e.target);
+    if (video) video.pause(), (video.currentTime = 0.5);
+  },
+  true,
+);
 // Arrastar para o canvas: o item leva só a posição dele na lista; quem solta é o canvas (drop, abaixo).
 $("#lib-body")?.addEventListener("dragstart", (e) => {
   const item = e.target.closest?.("[data-lib]");
   if (!item) return;
-  e.dataTransfer.setData(LIB_DRAG, item.dataset.lib);
+  // Arrastar um dos escolhidos leva todos; arrastar outro leva só ele.
+  e.dataTransfer.setData(LIB_DRAG, libPicked.has(+item.dataset.lib) ? "escolhidos" : item.dataset.lib);
   e.dataTransfer.effectAllowed = "copy";
+  $("video", item)?.pause();
 });
 try {
   if (localStorage.getItem("canvas-arquivos") === "1") showLibrary(true);
@@ -1213,7 +1328,11 @@ document.addEventListener("drop", (e) => {
   e.preventDefault();
   // Um arquivo do painel Arquivos: só entra solto no canvas (solto de volta no painel, nada acontece).
   const fromLib = e.dataTransfer.getData(LIB_DRAG);
-  if (fromLib) return vp.contains(e.target) ? pickFromLibrary(lib.querySelector(`[data-lib="${CSS.escape(fromLib)}"]`), toWorld(e.clientX, e.clientY)) : undefined;
+  if (fromLib) {
+    if (!vp.contains(e.target)) return;
+    const here = toWorld(e.clientX, e.clientY);
+    return fromLib === "escolhidos" ? addPicked(here) : pickFromLibrary(lib.querySelector(`[data-lib="${CSS.escape(fromLib)}"]`), here);
+  }
   const at = vp.contains(e.target) ? toWorld(e.clientX, e.clientY) : dropPoint();
   if (e.dataTransfer.files.length) return bringIn([...e.dataTransfer.files], at);
   const text = e.dataTransfer.getData("text/plain").trim();

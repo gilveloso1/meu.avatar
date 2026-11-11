@@ -47,6 +47,9 @@ describe("projetos do canvas", () => {
     // O painel vem fechado, à esquerda do canvas, e o botão da barra o abre.
     expect(page).toMatch(/<aside class="files-panel" id="lib"[^>]* hidden>/);
     expect(page).toContain('data-open-library aria-controls="lib" aria-expanded="false"');
+    // O envio do computador saiu da barra de cima: fica no pé do painel (e no canvas vazio).
+    expect(/<header[\s\S]*?<\/header>/.exec(page)?.[0] ?? "").not.toContain("data-open-file");
+    expect(page).toMatch(/id="lib-foot">\s*<button[^>]*data-open-file>/);
     expect(c.projeto).toMatchObject({ id, name: "Projeto sem nome", data: { blocks: [], edges: [] }, salvar: `/projetos/${id}/salvar`, arquivos: `/projetos/${id}/arquivos`, acervo: `/projetos/${id}/acervo` });
     expect(c.erros).toMatchObject({ arquivo: ERROS.canvasArquivo, salvar: ERROS.canvasSalvar, nome: ERROS.projetoNome, abrir: ERROS.canvasAbrir, acervo: ERROS.canvasAcervo });
     expect(res.headers.get("content-security-policy")).toContain("img-src 'self' blob: data:");

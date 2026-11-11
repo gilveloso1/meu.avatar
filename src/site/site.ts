@@ -992,7 +992,6 @@ ${error ? snackbar(error) : ""}`;
       },
     };
     const actions = `<button class="button button--outlined interactive" type="button" id="add-final"><span class="icon">flag</span>Bloco final</button>
-    <button class="button button--tonal interactive" type="button" data-open-file><span class="icon">upload</span>Do computador</button>
     <button class="button button--filled interactive" type="button" data-open-library aria-controls="lib" aria-expanded="false"><span class="icon">photo_library</span>Arquivos</button>`;
     // O JSON vai num bloco de dados (não executa); "<" escapado para não fechar a tag.
     const body = `${CANVAS_STYLE}

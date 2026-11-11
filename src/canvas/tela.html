@@ -350,10 +350,32 @@ a.xlist__item { color: inherit; text-decoration: none; }
 .ftile:focus-visible { outline: 0; }
 .ftile:focus-visible .ftile__media { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
 .ftile__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--md-sys-typescale-label-medium); letter-spacing: 0.031rem; color: var(--md-sys-color-on-surface-variant); }
-/* O que já entrou no canvas: o selo de check no canto do card. */
+/* O que já entrou no canvas: o selo no canto de cima, à direita, com o ícone de camadas (o check é de escolher). */
 .ftile__badge { position: absolute; top: 6px; right: 6px; z-index: 1; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
 .ftile__badge .icon { font-size: 16px; }
 .ftile .spinner { position: absolute; z-index: 1; top: calc(50% - 22px); left: calc(50% - 12px); width: 24px; height: 24px; color: var(--md-sys-color-on-primary); }
+/* A duração no canto de baixo do card (lida do próprio arquivo), sobre um fundo escuro para se ler em qualquer imagem. */
+.ftile__dur { position: absolute; right: 6px; bottom: 6px; z-index: 1; padding: 0 6px; border-radius: var(--md-sys-shape-corner-extra-small); background: rgb(0 0 0 / 0.6); color: #fff; font: var(--md-sys-typescale-label-small); letter-spacing: 0.031rem; font-variant-numeric: tabular-nums; }
+.ftile__dur:empty { display: none; }
+/* Escolher vários: o círculo no canto do card (aparece com o mouse em cima, ou sempre que há algum
+   escolhido); o escolhido ganha o contorno primary e o círculo cheio, com o check. */
+.ftile__pick { position: absolute; top: 6px; left: 6px; z-index: 2; width: 24px; height: 24px; display: grid; place-items: center; border: 2px solid #fff; border-radius: var(--md-sys-shape-corner-full); background: rgb(0 0 0 / 0.32); color: transparent; opacity: 0; cursor: pointer; transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
+.ftile__pick .icon { font-size: 16px; }
+.ftile:hover .ftile__pick, .ftile:focus-visible .ftile__pick, .files-panel.is-picking .ftile__pick { opacity: 1; }
+.ftile.is-picked .ftile__pick { opacity: 1; border-color: var(--md-sys-color-primary); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.ftile.is-picked .ftile__media { outline: 3px solid var(--md-sys-color-primary); outline-offset: -3px; }
+@media (hover: none) { .ftile__pick { opacity: 1; } }
+/* O áudio: uma linha com o botão de ouvir, o nome (que põe no canvas) e a duração. */
+.frow { padding: 4px 12px 4px 4px; cursor: grab; }
+.frow .icon-button { flex: none; width: 40px; height: 40px; }
+.frow__main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; align-self: stretch; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; }
+.frow.is-picked { border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.frow audio { display: none; }
+/* O pé do painel: enviar do computador ou, com arquivos escolhidos, quantos são e pôr todos no canvas. */
+.files-panel__foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid var(--md-sys-color-outline-variant); }
+.files-panel__foot > .button:only-child { flex: 1; justify-content: center; }
+.files-panel__count { flex: 1; min-width: 0; white-space: nowrap; font: var(--md-sys-typescale-title-small); letter-spacing: 0.006rem; }
+#lib-pick { padding-left: 8px; }
 /* Tela estreita: os dois painéis não cabem ao lado do canvas; o Arquivos passa por cima dele. */
 @media (max-width: 1199px) {
   .editor.has-files { grid-template-columns: minmax(0, 1fr) var(--layout-config); }
@@ -394,6 +416,14 @@ a.xlist__item { color: inherit; text-decoration: none; }
       <div class="xlist" id="lib-audios"></div>
       <p class="sheet-hint" id="lib-empty" hidden></p>
       <button class="button button--text interactive" type="button" id="lib-more" hidden>Mostrar mais</button>
+    </div>
+    <div class="files-panel__foot" id="lib-foot">
+      <button class="button button--tonal interactive" type="button" data-open-file><span class="icon">upload</span>Enviar do computador</button>
+    </div>
+    <div class="files-panel__foot" id="lib-pick" hidden>
+      <button class="icon-button interactive" type="button" id="lib-clear" aria-label="Desmarcar todos" title="Desmarcar todos"><span class="icon">close</span></button>
+      <span class="files-panel__count" id="lib-count" role="status"></span>
+      <button class="button button--filled interactive" type="button" id="lib-add"><span class="icon">add</span>Inserir</button>
     </div>
   </aside>
   <div class="canvas">
