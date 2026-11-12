@@ -736,3 +736,56 @@ test("o corte solto (Alt) só anda a borda: ninguém acompanha, fica o buraco e 
   const g = M.groupIndex(M.groups(b));
   assert.equal(g.get("corpo"), g.get("produto"));
 });
+
+test("placement com área: a imagem fica dentro dela e o que passa é cortado", () => {
+  const ponto = ([a, b, c, d, e, f], x, y) => [a * x + c * y + e, b * x + d * y + f];
+  // Metade de cima de um quadro 100 × 200, vídeo quadrado: cobre a área de 100 × 100.
+  const cima = M.placement({ box: { x: 0, y: 0, w: 1, h: 0.5 } }, 100, 100, 100, 200);
+  assert.deepEqual(ponto(cima.matrix, 0, 0), [0, 0]);
+  assert.deepEqual(ponto(cima.matrix, 100, 100), [100, 100]);
+  assert.equal(cima.clip, "inset(0% 0% 0% 0%)");
+  // No canto de baixo à direita, 30 × 40: o vídeo largo cobre a área (80 × 40) e as sobras dos lados saem no recorte.
+  const pip = M.placement({ box: { x: 0.6, y: 0.7, w: 0.3, h: 0.2 } }, 200, 100, 100, 200);
+  assert.deepEqual(ponto(pip.matrix, 100, 50), [75, 160]);
+  assert.equal(pip.clip, "inset(0% 31.25% 0% 31.25%)");
+  // Caber: a imagem toda dentro da área, sem corte.
+  const cabe = M.placement({ fit: "contain", box: { x: 0.5, y: 0, w: 0.5, h: 1 } }, 100, 100, 100, 200);
+  assert.deepEqual(ponto(cabe.matrix, 0, 0), [50, 75]);
+  assert.equal(cabe.clip, "inset(0% 0% 0% 0%)");
+});
+
+test("camada: frente, trás, fundo, acima e abaixo mudam a ordem de desenho", () => {
+  const q = base(el("c", 40, -M.VIS_H, 2), el("d", 80, -2 * M.VIS_H, 2), faixa("m", 0, 0, 10));
+  const ordem = (p) => M.timeline([M.groups(p).find((g) => g.id === "a")]).items.filter((i) => i.layer !== "audio").map((i) => `${i.block.id}${i.layer === -1 ? "*" : ""}`);
+  assert.deepEqual(ordem(q), ["a", "b", "c", "d"]);
+  const frente = M.restack(q, "c", { frente: true });
+  assert.equal(frente.problem, null);
+  assert.deepEqual(ordem(frente.project), ["a", "b", "d", "c"]);
+  // A trilha que ficou vazia some: d desce para a 1 e c fica na 2.
+  assert.deepEqual(["c", "d"].map((id) => frente.project.blocks.find((b) => b.id === id).y), [-2 * M.VIS_H, -M.VIS_H]);
+  assert.deepEqual(ordem(M.restack(q, "d", { tras: true }).project), ["a", "b", "d", "c"]);
+  assert.deepEqual(ordem(M.restack(q, "d", { abaixo: "c" }).project), ["a", "b", "d", "c"]);
+  assert.deepEqual(ordem(M.restack(q, "c", { acima: "d" }).project), ["a", "b", "d", "c"]);
+  // Fundo: atrás da base, e o bloco continua o mesmo.
+  const fundo = M.restack(q, "d", { fundo: true }).project;
+  assert.deepEqual(ordem(fundo), ["d*", "a", "b", "c"]);
+  assert.deepEqual(M.groups(fundo).find((g) => g.id === "a").covers.map((b) => b.id).sort(), ["c", "d"]);
+  assert.deepEqual(M.exportWork({ ...fundo, finals: [{ id: "f", x: 0, y: 0 }], edges: [{ id: "e", from: "a", to: "f" }] }, "f").trechos[0].itens.map((i) => i.camada), ["fundo", "base", "base", "cobertura", "audio"]);
+  // Abaixo da base também é o fundo; de volta à frente, sai do fundo.
+  assert.deepEqual(ordem(M.restack(q, "c", { abaixo: "a" }).project), ["c*", "a", "b", "d"]);
+  assert.deepEqual(ordem(M.restack(fundo, "d", { acima: "a" }).project), ["a", "b", "d", "c"]);
+  // A base não muda de camada; a referência tem de ser do mesmo bloco.
+  assert.equal(M.restack(q, "a", { frente: true }).problem, "base");
+  assert.equal(M.restack(q, "c", { acima: "x" }).problem, "missing");
+  assert.equal(M.restack(q, "c", { acima: "c" }).problem, "missing");
+});
+
+test("camada num bloco só de som: sem base de imagem, não há fundo", () => {
+  const q = { blocks: [faixa("m", 0, 0, 10), el("c", 0, 0, 2), el("d", 40, -M.VIS_H, 2)], finals: [], edges: [] };
+  const g = M.groups(q).find((o) => o.id === "m");
+  assert.equal(g.soloAudio, true);
+  assert.equal(M.restack(q, "c", { fundo: true }).problem, "base");
+  const r = M.restack(q, "c", { frente: true });
+  assert.equal(r.problem, null);
+  assert.deepEqual(M.timeline([M.groups(r.project).find((o) => o.id === "m")]).items.filter((i) => i.layer === 1).map((i) => i.block.id), ["d", "c"]);
+});

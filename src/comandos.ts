@@ -3,7 +3,7 @@
  * vídeo depois daquele"), não a geometria do canvas. Tudo passa pelo mesmo modelo da tela
  * (src/canvas/modelo.js), com as mesmas regras. Um lote vale inteiro ou não vale nada.
  */
-import { addNote, arrange, base, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, len, linkFirst, linkProblem, links, maxEnd, members, MIN_LEN, newId, NOTE_MAX, nextTone, PX, relay, removeItems, renameGroup, RESOLUTIONS, sequence, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
+import { addNote, arrange, base, CODE_MAX, dropBlock, FORMATS, groupIndex, groups, height, IMAGE_MAX, len, linkFirst, linkProblem, links, maxEnd, members, MIN_LEN, newId, NOTE_MAX, nextTone, PX, relay, removeItems, renameGroup, RESOLUTIONS, restack, sequence, snap, SPEED_MAX, SPEED_MIN, split, upgrade, VIS_H, width } from "./canvas/modelo.js";
 import type { Block, CanvasProject, Frame, FrameKey, Sequence } from "./canvas/modelo.js";
 import { PAUSES, planParts, RULES } from "./quickedit";
 
@@ -19,7 +19,7 @@ export class ComandoError extends Error {
 }
 
 /** Os tipos que `aplicar` conhece; o teste confere que cada um tem o seu caso. */
-export const TIPOS = ["adicionar", "rascunho", "nota", "editarNota", "editarCodigo", "renomear", "trocar", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "ordenar", "remover", "som", "final", "organizar"];
+export const TIPOS = ["adicionar", "rascunho", "nota", "editarNota", "editarCodigo", "renomear", "trocar", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "camada", "ligar", "ordenar", "remover", "som", "final", "organizar"];
 
 /** Quantas letras trocar, pôr ou tirar para ir de uma palavra à outra. */
 function distancia(a: string, b: string): number {
@@ -245,6 +245,9 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
       case "enquadrar":
         project = await enquadrar(project, c, ctx, falha);
         break;
+      case "camada":
+        project = camada(project, c, falha);
+        break;
       case "cortar":
         project = cortar(project, c, falha);
         break;
@@ -310,7 +313,7 @@ export async function aplicar(original: CanvasProject, comandos: Comando[], ctx:
   return { project, criados };
 }
 
-const CAMPOS_DE_BLOCO = ["bloco", "depois", "antes", "sobre", "de", "para", "grupo", "nota", "perto"];
+const CAMPOS_DE_BLOCO = ["bloco", "depois", "antes", "sobre", "de", "para", "grupo", "nota", "perto", "acimaDe", "abaixoDe"];
 
 /** O texto de uma nota: não vazio e até NOTE_MAX caracteres (guarda as quebras de linha). */
 function textoDaNota(v: unknown, falha: (codigo: string, extra?: Record<string, unknown>) => ComandoError): string {
@@ -748,8 +751,10 @@ function manterPartes(project: CanvasProject, alvo: Block, partes: readonly (rea
 const ENCAIXES: Record<string, Frame["fit"]> = { preencher: "cover", caber: "contain", desfocar: "blur" };
 const MAX_CHAVES = 32;
 const MAX_ZOOM = 8;
+/** A menor largura ou altura da posição, em fração do quadro (MIN_AREA, container/exportar.py). */
+const MIN_AREA = 0.05;
 
-/** Zoom, foco, recorte, espelho, giro, encaixe e animação. O que não vem fica como estava. */
+/** Zoom, foco, recorte, espelho, giro, encaixe, posição e animação. O que não vem fica como estava. */
 async function enquadrar(project: CanvasProject, c: Comando, ctx: Contexto, falha: (c: string) => ComandoError): Promise<CanvasProject> {
   const b = project.blocks.find((o) => o.id === c.bloco);
   if (!b) throw falha("bloco_inexistente");
@@ -766,6 +771,16 @@ async function enquadrar(project: CanvasProject, c: Comando, ctx: Contexto, falh
   if (c.girar !== undefined) {
     if (![0, 90, 180, 270].includes(c.girar as number)) throw falha("enquadramento_invalido");
     frame.rotate = c.girar as number;
+  }
+  if (c.posicao === null) delete frame.box;
+  else if (c.posicao !== undefined) {
+    if (typeof c.posicao !== "object" || Array.isArray(c.posicao)) throw falha("enquadramento_invalido");
+    const r = c.posicao as Record<string, unknown>;
+    const [x, y, w, h] = [numero(r.x ?? 0), numero(r.y ?? 0), numero(r.largura ?? 1), numero(r.altura ?? 1)];
+    if (x === null || y === null || w === null || h === null || x < 0 || y < 0 || w < MIN_AREA || h < MIN_AREA || x + w > 1.0001 || y + h > 1.0001) throw falha("enquadramento_invalido");
+    // Na tela inteira, a posição não muda nada: não fica guardada.
+    if (x === 0 && y === 0 && w === 1 && h === 1) delete frame.box;
+    else frame.box = { x, y, w, h };
   }
   if (c.recorte !== undefined) {
     const r = (c.recorte ?? {}) as Record<string, unknown>;
@@ -795,6 +810,27 @@ async function enquadrar(project: CanvasProject, c: Comando, ctx: Contexto, falh
     });
   } else if (c.zoom !== undefined || c.focoX !== undefined || c.focoY !== undefined || c.rosto === true) frame.keys = [chave(c, 0)];
   return { ...project, blocks: project.blocks.map((o) => (o === b ? { ...o, frame } : o)) };
+}
+
+/**
+ * A ordem das imagens no bloco: frente, tras (logo acima da base), fundo (atrás da base), acimaDe ou abaixoDe
+ * outro elemento do mesmo bloco. Só uma das cinco; a base não muda de camada.
+ */
+function camada(project: CanvasProject, c: Comando, falha: (c: string) => ComandoError): CanvasProject {
+  const b = project.blocks.find((o) => o.id === c.bloco);
+  if (!b) throw falha("bloco_inexistente");
+  const pedidos = [
+    c.frente === true && { frente: true },
+    c.tras === true && { tras: true },
+    c.fundo === true && { fundo: true },
+    typeof c.acimaDe === "string" && { acima: c.acimaDe },
+    typeof c.abaixoDe === "string" && { abaixo: c.abaixoDe },
+  ].filter((v) => v !== false);
+  if (pedidos.length !== 1 || b.kind === "audio") throw falha("camada_invalida");
+  const r = restack(project, b.id, pedidos[0]!);
+  if (r.problem === "missing") throw falha("bloco_inexistente");
+  if (r.problem) throw falha("camada_invalida");
+  return r.project;
 }
 
 /** O novo início e fim do trecho do arquivo, nas regras do corte da tela. */

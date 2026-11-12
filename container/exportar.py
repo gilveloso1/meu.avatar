@@ -43,6 +43,8 @@ MAX_LADO = 1920
 VELOCIDADE = (0.25, 4)
 MAX_CHAVES = 32
 MAX_ZOOM = 8
+# A menor área (largura ou altura, em fração do quadro) que a posição aceita; o mesmo do comando enquadrar.
+MIN_AREA = 0.05
 # Animação com zoom: amplia antes, senão o zoompan anda de pixel em pixel e treme.
 SUPER = 2
 MAX_QUADROS = 12
@@ -134,9 +136,31 @@ def zoom(chaves, w, h):
     return [f"crop={cw:.3f}:{ch:.3f}:{cx:.3f}:{cy:.3f}:exact=1", f"scale={w}:{h}:flags=bicubic"]
 
 
+def area(quadro, w, h):
+    """A área do quadro que a imagem ocupa (box, em frações), em pixels pares: (x, y, largura, altura), ou None."""
+    box = quadro.get("box")
+    if box is None:
+        return None
+    if not isinstance(box, dict):
+        raise SystemExit("Posição inválida no plano.")
+    x, y = numero(box.get("x", 0), 0, 1), numero(box.get("y", 0), 0, 1)
+    bw, bh = numero(box.get("w", 1), MIN_AREA, 1), numero(box.get("h", 1), MIN_AREA, 1)
+    if x + bw > 1.0001 or y + bh > 1.0001:
+        raise SystemExit("Posição inválida no plano.")
+    par = lambda v, de: max(2, min(de, 2 * round(v * de / 2)))
+    lw, lh = par(bw, w), par(bh, h)
+    return min(round(x * w), w - lw), min(round(y * h), h - lh), lw, lh
+
+
 def enquadrar(entrada, saida, quadro, w, h, n):
-    """A imagem no quadro, a mesma conta de placement (modelo.js). Devolve os filtros do grafo."""
+    """A imagem no quadro, a mesma conta de placement (modelo.js). Devolve os filtros do grafo.
+    Com área (box), tudo vale dentro dela, e o resto do quadro fica transparente."""
     quadro = quadro if isinstance(quadro, dict) else {}
+    caixa = area(quadro, w, h)
+    if caixa:
+        x, y, lw, lh = caixa
+        filtros = enquadrar(entrada, f"r{n}", {k: v for k, v in quadro.items() if k != "box"}, lw, lh, n)
+        return [*filtros, f"[r{n}]pad={w}:{h}:{x}:{y}:color=black@0[{saida}]"]
     c = quadro.get("crop") if isinstance(quadro.get("crop"), dict) else {}
     l, t, r, b = (numero(c.get(k, 0), 0, 0.9) for k in "ltrb")
     if l + r > 0.9 or t + b > 0.9:
@@ -184,8 +208,9 @@ def filtros(plano, arquivos):
     itens = plano.get("itens")
     if not isinstance(itens, list):
         raise SystemExit("Plano sem itens.")
-    # A base primeiro e as coberturas por cima, na ordem do plano.
-    itens = sorted(itens, key=lambda i: isinstance(i, dict) and i.get("camada") == "cobertura")
+    # As coberturas de fundo, a base e as coberturas por cima, cada camada na ordem do plano.
+    ordem = {"fundo": 0, "cobertura": 2}
+    itens = sorted(itens, key=lambda i: ordem.get(i.get("camada"), 1) if isinstance(i, dict) else 1)
     for n, item in enumerate(itens):
         if not isinstance(item, dict) or item.get("tipo") not in ("video", "imagem", "audio"):
             raise SystemExit("Item inválido no plano.")

@@ -65,6 +65,12 @@ menos custo.
 - **Sobrepor**: um bloco em cima de outro cobre a imagem dele naquele trecho,
   como um corte para o b-roll; arrastar para os lados escolhe o momento. Um
   b-roll também pode ficar entre dois blocos, como trecho próprio.
+- **Posição e ordem das camadas** (12/11/2026, só pelo agente por enquanto): cada imagem pode ocupar
+  só uma área do quadro (`frame.box`, comando `enquadrar {posicao}`): tela dividida, janela no canto,
+  a base menor sobre outro vídeo. O resto da área fica transparente e mostra a camada de baixo. A ordem
+  de desenho é a das trilhas (a mais alta por cima); `camada` leva um elemento para a frente, para trás
+  ou para trás da base (`back`, a cobertura de fundo, nas trilhas de baixo). Prévia (`placement`,
+  `player.js`) e exportação (`area` e a ordem em `filtros`, `exportar.py`) fazem a mesma conta.
 - **Som**: em qualquer bloco, tirar o som, manter, sobrepor (música, narração)
   e ajustar o volume. O resultado é o que a pessoa arrumou.
 - **Conectar (linhas)**: a linha liga uma parte à seguinte e é o que cria

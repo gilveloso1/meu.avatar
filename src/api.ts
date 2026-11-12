@@ -139,13 +139,15 @@ function resumo(data: CanvasProject) {
         id: b.id,
         nome: b.name,
         tipo: b.draft ? "rascunho" : b.code ? "animacao" : TIPOS_DE_BLOCO[b.kind],
-        camada: main.includes(b) ? "base" : g.covers.includes(b) ? "cobertura" : "audio",
+        // As coberturas vêm na ordem de desenho, de trás para a frente; as de fundo ficam atrás da base.
+        camada: main.includes(b) ? "base" : g.covers.includes(b) ? (b.back && g.blocks.length ? "fundo" : "cobertura") : "audio",
         inicio: segundos(b.x - g.x),
         fim: segundos(b.x + width(b) - g.x),
         // O que som e velocidade mudaram, só quando saiu do padrão: o agente confere sem pedir o canvas inteiro.
         // O trecho do arquivo que o bloco usa, quando ele foi cortado (a imagem, o rascunho e a animação não têm arquivo a cortar).
         ...(b.kind !== "image" && (b.tin > 0.001 || b.tout < b.dur - 0.001) ? { corte: [+b.tin.toFixed(3), +b.tout.toFixed(3)] } : {}),
         ...(b.speed && b.speed !== 1 ? { velocidade: b.speed } : {}),
+        ...(b.frame?.box ? { posicao: { x: b.frame.box.x, y: b.frame.box.y, largura: b.frame.box.w, altura: b.frame.box.h } } : {}),
         ...(b.mute ? { mudo: true } : b.vol !== 1 && b.vol !== undefined ? { volume: b.vol } : {}),
       })),
       };

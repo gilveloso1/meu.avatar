@@ -166,9 +166,12 @@ Próximos passos, nesta ordem:
 5. **Transições**: fusão, fade do preto, cortina, zoom, flash e transição em HyperFrames.
 6. **Cor**: exposição, contraste, saturação, temperatura, LUT, igualar a cor entre vídeos,
    vinheta e nitidez.
-7. **Tempo e imagem avançados**: rampa de velocidade, cortes em J e L, congelar, reverter,
-   repetir, reenquadrar seguindo o rosto, tela dividida, picture-in-picture, opacidade,
-   mistura, tremido e estabilização.
+7. **Tempo e imagem avançados**: tela dividida, janela no canto (picture-in-picture) e a ordem das
+   camadas já saem pelo agente (12/11/2026, `enquadrar {posicao}` e `camada`, ver [api.md](api.md)).
+   Faltam: a posição animada (deslizar, crescer), cantos arredondados e borda na janela, a marca da
+   cobertura de fundo e os campos de posição e camada nos Ajustes do canvas, opacidade, mistura,
+   rampa de velocidade, cortes em J e L, congelar, reverter, repetir, reenquadrar seguindo o rosto,
+   tremido e estabilização.
 8. **Agente mais autônomo**: detectar cenas e o que aparece nelas, prévia rápida de um
    trecho, plano sem aplicar com o custo, desfazer pela API, histórico de versões (com ele, o
    conflito do `editar_projeto` pode dizer o que mudou peça a peça), medir gancho, ritmo e áreas
