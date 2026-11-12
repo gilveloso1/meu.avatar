@@ -500,7 +500,8 @@ export const variantLabel = (cols) => (cols <= 2 ? "full" : cols === 3 ? "short"
 
 /**
  * Linha do tempo de uma versão: o que toca, quando e de onde do arquivo.
- * layer 0: base; 1: cobertura (b-roll); "audio": som somado.
+ * layer -1: cobertura de fundo (atrás da base); 0: base; 1: cobertura (b-roll); "audio": som somado.
+ * Na lista, quem vem depois fica por cima.
  */
 export function timeline(version, rate = 1) {
   const items = [];
@@ -508,8 +509,11 @@ export function timeline(version, rate = 1) {
   for (const g of version) {
     // Por trilha: quem está mais acima vem depois e fica por cima.
     const on = (b, layer) => items.push({ block: b, layer, start: (t + (b.x - g.x) / PX) / rate, len: len(b) / rate, tin: b.tin, speed: (b.speed ?? 1) * rate, rate });
+    // A cobertura de fundo (`back`, comando camada do agente) fica atrás da base: só aparece onde a base não cobre.
+    const behind = g.blocks.length ? g.covers.filter((b) => b.back) : [];
+    behind.forEach((b) => on(b, -1));
     g.blocks.forEach((b) => on(b, 0));
-    g.covers.forEach((b) => on(b, 1));
+    g.covers.filter((b) => !behind.includes(b)).forEach((b) => on(b, 1));
     g.audios.forEach((b) => on(b, "audio"));
     t += g.dur;
   }
@@ -636,7 +640,7 @@ export function sceneWork(project, finalId, groupId) {
 /** O trecho de um grupo: cada elemento com a camada, o tempo e o corte, na velocidade do Final. */
 function segmentOf(g, final) {
   const tipo = { video: "video", image: "imagem", audio: "audio" };
-  const camada = { 0: "base", 1: "cobertura", audio: "audio" };
+  const camada = { "-1": "fundo", 0: "base", 1: "cobertura", audio: "audio" };
   const tl = timeline([g], finalRate(final));
   return {
     duracao: +tl.duration.toFixed(3),
@@ -658,6 +662,55 @@ function segmentOf(g, final) {
 /* ---------- Edição (funções puras: devolvem um projeto novo) ---------- */
 
 const clone = (p) => structuredClone(p);
+
+/**
+ * A ordem das imagens de um bloco (o comando camada do agente): leva a cobertura `id` para a frente de
+ * todas (`frente`), para logo acima da base (`tras`), para trás da base (`fundo`), ou para logo acima ou
+ * abaixo de outro elemento do mesmo bloco (`acima`/`abaixo`: o id). A ordem de desenho é a das trilhas:
+ * as coberturas de fundo (`back`) ficam nas trilhas de baixo, depois as outras; o elemento vai para uma
+ * trilha só dele, e as trilhas que ficam vazias somem. Devolve { project, problem }: problem "missing"
+ * (o elemento ou a referência não estão no bloco), "base" (a base não muda de camada, e sem base não há
+ * fundo) ou null.
+ */
+export function restack(project, id, where) {
+  const p = clone(project);
+  const g = groupIndex(groups(p)).get(id);
+  const b = g?.covers.find((o) => o.id === id);
+  if (!g) return { project, problem: "missing" };
+  if (!b) return { project, problem: "base" };
+  const hasBase = g.blocks.length > 0;
+  const tracks = [...new Set(g.covers.map((c) => trackIn(c, g)))].sort((x, y) => x - y);
+  const row = (t, back) => g.covers.filter((c) => c !== b && trackIn(c, g) === t && (back === undefined || !!c.back === back));
+  const BASE = "base";
+  const rows = (hasBase ? [...tracks.map((t) => row(t, true)), BASE, ...tracks.map((t) => row(t, false))] : [BASE, ...tracks.map((t) => row(t))]).filter(
+    (r) => r === BASE || r.length,
+  );
+  const baseAt = rows.indexOf(BASE);
+  let at;
+  if (where.frente) at = rows.length;
+  else if (where.tras) at = baseAt + 1;
+  else if (where.fundo) at = 0;
+  else {
+    const ref = where.acima ?? where.abaixo;
+    const idx = g.blocks.some((o) => o.id === ref) ? baseAt : ref === id ? -1 : rows.findIndex((r) => r !== BASE && r.some((o) => o.id === ref));
+    if (idx < 0) return { project, problem: "missing" };
+    at = where.acima ? idx + 1 : idx;
+  }
+  if (!hasBase && at <= baseAt) return { project, problem: "base" };
+  rows.splice(at, 0, [b]);
+  const behind = rows.indexOf(BASE);
+  let t = hasBase ? 1 : 0;
+  rows.forEach((r, i) => {
+    if (r === BASE) return;
+    for (const c of r) {
+      c.y = videoY(g) - t * VIS_H;
+      if (i < behind) c.back = true;
+      else delete c.back;
+    }
+    t++;
+  });
+  return { project: p, problem: null };
+}
 
 /**
  * Onde um bloco arrastado vai parar: encaixa depois ou antes de outro, cobre um
@@ -1104,31 +1157,48 @@ export function zoomWindow({ z, x, y }, W, H) {
 /**
  * Onde a mídia (vw × vh) fica num quadro W × H, a mesma conta do container/exportar.py.
  * frame: { fit: "cover" | "contain" | "blur", flipH, flipV, rotate: 0, 90, 180 ou 270,
- * crop: { l, t, r, b } (fração cortada de cada lado), keys: [{ t, z, x, y }] }.
+ * crop: { l, t, r, b } (fração cortada de cada lado), keys: [{ t, z, x, y }],
+ * box: { x, y, w, h } (a área do quadro que a imagem ocupa, em frações; sem ela, o quadro todo) }.
+ * Com box, tudo o mais vale dentro da área, e o que passa dela é cortado.
  * Devolve a matriz CSS (origem no canto da mídia) e o recorte em % para clip-path.
  */
 export function placement(frame, vw, vh, W, H, t = 0) {
+  const box = frame?.box;
+  const [bx, by] = box ? [box.x * W, box.y * H] : [0, 0];
+  const [bw, bh] = box ? [box.w * W, box.h * H] : [W, H];
   const c = { l: 0, t: 0, r: 0, b: 0, ...frame?.crop };
   const [sw, sh] = [vw * (1 - c.l - c.r), vh * (1 - c.t - c.b)];
   const rotate = frame?.rotate ?? 0;
   const turned = rotate % 180 !== 0;
   const [rw, rh] = turned ? [sh, sw] : [sw, sh];
   const fill = (frame?.fit ?? "cover") === "cover";
-  const s = fill ? Math.max(W / rw, H / rh) : Math.min(W / rw, H / rh);
-  const win = zoomWindow(frameAt(frame, t), W, H);
-  const z = W / win.w;
-  // Da mídia para o quadro: centro do recorte na origem, espelha, gira, escala e leva ao centro.
+  const s = fill ? Math.max(bw / rw, bh / rh) : Math.min(bw / rw, bh / rh);
+  const win = zoomWindow(frameAt(frame, t), bw, bh);
+  const z = bw / win.w;
+  // Da mídia para o quadro: centro do recorte na origem, espelha, gira, escala e leva ao centro da área.
   const a = (rotate * Math.PI) / 180;
   const [cos, sin] = [Math.round(Math.cos(a)), Math.round(Math.sin(a))];
   const [fx, fy] = [frame?.flipH ? -1 : 1, frame?.flipV ? -1 : 1];
   const k = s * z;
   const m = [cos * fx * k, sin * fx * k, -sin * fy * k, cos * fy * k];
   const [cx, cy] = [vw * (c.l + (1 - c.l - c.r) / 2), vh * (c.t + (1 - c.t - c.b) / 2)];
-  const ox = (W / 2 - win.x) * z - (m[0] * cx + m[2] * cy);
-  const oy = (H / 2 - win.y) * z - (m[1] * cx + m[3] * cy);
+  const ox = bx + (bw / 2 - win.x) * z - (m[0] * cx + m[2] * cy);
+  const oy = by + (bh / 2 - win.y) * z - (m[1] * cx + m[3] * cy);
+  // O recorte, na mídia: o do frame e, com área, o que cai fora dela (a matriz só gira de 90 em 90°).
+  let [l, tp, r, b] = [c.l * vw, c.t * vh, vw - c.r * vw, vh - c.b * vh];
+  if (box) {
+    const det = m[0] * m[3] - m[1] * m[2];
+    const back = ([qx, qy]) => [(m[3] * (qx - ox) - m[2] * (qy - oy)) / det, (m[0] * (qy - oy) - m[1] * (qx - ox)) / det];
+    const pts = [[bx, by], [bx + bw, by], [bx, by + bh], [bx + bw, by + bh]].map(back);
+    l = Math.max(l, Math.min(...pts.map((p) => p[0])));
+    r = Math.min(r, Math.max(...pts.map((p) => p[0])));
+    tp = Math.max(tp, Math.min(...pts.map((p) => p[1])));
+    b = Math.min(b, Math.max(...pts.map((p) => p[1])));
+  }
+  const pc = (v, of) => +((Math.max(v, 0) / of) * 100).toFixed(4);
   return {
     matrix: [...m, ox, oy],
-    clip: `inset(${c.t * 100}% ${c.r * 100}% ${c.b * 100}% ${c.l * 100}%)`,
+    clip: `inset(${pc(tp, vh)}% ${pc(vw - r, vw)}% ${pc(vh - b, vh)}% ${pc(l, vw)}%)`,
   };
 }
 

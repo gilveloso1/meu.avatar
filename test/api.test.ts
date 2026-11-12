@@ -479,6 +479,40 @@ describe("edição fina", () => {
     expect(await (await comandos(id, r.revisao, [{ tipo: "enquadrar", bloco: a, chaves: [null] }])).json()).toEqual({ erro: "enquadramento_invalido", comando: 0 });
   });
 
+  it("enquadrar com posicao guarda a área, null volta à tela inteira, e fora do quadro recusa", async () => {
+    const { id, a, v } = await dois();
+    const r = await lote(id, v.revisao, [{ tipo: "enquadrar", bloco: a, posicao: { x: 0.6, y: 0.7, largura: 0.35, altura: 0.25 } }]);
+    expect(bloco(r, a).frame).toEqual({ box: { x: 0.6, y: 0.7, w: 0.35, h: 0.25 } });
+    const vista = await (await api(`/api/v1/projetos/${id}`, admin)).json<{ grupos: { blocos: { id: string; posicao?: unknown }[] }[] }>();
+    expect(vista.grupos[0]!.blocos.find((b) => b.id === a)!.posicao).toEqual({ x: 0.6, y: 0.7, largura: 0.35, altura: 0.25 });
+    for (const posicao of [{ x: 0.8, largura: 0.3 }, { altura: 0.01 }, { y: -0.1 }, "cima"])
+      expect(await (await comandos(id, r.revisao, [{ tipo: "enquadrar", bloco: a, posicao }])).json(), JSON.stringify(posicao)).toEqual({ erro: "enquadramento_invalido", comando: 0 });
+    const volta = await lote(id, r.revisao, [{ tipo: "enquadrar", bloco: a, posicao: null }]);
+    expect(bloco(volta, a).frame).toEqual({});
+  });
+
+  it("camada: frente, fundo e acimaDe mudam quem fica na frente; a base e o pedido duplo recusam", async () => {
+    const { id, revisao } = await novo();
+    const r = await lote(id, revisao, [
+      { tipo: "adicionar", video: VIDEO, fim: 4, rotulo: "a" },
+      { tipo: "adicionar", video: VIDEO2, fim: 2, sobre: "@a", em: 0, rotulo: "c" },
+      { tipo: "adicionar", video: VIDEO2, fim: 2, sobre: "@a", em: 0.5, rotulo: "d" },
+    ]);
+    const [a, c, d] = r.criados as [string, string, string];
+    const ordem = async () => (await (await api(`/api/v1/projetos/${id}`, admin)).json<{ grupos: { blocos: { id: string; camada: string }[] }[] }>()).grupos[0]!.blocos.filter((b) => b.camada !== "audio").map((b) => `${b.camada}:${b.id === a ? "a" : b.id === c ? "c" : "d"}`);
+    expect(await ordem()).toEqual(["base:a", "cobertura:c", "cobertura:d"]);
+    const f = await lote(id, r.revisao, [{ tipo: "camada", bloco: c, frente: true }]);
+    expect(await ordem()).toEqual(["base:a", "cobertura:d", "cobertura:c"]);
+    const g = await lote(id, f.revisao, [{ tipo: "camada", bloco: d, fundo: true }, { tipo: "enquadrar", bloco: a, posicao: { x: 0.25, y: 0.25, largura: 0.5, altura: 0.5 } }]);
+    expect(await ordem()).toEqual(["base:a", "fundo:d", "cobertura:c"]);
+    const h = await lote(id, g.revisao, [{ tipo: "camada", bloco: d, acimaDe: c }]);
+    expect(await ordem()).toEqual(["base:a", "cobertura:c", "cobertura:d"]);
+    const erro = async (cmd: unknown) => (await comandos(id, h.revisao, [cmd])).json();
+    expect(await erro({ tipo: "camada", bloco: a, frente: true })).toEqual({ erro: "camada_invalida", comando: 0 });
+    expect(await erro({ tipo: "camada", bloco: c, frente: true, fundo: true })).toEqual({ erro: "camada_invalida", comando: 0 });
+    expect(await erro({ tipo: "camada", bloco: c, acimaDe: "x" })).toEqual({ erro: "bloco_inexistente", comando: 0 });
+  });
+
   it("zoom no rosto usa o ponto achado; sem ele, recusa", async () => {
     const { id, a, v } = await dois();
     expect(await (await comandos(id, v.revisao, [{ tipo: "enquadrar", bloco: a, zoom: 1.4, rosto: true }])).json()).toEqual({ erro: "rosto_indisponivel", comando: 0 });

@@ -98,8 +98,16 @@ const COMANDO: { tipo: string; assinatura: string; nota?: string; regras: string
   { tipo: "removerTrechos", assinatura: "{bloco, trechos: [[inicio, fim], ...]}", regras: "Segundos do arquivo, como os de ver_transcricao; o resto encosta. Sobra menor que 0,5 s é recusada: junte-a ao trecho do lado." },
   {
     tipo: "enquadrar",
-    assinatura: "{bloco, zoom: 1 a 8, focoX, focoY: 0 a 1, rosto: true, chaves: [{t, zoom, focoX, focoY}], encaixe: preencher|caber|desfocar, recorte: {esquerda, topo, direita, base}, espelharH, espelharV, girar: 0|90|180|270, limpar}",
-    regras: "Só muda o que vier. rosto: o ponto entre os olhos. t é o tempo do bloco (negativo continua um movimento do bloco anterior); entre as chaves, a curva é suave. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela.",
+    assinatura: "{bloco, zoom: 1 a 8, focoX, focoY: 0 a 1, rosto: true, chaves: [{t, zoom, focoX, focoY}], encaixe: preencher|caber|desfocar, recorte: {esquerda, topo, direita, base}, posicao: {x, y, largura, altura}|null, espelharH, espelharV, girar: 0|90|180|270, limpar}",
+    regras:
+      "Só muda o que vier. rosto: o ponto entre os olhos. t é o tempo do bloco (negativo continua um movimento do bloco anterior); entre as chaves, a curva é suave. Um movimento de câmera na mesma frase é um só: não mude o foco no meio dela. posicao: a área do quadro que a imagem ocupa, em frações de 0 a 1 (x e y do canto de cima à esquerda; largura e altura de 0,05 a 1, sem passar da borda); o encaixe, o zoom, o foco e o recorte valem dentro dela, e o resto do quadro mostra a camada de baixo. Metade de cima: {x: 0, y: 0, largura: 1, altura: 0.5}; janela no canto de baixo à direita: {x: 0.6, y: 0.7, largura: 0.35, altura: 0.25}. Vale também na base (o que ela não cobre mostra o fundo ou o preto). null volta à tela inteira. Confira com ver_cena.",
+  },
+  {
+    tipo: "camada",
+    assinatura: "{bloco, frente | tras | fundo: true | acimaDe | abaixoDe: bloco}",
+    nota: "quem fica na frente de quem numa cena",
+    regras:
+      "Só uma opção. frente: na frente de todas; tras: logo acima da base; fundo: atrás da base (só aparece onde a base não cobre: base com posicao ou encaixe caber); acimaDe e abaixoDe: um elemento do mesmo grupo (abaixoDe da base é o fundo). A base não muda de camada; para pôr outro vídeo na frente dela, mude a camada do outro. ver_projeto lista as coberturas de trás para a frente, com camada fundo para as de trás da base. Recusa: camada_invalida.",
   },
   {
     tipo: "ligar",

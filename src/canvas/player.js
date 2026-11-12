@@ -223,7 +223,8 @@ export class Player {
     const ready = (i) => (i.el.tagName === "IFRAME" ? i.ready : i.el.tagName === "IMG" ? i.el.complete : i.el.readyState >= READY && !i.el.seeking);
     // Na mesma camada de base, vale quem está na trilha mais alta: é o último da lista.
     const base = this.items.findLast((i) => i.layer === 0 && on(i));
-    const tops = this.items.filter((i) => i.layer === 1 && on(i));
+    // As de fundo (-1) entram com as de cima: a ordem da lista as põe atrás da base no quadro.
+    const tops = this.items.filter((i) => (i.layer === 1 || i.layer === -1) && on(i));
     // Quem deve aparecer ainda sem imagem: fica o que estava, senão outra coisa pisca na tela.
     const front = tops.length ? tops : base ? [base] : [];
     if (front.some((i) => !ready(i))) return;
@@ -240,7 +241,7 @@ export class Player {
     this.paintBack();
   }
 
-  /** O bloco com enquadramento fica onde a exportação põe; sem ele, vale o CSS (cobre o quadro). */
+  /** O bloco com enquadramento (e posição) fica onde a exportação põe; sem ele, vale o CSS (cobre o quadro). */
   place(i) {
     if (i.el.tagName === "IFRAME") return this.placeFrame(i);
     const frame = i.block.frame;
@@ -262,8 +263,10 @@ export class Player {
   /** Fundo desfocado: um quadro pequeno, esticado e borrado pelo CSS, sem outro vídeo tocando. */
   paintBack() {
     // O fundo é o da imagem mais de cima que não é animação.
-    const i = this.shown[1].findLast((o) => !o.block.code) ?? this.shown[0];
-    const blur = i?.block.frame?.fit === "blur";
+    const pick = (o) => !o.block.code;
+    const i = this.shown[1].findLast((o) => pick(o) && o.layer === 1) ?? this.shown[0] ?? this.shown[1].findLast(pick);
+    // Numa área (posição), o desfocado fica só na exportação: aqui a imagem cabe na área, sem o fundo.
+    const blur = i?.block.frame?.fit === "blur" && !i.block.frame.box;
     if (this.back.hidden === blur) this.back.hidden = !blur;
     if (!blur) return;
     try {

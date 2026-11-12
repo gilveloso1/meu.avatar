@@ -186,7 +186,7 @@ describe("protocolo", () => {
     // A descrição do editar_projeto segue com a assinatura de cada comando e aponta a ajuda.
     const { tools } = (await rpc("tools/list")).result as { tools: { name: string; inputSchema: { properties: { comandos?: { description: string } } } }[] };
     const descricao = tools.find((t) => t.name === "editar_projeto")!.inputSchema.properties.comandos!.description;
-    for (const tipo of ["adicionar", "editarCodigo", "rascunho", "trocar", "nota", "editarNota", "renomear", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "ligar", "ordenar", "remover", "som", "final", "organizar"]) expect(descricao, tipo).toContain(`\n${tipo} {`);
+    for (const tipo of ["adicionar", "editarCodigo", "rascunho", "trocar", "nota", "editarNota", "renomear", "cortar", "dividir", "mover", "velocidade", "removerPausas", "removerTrechos", "enquadrar", "camada", "ligar", "ordenar", "remover", "som", "final", "organizar"]) expect(descricao, tipo).toContain(`\n${tipo} {`);
     expect(descricao).toContain("ajuda {assunto");
   });
 });

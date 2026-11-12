@@ -6,9 +6,9 @@ export interface ExportWork {
   trechos: { duracao: number; itens: ExportItem[] }[];
   versoes: { nome: string; trechos: number[] }[];
 }
-export interface Block { id: string; kind: "video" | "image" | "audio"; name: string; src: string; dur: number; tin: number; tout: number; x: number; y: number; mute: boolean; vol: number; tone: number; audio?: string; joint?: string; speed?: number; frame?: Frame; draft?: { fala: string; descricao?: string }; code?: { html: string; params?: Record<string, string | number>; escala?: number; fixa?: boolean } }
+export interface Block { id: string; kind: "video" | "image" | "audio"; name: string; src: string; dur: number; tin: number; tout: number; x: number; y: number; mute: boolean; vol: number; tone: number; audio?: string; joint?: string; speed?: number; frame?: Frame; back?: boolean; draft?: { fala: string; descricao?: string }; code?: { html: string; params?: Record<string, string | number>; escala?: number; fixa?: boolean } }
 export interface FrameKey { t: number; z: number; x: number; y: number }
-export interface Frame { fit?: "cover" | "contain" | "blur"; flipH?: boolean; flipV?: boolean; rotate?: number; crop?: { l: number; t: number; r: number; b: number }; keys?: FrameKey[] }
+export interface Frame { fit?: "cover" | "contain" | "blur"; flipH?: boolean; flipV?: boolean; rotate?: number; crop?: { l: number; t: number; r: number; b: number }; keys?: FrameKey[]; box?: { x: number; y: number; w: number; h: number } }
 export interface CanvasFinal { id: string; x: number; y: number; resolution?: string; format?: string; speed?: number }
 export interface CanvasEdge { id: string; from: string; to: string }
 export interface CanvasNote { id: string; x: number; y: number; text: string }
@@ -55,6 +55,7 @@ export function codeHtml(code: { html: string; params?: Record<string, string | 
 export function sounds(b: Block): boolean;
 export function finalRate(final?: CanvasFinal): number;
 export function split(project: CanvasProject, id: string, at: number): { project: CanvasProject; id: string };
+export function restack(project: CanvasProject, id: string, where: { frente?: boolean; tras?: boolean; fundo?: boolean; acima?: string; abaixo?: string }): { project: CanvasProject; problem: "missing" | "base" | null };
 export function relay(before: CanvasProject, after: CanvasProject, order: string[], x0: number, y: number): CanvasProject;
 export function height(b: Block): number;
 export function upgrade(project: CanvasProject): CanvasProject;
