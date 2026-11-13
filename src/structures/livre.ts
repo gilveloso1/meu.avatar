@@ -20,17 +20,29 @@ export const MAX_SCENE = 2000;
 /** Até quantas imagens de referência (o OpenRouter não diz o limite dos modelos). */
 export const MAX_REFERENCES = 4;
 
-/** O descritor do agente: o uso é do modelo; `video`, a frase do vídeo de referência, onde ele aceita. */
-export function freeAgent(use: string, video?: string): AgentSpec {
+/**
+ * O que muda de um modelo livre para outro, pelo que o OpenRouter aceita dele: `video`, a frase do
+ * vídeo de referência, onde ele aceita; `lastFrame: false`, sem último quadro; `sound: false`, sem a
+ * escolha do som (o modelo não tem `generate_audio`: o som vem sempre).
+ */
+export interface FreeOptions {
+  video?: string;
+  lastFrame?: boolean;
+  sound?: boolean;
+}
+
+/** O descritor do agente: o uso é do modelo; os campos, os que ele aceita (`FreeOptions`). */
+export function freeAgent(use: string, opts: FreeOptions = {}): AgentSpec {
+  const last = opts.lastFrame !== false;
   return {
     use,
     fields: {
       cena: "O prompt inteiro: quem aparece, o que faz, a câmera, a luz e a fala entre aspas com o idioma. Até 2.000 caracteres. Obrigatória.",
       foto: `${CAMPOS.foto} Opcional.`,
-      ultimoQuadro: "src da imagem do último quadro: o vídeo termina nela. Opcional.",
-      referencias: `Até ${MAX_REFERENCES} src de imagem que guiam a cena (a pessoa, o produto, o lugar), sem virar quadro; diga na cena o que vem de cada uma. Não vai com foto nem ultimoQuadro.`,
-      ...(video ? { video } : {}),
-      som: "false para sair sem som (para pôr outro áudio por cima). Padrão: com som.",
+      ...(last ? { ultimoQuadro: "src da imagem do último quadro: o vídeo termina nela. Opcional." } : {}),
+      referencias: `Até ${MAX_REFERENCES} src de imagem que guiam a cena (a pessoa, o produto, o lugar), sem virar quadro; diga na cena o que vem de cada uma. Não vai com foto${last ? " nem ultimoQuadro" : ""}.`,
+      ...(opts.video ? { video: opts.video } : {}),
+      ...(opts.sound !== false ? { som: "false para sair sem som (para pôr outro áudio por cima). Padrão: com som." } : {}),
       semente: "Inteiro, para repetir um resultado parecido. Opcional.",
       duracao: CAMPOS.duracao,
       resolucao: CAMPOS.resolucao,
@@ -42,8 +54,8 @@ export function freeAgent(use: string, video?: string): AgentSpec {
       cena: txt(a, "cena"),
       // Com referências ou vídeo, a foto vai como referência; senão, como primeiro quadro.
       foto: (Array.isArray(a.referencias) && a.referencias.length) || txt(a, "video") ? "referencia" : "quadro",
-      // O preço com vídeo na entrada é outro (o SKU com "_video", onde há).
-      entrada: txt(a, "video") ? "_video" : "",
+      // O preço com vídeo ou imagens de referência na entrada pode ser outro: o SKU com "_video" ou "_ref".
+      entrada: txt(a, "video") ? "_video" : Array.isArray(a.referencias) && a.referencias.length ? "_ref" : "",
       som: a.som === false ? "nao" : "sim",
       semente: num(a, "semente"),
       duracao: num(a, "duracao"),
@@ -54,7 +66,7 @@ export function freeAgent(use: string, video?: string): AgentSpec {
 }
 
 /** O formulário do site: a cena, o primeiro quadro e as opções do vídeo, da lista do modelo. */
-export function freeSections(model: VideoModel | null, d: Defaults): Section[] {
+export function freeSections(model: VideoModel | null, d: Defaults, opts: FreeOptions = {}): Section[] {
   const durations = model?.supported_durations ?? [d.duration];
   const resolutions = model?.supported_resolutions ?? [d.resolution];
   const ratios = model?.supported_aspect_ratios ?? [d.aspectRatio];
@@ -83,14 +95,15 @@ export function freeSections(model: VideoModel | null, d: Defaults): Section[] {
         { kind: "select", name: "duracao", label: "Duração", options: durations.map((s) => ({ value: String(s), label: `${s} s` })), value: String(pick(durations, d.duration)) },
         { kind: "segmented", name: "resolucao", label: "Resolução", options: options(resolutions), value: pick(resolutions, d.resolution) },
         { kind: "select", name: "formato", label: "Formato", options: options(ratios), value: pick(ratios, d.aspectRatio) },
-        { kind: "segmented", name: "som", label: "Som", options: [{ value: "sim", label: "Com som" }, { value: "nao", label: "Sem som" }], value: "sim" },
+        ...(opts.sound !== false ? [{ kind: "segmented" as const, name: "som", label: "Som", options: [{ value: "sim", label: "Com som" }, { value: "nao", label: "Sem som" }], value: "sim" }] : []),
       ],
     },
   ];
 }
 
 /** Monta o pedido livre; `video`, o vídeo de referência, se veio, na duração aceita (`range`). */
-export function freeBuild(values: Values, hasImage: boolean, video: SourceVideo | null, range?: { min: number; max: number }): Built {
+export function freeBuild(values: Values, hasImage: boolean, video: SourceVideo | null, opts: FreeOptions & { range?: { min: number; max: number } } = {}): Built {
+  const range = opts.range;
   const scene = values("cena").replace(/\s+/g, " ").trim();
   if (!scene) throw new InputError(ERROS.cena);
   if (scene.length > MAX_SCENE) throw new InputError(ERROS.cenaLonga(MAX_SCENE));
@@ -98,15 +111,16 @@ export function freeBuild(values: Values, hasImage: boolean, video: SourceVideo 
   const duration = Number(values("duracao"));
   const resolution = values("resolucao");
   const aspectRatio = values("formato");
-  const sound = values("som") !== "nao";
+  // Sem a escolha do som, o pedido não leva `generate_audio` (o modelo não aceita o campo).
+  const sound = opts.sound === false ? null : values("som") !== "nao";
   if (values("semente") && !(/^\d{1,10}$/.test(values("semente")) && Number(values("semente")) < 2 ** 32)) throw new InputError(ERROS.semente);
   const seed = values("semente") ? Number(values("semente")) : undefined;
   // "referencia" (o gerar_video com referencias ou vídeo): a foto é a primeira referência; senão, o primeiro quadro.
   const reference = values("foto") === "referencia" || source !== null;
   return {
-    request: { prompt: scene, duration, resolution, aspect_ratio: aspectRatio, generate_audio: sound, ...(seed !== undefined ? { seed } : {}) },
+    request: { prompt: scene, duration, resolution, aspect_ratio: aspectRatio, ...(sound !== null ? { generate_audio: sound } : {}), ...(seed !== undefined ? { seed } : {}) },
     image: hasImage ? (reference ? "reference" : "first_frame") : null,
-    lastFrame: !reference,
+    lastFrame: !reference && opts.lastFrame !== false,
     video: source !== null,
     record: {
       // A cena fica no lugar da fala: é o texto da lista e da busca.
@@ -119,7 +133,7 @@ export function freeBuild(values: Values, hasImage: boolean, video: SourceVideo 
       language: null,
       extra: null,
       settings: {
-        som: sound ? "sim" : "nao",
+        ...(sound !== null ? { som: sound ? "sim" : "nao" } : {}),
         ...(hasImage ? { foto: reference ? "referencia" : "quadro" } : {}),
         ...(seed !== undefined ? { semente: String(seed) } : {}),
         ...(source ? { source_seconds: source.seconds.toFixed(1) } : {}),

@@ -19,6 +19,9 @@
   semente. Para cena, produto, cenário e personagem estilizado: rosto realista o provedor recusa.
   Custo pelos tokens do quadro; com vídeo, o preço menor do token conta também o vídeo enviado
   (SKU `<res>_<formato>_video`). Ainda sem teste real.
+- **Seedance 2.0 Mini (`seedance-mini`, 13/11/2026):** a mesma estrutura do livre no modelo
+  `bytedance/seedance-2.0-mini`, versão "Mini" do Seedance: metade do preço do token (US$ 0,0000035;
+  cerca de US$ 0,034/s em 480p e 0,076 em 720p, 9:16), só 480p e 720p. Ainda sem teste real.
 - **A estrutura fica como está**, com o campo Uso: o Seedance pode servir a
   outros usos sem rosto realista na entrada (cenário, objeto, personagem
   estilizado). Um uso novo é uma opção nova em `USES`.

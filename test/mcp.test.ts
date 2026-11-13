@@ -487,7 +487,8 @@ describe("listar_modelos e os dois passos do gerar_*", () => {
     const api = new FakeVideoApi();
     const { modelos } = dados<{ modelos: Modelo[] }>(await comApi(api, "listar_modelos", {}));
     expect(modelos.map((m) => [m.id, m.tipo])).toEqual([
-      ["wan", "video"], ["wan-livre", "video"], ["heygen", "video"], ["grok", "video"], ["mischief", "video"], ["omni", "video"], ["seedance-livre", "video"], ["flux-edit", "video"],
+      ["wan", "video"], ["wan-livre", "video"], ["heygen", "video"], ["heygen-video", "video"], ["grok", "video"], ["mischief", "video"], ["omni", "video"],
+      ["seedance-livre", "video"], ["seedance-mini", "video"], ["flux-edit", "video"],
       ["nano-banana", "imagem"], ["elevenlabs", "audio"], ["fish", "audio"],
     ]);
     const mischief = modelos.find((m) => m.id === "mischief")!;
@@ -867,6 +868,49 @@ describe("gerar_video com o Seedance livre", () => {
       expect(r.content[0]!.text).toContain(erro);
     }
     expect(api.submitted).toHaveLength(0);
+  });
+});
+
+describe("gerar_video com o HeyGen Video 1 e o Seedance Mini", () => {
+  const comApi = async (api: FakeVideoApi, name: string, args: unknown) => {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
+    const res = await call(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: "Bearer ma_admin", ...CABECALHOS("tools/call", name) } }), api);
+    return ((await res.json()) as { result: Result }).result;
+  };
+  const custo = async (api: FakeVideoApi, args: Record<string, unknown>) => dados<{ custoEstimado: number }>(await comApi(api, "gerar_video", { modelo: "heygen-video", ...args })).custoEstimado;
+
+  it("HeyGen Video: a cena vai sem generate_audio e sem último quadro; o preço muda acima de 15 s e com referências", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "HeyGen" }));
+    const cena = 'Mulher na cozinha olha para a câmera e diz em português: "Oi, gente!"';
+    expect(await custo(api, { projeto: id, cena, duracao: 10 })).toBeCloseTo(0.2);
+    expect(await custo(api, { projeto: id, cena, duracao: 20 })).toBeCloseTo(0.9);
+    const ref = (await imagemGerada((n, x) => comApi(api, n, x), id)).src;
+    expect(await custo(api, { projeto: id, cena, duracao: 10, referencias: [ref] })).toBeCloseTo(0.7);
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "heygen-video", projeto: id, cena, duracao: 10, foto: ref });
+    expect(r.isError).toBeFalsy();
+    const pedido = api.submitted.at(-1)!;
+    expect(pedido).toMatchObject({ model: "heygen/heygen-video-1", prompt: cena, duration: 10, resolution: "480p", aspect_ratio: "9:16" });
+    expect(pedido.generate_audio).toBeUndefined();
+    expect(pedido.frame_images!.map((f) => f.frame_type)).toEqual(["first_frame"]);
+    for (const campo of [{ ultimoQuadro: ref }, { som: false }]) {
+      const recusa = await comApi(api, "gerar_video", { modelo: "heygen-video", projeto: id, cena, ...campo });
+      expect(recusa.content[0]!.text).toContain("campo_nao_aceito");
+    }
+  });
+
+  it("Seedance Mini: o mesmo pedido do livre no modelo Mini, pela metade do preço", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Mini" }));
+    const pedido = { projeto: id, cena: "garrafa girando sobre a mesa", duracao: 5, resolucao: "720p", formato: "9:16" };
+    const livre = dados<{ custoEstimado: number }>(await comApi(api, "gerar_video", { modelo: "seedance-livre", ...pedido })).custoEstimado;
+    const mini = dados<{ custoEstimado: number }>(await comApi(api, "gerar_video", { modelo: "seedance-mini", ...pedido })).custoEstimado;
+    expect(mini).toBeCloseTo(livre / 2, 2);
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "seedance-mini", ...pedido });
+    expect(r.isError).toBeFalsy();
+    expect(api.submitted.at(-1)).toMatchObject({ model: "bytedance/seedance-2.0-mini", prompt: "garrafa girando sobre a mesa", duration: 5, resolution: "720p", generate_audio: true });
+    const fora = await comApi(api, "gerar_video", { modelo: "seedance-mini", ...pedido, resolucao: "1080p" });
+    expect(fora.content[0]!.text).toContain("pedido_invalido");
   });
 });
 

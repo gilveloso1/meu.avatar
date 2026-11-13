@@ -27,7 +27,7 @@ export const WAN_LIVRE: Structure = {
   wordsPerSecond: WORDS_PER_SECOND,
   // Abaixo de 5 s, o provedor cobra 5 s (docs/modelos/wan-3.0.md, teste de 10/11/2026).
   cost: { sku: "duration_seconds_{resolucao}", seconds: { field: "duracao" }, billed: { min: 5 } },
-  sections: freeSections,
+  sections: (model, d) => freeSections(model, d),
   build: (values, hasImage) => freeBuild(values, hasImage, null),
   details: freeDetails,
 };

@@ -1346,6 +1346,22 @@ describe("Seedance livre", () => {
   });
 });
 
+describe("HeyGen Video 1", () => {
+  it("o formulário é o da cena livre, sem a escolha do som, e começa na resolução mais barata", async () => {
+    const page = await (await get("/modelo/heygen-video")).text();
+    expect(page).toContain('name="cena"');
+    expect(page).not.toContain('name="som"');
+    expect(page).toContain('name="resolucao" value="480p" checked');
+    expect(page).toContain("&quot;480p_20&quot;:&quot;0.045&quot;");
+  });
+
+  it("conta comum não vê nem usa", async () => {
+    const member = await memberCookie();
+    expect(await (await get("/", member)).text()).not.toContain("/modelo/heygen-video");
+    expect((await get("/modelo/heygen-video", member)).status).toBe(404);
+  });
+});
+
 describe("FLUX Video Edit", () => {
   const origem = (seconds = 6.2) => new File([fakeMp4(seconds, { width: 1920, height: 1080 })], "cena.mp4", { type: "video/mp4" });
 
