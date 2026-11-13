@@ -39,6 +39,7 @@ do OpenRouter do dia. Quando o provedor cobra segundos diferentes dos do vídeo,
 | Gemini Omni 1.2 Flash e 1.1 | preço da lista por segundo, por resolução | US$ 0,556 por 8 s (1.2) e 0,4054 por 4 s (1.1), em 720p | Bate |
 | Nano Banana 2.1 | tokens da imagem × preço (US$ 0,039 em 1K, 0,06 em 2K) | média de US$ 0,0398 em 1K (108 imagens) e 0,0555 em 2K (115) | Bate em 1K; em 2K a estimativa sai uns 8% acima |
 | Seedance 2.0 | tokens do vídeo × preço | sem vídeo pronto (bloqueado) | Sem como conferir |
+| FLUX Video Edit | preço da lista por segundo (US$ 0,03), pelos segundos do vídeo de origem | sem vídeo pronto (não testado) | Conferir no primeiro teste |
 
 ## Resumo
 
@@ -49,6 +50,7 @@ do OpenRouter do dia. Quando o provedor cobra segundos diferentes dos do vídeo,
 | [HeyGen Avatar IV](heygen-avatar-iv.md) (`heygen/avatar-iv`) | Avatar falando, voz pronta da HeyGen | Em teste. A API direta da HeyGen sai mais barata (US$ 0,0385/s, contra US$ 0,05/s) e aceita áudio próprio e voz clonada | `heygen.ts` |
 | [Seedance 2.0](seedance-2.0.md) (`bytedance/seedance-2.0`) | Trocar avatar (vídeo + foto) | **Bloqueado** para vídeo com rosto realista | `seedance.ts` |
 | [Runway Aleph 2](runway-aleph-2.md) (`runway/aleph-2`) | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | Em teste: a receita do terceiro teste troca o avatar e mantém o áudio. Cobrou US$ 1,40 por pedido até 20 s, mais ≈ US$ 0,22 de imagens | `aleph.ts` |
+| [FLUX Video Edit](flux-video-edit.md) (`black-forest-labs/flux-video-edit`) | Editar um vídeo pronto pelo texto (tirar, pôr ou trocar objetos, pessoas e o cenário) | Em teste, só o administrador, no site e no agente (`gerar_video` com `video`), desde 13/11/2026. Ainda sem teste real; US$ 0,03/s | `flux.ts` |
 | [Gemini Nano Banana 2.1](gemini-nano-banana-2.1.md) (`google/gemini-nano-banana-2.1`) | Trocar o rosto nos quadros-chave do Aleph 2; esboço inicial dos vídeos (com ou sem foto de referência) | Em teste, dentro do `aleph.ts`. Estrutura de imagem só para o administrador: o melhor na comparação de 06/11/2026 (US$ 0,04 por imagem em 1K) | `imagem.ts` |
 | `anthropic/claude-haiku-5.5` | Conferir o fundo dos quadros-chave do Aleph 2 | Em teste, dentro do `aleph.ts` (ver [runway-aleph-2.md](runway-aleph-2.md)) | — |
 | [Grok Imagine Video 1.5 Lite](grok-imagine-video-1.5-lite.md) (`x-ai/grok-imagine-video-1.5-lite`) | Cena sem fala, a partir da foto | Em teste: fez as duas cenas pelo terminal (US$ 0,03/s em 720p); vem com som mesmo sem áudio. Estrutura só para o administrador, no ar desde 06/11/2026 | `grok.ts` |

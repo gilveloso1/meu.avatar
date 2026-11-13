@@ -19,7 +19,7 @@ import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
 import { criarEnvio, MAX_ATIVO, MAX_AVATAR_DESCRIPTION, receberAtivo, uso } from "./ativos";
 import { MEDIA_TYPES, mediaType } from "./arquivos";
-import { base64, ForbiddenError, type Studio } from "./studio";
+import { base64, ForbiddenError, readSource, type Studio } from "./studio";
 import { FONTES, MAX_RENDER_SECONDS, RenderError } from "./render";
 import { AudioLongoError, type Palavra } from "./transcricao";
 
@@ -762,7 +762,7 @@ export class Api {
    * código é sorteado e fica guardado (só o hash) com o pedido e o custo: vale para o mesmo
    * pedido, uma vez, por SIMULACAO_MIN minutos e enquanto o custo for o que a pessoa viu;
    * qualquer campo diferente, o reenvio ou o prazo vencido pedem outra simulação. Não há modelo
-   * padrão. Os arquivos (foto, ultimoQuadro, referencias, audio) são src do projeto.
+   * padrão. Os arquivos (foto, ultimoQuadro, referencias, audio, video) são src do projeto.
    */
   private async generate(tipo: Tipo, request: Request, user: User, project: Project | null): Promise<Response> {
     const body = ((await json(request)) ?? {}) as Record<string, unknown>;
@@ -815,6 +815,8 @@ export class Api {
     if (ultimo instanceof Response) return ultimo;
     const audio = await arquivo(texto("audio"), /^audio\/(mpeg|mp3|wav|x-wav|wave)$/, "audio");
     if (audio instanceof Response) return audio;
+    const video = await arquivo(texto("video"), /^video\/(mp4|quicktime)$/, "video");
+    if (video instanceof Response) return video;
     const [primeira = null, ...references] = imagens;
 
     // Os campos de texto viram o formulário; o que faltar fica com o padrão do formulário do site.
@@ -828,14 +830,16 @@ export class Api {
     );
     const values = (name: string) => valores[name] || padroes[name] || "";
     const avatar = /^\/avatares\/([0-9a-f-]{36})\/arquivos\//.exec(texto("foto") || referencias[0] || "")?.[1] ?? null;
-    const input = { structure: resolved, values, image: foto ?? primeira, references, lastFrame: ultimo, audio, avatarId: avatar, user };
+    const input = { structure: resolved, values, image: foto ?? primeira, references, lastFrame: ultimo, audio, video, avatarId: avatar, user };
     const resumo = await sha256(JSON.stringify([user.id, tipo, project?.id ?? null, texto("modelo"), texto("final"), Object.keys(pedido).sort().map((k) => [k, pedido[k]])]));
     const centavos = (custo: number | undefined) => (custo !== undefined ? +custo.toFixed(4) : null);
 
     try {
+      // O vídeo de origem (os modelos que editam vídeo): a duração conta no custo.
+      const origem = (await readSource(video))?.source ?? null;
       if (body.confirmacao === undefined) {
         const { built } = await this.studio.check(input);
-        const custo = estimate(resolved, model, values);
+        const custo = estimate(resolved, model, values, origem);
         const r = built.record;
         const codigo = randomToken().slice(0, 16);
         const agora = Date.now();
@@ -855,12 +859,12 @@ export class Api {
       const invalida = (motivo: string) => falha(409, "confirmacao_invalida", { motivo });
       if (!simulada) return invalida(`O código vale para o mesmo pedido, uma vez, por ${SIMULACAO_MIN} min: simule de novo (sem confirmacao) e confirme com a pessoa.`);
       // O preço mudou depois do sim: a pessoa vê o custo novo antes de gerar.
-      if (simulada.custo !== centavos(estimate(resolved, model, values))) return invalida("O custo mudou desde a simulação: simule de novo (sem confirmacao) e confirme com a pessoa.");
+      if (simulada.custo !== centavos(estimate(resolved, model, values, origem))) return invalida("O custo mudou desde a simulação: simule de novo (sem confirmacao) e confirme com a pessoa.");
 
       const v = await this.studio.create(input);
       if (tipo === "video") {
         if (v.status === "failed") return falha(502, "video_falhou", { id: v.id });
-        const custo = estimate(resolved, model, values);
+        const custo = estimate(resolved, model, values, origem);
         return Response.json(
           { video: { id: v.id, modelo: structure.id, status: v.status, duracaoEstimada: v.duration || null, custoEstimado: custo !== undefined ? +custo.toFixed(2) : null, resolucao: v.resolution, formato: v.aspect_ratio } },
           { status: 201 },

@@ -21,6 +21,7 @@
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
+import { sourceWithin } from "./origem";
 import { InputError, type Option, type Structure } from "./types";
 import { options } from "./wan";
 
@@ -122,15 +123,14 @@ export const SEEDANCE: Structure = {
   build(values, hasImage, model, video) {
     const use = USES.find((u) => u.value === values("uso"));
     if (!use) throw new InputError(ERROS.uso);
-    if (!video) throw new InputError(ERROS.videoOrigem);
-    if (video.seconds < SOURCE_SECONDS.min || video.seconds > SOURCE_SECONDS.max + 0.5) throw new InputError(ERROS.videoDuracao(SOURCE_SECONDS.min, SOURCE_SECONDS.max));
+    const source = sourceWithin(video, SOURCE_SECONDS);
     if (!hasImage) throw new InputError(ERROS.foto);
     const outfit = OUTFITS.find((o) => o.value === values("roupa"));
     if (!outfit) throw new InputError(ERROS.roupa);
     const extra = values("instrucoes").replace(/\s+/g, " ").trim();
     if (extra.length > MAX_SWAP_EXTRA) throw new InputError(ERROS.instrucoesLongas(MAX_SWAP_EXTRA));
 
-    const duration = outputSeconds(video.seconds, model.supported_durations);
+    const duration = outputSeconds(source.seconds, model.supported_durations);
     const resolution = values("resolucao");
     const aspectRatio = values("formato");
     const prompt = swapPrompt(outfit.value, extra);
@@ -148,7 +148,7 @@ export const SEEDANCE: Structure = {
         style: null,
         language: null,
         extra: extra || null,
-        settings: { use: use.value, outfit: outfit.value, source_seconds: video.seconds.toFixed(1) },
+        settings: { use: use.value, outfit: outfit.value, source_seconds: source.seconds.toFixed(1) },
       },
     };
   },

@@ -114,9 +114,11 @@ export interface CostRule {
   extraSku?: string;
 }
 
-/** O vídeo enviado, já lido: quantos segundos tem. */
+/** O vídeo enviado, já lido: quantos segundos tem e, se o cabeçalho diz, o tamanho do quadro. */
 export interface SourceVideo {
   seconds: number;
+  width?: number;
+  height?: number;
 }
 
 /** O que o formulário mandou, já sem a foto. */

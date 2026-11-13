@@ -24,7 +24,8 @@ corrigido no mesmo PR). Vem antes do resto, nesta ordem.
 4. **Prazo de edição**: o contêiner corta em 10 min (15 na composição); o Worker e
    `docs/operacao.md` dizem 20. Escolher um.
 5. **Simulação do agente mais fraca que a geração** (`check`, `src/studio.ts`): não confere a voz
-   clonada do Fish nem o vídeo de origem; e a voz clonada é gravada antes da validação (sobra voz órfã).
+   clonada do Fish (o vídeo de origem já confere, desde 13/11/2026); e a voz clonada é gravada antes
+   da validação (sobra voz órfã).
 
 ### 2. Telas (aprovadas: mudar só com o sim do dono)
 

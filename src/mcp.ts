@@ -307,6 +307,7 @@ const FERRAMENTAS = [
         ultimoQuadro: texto("src da imagem do último quadro."),
         referencias: textos("src de imagens que guiam a cena; não vão com foto nem ultimoQuadro."),
         audio: texto("src de um áudio que é a fala."),
+        video: texto("src do vídeo de origem, nos modelos que editam vídeo."),
         som: { type: "boolean", description: "false para sair sem som." },
         semente: inteiro("Para repetir um resultado parecido."),
         expressividade: texto('"low", "medium" ou "high".'),

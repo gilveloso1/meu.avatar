@@ -9,7 +9,8 @@ import { NANO_BANANA } from "./imagem";
 import { OMNI, OMNI_11 } from "./omni";
 import { HEYGEN_DIRECT } from "./heygen-direta";
 import { SEEDANCE } from "./seedance";
-import type { CostRule, Structure, Values } from "./types";
+import type { CostRule, SourceVideo, Structure, Values } from "./types";
+import { FLUX_EDIT } from "./flux";
 import { ELEVENLABS, FISH } from "./voz";
 import { WAN } from "./wan";
 import { WAN_LIVRE } from "./wan-livre";
@@ -17,7 +18,7 @@ import { WAN_LIVRE } from "./wan-livre";
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, WAN_LIVRE, HEYGEN_AVATAR, GROK, MISCHIEF, OMNI, OMNI_11, SEEDANCE, ALEPH, NANO_BANANA, ELEVENLABS, FISH];
+export const STRUCTURES: Structure[] = [WAN, WAN_LIVRE, HEYGEN_AVATAR, GROK, MISCHIEF, OMNI, OMNI_11, SEEDANCE, ALEPH, FLUX_EDIT, NANO_BANANA, ELEVENLABS, FISH];
 
 /** As versões do mesmo modelo (a principal primeiro); sem versões, só ela. */
 export function familyOf(structure: Structure): Structure[] {
@@ -73,9 +74,10 @@ export function prices(structure: Structure, model: VideoModel): Record<string, 
 
 /**
  * Custo estimado em US$ pela regra da estrutura; undefined se o modelo não tem
- * o preço ou se os segundos só se sabem no navegador (duração do vídeo enviado).
+ * o preço ou se faltam os segundos do vídeo enviado (no site, quem conta é o navegador;
+ * no gerar_video do agente, `source`, o vídeo já lido).
  */
-export function estimate(structure: Structure, model: VideoModel, values: Values): number | undefined {
+export function estimate(structure: Structure, model: VideoModel, values: Values, source?: SourceVideo | null): number | undefined {
   const rule: CostRule = structure.cost;
   const price = Number(prices(structure, model)[rule.sku.replace(/\{(\w+)\}/g, (_, name: string) => values(name))]);
   // Fala: o preço é por caractere do texto, sem nada fixo.
@@ -87,7 +89,7 @@ export function estimate(structure: Structure, model: VideoModel, values: Values
   const seconds =
     "speech" in rule.seconds && rule.seconds.audio && values("fonte") === "audio"
       ? 0
-      : "field" in rule.seconds ? Number(values(rule.seconds.field)) : "speech" in rule.seconds ? speechSeconds(values(rule.seconds.speech), structure.wordsPerSecond) : "fixed" in rule.seconds ? rule.seconds.fixed : 0;
+      : "field" in rule.seconds ? Number(values(rule.seconds.field)) : "speech" in rule.seconds ? speechSeconds(values(rule.seconds.speech), structure.wordsPerSecond) : "fixed" in rule.seconds ? rule.seconds.fixed : (source?.seconds ?? 0);
   return price && seconds ? price * billedSeconds(rule, seconds) + fixedCost(structure, model) : undefined;
 }
 

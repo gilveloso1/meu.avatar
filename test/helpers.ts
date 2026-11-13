@@ -56,6 +56,17 @@ export const ALEPH_MODEL: VideoModel = {
   pricing_skus: { cents_per_second_output: "28", minimum_cents_per_generation: "56" },
 };
 
+export const FLUX_EDIT_MODEL: VideoModel = {
+  id: "black-forest-labs/flux-video-edit",
+  name: "Black Forest Labs: FLUX Video Edit",
+  supported_durations: null,
+  supported_resolutions: null,
+  supported_aspect_ratios: null,
+  supported_frame_images: null,
+  generate_audio: false,
+  pricing_skus: { cents_per_second_output: "3" },
+};
+
 export const GROK_MODEL: VideoModel = {
   id: "x-ai/grok-imagine-video-1.5-lite",
   name: "xAI: Grok Imagine Video 1.5 Lite",
@@ -107,7 +118,7 @@ export const OMNI_11_MODEL: VideoModel = {
   },
 };
 
-const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_MODEL, OMNI_11_MODEL];
+const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, FLUX_EDIT_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_MODEL, OMNI_11_MODEL];
 
 /** Nano Banana 2.1 pela lista de imagens: cobra por token de saída (endpoints). */
 export const BANANA_MODEL: VideoModel = {
