@@ -56,8 +56,8 @@ corrigido no mesmo PR). Vem antes do resto, nesta ordem.
 
 - `prototipos/acao-na-bolsa/` (scripts com caminhos de um computador, não rodam) e
   `prototipos/canvas/` (com `CONFIG.amostra`, `#reset` e `M.sample` no script de produção).
-- Pipeline do Aleph 2 (quadros-chave, composição): é o que a Direção manda não construir, e custa
-  4 instruções por minuto no agendamento. Manter como teste ou descartar.
+- Pipeline do Aleph 2 (quadros-chave, composição): desativado em 13/11/2026 (`off: true`, sem a fila
+  no agendamento); o código fica. Apagar de vez se o FLUX Video Edit ou outro modelo pronto der conta.
 - Sobras: campos de imagem e vídeo do formulário que nenhuma tela mostra (`fieldHtml`), parâmetros
   sem uso em seis funções do site, CSS sempre sobrescrito (`.player__controls`, `.quick-edit` base),
   `ERROS.vozFalhou` e `ERROS.ativoSalvar`, `base64` escrita quatro vezes, `Db.recentVideos` só nos

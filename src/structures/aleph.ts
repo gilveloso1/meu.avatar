@@ -140,6 +140,8 @@ export const ALEPH: Structure = {
   summary: "Troca a pessoa de um vídeo pela da foto, mantendo cena, gestos e a voz original.",
   icon: "switch_account",
   access: "admin",
+  // Desativado em 13/11/2026: caro demais (docs/modelos/runway-aleph-2.md); o código fica.
+  off: true,
   // O Aleph devolve o áudio do vídeo de origem, sem mudança.
   treatAudio: false,
   compose: true,

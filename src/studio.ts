@@ -9,7 +9,7 @@ import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace
 import type { ImageRunner } from "./imagens";
 import type { FishApi, FishVoice } from "./fish";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
-import { type Built, canUse, InputError, type Lists, madeAtOnce, makesAudio, onPlatform, STRUCTURES, structureById, type SourceVideo, type Structure, type Values, videoPlatform } from "./structures";
+import { type Built, canGenerate, canUse, InputError, type Lists, madeAtOnce, makesAudio, onPlatform, STRUCTURES, structureById, type SourceVideo, type Structure, type Values, videoPlatform } from "./structures";
 import type { VoiceOption } from "./structures/types";
 import { HEYGEN_AVATAR } from "./structures/heygen";
 import { FISH, fishVoices, MAX_CLONE_BYTES, PREVIEW_TEXT, speechCost } from "./structures/voz";
@@ -311,7 +311,7 @@ export class Studio {
   /** Confere o acesso, valida pela estrutura, guarda a foto, registra o vídeo e envia o pedido. */
   async create(input: NewVideoInput): Promise<Video> {
     const { structure } = input;
-    if (!canUse(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
+    if (!canGenerate(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
     if (structure.platform === "heygen") return this.createDirect(input);
     const api = this.requireApi();
 
@@ -448,7 +448,7 @@ export class Studio {
    */
   async check(input: NewVideoInput): Promise<{ model: VideoModel; built: Built }> {
     const { structure } = input;
-    if (!canUse(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
+    if (!canGenerate(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
     for (const f of [input.image, input.lastFrame, ...(input.references ?? [])]) {
       if (!f || f.size === 0) continue;
       if (!IMAGE_TYPES[f.type]) throw new InputError(ERROS.fotoTipo);

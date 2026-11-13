@@ -1,4 +1,10 @@
-# Runway Aleph 2 (`runway/aleph-2`): em teste para trocar avatar
+# Runway Aleph 2 (`runway/aleph-2`): desativado
+
+**Desativado em 13/11/2026** (`off: true` em `src/structures/aleph.ts`), a pedido do dono: custa
+US$ 1,62 por vídeo (US$ 1,40 da Runway e cerca de US$ 0,22 dos quadros-chave) e depende de
+quadros-chave e composição feitos por nós, o que a Direção pede para evitar. O código, os testes e
+os vídeos já feitos ficam; a fila de preparo não roda no agendamento. O FLUX Video Edit
+([flux-video-edit.md](flux-video-edit.md)) é o próximo a testar para editar vídeo, por um décimo do preço.
 
 **Estrutura `aleph` (`src/structures/aleph.ts`), só para o administrador,
 desde 29/10/2026**, com a receita do terceiro teste e a conferência do fundo

@@ -13,7 +13,7 @@ import type { AssetKind, Avatar, AvatarAsset, Db, Project, User, Video } from ".
 import { type Exports } from "./exportar";
 import { mp3Duration } from "./mp3";
 import { mp4Duration } from "./mp4";
-import { canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, prices, STRUCTURES, type Structure, structureById } from "./structures";
+import { canGenerate, canUse, estimate, InputError, madeAtOnce, makesAudio, makesImage, prices, STRUCTURES, type Structure, structureById } from "./structures";
 import { randomToken, sha256 } from "./auth";
 import { HEYGEN_AVATAR, VOICES } from "./structures/heygen";
 import { DIRECT_VOICES, HEYGEN_MODEL } from "./structures/heygen-direta";
@@ -63,7 +63,7 @@ type Tipo = "video" | "imagem" | "audio";
 const TIPOS: Tipo[] = ["video", "imagem", "audio"];
 const tipoDe = (s: Structure): Tipo => (makesImage(s) ? "imagem" : makesAudio(s) ? "audio" : "video");
 /** Os modelos do agente: os que têm descritor e a conta pode usar, de um tipo ou de todos. */
-const modelosDoAgente = (user: User, tipo?: Tipo) => STRUCTURES.filter((s) => s.agent && canUse(s, user) && (!tipo || tipoDe(s) === tipo));
+const modelosDoAgente = (user: User, tipo?: Tipo) => STRUCTURES.filter((s) => s.agent && canGenerate(s, user) && (!tipo || tipoDe(s) === tipo));
 /** Os campos do pedido que não são do modelo (nem entram no código de confirmação). */
 const CAMPOS_DO_PEDIDO = ["modelo", "confirmacao", "final", "previa"];
 /** Por quanto tempo o sim da pessoa vale depois da simulação de um gerar_*. */
@@ -772,7 +772,7 @@ export class Api {
     if (!modelos.length) return falha(404, "nao_encontrado");
     if (!texto("modelo")) return falha(400, "modelo_obrigatorio", { modelos });
     const structure = structureById(texto("modelo"));
-    if (!structure?.agent || !canUse(structure, user) || tipoDe(structure) !== tipo) return falha(404, "modelo_inexistente", { modelos });
+    if (!structure?.agent || !canGenerate(structure, user) || tipoDe(structure) !== tipo) return falha(404, "modelo_inexistente", { modelos });
     const spec = structure.agent;
     if (!this.studio) return falha(503, "criacao_pausada");
     const resolved = await this.studio.resolve(structure);

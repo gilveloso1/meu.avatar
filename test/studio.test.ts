@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Db, type User } from "../src/db";
 import { ERROS } from "../src/erros";
 import { createStudio } from "../src/index";
@@ -1382,9 +1382,39 @@ describe("FLUX Video Edit", () => {
   });
 });
 
+describe("Aleph 2 desativado", () => {
+  const origem = () => new File([fakeMp4(5.5, { width: 1280, height: 720 })], "cena.mp4", { type: "video/mp4" });
+
+  it("sem card, sem página e sem gerar; o vídeo que já fez abre, sem o Refazer", async () => {
+    expect(ALEPH.off).toBe(true);
+    const api = new FakeVideoApi();
+    expect(await (await get("/")).text()).not.toContain("/modelo/aleph");
+    expect((await get("/modelo/aleph")).status).toBe(404);
+    const res = await post(api, { video: origem(), imagem: new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" }) }, "aleph");
+    expect(res.status).toBe(404);
+    expect(await new Db(env.DB).recentVideos()).toHaveLength(0);
+
+    const db = new Db(env.DB);
+    // Um vídeo do próprio administrador (sem dono diferente, o Refazer apareceria com o Aleph ligado).
+    await cookie();
+    const admin = (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").first<{ id: number }>())!.id;
+    const antigo = await db.insertVideo({ id: crypto.randomUUID(), user_id: admin, structure: "aleph", model: "runway/aleph-2", prompt: "", duration: 6, resolution: "1080p", aspect_ratio: "9:16", request_prompt: alephPrompt(""), style: null, language: null, extra: null, image_key: null, avatar_id: null, settings: null });
+    await db.updateVideo(antigo.id, { status: "completed", video_key: `videos/${antigo.id}.mp4` });
+    const pagina = await get(`/video/${antigo.id}`, undefined, api);
+    expect(pagina.status).toBe(200);
+    expect(await pagina.text()).not.toContain("?refazer=");
+    ALEPH.off = false;
+    expect(await (await get(`/video/${antigo.id}`, undefined, api)).text()).toContain("?refazer=");
+    ALEPH.off = true;
+  });
+});
+
 describe("Aleph 2", () => {
   const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
   const origem = (seconds = 5.5) => new File([fakeMp4(seconds, { width: 1280, height: 720 })], "cena.mp4", { type: "video/mp4" });
+  // O código fica testado: aqui o Aleph volta a valer, como se fosse religado.
+  beforeEach(() => void (ALEPH.off = false));
+  afterEach(() => void (ALEPH.off = true));
   const studio = (api: FakeVideoApi, audio: FakeAudioApi) => createStudio({ ...env, SITE_URL: SITE }, { api, audio });
   async function pedido(api: FakeVideoApi, audio: FakeAudioApi | null, fields: Record<string, string | File> = {}) {
     return post(api, { video: origem(), imagem: foto(), ...fields }, "aleph", audio);

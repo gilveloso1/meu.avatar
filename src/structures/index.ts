@@ -67,6 +67,11 @@ export function canUse(structure: Structure, conta: Conta): boolean {
   return pode(conta, structure.access === "all" ? "usar:modelo" : "usar:modelo:teste");
 }
 
+/** A conta pode gerar com a estrutura agora: pode usá-la e ela não está desativada (`off`). */
+export function canGenerate(structure: Structure, conta: Conta): boolean {
+  return !structure.off && canUse(structure, conta);
+}
+
 /** Preço por segundo de cada SKU da estrutura. */
 export function prices(structure: Structure, model: VideoModel): Record<string, string> {
   return structure.prices?.(model) ?? model.pricing_skus ?? {};

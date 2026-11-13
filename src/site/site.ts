@@ -31,7 +31,7 @@ import { pode } from "../permissoes";
 import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, familyOf, type Field, fixedCost, madeAtOnce, makesAudio, makesImage, type Option, outputKind, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
+import { canGenerate, canUse, type Defaults, estimate, familyOf, type Field, fixedCost, madeAtOnce, makesAudio, makesImage, type Option, outputKind, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { EMOTIONS, speechTags, speechText, spokenText } from "../structures/voz";
 import { temSom } from "../som";
@@ -228,9 +228,9 @@ export class Site {
 
     const model = /^\/modelo\/([a-z0-9-]+)$/.exec(path);
     if (model) {
-      // Estrutura que não existe ou que a pessoa não pode usar: a página nem aparece.
+      // Estrutura que não existe, desativada ou que a pessoa não pode usar: a página nem aparece.
       const found = structureById(model[1]);
-      if (!found || !canUse(found, user)) return new Response("não encontrado", { status: 404 });
+      if (!found || !canGenerate(found, user)) return new Response("não encontrado", { status: 404 });
       // O HeyGen pode estar na API direta (config do banco): o formulário mostra só o que ela aceita.
       const structure = await this.studio.resolve(found);
       if (post) return this.createVideo(request, user, structure);
@@ -727,7 +727,7 @@ ${folders.length ? moveDialog({ folders, rootLabel: "Ativos" }, { action: `${src
     const q = (url.searchParams.get("q") ?? "").trim();
     const counts = await this.db.conta(user.id).countByStructure();
     // As versões de um modelo ficam no card da principal (o seletor Versão fica na página).
-    const structures = STRUCTURES.filter((s) => !s.family && canUse(s, user) && s.name.toLowerCase().includes(q.toLowerCase()));
+    const structures = STRUCTURES.filter((s) => !s.family && canGenerate(s, user) && s.name.toLowerCase().includes(q.toLowerCase()));
     const cards = structures.map((s, i) => {
       const n = familyOf(s).reduce((sum, v) => sum + (counts.get(v.id) ?? 0), 0);
       return tileCard({
@@ -1596,7 +1596,7 @@ ${error ? snackbar(error) : ""}`;
       ${quick ? quickEditPreview(v, showOriginal) : ""}
     </div>
     <div class="viewer__actions">
-      ${mine ? `<a class="button button--filled interactive" href="/modelo/${structure.id}?refazer=${v.id}"><span class="icon">refresh</span>Refazer</a>` : ""}
+      ${mine && !structure.off ? `<a class="button button--filled interactive" href="/modelo/${structure.id}?refazer=${v.id}"><span class="icon">refresh</span>Refazer</a>` : ""}
       ${downloads.length === 1 ? `<a class="button button--outlined interactive" href="${downloads[0]!.href}" download><span class="icon">download</span>Baixar</a>` : downloads.length ? downloadMenu(downloads) : ""}
     </div>
   </aside>
