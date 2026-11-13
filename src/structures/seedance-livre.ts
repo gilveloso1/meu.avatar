@@ -1,6 +1,6 @@
 /**
  * Seedance livre (bytedance/seedance-2.0) e Seedance 2.0 Mini (bytedance/seedance-2.0-mini): o Seedance com tudo o que ele aceita no OpenRouter, para
- * o agente e como versão "Livre" do Seedance no site: a cena escrita inteira, primeiro e último
+ * o agente e no site (o card do Seedance; o Mini é a outra versão): a cena escrita inteira, primeiro e último
  * quadro, imagens de referência, um vídeo de referência (editar, estender, seguir o movimento),
  * som e semente. As peças são as do Wan livre (`livre.ts`).
  *
@@ -14,7 +14,7 @@ import type { VideoModel } from "../openrouter";
 import { WORDS_PER_SECOND } from "../prompt";
 import { CAMPOS } from "./agente";
 import { freeAgent, freeBuild, freeDetails, freeSections } from "./livre";
-import { SEEDANCE, SOURCE_SECONDS, tokenPrices } from "./seedance";
+import { SOURCE_SECONDS, tokenPrices } from "./seedance";
 import type { Structure } from "./types";
 
 /**
@@ -28,11 +28,11 @@ export function freePrices(model: VideoModel): Record<string, string> {
 }
 
 /** Uma versão livre do Seedance: a mesma estrutura, com o modelo e o nome de cada uma. */
-function seedanceFree(v: { id: string; version: string; name: string; model: string; summary: string; use: string }): Structure {
+function seedanceFree(v: { id: string; family?: string; version?: string; name: string; model: string; summary: string; use: string }): Structure {
   return {
     id: v.id,
-    family: SEEDANCE.id,
-    version: v.version,
+    ...(v.family ? { family: v.family } : {}),
+    ...(v.version ? { version: v.version } : {}),
     name: v.name,
     model: v.model,
     summary: v.summary,
@@ -53,10 +53,10 @@ function seedanceFree(v: { id: string; version: string; name: string; model: str
   };
 }
 
+/** A versão principal do Seedance (o card e a página): a troca de avatar (`seedance.ts`) está desativada. */
 export const SEEDANCE_LIVRE = seedanceFree({
   id: "seedance-livre",
-  version: "Livre",
-  name: "Seedance 2.0 livre",
+  name: "Seedance 2.0",
   model: "bytedance/seedance-2.0",
   summary: "A cena escrita inteira, com quadros, referências, vídeo de referência, som e semente.",
   use: "A cena escrita inteira, até 4K.",
@@ -65,6 +65,7 @@ export const SEEDANCE_LIVRE = seedanceFree({
 /** O Seedance 2.0 Mini: o mesmo pedido, metade do preço do token, só 480p e 720p. */
 export const SEEDANCE_MINI = seedanceFree({
   id: "seedance-mini",
+  family: "seedance-livre",
   version: "Mini",
   name: "Seedance 2.0 Mini",
   model: "bytedance/seedance-2.0-mini",

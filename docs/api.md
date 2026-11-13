@@ -72,8 +72,8 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
     (`agent` em `src/structures/`, com `values`, que leva os campos ao formulário do site); modelo
     novo com `agent` aparece sozinho, sem mexer no MCP. Hoje: `wan`, `wan-livre`, `heygen`, `grok`,
     `mischief`, `omni`, `heygen-video` (a cena livre com fala, de 5 a 30 s, sem último quadro nem `som`), `seedance-livre` e `seedance-mini` (a cena livre, com vídeo de referência, sem rosto realista), `flux-edit` (vídeo; edita um vídeo pronto pelo texto, com `video` e `cena`),
-    `nano-banana` (imagem), `elevenlabs` e `fish` (áudio). O Seedance da troca de avatar fica só no
-    site; o Aleph está desativado.
+    `nano-banana` (imagem), `elevenlabs` e `fish` (áudio). A troca de avatar (Seedance e Aleph) está
+    desativada.
   - **Dois passos.** Sem `confirmacao`, a chamada só simula: confere tudo como o site (campos,
     arquivos, o que o modelo aceita) sem gastar, e responde `{simulacao: true, modelo,
     custoEstimado, duracao?, resolucao?, formato?, confirmacao, validade, proximo}`. O agente mostra à pessoa o

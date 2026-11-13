@@ -1210,9 +1210,23 @@ describe("Nano Banana 2.1 (imagem)", () => {
   });
 });
 
-describe("Seedance 2.0", () => {
+describe("Seedance 2.0, troca de avatar (desativada)", () => {
   const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
   const origem = (seconds = 8.4, type = "video/mp4") => new File([fakeMp4(seconds)], "cena.mp4", { type });
+  // O código fica testado: aqui a troca volta a valer, como se fosse religada.
+  beforeEach(() => void (SEEDANCE_STRUCTURE.off = false));
+  afterEach(() => void (SEEDANCE_STRUCTURE.off = true));
+
+  it("desativada: sem página, sem gerar e fora do seletor Versão do Seedance", async () => {
+    SEEDANCE_STRUCTURE.off = true;
+    expect((await get("/modelo/seedance")).status).toBe(404);
+    const api = new FakeVideoApi();
+    expect((await post(api, { video: origem(), imagem: foto() }, "seedance")).status).toBe(404);
+    expect(api.submitted).toHaveLength(0);
+    const page = await (await get("/modelo/seedance-livre")).text();
+    expect(page).toContain(">Mini<");
+    expect(page).not.toContain("Troca de avatar");
+  });
 
   it("lê a duração do MP4, com o moov no começo ou no fim e mvhd de 32 ou 64 bits", () => {
     expect(mp4Duration(fakeMp4(8.4).buffer)).toBeCloseTo(8.4);
@@ -1326,12 +1340,14 @@ describe("Seedance 2.0", () => {
 });
 
 describe("Seedance livre", () => {
-  it("é a versão Livre do Seedance: a cena, o primeiro quadro e as opções do modelo; o preço sem vídeo é o do token cheio", async () => {
+  it("é o card do Seedance, com o Mini no seletor Versão: a cena, o primeiro quadro e as opções do modelo; o preço sem vídeo é o do token cheio", async () => {
+    expect(await (await get("/")).text()).toContain('href="/modelo/seedance-livre"');
     const page = await (await get("/modelo/seedance-livre")).text();
     expect(page).toContain('name="cena"');
     expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
     expect(page).not.toMatch(/type="file" name="video"/);
-    expect(page).toContain("Livre");
+    // O seletor Versão: o principal pelo nome, primeiro, e o Mini.
+    expect(page).toMatch(/data-version-switch[\s\S]*>Seedance 2\.0<[\s\S]*>Mini</);
     const precos = SEEDANCE_LIVRE.prices!(SEEDANCE);
     expect(Number(precos["720p_9:16"])).toBeCloseTo(((720 * 1280 * 24) / 1024) * 0.000007);
     expect(Number(precos["720p_9:16_video"])).toBeCloseTo(Number(SEEDANCE_STRUCTURE.prices!(SEEDANCE)["720p_9:16"]));

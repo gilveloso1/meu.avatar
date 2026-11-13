@@ -54,7 +54,12 @@ export function swapPrompt(outfit: string, extra: string): string {
 
 export const SEEDANCE: Structure = {
   id: "seedance",
-  name: "Seedance 2.0",
+  // Desativado em 13/11/2026: a ByteDance recusa a troca com rosto realista (docs/modelos/seedance-2.0.md).
+  // O código fica; a página do Seedance é a do livre, e os vídeos daqui aparecem na lista dele.
+  off: true,
+  family: "seedance-livre",
+  version: "Troca de avatar",
+  name: "Seedance 2.0 (troca de avatar)",
   model: "bytedance/seedance-2.0",
   summary: "Vários usos a partir de vídeos e fotos de referência. Hoje: trocar o avatar de um vídeo.",
   icon: "switch_account",
