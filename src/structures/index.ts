@@ -9,6 +9,7 @@ import { NANO_BANANA } from "./imagem";
 import { OMNI, OMNI_11 } from "./omni";
 import { HEYGEN_DIRECT } from "./heygen-direta";
 import { SEEDANCE } from "./seedance";
+import { SEEDANCE_LIVRE } from "./seedance-livre";
 import type { CostRule, SourceVideo, Structure, Values } from "./types";
 import { FLUX_EDIT } from "./flux";
 import { ELEVENLABS, FISH } from "./voz";
@@ -18,7 +19,7 @@ import { WAN_LIVRE } from "./wan-livre";
 export * from "./types";
 
 /** As estruturas, na ordem dos cartões. O Wan é a primeira. */
-export const STRUCTURES: Structure[] = [WAN, WAN_LIVRE, HEYGEN_AVATAR, GROK, MISCHIEF, OMNI, OMNI_11, SEEDANCE, ALEPH, FLUX_EDIT, NANO_BANANA, ELEVENLABS, FISH];
+export const STRUCTURES: Structure[] = [WAN, WAN_LIVRE, HEYGEN_AVATAR, GROK, MISCHIEF, OMNI, OMNI_11, SEEDANCE, SEEDANCE_LIVRE, ALEPH, FLUX_EDIT, NANO_BANANA, ELEVENLABS, FISH];
 
 /** As versões do mesmo modelo (a principal primeiro); sem versões, só ela. */
 export function familyOf(structure: Structure): Structure[] {

@@ -12,6 +12,13 @@
   o OpenRouter não repassa: das opções da BytePlus, só `watermark` e `req_key`.
 - **Não contornar** o filtro (cortar, borrar, disfarçar o rosto): é regra do
   provedor.
+- **Seedance livre (`seedance-livre.ts`, 13/11/2026):** versão "Livre" do Seedance, só para o
+  administrador, no site e no agente (`gerar_video {modelo: "seedance-livre"}`), com as peças do Wan
+  livre (`livre.ts`): a cena escrita inteira, primeiro e último quadro, até 4 imagens de referência,
+  um vídeo de referência (2 a 15 s, o "video 1" da cena: editar, estender, seguir o movimento), som e
+  semente. Para cena, produto, cenário e personagem estilizado: rosto realista o provedor recusa.
+  Custo pelos tokens do quadro; com vídeo, o preço menor do token conta também o vídeo enviado
+  (SKU `<res>_<formato>_video`). Ainda sem teste real.
 - **A estrutura fica como está**, com o campo Uso: o Seedance pode servir a
   outros usos sem rosto realista na entrada (cenário, objeto, personagem
   estilizado). Um uso novo é uma opção nova em `USES`.

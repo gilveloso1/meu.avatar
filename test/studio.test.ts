@@ -19,6 +19,7 @@ import { MISCHIEF, MISCHIEF_GUIDE } from "../src/structures/mischief";
 import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_11, OMNI_SILENT, OMNI_SILENT_GUIDE, OMNI_SINGLE_SHOT, omniTalkPrompt } from "../src/structures/omni";
 import { IMAGE_GUIDE, IMAGE_REFERENCE_GUIDE, NANO_BANANA } from "../src/structures/imagem";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
+import { SEEDANCE_LIVRE } from "../src/structures/seedance-livre";
 import { ALEPH_MODEL, BANANA_MODEL, FLUX_EDIT_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_11_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, dono, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
@@ -1321,6 +1322,27 @@ describe("Seedance 2.0", () => {
     const res = await call(postForm("/modelo/seedance", { video: origem(), imagem: foto() }, { cookie: member }), api);
     expect(res.status).toBe(404);
     expect(api.submitted).toHaveLength(0);
+  });
+});
+
+describe("Seedance livre", () => {
+  it("é a versão Livre do Seedance: a cena, o primeiro quadro e as opções do modelo; o preço sem vídeo é o do token cheio", async () => {
+    const page = await (await get("/modelo/seedance-livre")).text();
+    expect(page).toContain('name="cena"');
+    expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
+    expect(page).not.toMatch(/type="file" name="video"/);
+    expect(page).toContain("Livre");
+    const precos = SEEDANCE_LIVRE.prices!(SEEDANCE);
+    expect(Number(precos["720p_9:16"])).toBeCloseTo(((720 * 1280 * 24) / 1024) * 0.000007);
+    expect(Number(precos["720p_9:16_video"])).toBeCloseTo(Number(SEEDANCE_STRUCTURE.prices!(SEEDANCE)["720p_9:16"]));
+  });
+
+  it("gera pelo site com a cena, sem o molde da troca de avatar", async () => {
+    const api = new FakeVideoApi();
+    const res = await post(api, { cena: "garrafa girando na mesa", duracao: "5", resolucao: "480p", formato: "1:1", som: "nao" }, "seedance-livre");
+    expect(res.status).toBe(303);
+    expect(api.submitted[0]).toMatchObject({ model: "bytedance/seedance-2.0", prompt: "garrafa girando na mesa", duration: 5, resolution: "480p", aspect_ratio: "1:1", generate_audio: false });
+    expect(api.submitted[0]!.input_references).toBeUndefined();
   });
 });
 

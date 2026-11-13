@@ -41,7 +41,7 @@ do OpenRouter do dia. Quando o provedor cobra segundos diferentes dos do vídeo,
 | mischief 1 | preço da lista por segundo | US$ 0,015 por 3 s em 480p | Bate |
 | Gemini Omni 1.2 Flash e 1.1 | preço da lista por segundo, por resolução | US$ 0,556 por 8 s (1.2) e 0,4054 por 4 s (1.1), em 720p | Bate |
 | Nano Banana 2.1 | tokens da imagem × preço (US$ 0,039 em 1K, 0,06 em 2K) | média de US$ 0,0398 em 1K (108 imagens) e 0,0555 em 2K (115) | Bate em 1K; em 2K a estimativa sai uns 8% acima |
-| Seedance 2.0 | tokens do vídeo × preço | sem vídeo pronto (bloqueado) | Sem como conferir |
+| Seedance 2.0 e 2.0 livre | tokens do vídeo × preço (com vídeo na entrada, o preço menor e o enviado contado) | sem vídeo pronto | Conferir no primeiro teste do livre |
 | FLUX Video Edit | preço da lista por segundo (US$ 0,03), pelos segundos do vídeo de origem | sem vídeo pronto (não testado) | Conferir no primeiro teste |
 
 ## Resumo
@@ -52,6 +52,7 @@ do OpenRouter do dia. Quando o provedor cobra segundos diferentes dos do vídeo,
 | [Wan 3.0 livre](wan-3.0.md#wan-30-livre-wan-livrets-10112026) (`alibaba/wan-3.0`) | Cena livre para o agente: texto, primeiro e último quadro, referências, som, semente | Em teste, só o administrador. Primeiro e último quadro e sem som funcionam (10/11/2026); US$ 0,0425/s em 480p, mínimo de 5 s; falta testar referências | `wan-livre.ts` |
 | [HeyGen Avatar IV](heygen-avatar-iv.md) (`heygen/avatar-iv`) | Avatar falando, voz pronta da HeyGen | Em teste. A API direta da HeyGen sai mais barata (US$ 0,0385/s, contra US$ 0,05/s) e aceita áudio próprio e voz clonada | `heygen.ts` |
 | [Seedance 2.0](seedance-2.0.md) (`bytedance/seedance-2.0`) | Trocar avatar (vídeo + foto) | **Bloqueado** para vídeo com rosto realista | `seedance.ts` |
+| [Seedance 2.0 livre](seedance-2.0.md) (`bytedance/seedance-2.0`) | Cena livre para o agente e o site: texto, quadros, referências de imagem, vídeo de referência, som, semente | Em teste, só o administrador, desde 13/11/2026; sem teste real. Rosto realista o provedor recusa | `seedance-livre.ts` |
 | [Runway Aleph 2](runway-aleph-2.md) (`runway/aleph-2`) | Trocar avatar (vídeo + 5 quadros com o rosto trocado) | **Desativado** em 13/11/2026: caro (US$ 1,62 por vídeo) e com quadros-chave montados por nós, o que a Direção pede para evitar. A receita do terceiro teste trocava o avatar e mantinha o áudio | `aleph.ts` |
 | [FLUX Video Edit](flux-video-edit.md) (`black-forest-labs/flux-video-edit`) | Editar um vídeo pronto pelo texto (tirar, pôr ou trocar objetos, pessoas e o cenário) | Em teste, só o administrador, no site e no agente (`gerar_video` com `video`), desde 13/11/2026. Ainda sem teste real; US$ 0,03/s | `flux.ts` |
 | [Gemini Nano Banana 2.1](gemini-nano-banana-2.1.md) (`google/gemini-nano-banana-2.1`) | Trocar o rosto nos quadros-chave do Aleph 2; esboço inicial dos vídeos (com ou sem foto de referência) | Em teste, dentro do `aleph.ts`. Estrutura de imagem só para o administrador: o melhor na comparação de 06/11/2026 (US$ 0,04 por imagem em 1K) | `imagem.ts` |
