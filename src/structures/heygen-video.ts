@@ -17,7 +17,8 @@ import type { Structure } from "./types";
 
 /** Acima disso, o preço por segundo é o `long_` (a página do modelo: "over 15 s"). */
 export const LONG_AFTER = 15;
-const OPTIONS: FreeOptions = { lastFrame: false, sound: false };
+/** Abre em 8 s (US$ 0,16 em 480p): a duração padrão do site, 25 s, passa dos 15 s e custa mais por segundo. */
+const OPTIONS: FreeOptions = { lastFrame: false, sound: false, duration: 8 };
 
 /** O preço por segundo, por `<resolução>_<duração>` e a entrada (`_ref`, com imagens de referência). */
 export function heygenVideoPrices(model: VideoModel): Record<string, string> {

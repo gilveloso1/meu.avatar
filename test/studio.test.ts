@@ -1368,6 +1368,8 @@ describe("HeyGen Video 1", () => {
     expect(page).toContain('name="cena"');
     expect(page).not.toContain('name="som"');
     expect(page).toContain('name="resolucao" value="480p" checked');
+    expect(page).toMatch(/<option value="8" selected/);
+    expect(page).toContain("Descreva a cena, escolha os ajustes e toque em Gerar vídeo.");
     expect(page).toContain("&quot;480p_20&quot;:&quot;0.045&quot;");
   });
 
@@ -1394,6 +1396,7 @@ describe("FLUX Video Edit", () => {
     expect(page).toContain('name="cena"');
     expect(page).not.toMatch(/type="file" name="imagem"/);
     expect(page).not.toContain('name="fala"');
+    expect(page).toContain("Escolha o vídeo, descreva o que mudar e toque em Gerar vídeo.");
   });
 
   it("manda só o texto e o vídeo; o vídeo fica com a duração e o quadro do original", async () => {

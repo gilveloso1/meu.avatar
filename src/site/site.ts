@@ -1321,10 +1321,14 @@ ${error ? snackbar(error) : ""}`;
             : audio
             ? "Escolha a voz, escreva o texto e toque em Gerar áudio."
             : fields.some((f) => f.kind === "video")
-            ? "Escolha o vídeo, a foto e os ajustes e toque em Gerar vídeo."
+            ? fields.some((f) => f.kind === "image")
+              ? "Escolha o vídeo, a foto e os ajustes e toque em Gerar vídeo."
+              : "Escolha o vídeo, descreva o que mudar e toque em Gerar vídeo."
             : fields.some((f) => f.kind === "textarea" && f.speech)
               ? "Escolha a foto e os ajustes, escreva a fala e toque em Gerar vídeo."
-              : "Escolha a foto e os ajustes, descreva o movimento e toque em Gerar vídeo.",
+              : fields.some((f) => f.name === "cena")
+                ? "Descreva a cena, escolha os ajustes e toque em Gerar vídeo."
+                : "Escolha a foto e os ajustes, descreva o movimento e toque em Gerar vídeo.",
         ),
         structureOf: () => structure,
         mine: kinds.length ? user.id : undefined,

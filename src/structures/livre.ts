@@ -23,10 +23,12 @@ export const MAX_REFERENCES = 4;
 /**
  * O que muda de um modelo livre para outro, pelo que o OpenRouter aceita dele: `video`, a frase do
  * vídeo de referência, onde ele aceita; `lastFrame: false`, sem último quadro; `sound: false`, sem a
- * escolha do som (o modelo não tem `generate_audio`: o som vem sempre).
+ * escolha do som (o modelo não tem `generate_audio`: o som vem sempre); `duration`, a duração com
+ * que o formulário abre, quando a padrão do site não serve ao modelo.
  */
 export interface FreeOptions {
   video?: string;
+  duration?: number;
   lastFrame?: boolean;
   sound?: boolean;
 }
@@ -92,7 +94,7 @@ export function freeSections(model: VideoModel | null, d: Defaults, opts: FreeOp
     {
       title: "Vídeo",
       fields: [
-        { kind: "select", name: "duracao", label: "Duração", options: durations.map((s) => ({ value: String(s), label: `${s} s` })), value: String(pick(durations, d.duration)) },
+        { kind: "select", name: "duracao", label: "Duração", options: durations.map((s) => ({ value: String(s), label: `${s} s` })), value: String(pick(durations, opts.duration ?? d.duration)) },
         { kind: "segmented", name: "resolucao", label: "Resolução", options: options(resolutions), value: pick(resolutions, d.resolution) },
         { kind: "select", name: "formato", label: "Formato", options: options(ratios), value: pick(ratios, d.aspectRatio) },
         ...(opts.sound !== false ? [{ kind: "segmented" as const, name: "som", label: "Som", options: [{ value: "sim", label: "Com som" }, { value: "nao", label: "Sem som" }], value: "sim" }] : []),
