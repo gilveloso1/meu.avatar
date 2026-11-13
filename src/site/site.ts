@@ -31,7 +31,7 @@ import { pode } from "../permissoes";
 import { MAQUINAS, type MaquinasApi } from "../maquinas";
 import { OpenRouterVideo, type VideoModel } from "../openrouter";
 import { CAMERAS, DEFAULT_CAMERA, DEFAULT_PAUSE, PAUSES, parsePlan, planParts, RULES } from "../quickedit";
-import { canUse, type Defaults, estimate, familyOf, type Field, fixedCost, madeAtOnce, makesAudio, makesImage, type Option, outputKind, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
+import { canGenerate, canUse, type Defaults, estimate, familyOf, type Field, fixedCost, madeAtOnce, makesAudio, makesImage, type Option, outputKind, prices, type Section, STRUCTURES, structureById, type Structure, type Values, videoPlatform, videoStructure, type VoiceOption } from "../structures";
 import { HEYGEN_MODEL } from "../structures/heygen-direta";
 import { EMOTIONS, speechTags, speechText, spokenText } from "../structures/voz";
 import { temSom } from "../som";
@@ -228,9 +228,9 @@ export class Site {
 
     const model = /^\/modelo\/([a-z0-9-]+)$/.exec(path);
     if (model) {
-      // Estrutura que não existe ou que a pessoa não pode usar: a página nem aparece.
+      // Estrutura que não existe, desativada ou que a pessoa não pode usar: a página nem aparece.
       const found = structureById(model[1]);
-      if (!found || !canUse(found, user)) return new Response("não encontrado", { status: 404 });
+      if (!found || !canGenerate(found, user)) return new Response("não encontrado", { status: 404 });
       // O HeyGen pode estar na API direta (config do banco): o formulário mostra só o que ela aceita.
       const structure = await this.studio.resolve(found);
       if (post) return this.createVideo(request, user, structure);
@@ -727,7 +727,7 @@ ${folders.length ? moveDialog({ folders, rootLabel: "Ativos" }, { action: `${src
     const q = (url.searchParams.get("q") ?? "").trim();
     const counts = await this.db.conta(user.id).countByStructure();
     // As versões de um modelo ficam no card da principal (o seletor Versão fica na página).
-    const structures = STRUCTURES.filter((s) => !s.family && canUse(s, user) && s.name.toLowerCase().includes(q.toLowerCase()));
+    const structures = STRUCTURES.filter((s) => !s.family && canGenerate(s, user) && s.name.toLowerCase().includes(q.toLowerCase()));
     const cards = structures.map((s, i) => {
       const n = familyOf(s).reduce((sum, v) => sum + (counts.get(v.id) ?? 0), 0);
       return tileCard({
@@ -1298,7 +1298,7 @@ ${error ? snackbar(error) : ""}`;
     <section class="pane pane--config" aria-labelledby="configuracao">
       <div class="pane__head"><h2 class="pane__headline" id="configuracao">Configuração</h2></div>
       <div class="pane__body" id="configuracao-corpo">
-        ${family.length > 1 ? versionSwitch(family, structure) : ""}
+        ${family.filter((s) => !s.off).length > 1 ? versionSwitch(family.filter((s) => !s.off), structure) : ""}
         ${leads.map((f) => f.fields.map((field) => formField(field, value)).join("")).join("")}
         ${withPanel ? assetList(picks, kinds, recent) : ""}
         ${rest.map((section) => formSection(section, value)).join("")}
@@ -1321,10 +1321,14 @@ ${error ? snackbar(error) : ""}`;
             : audio
             ? "Escolha a voz, escreva o texto e toque em Gerar áudio."
             : fields.some((f) => f.kind === "video")
-            ? "Escolha o vídeo, a foto e os ajustes e toque em Gerar vídeo."
+            ? fields.some((f) => f.kind === "image")
+              ? "Escolha o vídeo, a foto e os ajustes e toque em Gerar vídeo."
+              : "Escolha o vídeo, descreva o que mudar e toque em Gerar vídeo."
             : fields.some((f) => f.kind === "textarea" && f.speech)
               ? "Escolha a foto e os ajustes, escreva a fala e toque em Gerar vídeo."
-              : "Escolha a foto e os ajustes, descreva o movimento e toque em Gerar vídeo.",
+              : fields.some((f) => f.name === "cena")
+                ? "Descreva a cena, escolha os ajustes e toque em Gerar vídeo."
+                : "Escolha a foto e os ajustes, descreva o movimento e toque em Gerar vídeo.",
         ),
         structureOf: () => structure,
         mine: kinds.length ? user.id : undefined,
@@ -1596,7 +1600,7 @@ ${error ? snackbar(error) : ""}`;
       ${quick ? quickEditPreview(v, showOriginal) : ""}
     </div>
     <div class="viewer__actions">
-      ${mine ? `<a class="button button--filled interactive" href="/modelo/${structure.id}?refazer=${v.id}"><span class="icon">refresh</span>Refazer</a>` : ""}
+      ${mine && !structure.off ? `<a class="button button--filled interactive" href="/modelo/${structure.id}?refazer=${v.id}"><span class="icon">refresh</span>Refazer</a>` : ""}
       ${downloads.length === 1 ? `<a class="button button--outlined interactive" href="${downloads[0]!.href}" download><span class="icon">download</span>Baixar</a>` : downloads.length ? downloadMenu(downloads) : ""}
     </div>
   </aside>
@@ -1612,7 +1616,7 @@ ${error ? snackbar(error) : ""}`;
   private async useTarget(v: Video, back: string, user: User): Promise<string | null> {
     const id = /^\/modelo\/([a-z0-9-]+)(?:[?#]|$)/.exec(back)?.[1];
     const found = id ? structureById(id) : undefined;
-    if (!found || !canUse(found, user)) return null;
+    if (!found || !canGenerate(found, user)) return null;
     // A mesma conferência da escolha no painel (dono, pronto, arquivo no R2): o botão nunca leva a nada.
     const pick = await this.pickFile(`gerado:${v.id}`, user);
     const structure = await this.studio.resolve(found);

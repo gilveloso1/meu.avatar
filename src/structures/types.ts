@@ -114,9 +114,11 @@ export interface CostRule {
   extraSku?: string;
 }
 
-/** O vídeo enviado, já lido: quantos segundos tem. */
+/** O vídeo enviado, já lido: quantos segundos tem e, se o cabeçalho diz, o tamanho do quadro. */
 export interface SourceVideo {
   seconds: number;
+  width?: number;
+  height?: number;
 }
 
 /** O que o formulário mandou, já sem a foto. */
@@ -241,6 +243,11 @@ export interface Structure {
   version?: string;
   /** "admin": só o administrador vê e usa (modelo em teste). */
   access: "all" | "admin";
+  /**
+   * Desativado: o código fica, mas ninguém gera com ele (sem card, sem página, fora do agente). Os
+   * vídeos que ele já fez seguem nas listas e abrem, sem o Refazer. O porquê vai em docs/modelos/.
+   */
+  off?: boolean;
   /** O áudio pronto passa pelo contêiner (src/audio.ts). */
   treatAudio: boolean;
   /** O vídeo pronto tem o botão "Edição rápida" (container/editar.py). */

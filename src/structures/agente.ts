@@ -15,6 +15,7 @@ export const CAMPOS = {
   duracao: "Segundos (os aceitos em duracoes).",
   resolucao: "Uma das resolucoes.",
   formato: "Um dos formatos; sem isso, o do Final.",
+  video: 'um vídeo gerado ("/videos/<id>.mp4"), um arquivo do projeto ou um vídeo de um ativo de listar_avatares.',
 };
 
 /**

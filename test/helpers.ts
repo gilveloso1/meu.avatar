@@ -56,6 +56,46 @@ export const ALEPH_MODEL: VideoModel = {
   pricing_skus: { cents_per_second_output: "28", minimum_cents_per_generation: "56" },
 };
 
+export const HEYGEN_VIDEO_MODEL: VideoModel = {
+  id: "heygen/heygen-video-1",
+  name: "HeyGen: HeyGen Video",
+  supported_durations: Array.from({ length: 26 }, (_, i) => i + 5),
+  supported_resolutions: ["480p", "768p", "1080p", "2K"],
+  supported_aspect_ratios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"],
+  supported_frame_images: ["first_frame"],
+  generate_audio: false,
+  pricing_skus: {
+    duration_seconds_480p: "0.02", duration_seconds_768p: "0.036", duration_seconds_1080p: "0.1", duration_seconds_2k: "0.1",
+    long_duration_seconds_480p: "0.045", long_duration_seconds_768p: "0.075", long_duration_seconds_1080p: "0.105", long_duration_seconds_2k: "0.105",
+    reference_duration_seconds_480p: "0.07", reference_duration_seconds_768p: "0.1", reference_duration_seconds_1080p: "0.18", reference_duration_seconds_2k: "0.18",
+    long_reference_duration_seconds_480p: "0.07", long_reference_duration_seconds_768p: "0.1", long_reference_duration_seconds_1080p: "0.18", long_reference_duration_seconds_2k: "0.18",
+    reference_input_images: "0.04",
+  },
+};
+
+export const SEEDANCE_MINI_MODEL: VideoModel = {
+  id: "bytedance/seedance-2.0-mini",
+  name: "ByteDance: Seedance 2.0 Mini",
+  supported_durations: Array.from({ length: 12 }, (_, i) => i + 4),
+  supported_resolutions: ["480p", "720p"],
+  supported_aspect_ratios: ["1:1", "3:4", "9:16", "4:3", "16:9", "21:9", "9:21"],
+  supported_sizes: ["480x480", "480x640", "480x854", "640x480", "854x480", "1120x480", "720x720", "720x960", "720x1280", "720x1680", "960x720", "1280x720", "1680x720"],
+  supported_frame_images: ["first_frame", "last_frame"],
+  generate_audio: true,
+  pricing_skus: { video_tokens: "0.0000035", video_tokens_without_audio: "0.0000035", video_tokens_with_video_input: "0.0000021" },
+};
+
+export const FLUX_EDIT_MODEL: VideoModel = {
+  id: "black-forest-labs/flux-video-edit",
+  name: "Black Forest Labs: FLUX Video Edit",
+  supported_durations: null,
+  supported_resolutions: null,
+  supported_aspect_ratios: null,
+  supported_frame_images: null,
+  generate_audio: false,
+  pricing_skus: { cents_per_second_output: "3" },
+};
+
 export const GROK_MODEL: VideoModel = {
   id: "x-ai/grok-imagine-video-1.5-lite",
   name: "xAI: Grok Imagine Video 1.5 Lite",
@@ -107,7 +147,7 @@ export const OMNI_11_MODEL: VideoModel = {
   },
 };
 
-const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_MODEL, OMNI_11_MODEL];
+const MODELS = [WAN, HEYGEN, SEEDANCE, ALEPH_MODEL, FLUX_EDIT_MODEL, HEYGEN_VIDEO_MODEL, SEEDANCE_MINI_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_MODEL, OMNI_11_MODEL];
 
 /** Nano Banana 2.1 pela lista de imagens: cobra por token de saída (endpoints). */
 export const BANANA_MODEL: VideoModel = {

@@ -107,10 +107,11 @@ describe("referências sem avatar", () => {
     await pronto(session);
     expect(recente(await (await get("/modelo/wan", session)).text())).toMatchObject({ id: `gerado:${ultima.id}`, kind: "imagem", hint: "Imagem gerada" });
     expect(recente(await (await get("/modelo/nano-banana", session)).text())).toMatchObject({ id: `gerado:${ultima.id}` });
-    // Vale para cada tipo: no Seedance (foto e vídeo), a imagem e o vídeo mais recentes.
-    const seedance = await (await get("/modelo/seedance", session)).text();
+    // Vale para cada tipo: no Seedance (foto), a imagem; no FLUX (vídeo), o vídeo mais recente.
+    const seedance = await (await get("/modelo/seedance-livre", session)).text();
     expect(seedance).toContain("Usar imagem recente");
-    expect(seedance).toContain("Usar vídeo recente");
+    expect(seedance).not.toContain("Usar vídeo recente");
+    expect(await (await get("/modelo/flux-edit", session)).text()).toContain("Usar vídeo recente");
     // A imagem de outra conta nunca aparece.
     expect(await (await get("/modelo/wan", await memberCookie())).text()).not.toContain('data-recent-item="');
   });
@@ -137,7 +138,9 @@ describe("Usar para gerar", () => {
 
     const video = await pronto(session);
     expect(await (await get(`/video/${video.id}?de=/modelo/wan`, session)).text()).not.toContain("?usar=gerado:");
-    expect(await (await get(`/video/${video.id}?de=/modelo/seedance`, session)).text()).toContain(`href="/modelo/seedance?usar=gerado:${video.id}"`);
+    expect(await (await get(`/video/${video.id}?de=/modelo/flux-edit`, session)).text()).toContain(`href="/modelo/flux-edit?usar=gerado:${video.id}"`);
+    // Modelo desativado (a troca de avatar do Seedance): o botão não leva a uma página que não abre.
+    expect(await (await get(`/video/${video.id}?de=/modelo/seedance`, session)).text()).not.toContain("?usar=gerado:");
 
     const painel = await (await get(`/modelo/wan?usar=gerado:${imagem.id}`, session)).text();
     expect(painel).toContain(`gerado:${imagem.id}`);
@@ -147,14 +150,14 @@ describe("Usar para gerar", () => {
   it("não aparece para quem não gerou o vídeo", async () => {
     const imagem = await pronto(await cookie(), { imagem: true });
     await env.DB.prepare("UPDATE videos SET structure = 'wan' WHERE id = ?").bind(imagem.id).run();
-    expect(await (await get(`/video/${imagem.id}?de=/modelo/seedance`, await memberCookie())).text()).not.toContain("?usar=gerado:");
+    expect(await (await get(`/video/${imagem.id}?de=/modelo/flux-edit`, await memberCookie())).text()).not.toContain("?usar=gerado:");
   });
 
   it("não aparece quando o arquivo do vídeo não existe: o botão nunca leva a nada", async () => {
     const session = await cookie();
     const video = await pronto(session);
     await env.MIDIA.delete(video.video_key!);
-    expect(await (await get(`/video/${video.id}?de=/modelo/seedance`, session)).text()).not.toContain("?usar=gerado:");
+    expect(await (await get(`/video/${video.id}?de=/modelo/flux-edit`, session)).text()).not.toContain("?usar=gerado:");
   });
 });
 

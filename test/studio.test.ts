@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Db, type User } from "../src/db";
 import { ERROS } from "../src/erros";
 import { createStudio } from "../src/index";
@@ -13,12 +13,14 @@ import { mp4Duration } from "../src/mp4";
 import { billedSeconds, estimate, structureById } from "../src/structures";
 import { MOTION_GUIDE, VOICES } from "../src/structures/heygen";
 import { ALEPH, alephPrompt, aspectLabel, CHECK_MODEL, FACE_MODEL, keyframeTimes, parseCheck } from "../src/structures/aleph";
+import { FLUX_EDIT } from "../src/structures/flux";
 import { GROK, GROK_GUIDE } from "../src/structures/grok";
 import { MISCHIEF, MISCHIEF_GUIDE } from "../src/structures/mischief";
 import { MAX_OMNI_SPEECH, NO_SPEECH, OMNI, OMNI_11, OMNI_SILENT, OMNI_SILENT_GUIDE, OMNI_SINGLE_SHOT, omniTalkPrompt } from "../src/structures/omni";
 import { IMAGE_GUIDE, IMAGE_REFERENCE_GUIDE, NANO_BANANA } from "../src/structures/imagem";
 import { outputSeconds, SEEDANCE as SEEDANCE_STRUCTURE, swapPrompt } from "../src/structures/seedance";
-import { ALEPH_MODEL, BANANA_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_11_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, dono, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
+import { SEEDANCE_LIVRE } from "../src/structures/seedance-livre";
+import { ALEPH_MODEL, BANANA_MODEL, FLUX_EDIT_MODEL, GROK_MODEL, MISCHIEF_MODEL, OMNI_11_MODEL, OMNI_MODEL, call, cookie, FakeAudioApi, FakeVideoApi, fakeMp4, dono, memberCookie, postForm, SEEDANCE, SITE, sign, WAN } from "./helpers";
 
 const FALA = "Oi, gente! Hoje eu vou mostrar como eu faço meus vídeos.";
 const PEDIDO = { estilo: "selfie", idioma: "pt-BR", fala: FALA };
@@ -1208,9 +1210,23 @@ describe("Nano Banana 2.1 (imagem)", () => {
   });
 });
 
-describe("Seedance 2.0", () => {
+describe("Seedance 2.0, troca de avatar (desativada)", () => {
   const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
   const origem = (seconds = 8.4, type = "video/mp4") => new File([fakeMp4(seconds)], "cena.mp4", { type });
+  // O código fica testado: aqui a troca volta a valer, como se fosse religada.
+  beforeEach(() => void (SEEDANCE_STRUCTURE.off = false));
+  afterEach(() => void (SEEDANCE_STRUCTURE.off = true));
+
+  it("desativada: sem página, sem gerar e fora do seletor Versão do Seedance", async () => {
+    SEEDANCE_STRUCTURE.off = true;
+    expect((await get("/modelo/seedance")).status).toBe(404);
+    const api = new FakeVideoApi();
+    expect((await post(api, { video: origem(), imagem: foto() }, "seedance")).status).toBe(404);
+    expect(api.submitted).toHaveLength(0);
+    const page = await (await get("/modelo/seedance-livre")).text();
+    expect(page).toContain(">Mini<");
+    expect(page).not.toContain("Troca de avatar");
+  });
 
   it("lê a duração do MP4, com o moov no começo ou no fim e mvhd de 32 ou 64 bits", () => {
     expect(mp4Duration(fakeMp4(8.4).buffer)).toBeCloseTo(8.4);
@@ -1323,9 +1339,139 @@ describe("Seedance 2.0", () => {
   });
 });
 
+describe("Seedance livre", () => {
+  it("é o card do Seedance, com o Mini no seletor Versão: a cena, o primeiro quadro e as opções do modelo; o preço sem vídeo é o do token cheio", async () => {
+    expect(await (await get("/")).text()).toContain('href="/modelo/seedance-livre"');
+    const page = await (await get("/modelo/seedance-livre")).text();
+    expect(page).toContain('name="cena"');
+    expect(page).toMatch(/<input [^>]*type="file" name="imagem"/);
+    expect(page).not.toMatch(/type="file" name="video"/);
+    // O seletor Versão: o principal pelo nome, primeiro, e o Mini.
+    expect(page).toMatch(/data-version-switch[\s\S]*>Seedance 2\.0<[\s\S]*>Mini</);
+    const precos = SEEDANCE_LIVRE.prices!(SEEDANCE);
+    expect(Number(precos["720p_9:16"])).toBeCloseTo(((720 * 1280 * 24) / 1024) * 0.000007);
+    expect(Number(precos["720p_9:16_video"])).toBeCloseTo(Number(SEEDANCE_STRUCTURE.prices!(SEEDANCE)["720p_9:16"]));
+  });
+
+  it("gera pelo site com a cena, sem o molde da troca de avatar", async () => {
+    const api = new FakeVideoApi();
+    const res = await post(api, { cena: "garrafa girando na mesa", duracao: "5", resolucao: "480p", formato: "1:1", som: "nao" }, "seedance-livre");
+    expect(res.status).toBe(303);
+    expect(api.submitted[0]).toMatchObject({ model: "bytedance/seedance-2.0", prompt: "garrafa girando na mesa", duration: 5, resolution: "480p", aspect_ratio: "1:1", generate_audio: false });
+    expect(api.submitted[0]!.input_references).toBeUndefined();
+  });
+});
+
+describe("HeyGen Video 1", () => {
+  it("o formulário é o da cena livre, sem a escolha do som, e começa na resolução mais barata", async () => {
+    const page = await (await get("/modelo/heygen-video")).text();
+    expect(page).toContain('name="cena"');
+    expect(page).not.toContain('name="som"');
+    expect(page).toContain('name="resolucao" value="480p" checked');
+    expect(page).toMatch(/<option value="8" selected/);
+    expect(page).toContain("Descreva a cena, escolha os ajustes e toque em Gerar vídeo.");
+    expect(page).toContain("&quot;480p_20&quot;:&quot;0.045&quot;");
+  });
+
+  it("conta comum não vê nem usa", async () => {
+    const member = await memberCookie();
+    expect(await (await get("/", member)).text()).not.toContain("/modelo/heygen-video");
+    expect((await get("/modelo/heygen-video", member)).status).toBe(404);
+  });
+});
+
+describe("FLUX Video Edit", () => {
+  const origem = (seconds = 6.2) => new File([fakeMp4(seconds, { width: 1920, height: 1080 })], "cena.mp4", { type: "video/mp4" });
+
+  it("o custo é US$ 0,03 por segundo do original; sem o vídeo, sem estimativa", () => {
+    const values = () => "";
+    expect(FLUX_EDIT.prices!(FLUX_EDIT_MODEL)).toEqual({ segundo: "0.03" });
+    expect(estimate(FLUX_EDIT, FLUX_EDIT_MODEL, values, { seconds: 6.2 })).toBeCloseTo(0.186);
+    expect(estimate(FLUX_EDIT, FLUX_EDIT_MODEL, values)).toBeUndefined();
+  });
+
+  it("o formulário pede o vídeo de origem e o que mudar, sem foto nem fala", async () => {
+    const page = await (await get("/modelo/flux-edit")).text();
+    expect(page).toMatch(/<input [^>]*type="file" name="video" accept="video\/mp4,video\/quicktime"/);
+    expect(page).toContain('name="cena"');
+    expect(page).not.toMatch(/type="file" name="imagem"/);
+    expect(page).not.toContain('name="fala"');
+    expect(page).toContain("Escolha o vídeo, descreva o que mudar e toque em Gerar vídeo.");
+  });
+
+  it("manda só o texto e o vídeo; o vídeo fica com a duração e o quadro do original", async () => {
+    const api = new FakeVideoApi();
+    const res = await post(api, { video: origem(), cena: "  tira o   copo da mesa " }, "flux-edit");
+    expect(res.status).toBe(303);
+    const [req] = api.submitted;
+    expect(req).toEqual({ model: "black-forest-labs/flux-video-edit", prompt: "tira o copo da mesa", input_references: [{ type: "video_url", video_url: { url: expect.stringMatching(new RegExp(`^${SITE}/midia/origens/[0-9a-f-]{36}\\.mp4$`)) } }], callback_url: expect.any(String) });
+    const [criado] = await new Db(env.DB).recentVideos();
+    expect(criado).toMatchObject({ structure: "flux-edit", prompt: "tira o copo da mesa", duration: 6, resolution: "1080p", aspect_ratio: "16:9" });
+    const detalhes = await (await get(`/video/${criado!.id}`, undefined, api)).text();
+    expect(detalhes).toContain('<dt class="qe-result__label">Vídeo de origem</dt><dd class="qe-result__value">6,2 s</dd>');
+  });
+
+  it("recusa sem vídeo, sem edição, edição longa e vídeo fora da duração", async () => {
+    const api = new FakeVideoApi();
+    const casos: [Record<string, string | File>, string][] = [
+      [{ cena: "tira o copo" }, ERROS.videoOrigem],
+      [{ video: origem() }, ERROS.edicao],
+      [{ video: origem(), cena: "x".repeat(1001) }, ERROS.edicaoLonga(1000)],
+      [{ video: origem(1.2), cena: "tira o copo" }, ERROS.videoDuracao(2, 15)],
+      [{ video: origem(20), cena: "tira o copo" }, ERROS.videoDuracao(2, 15)],
+    ];
+    for (const [fields, erro] of casos) {
+      const res = await post(api, fields, "flux-edit");
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(erro);
+    }
+    expect(api.submitted).toHaveLength(0);
+  });
+
+  it("conta comum não vê nem usa o FLUX Video Edit", async () => {
+    const api = new FakeVideoApi();
+    const member = await memberCookie();
+    expect(await (await get("/", member)).text()).not.toContain("/modelo/flux-edit");
+    expect((await get("/modelo/flux-edit", member)).status).toBe(404);
+    const res = await call(postForm("/modelo/flux-edit", { video: origem(), cena: "tira o copo" }, { cookie: member }), api);
+    expect(res.status).toBe(404);
+    expect(api.submitted).toHaveLength(0);
+  });
+});
+
+describe("Aleph 2 desativado", () => {
+  const origem = () => new File([fakeMp4(5.5, { width: 1280, height: 720 })], "cena.mp4", { type: "video/mp4" });
+
+  it("sem card, sem página e sem gerar; o vídeo que já fez abre, sem o Refazer", async () => {
+    expect(ALEPH.off).toBe(true);
+    const api = new FakeVideoApi();
+    expect(await (await get("/")).text()).not.toContain("/modelo/aleph");
+    expect((await get("/modelo/aleph")).status).toBe(404);
+    const res = await post(api, { video: origem(), imagem: new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" }) }, "aleph");
+    expect(res.status).toBe(404);
+    expect(await new Db(env.DB).recentVideos()).toHaveLength(0);
+
+    const db = new Db(env.DB);
+    // Um vídeo do próprio administrador (sem dono diferente, o Refazer apareceria com o Aleph ligado).
+    await cookie();
+    const admin = (await env.DB.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").first<{ id: number }>())!.id;
+    const antigo = await db.insertVideo({ id: crypto.randomUUID(), user_id: admin, structure: "aleph", model: "runway/aleph-2", prompt: "", duration: 6, resolution: "1080p", aspect_ratio: "9:16", request_prompt: alephPrompt(""), style: null, language: null, extra: null, image_key: null, avatar_id: null, settings: null });
+    await db.updateVideo(antigo.id, { status: "completed", video_key: `videos/${antigo.id}.mp4` });
+    const pagina = await get(`/video/${antigo.id}`, undefined, api);
+    expect(pagina.status).toBe(200);
+    expect(await pagina.text()).not.toContain("?refazer=");
+    ALEPH.off = false;
+    expect(await (await get(`/video/${antigo.id}`, undefined, api)).text()).toContain("?refazer=");
+    ALEPH.off = true;
+  });
+});
+
 describe("Aleph 2", () => {
   const foto = () => new File([new Uint8Array([1, 2, 3])], "eu.png", { type: "image/png" });
   const origem = (seconds = 5.5) => new File([fakeMp4(seconds, { width: 1280, height: 720 })], "cena.mp4", { type: "video/mp4" });
+  // O código fica testado: aqui o Aleph volta a valer, como se fosse religado.
+  beforeEach(() => void (ALEPH.off = false));
+  afterEach(() => void (ALEPH.off = true));
   const studio = (api: FakeVideoApi, audio: FakeAudioApi) => createStudio({ ...env, SITE_URL: SITE }, { api, audio });
   async function pedido(api: FakeVideoApi, audio: FakeAudioApi | null, fields: Record<string, string | File> = {}) {
     return post(api, { video: origem(), imagem: foto(), ...fields }, "aleph", audio);

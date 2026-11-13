@@ -25,9 +25,9 @@
  * O Aleph cobra por segundo (US$ 0,28) e mantém o áudio do vídeo. Não aceita
  * foto de referência solta nem `aspect_ratio` (que expande o quadro).
  */
-import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
+import { centsPerSecond, sourceWithin } from "./origem";
 import { InputError, type Option, type Structure } from "./types";
 
 export const MAX_ALEPH_EXTRA = 400;
@@ -140,6 +140,8 @@ export const ALEPH: Structure = {
   summary: "Troca a pessoa de um vídeo pela da foto, mantendo cena, gestos e a voz original.",
   icon: "switch_account",
   access: "admin",
+  // Desativado em 13/11/2026: caro demais (docs/modelos/runway-aleph-2.md); o código fica.
+  off: true,
   // O Aleph devolve o áudio do vídeo de origem, sem mudança.
   treatAudio: false,
   compose: true,
@@ -175,17 +177,12 @@ export const ALEPH: Structure = {
     ];
   },
 
-  prices(model: VideoModel): Record<string, string> {
-    // O preço vem em centavos por segundo (`cents_per_second_output`).
-    const cents = Number(model.pricing_skus?.cents_per_second_output);
-    return cents ? { segundo: String(cents / 100) } : {};
-  },
+  prices: centsPerSecond,
 
   build(values, hasImage, _model, video) {
     const use = USES.find((u) => u.value === values("uso"));
     if (!use) throw new InputError(ERROS.uso);
-    if (!video) throw new InputError(ERROS.videoOrigem);
-    if (video.seconds < ALEPH_SECONDS.min || video.seconds > ALEPH_SECONDS.max + 0.5) throw new InputError(ERROS.videoDuracao(ALEPH_SECONDS.min, ALEPH_SECONDS.max));
+    const source = sourceWithin(video, ALEPH_SECONDS);
     if (!hasImage) throw new InputError(ERROS.foto);
     const extra = values("instrucoes").replace(/\s+/g, " ").trim();
     if (extra.length > MAX_ALEPH_EXTRA) throw new InputError(ERROS.instrucoesLongas(MAX_ALEPH_EXTRA));
@@ -198,7 +195,7 @@ export const ALEPH: Structure = {
       prepare: true,
       record: {
         prompt: extra,
-        duration: Math.round(video.seconds),
+        duration: Math.round(source.seconds),
         // Resolução e formato de verdade só depois do preparo (seguem o vídeo).
         resolution: "1080p",
         aspect_ratio: "9:16",
@@ -206,7 +203,7 @@ export const ALEPH: Structure = {
         style: null,
         language: null,
         extra: extra || null,
-        settings: { use: use.value, source_seconds: video.seconds.toFixed(1) },
+        settings: { use: use.value, source_seconds: source.seconds.toFixed(1) },
       },
     };
   },

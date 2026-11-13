@@ -1,4 +1,5 @@
 import { type FishApi, FishClient } from "./fish";
+import { ALEPH } from "./structures/aleph";
 import { type AudioApi, type AudioFixer, ContainerAudio } from "./audio";
 import { Accounts } from "./auth";
 import { type CustosApi, CustosReais, lerHeyGen, lerOpenRouter } from "./custos";
@@ -193,8 +194,8 @@ export default {
     const studio = createStudio(env);
     // Cada etapa por si: o erro de uma (um download que falha, por exemplo) não para as seguintes.
     const etapa = (nome: string, fazer: () => Promise<unknown>) => fazer().catch((err) => console.error(`Agendamento: ${nome} falhou`, err));
-    // A troca de avatar pelo Aleph 2 prepara um vídeo e o envia; depois, os da fila.
-    await etapa("preparo", () => studio.prepareNext());
+    // A troca de avatar pelo Aleph 2 prepara um vídeo e o envia; depois, os da fila. Desativado, nem consulta.
+    if (!ALEPH.off) await etapa("preparo", () => studio.prepareNext());
     // O HeyGen pela API direta com voz clonada: pede os vídeos cuja voz ficou pronta.
     await etapa("voz", () => studio.voiceNext());
     await etapa("conferência", () => studio.syncOpen());

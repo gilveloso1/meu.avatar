@@ -9,7 +9,7 @@ import { containerPlan, DEFAULT_CAMERA, DEFAULT_PAUSE, type EditPlan, storedFace
 import type { ImageRunner } from "./imagens";
 import type { FishApi, FishVoice } from "./fish";
 import type { HeyGenApi, HeyGenVideoRequest, HeyGenVoice } from "./heygen";
-import { type Built, canUse, InputError, type Lists, madeAtOnce, makesAudio, onPlatform, STRUCTURES, structureById, type Structure, type Values, videoPlatform } from "./structures";
+import { type Built, canGenerate, canUse, InputError, type Lists, madeAtOnce, makesAudio, onPlatform, STRUCTURES, structureById, type SourceVideo, type Structure, type Values, videoPlatform } from "./structures";
 import type { VoiceOption } from "./structures/types";
 import { HEYGEN_AVATAR } from "./structures/heygen";
 import { FISH, fishVoices, MAX_CLONE_BYTES, PREVIEW_TEXT, speechCost } from "./structures/voz";
@@ -87,6 +87,21 @@ export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const VIDEO_TYPES: Record<string, string> = { "video/mp4": "mp4", "video/quicktime": "mov" };
 /** Limite do vídeo de origem: o do Seedance para vídeo de referência. */
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+
+/**
+ * O vídeo de origem (as estruturas que recebem um vídeo), conferido e lido: o tipo, o tamanho e,
+ * do cabeçalho do MP4/MOV, a duração e o quadro. Sem arquivo, null; fora do aceito, InputError.
+ */
+export async function readSource(file: File | null | undefined): Promise<{ file: File; ext: string; bytes: ArrayBuffer; source: SourceVideo } | null> {
+  if (!file || file.size === 0) return null;
+  const ext = VIDEO_TYPES[file.type];
+  if (!ext) throw new InputError(ERROS.videoTipo);
+  if (file.size > MAX_VIDEO_BYTES) throw new InputError(ERROS.videoTamanho(MAX_VIDEO_BYTES / 1024 / 1024));
+  const bytes = await file.arrayBuffer();
+  const seconds = mp4Duration(bytes);
+  if (seconds === null) throw new InputError(ERROS.videoLeitura);
+  return { file, ext, bytes, source: { seconds, ...mp4Size(bytes) } };
+}
 
 const AUDIO_TYPES: Record<string, string> = { "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/wav": "wav", "audio/x-wav": "wav", "audio/wave": "wav" };
 /** Limite do áudio enviado: o do upload de arquivos da HeyGen. */
@@ -296,7 +311,7 @@ export class Studio {
   /** Confere o acesso, valida pela estrutura, guarda a foto, registra o vídeo e envia o pedido. */
   async create(input: NewVideoInput): Promise<Video> {
     const { structure } = input;
-    if (!canUse(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
+    if (!canGenerate(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
     if (structure.platform === "heygen") return this.createDirect(input);
     const api = this.requireApi();
 
@@ -314,18 +329,15 @@ export class Studio {
     if (last && !IMAGE_TYPES[last.type]) throw new InputError(ERROS.fotoTipo);
     if (last && last.size > MAX_IMAGE_BYTES) throw new InputError(ERROS.fotoTamanho);
 
-    const upload = input.video && input.video.size > 0 ? input.video : null;
-    const videoExt = upload ? VIDEO_TYPES[upload.type] : undefined;
-    if (upload && !videoExt) throw new InputError(ERROS.videoTipo);
-    if (upload && upload.size > MAX_VIDEO_BYTES) throw new InputError(ERROS.videoTamanho(MAX_VIDEO_BYTES / 1024 / 1024));
-    const videoBytes = upload ? await upload.arrayBuffer() : null;
-    const seconds = videoBytes ? mp4Duration(videoBytes) : null;
-    if (videoBytes && seconds === null) throw new InputError(ERROS.videoLeitura);
+    const origin = await readSource(input.video);
+    const upload = origin?.file ?? null;
+    const videoExt = origin?.ext;
+    const videoBytes = origin?.bytes ?? null;
 
     const model = await this.modelOf(structure);
     // As vozes do Fish vêm das listas; as outras estruturas daqui não usam listas.
     const lists = makesAudio(structure) ? await this.lists(structure, input.user.id) : {};
-    const built = structure.build(input.values, image !== null, model, seconds !== null ? { seconds } : null, lists);
+    const built = structure.build(input.values, image !== null, model, origin?.source ?? null, lists);
     // A voz clonada: a gravação fica anotada no vídeo e vai junto em cada pedido.
     if (built.speech) built.record.settings = { ...built.record.settings, ...(await this.speechReference(built.speech, input)) };
     // O preparo (Aleph 2) roda no contêiner: sem ele, não dá para começar.
@@ -436,7 +448,7 @@ export class Studio {
    */
   async check(input: NewVideoInput): Promise<{ model: VideoModel; built: Built }> {
     const { structure } = input;
-    if (!canUse(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
+    if (!canGenerate(structure, input.user)) throw new ForbiddenError(ERROS.semAcessoModelo);
     for (const f of [input.image, input.lastFrame, ...(input.references ?? [])]) {
       if (!f || f.size === 0) continue;
       if (!IMAGE_TYPES[f.type]) throw new InputError(ERROS.fotoTipo);
@@ -452,7 +464,7 @@ export class Studio {
     this.requireApi();
     const model = await this.modelOf(structure);
     const lists = makesAudio(structure) ? await this.lists(structure, input.user.id) : {};
-    const built = structure.build(input.values, hasImage, model, null, lists);
+    const built = structure.build(input.values, hasImage, model, (await readSource(input.video))?.source ?? null, lists);
     if (madeAtOnce(structure)) return { model, built };
     const request: VideoRequest = { model: structure.model, ...built.request };
     const frames: NonNullable<VideoRequest["frame_images"]> = [];

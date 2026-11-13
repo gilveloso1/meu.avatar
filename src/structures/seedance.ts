@@ -21,6 +21,7 @@
 import type { VideoModel } from "../openrouter";
 import { ERROS } from "../erros";
 import { WORDS_PER_SECOND } from "../prompt";
+import { sourceWithin } from "./origem";
 import { InputError, type Option, type Structure } from "./types";
 import { options } from "./wan";
 
@@ -53,7 +54,12 @@ export function swapPrompt(outfit: string, extra: string): string {
 
 export const SEEDANCE: Structure = {
   id: "seedance",
-  name: "Seedance 2.0",
+  // Desativado em 13/11/2026: a ByteDance recusa a troca com rosto realista (docs/modelos/seedance-2.0.md).
+  // O código fica; a página do Seedance é a do livre, e os vídeos daqui aparecem na lista dele.
+  off: true,
+  family: "seedance-livre",
+  version: "Troca de avatar",
+  name: "Seedance 2.0 (troca de avatar)",
   model: "bytedance/seedance-2.0",
   summary: "Vários usos a partir de vídeos e fotos de referência. Hoje: trocar o avatar de um vídeo.",
   icon: "switch_account",
@@ -105,32 +111,19 @@ export const SEEDANCE: Structure = {
     ];
   },
 
-  prices(model) {
-    const out: Record<string, string> = {};
-    for (const resolution of model.supported_resolutions ?? []) {
-      const token = Number(model.pricing_skus?.[tokenSku(resolution)] ?? model.pricing_skus?.video_tokens);
-      if (!token) continue;
-      for (const ratio of model.supported_aspect_ratios ?? []) {
-        const pixels = framePixels(model, resolution, ratio);
-        // Por segundo gerado: os tokens dele e os do mesmo segundo do vídeo enviado.
-        if (pixels) out[`${resolution}_${ratio}`] = String(((pixels * 24) / 1024) * token * 2);
-      }
-    }
-    return out;
-  },
+  prices: (model) => tokenPrices(model, true),
 
   build(values, hasImage, model, video) {
     const use = USES.find((u) => u.value === values("uso"));
     if (!use) throw new InputError(ERROS.uso);
-    if (!video) throw new InputError(ERROS.videoOrigem);
-    if (video.seconds < SOURCE_SECONDS.min || video.seconds > SOURCE_SECONDS.max + 0.5) throw new InputError(ERROS.videoDuracao(SOURCE_SECONDS.min, SOURCE_SECONDS.max));
+    const source = sourceWithin(video, SOURCE_SECONDS);
     if (!hasImage) throw new InputError(ERROS.foto);
     const outfit = OUTFITS.find((o) => o.value === values("roupa"));
     if (!outfit) throw new InputError(ERROS.roupa);
     const extra = values("instrucoes").replace(/\s+/g, " ").trim();
     if (extra.length > MAX_SWAP_EXTRA) throw new InputError(ERROS.instrucoesLongas(MAX_SWAP_EXTRA));
 
-    const duration = outputSeconds(video.seconds, model.supported_durations);
+    const duration = outputSeconds(source.seconds, model.supported_durations);
     const resolution = values("resolucao");
     const aspectRatio = values("formato");
     const prompt = swapPrompt(outfit.value, extra);
@@ -148,7 +141,7 @@ export const SEEDANCE: Structure = {
         style: null,
         language: null,
         extra: extra || null,
-        settings: { use: use.value, outfit: outfit.value, source_seconds: video.seconds.toFixed(1) },
+        settings: { use: use.value, outfit: outfit.value, source_seconds: source.seconds.toFixed(1) },
       },
     };
   },
@@ -176,11 +169,28 @@ export function outputSeconds(seconds: number, supported: number[] | null): numb
   return supported.reduce((best, s) => (Math.abs(s - rounded) < Math.abs(best - rounded) ? s : best));
 }
 
-/** O preço do token com vídeo na entrada, por resolução. */
-function tokenSku(resolution: string): string {
-  if (resolution === "1080p") return "video_tokens_1080p_with_video_input";
-  if (resolution === "4K") return "video_tokens_4k_with_video_input";
-  return "video_tokens_with_video_input";
+/**
+ * Preço por segundo gerado, por `<resolução>_<formato>`: os tokens do quadro vezes o preço do token
+ * da resolução. Com vídeo na entrada (`video`), o preço menor de quem manda vídeo, contando também os
+ * tokens do mesmo segundo do vídeo enviado (o enviado com a duração do gerado).
+ */
+export function tokenPrices(model: VideoModel, video: boolean): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const resolution of model.supported_resolutions ?? []) {
+    const token = Number(model.pricing_skus?.[tokenSku(resolution, video)] ?? model.pricing_skus?.video_tokens);
+    if (!token) continue;
+    for (const ratio of model.supported_aspect_ratios ?? []) {
+      const pixels = framePixels(model, resolution, ratio);
+      if (pixels) out[`${resolution}_${ratio}`] = String(((pixels * 24) / 1024) * token * (video ? 2 : 1));
+    }
+  }
+  return out;
+}
+
+/** O SKU do preço do token por resolução, com ou sem vídeo na entrada. */
+function tokenSku(resolution: string, video: boolean): string {
+  const tier = resolution === "1080p" ? "_1080p" : resolution === "4K" ? "_4k" : "";
+  return `video_tokens${tier}${video ? "_with_video_input" : ""}`;
 }
 
 /** Pixels de um quadro: o tamanho exato da lista do modelo ou, sem ele, a conta pelo lado menor. */

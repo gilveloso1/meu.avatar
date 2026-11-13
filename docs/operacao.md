@@ -163,6 +163,9 @@ site:
 
 ## Troca de avatar pelo Aleph 2
 
+**Desativado desde 13/11/2026** (`off: true`): ninguém gera e a fila de preparo não roda no
+agendamento. O que segue descreve o funcionamento, para quando for religado.
+
 A estrutura `aleph` (`src/structures/aleph.ts`, receita e testes em
 [docs/modelos/runway-aleph-2.md](modelos/runway-aleph-2.md)) não envia o pedido
 na hora: o vídeo fica "Preparando" (`prep_status = 'pending'`, migration

@@ -71,8 +71,9 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
     quando escolher o modelo; `campos`, o que cada campo é nele. Quem descreve é a própria estrutura
     (`agent` em `src/structures/`, com `values`, que leva os campos ao formulário do site); modelo
     novo com `agent` aparece sozinho, sem mexer no MCP. Hoje: `wan`, `wan-livre`, `heygen`, `grok`,
-    `mischief`, `omni` (vídeo), `nano-banana` (imagem), `elevenlabs` e `fish` (áudio). O Seedance e o
-    Aleph (troca de avatar) ficam só no site.
+    `mischief`, `omni`, `heygen-video` (a cena livre com fala, de 5 a 30 s, sem último quadro nem `som`), `seedance-livre` e `seedance-mini` (a cena livre, com vídeo de referência, sem rosto realista), `flux-edit` (vídeo; edita um vídeo pronto pelo texto, com `video` e `cena`),
+    `nano-banana` (imagem), `elevenlabs` e `fish` (áudio). A troca de avatar (Seedance e Aleph) está
+    desativada.
   - **Dois passos.** Sem `confirmacao`, a chamada só simula: confere tudo como o site (campos,
     arquivos, o que o modelo aceita) sem gastar, e responde `{simulacao: true, modelo,
     custoEstimado, duracao?, resolucao?, formato?, confirmacao, validade, proximo}`. O agente mostra à pessoa o
@@ -87,7 +88,8 @@ pedido às rotas abaixo, com o mesmo token: não há regra nem permissão própr
     ou os gestos), `fala`, `voz` (de `listar_vozes` com o mesmo modelo), `idioma`, `estilo`, `foto`
     (primeiro quadro), `ultimoQuadro`, `referencias` (imagens que guiam, nunca com quadros:
     `quadros_ou_referencias`), `audio` (a fala pronta: de `gerar_audio` ou o som de uma exportação),
-    `som`, `semente`, `expressividade`, `consentimento`, `duracao`, `resolucao`, `formato`; imagem
+    `video` (o vídeo de origem dos modelos que editam vídeo, MP4 ou MOV: a duração dele conta no
+    custo da simulação; `video_tipo_invalido` se não for vídeo), `som`, `semente`, `expressividade`, `consentimento`, `duracao`, `resolucao`, `formato`; imagem
     `descricao` e `referencias`; áudio `texto`, `voz` e `consentimento`. Os arquivos são `src` do
     projeto. O que faltar de duração, resolução, formato, estilo, idioma e expressividade fica com o
     padrão do formulário do site (o formato, com o do Final: `final`, ou o primeiro; sem Final, 9:16).

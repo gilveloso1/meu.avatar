@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/auth";
 import { Db } from "../src/db";
 import { ERROS } from "../src/erros";
-import { call, callFish, cookie, FakeExportApi, FakeFishApi, FakeHeyGenApi, FakeRenderApi, FakeVideoApi, memberCookie, postForm, SITE, webmBytes } from "./helpers";
+import { call, callFish, cookie, FakeExportApi, FakeFishApi, FakeHeyGenApi, FakeRenderApi, FakeVideoApi, fakeMp4, memberCookie, postForm, SITE, webmBytes } from "./helpers";
 import { IMAGE_REFERENCE_GUIDE, IMAGE_REFERENCES_GUIDE } from "../src/structures/imagem";
 
 const VIDEO = "11111111-1111-4111-8111-111111111111";
@@ -487,7 +487,8 @@ describe("listar_modelos e os dois passos do gerar_*", () => {
     const api = new FakeVideoApi();
     const { modelos } = dados<{ modelos: Modelo[] }>(await comApi(api, "listar_modelos", {}));
     expect(modelos.map((m) => [m.id, m.tipo])).toEqual([
-      ["wan", "video"], ["wan-livre", "video"], ["heygen", "video"], ["grok", "video"], ["mischief", "video"], ["omni", "video"],
+      ["wan", "video"], ["wan-livre", "video"], ["heygen", "video"], ["heygen-video", "video"], ["grok", "video"], ["mischief", "video"], ["omni", "video"],
+      ["seedance-livre", "video"], ["seedance-mini", "video"], ["flux-edit", "video"],
       ["nano-banana", "imagem"], ["elevenlabs", "audio"], ["fish", "audio"],
     ]);
     const mischief = modelos.find((m) => m.id === "mischief")!;
@@ -805,6 +806,170 @@ describe("gerar_video com o Wan 3.0 livre", () => {
       const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "wan-livre", projeto: id, ...args });
       expect(r.isError).toBe(true);
       expect(r.content[0]!.text).toContain(erro);
+    }
+    expect(api.submitted).toHaveLength(0);
+  });
+});
+
+describe("gerar_video com o Seedance livre", () => {
+  const comApi = async (api: FakeVideoApi, name: string, args: unknown) => {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
+    const res = await call(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: "Bearer ma_admin", ...CABECALHOS("tools/call", name) } }), api);
+    return ((await res.json()) as { result: Result }).result;
+  };
+  const origem = async (seconds: number) => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, fakeMp4(seconds, { width: 1280, height: 720 }), { httpMetadata: { contentType: "video/mp4" } });
+    return `/videos/${VIDEO}.mp4`;
+  };
+
+  it("só texto: a cena vai como prompt, com as opções do Seedance e o preço por tokens", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Seedance" }));
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "seedance-livre", projeto: id, cena: "garrafa girando sobre a mesa, luz de estúdio", duracao: 5, resolucao: "480p", formato: "9:16", som: false, semente: 7 });
+    expect(r.isError).toBeFalsy();
+    expect(api.submitted[0]).toMatchObject({ model: "bytedance/seedance-2.0", prompt: "garrafa girando sobre a mesa, luz de estúdio", duration: 5, resolution: "480p", aspect_ratio: "9:16", generate_audio: false, seed: 7 });
+    expect(api.submitted[0]!.input_references).toBeUndefined();
+    const { video } = dados<{ video: { custoEstimado: number } }>(r);
+    expect(video.custoEstimado).toBeGreaterThan(0);
+  });
+
+  it("vídeo de referência: vai em input_references com a foto, mais barato por token e contando o enviado", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Seedance" }));
+    const foto = (await imagemGerada((n, x) => comApi(api, n, x), id)).src;
+    const video = await origem(6);
+    const pedido = { modelo: "seedance-livre", projeto: id, cena: "o personagem da imagem 1 faz o movimento do video 1", video, foto, duracao: 6, resolucao: "720p", formato: "16:9" };
+    const sem = dados<{ custoEstimado: number }>(await comApi(api, "gerar_video", { ...pedido, video: undefined, foto: undefined }));
+    const com = dados<{ custoEstimado: number }>(await comApi(api, "gerar_video", pedido));
+    expect(com.custoEstimado).not.toBe(sem.custoEstimado);
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", pedido);
+    expect(r.isError).toBeFalsy();
+    const enviado = api.submitted.at(-1)!;
+    expect(enviado.input_references!.map((x) => x.type)).toEqual(["video_url", "image_url"]);
+    expect(enviado.frame_images).toBeUndefined();
+    const { video: v } = dados<{ video: { id: string } }>(r);
+    const row = await new Db(env.DB).videoById(v.id);
+    expect(JSON.parse(row!.settings!)).toMatchObject({ foto: "referencia", source_seconds: "6.0", source_key: expect.stringMatching(/^origens\//) });
+  });
+
+  it("recusa vídeo fora da duração ou que não é vídeo, e o Wan livre não aceita vídeo", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Seedance" }));
+    const imagem = (await imagemGerada((n, x) => comApi(api, n, x), id)).src;
+    // O vídeo de origem é gravado na hora de cada caso (todos usam o mesmo arquivo).
+    const casos: [() => Promise<Record<string, unknown>>, string][] = [
+      [async () => ({ modelo: "seedance-livre", cena: "c", video: await origem(30) }), "Use um vídeo de 2 a 15 segundos"],
+      [async () => ({ modelo: "seedance-livre", cena: "c", video: imagem }), "video_tipo_invalido"],
+      [async () => ({ modelo: "wan-livre", cena: "c", video: await origem(6) }), "campo_nao_aceito"],
+    ];
+    for (const [args, erro] of casos) {
+      const r = await comApi(api, "gerar_video", { projeto: id, ...(await args()) });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain(erro);
+    }
+    expect(api.submitted).toHaveLength(0);
+  });
+});
+
+describe("gerar_video com o HeyGen Video 1 e o Seedance Mini", () => {
+  const comApi = async (api: FakeVideoApi, name: string, args: unknown) => {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
+    const res = await call(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: "Bearer ma_admin", ...CABECALHOS("tools/call", name) } }), api);
+    return ((await res.json()) as { result: Result }).result;
+  };
+  const custo = async (api: FakeVideoApi, args: Record<string, unknown>) => dados<{ custoEstimado: number }>(await comApi(api, "gerar_video", { modelo: "heygen-video", ...args })).custoEstimado;
+
+  it("HeyGen Video: a cena vai sem generate_audio e sem último quadro; o preço muda acima de 15 s e com referências", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "HeyGen" }));
+    const cena = 'Mulher na cozinha olha para a câmera e diz em português: "Oi, gente!"';
+    expect(await custo(api, { projeto: id, cena, duracao: 10 })).toBeCloseTo(0.2);
+    expect(await custo(api, { projeto: id, cena, duracao: 20 })).toBeCloseTo(0.9);
+    const ref = (await imagemGerada((n, x) => comApi(api, n, x), id)).src;
+    expect(await custo(api, { projeto: id, cena, duracao: 10, referencias: [ref] })).toBeCloseTo(0.7);
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "heygen-video", projeto: id, cena, duracao: 10, foto: ref });
+    expect(r.isError).toBeFalsy();
+    const pedido = api.submitted.at(-1)!;
+    expect(pedido).toMatchObject({ model: "heygen/heygen-video-1", prompt: cena, duration: 10, resolution: "480p", aspect_ratio: "9:16" });
+    expect(pedido.generate_audio).toBeUndefined();
+    expect(pedido.frame_images!.map((f) => f.frame_type)).toEqual(["first_frame"]);
+    for (const campo of [{ ultimoQuadro: ref }, { som: false }]) {
+      const recusa = await comApi(api, "gerar_video", { modelo: "heygen-video", projeto: id, cena, ...campo });
+      expect(recusa.content[0]!.text).toContain("campo_nao_aceito");
+    }
+  });
+
+  it("Seedance Mini: o mesmo pedido do livre no modelo Mini, pela metade do preço", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Mini" }));
+    const pedido = { projeto: id, cena: "garrafa girando sobre a mesa", duracao: 5, resolucao: "720p", formato: "9:16" };
+    const livre = dados<{ custoEstimado: number }>(await comApi(api, "gerar_video", { modelo: "seedance-livre", ...pedido })).custoEstimado;
+    const mini = dados<{ custoEstimado: number }>(await comApi(api, "gerar_video", { modelo: "seedance-mini", ...pedido })).custoEstimado;
+    expect(mini).toBeCloseTo(livre / 2, 2);
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "seedance-mini", ...pedido });
+    expect(r.isError).toBeFalsy();
+    expect(api.submitted.at(-1)).toMatchObject({ model: "bytedance/seedance-2.0-mini", prompt: "garrafa girando sobre a mesa", duration: 5, resolution: "720p", generate_audio: true });
+    const fora = await comApi(api, "gerar_video", { modelo: "seedance-mini", ...pedido, resolucao: "1080p" });
+    expect(fora.content[0]!.text).toContain("pedido_invalido");
+  });
+});
+
+describe("gerar_video com o FLUX Video Edit", () => {
+  const comApi = async (api: FakeVideoApi, name: string, args: unknown, code = "ma_admin") => {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, _meta: META } };
+    const res = await call(new Request(`${SITE}/mcp`, { method: "POST", body: JSON.stringify(body), headers: { authorization: `Bearer ${code}`, ...CABECALHOS("tools/call", name) } }), api);
+    return ((await res.json()) as { result: Result }).result;
+  };
+  /** Um vídeo pronto da conta, de `seconds` segundos e 1080×1920, como origem. */
+  const origem = async (seconds: number) => {
+    await env.MIDIA.put(`videos/${VIDEO}.mp4`, fakeMp4(seconds, { width: 1080, height: 1920 }), { httpMetadata: { contentType: "video/mp4" } });
+    return `/videos/${VIDEO}.mp4`;
+  };
+
+  it("aparece no listar_modelos com o vídeo e a edição obrigatórios e o preço por segundo", async () => {
+    const { modelos } = dados<{ modelos: { id: string; obrigatorios: string[]; campos: Record<string, string>; preco: unknown }[] }>(await comApi(new FakeVideoApi(), "listar_modelos", { tipo: "video" }));
+    const flux = modelos.find((m) => m.id === "flux-edit")!;
+    expect(flux).toMatchObject({ obrigatorios: ["video", "cena"], preco: { por: "segundo", dolares: { segundo: "0.03" } } });
+    expect(Object.keys(flux.campos)).toEqual(["video", "cena"]);
+  });
+
+  it("simula com o custo pelos segundos do original e gera com o vídeo em input_references e só o texto", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Flux" }));
+    const video = await origem(6);
+    const sim = dados<{ custoEstimado: number; duracao: number; formato: string; resolucao: string }>(await comApi(api, "gerar_video", { modelo: "flux-edit", projeto: id, video, cena: "troca a caneca por uma garrafa verde" }));
+    expect(sim).toMatchObject({ custoEstimado: 0.18, duracao: 6, formato: "9:16", resolucao: "1080p" });
+    expect(api.submitted).toHaveLength(0);
+    const r = await gerando((n, x) => comApi(api, n, x), "gerar_video", { modelo: "flux-edit", projeto: id, video, cena: "troca a caneca por uma garrafa verde" });
+    expect(r.isError).toBeFalsy();
+    const pedido = api.submitted[0]!;
+    expect(pedido).toMatchObject({ model: "black-forest-labs/flux-video-edit", prompt: "troca a caneca por uma garrafa verde" });
+    expect(pedido.input_references).toEqual([{ type: "video_url", video_url: { url: expect.stringContaining("origens/") } }]);
+    for (const k of ["duration", "resolution", "aspect_ratio", "frame_images", "generate_audio"] as const) expect(pedido[k]).toBeUndefined();
+    const { video: v } = dados<{ video: { id: string } }>(r);
+    const row = await new Db(env.DB).videoById(v.id);
+    expect(row).toMatchObject({ structure: "flux-edit", prompt: "troca a caneca por uma garrafa verde", duration: 6 });
+    expect(JSON.parse(row!.settings!)).toMatchObject({ source_seconds: "6.0", source_key: expect.stringMatching(/^origens\//) });
+  });
+
+  it("recusa sem vídeo ou sem edição, vídeo fora da duração, arquivo que não é vídeo e campo de outro modelo", async () => {
+    const api = new FakeVideoApi();
+    const { id } = dados<{ id: string }>(await ferramenta("criar_projeto", { nome: "Flux" }));
+    const imagem = (await imagemGerada((n, x) => comApi(api, n, x), id)).src;
+    // O vídeo de origem é gravado na hora de cada caso (todos usam o mesmo arquivo).
+    const casos: [() => Promise<Record<string, unknown>>, string, string?][] = [
+      [async () => ({ cena: "tira o copo" }), "campo_obrigatorio"],
+      [async () => ({ video: await origem(6) }), "campo_obrigatorio"],
+      [async () => ({ video: imagem, cena: "tira o copo" }), "video_tipo_invalido"],
+      [async () => ({ video: await origem(6), cena: "tira o copo", foto: imagem }), "campo_nao_aceito"],
+      [async () => ({ video: await origem(6), cena: "x".repeat(1001) }), "pedido_invalido", "edição"],
+      [async () => ({ video: await origem(40), cena: "tira o copo" }), "pedido_invalido", "segundos"],
+    ];
+    for (const [args, erro, motivo] of casos) {
+      const r = await comApi(api, "gerar_video", { modelo: "flux-edit", projeto: id, ...(await args()) });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain(erro);
+      if (motivo) expect(r.content[0]!.text).toContain(motivo);
     }
     expect(api.submitted).toHaveLength(0);
   });
