@@ -42,7 +42,7 @@ do OpenRouter do dia. Quando o provedor cobra segundos diferentes dos do vídeo,
 | Gemini Omni 1.2 Flash e 1.1 | preço da lista por segundo, por resolução | US$ 0,556 por 8 s (1.2) e 0,4054 por 4 s (1.1), em 720p | Bate |
 | Nano Banana 2.1 | tokens da imagem × preço (US$ 0,039 em 1K, 0,06 em 2K) | média de US$ 0,0398 em 1K (108 imagens) e 0,0555 em 2K (115) | Bate em 1K; em 2K a estimativa sai uns 8% acima |
 | Seedance 2.0 e 2.0 livre | tokens do vídeo × preço (com vídeo na entrada, o preço menor e o enviado contado) | sem vídeo pronto | Conferir no primeiro teste do livre |
-| HeyGen Video 1 | preço da lista por segundo, por resolução, acima de 15 s e com referências (sem o preço por imagem de referência) | sem vídeo pronto | Conferir no primeiro teste |
+| HeyGen Video 1 | preço da lista por segundo, por resolução, acima de 15 s e com referências (sem o preço por imagem de referência) | US$ 0,05 por 5 s em 480p (US$ 0,01/s) | A estimativa sai o dobro (a lista diz US$ 0,02/s); conferir outras resoluções antes de mudar |
 | FLUX Video Edit | preço da lista por segundo (US$ 0,03), pelos segundos do vídeo de origem | sem vídeo pronto (não testado) | Conferir no primeiro teste |
 
 ## Resumo
@@ -52,7 +52,7 @@ do OpenRouter do dia. Quando o provedor cobra segundos diferentes dos do vídeo,
 | [Wan 3.0](wan-3.0.md) (`alibaba/wan-3.0`) | Avatar falando, a partir da foto e da fala | No ar | `wan.ts` |
 | [Wan 3.0 livre](wan-3.0.md#wan-30-livre-wan-livrets-10112026) (`alibaba/wan-3.0`) | Cena livre para o agente: texto, primeiro e último quadro, referências, som, semente | Em teste, só o administrador. Primeiro e último quadro e sem som funcionam (10/11/2026); US$ 0,0425/s em 480p, mínimo de 5 s; falta testar referências | `wan-livre.ts` |
 | [HeyGen Avatar IV](heygen-avatar-iv.md) (`heygen/avatar-iv`) | Avatar falando, voz pronta da HeyGen | Em teste. A API direta da HeyGen sai mais barata (US$ 0,0385/s, contra US$ 0,05/s) e aceita áudio próprio e voz clonada | `heygen.ts` |
-| [HeyGen Video 1](heygen-video-1.md) (`heygen/heygen-video-1`) | Cena livre com fala e som, 5 a 30 s | Em teste, só o administrador, desde 13/11/2026; sem teste real. US$ 0,02/s em 480p na lista, o vídeo com fala mais barato | `heygen-video.ts` |
+| [HeyGen Video 1](heygen-video-1.md) (`heygen/heygen-video-1`) | Cena livre com fala e som, 5 a 30 s | Em teste, só o administrador, desde 13/11/2026. Primeiro teste (13/11): aceitou avatar realista, fala exata em português, áudio limpo (−12 LUFS); **US$ 0,05 por 5 s em 480p** (US$ 0,01/s, metade da lista), um quarto do Wan | `heygen-video.ts` |
 | [Seedance 2.0](seedance-2.0.md) (`bytedance/seedance-2.0`) | Trocar avatar (vídeo + foto) | **Bloqueado** para vídeo com rosto realista; **desativado** em 13/11/2026 (o card do Seedance é o livre) | `seedance.ts` |
 | [Seedance 2.0 livre](seedance-2.0.md) (`bytedance/seedance-2.0`) | O card do Seedance. Cena livre para o agente e o site: texto, quadros, referências de imagem, vídeo de referência, som, semente | Em teste, só o administrador, desde 13/11/2026; sem teste real. Rosto realista o provedor recusa | `seedance-livre.ts` |
 | [Seedance 2.0 Mini](seedance-2.0.md) (`bytedance/seedance-2.0-mini`) | O mesmo do Seedance livre, só 480p e 720p | Em teste, só o administrador, desde 13/11/2026, como versão "Mini" no card do Seedance; sem teste real. Metade do preço do token do 2.0 | `seedance-livre.ts` |
